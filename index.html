@@ -32,11 +32,34 @@ const data = await r.json()
 
 const last = data[data.length-1]
 
+// safe display (handles missing values)
 document.getElementById("metrics").innerHTML =
-"Weight: " + last.weight_lb + " lb<br>" +
-"Body Fat: " + last.body_fat_pct + "%<br>" +
-"Active Calories: " + last.active_calories + "<br>" +
-"VO2 Max: " + last.vo2max
+"Date: " + (last.date ?? "NA") + "<br>" +
+"Weight: " + (last.weight_lb ?? "NA") + " lb<br>" +
+"Body Fat: " + (last.body_fat_pct ?? "NA") + "%<br>" +
+"Active Calories: " + (last.active_calories ?? "NA") + "<br>" +
+"VO2 Max: " + (last.vo2max ?? "NA")
+
+drawWeightTrend(data)
+
+}
+
+function drawWeightTrend(data){
+
+const weights = data
+.filter(d => d.weight_lb !== null)
+.slice(-30)
+
+if(weights.length === 0) return
+
+let html = "<h3>Weight Trend (last entries)</h3>"
+
+weights.forEach(w=>{
+html += w.date + " : " + w.weight_lb + " lb<br>"
+})
+
+document.body.innerHTML +=
+'<div class="card">'+html+'</div>'
 
 }
 
@@ -46,5 +69,6 @@ loadData()
 
 </body>
 </html>
+
 
 
