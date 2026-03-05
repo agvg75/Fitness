@@ -1,159 +1,118 @@
 <!DOCTYPE html>
-
 <html>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <head>
-<meta charset="UTF-8">
-<title>Andres Fitness Dashboard</title>
-<style>
-body{font-family:Arial;background:#07080e;color:#ced2f0;margin:40px}
-.card{background:#0d0e1c;padding:20px;border-radius:12px;margin-bottom:20px}
-h1{margin-top:0}
-</style>
+  <meta charset="UTF-8" />
+  <title>Andres Fitness Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body{font-family:Arial;background:#07080e;color:#ced2f0;margin:40px}
+    .card{background:#0d0e1c;padding:20px;border-radius:12px;margin-bottom:20px}
+    h1{margin-top:0}
+    a{color:#9bbcff}
+    pre{white-space:pre-wrap}
+  </style>
 </head>
 
 <body>
+  <h1>Fitness Dashboard</h1>
 
-<h1>Fitness Dashboard</h1>
-
-<div class="card">
-<h3>Latest Metrics</h3>
-<div id="metrics">Loading...</div>
-</div>
-
-<script>
-
-<div class="card">
-  <h3>Latest Metrics</h3>
-  <div id="metrics">Loading...</div>
-</div>
-
-<div class="card">
-  <h3>Trends</h3>
-  <div style="max-width:1100px">
-    <canvas id="chartWeight" height="120"></canvas>
+  <div class="card">
+    <h3>Latest Metrics</h3>
+    <div id="metrics">Loading...</div>
   </div>
-  <div style="max-width:1100px;margin-top:20px">
-    <canvas id="chartCals" height="120"></canvas>
+
+  <div class="card">
+    <h3>Trends</h3>
+    <div style="max-width:1100px">
+      <canvas id="chartWeight" height="120"></canvas>
+    </div>
+    <div style="max-width:1100px;margin-top:20px">
+      <canvas id="chartCals" height="120"></canvas>
+    </div>
+    <div style="max-width:1100px;margin-top:20px">
+      <canvas id="chartVo2" height="120"></canvas>
+    </div>
   </div>
-  <div style="max-width:1100px;margin-top:20px">
-    <canvas id="chartVo2" height="120"></canvas>
-  </div>
-</div>
 
-<script>
-async function loadData(){
+  <script>
+    async function loadData(){
+      const url =
+        "https://rjirurdpluknrwnxlcox.supabase.co/storage/v1/object/public/Fitness/fitness.json";
 
-  const url =
-  "https://rjirurdpluknrwnxlcox.supabase.co/storage/v1/object/public/Fitness/fitness.json"
+      const r = await fetch(url, { cache: "no-store" });
 
-  const r = await fetch(url, { cache: "no-store" })
-  if(!r.ok){
-    document.getElementById("metrics").innerHTML =
-      "Could not load data (" + r.status + "). Check bucket name and URL."
-    return
-  }
-
-  const data = await r.json()
-  if(!Array.isArray(data) || data.length === 0){
-    document.getElementById("metrics").innerHTML = "No data returned."
-    return
-  }
-
-  const last = data[data.length-1]
-
-  document.getElementById("metrics").innerHTML =
-    "Date: " + (last.date ?? "NA") + "<br>" +
-    "Weight: " + (last.weight_lb ?? "NA") + " lb<br>" +
-    "Body Fat: " + (last.body_fat_pct ?? "NA") + "%<br>" +
-    "Active Calories: " + (last.active_calories ?? "NA") + "<br>" +
-    "VO2 Max: " + (last.vo2max ?? "NA")
-
-  drawCharts(data)
-}
-
-function drawCharts(data){
-
-  // Keep last 120 days worth of entries (by row order, not perfect time slicing, but robust)
-  const tail = data.slice(-120)
-
-  const labels = tail.map(d => d.date ?? "")
-
-  const weight = tail.map(d => d.weight_lb ?? null)
-  const cals = tail.map(d => d.active_calories ?? null)
-  const vo2 = tail.map(d => d.vo2max ?? null)
-
-  // Weight chart
-  new Chart(document.getElementById("chartWeight"), {
-    type: "line",
-    data: {
-      labels,
-      datasets: [{
-        label: "Weight (lb)",
-        data: weight,
-        spanGaps: true,
-        pointRadius: 0,
-        borderWidth: 2
-      }]
-    },
-    options: {
-      responsive: true,
-      plugins: { legend: { display: true } },
-      scales: {
-        x: { ticks: { maxTicksLimit: 8 } }
+      // Better error visibility (shows what came back)
+      const text = await r.text();
+      if(!r.ok){
+        document.getElementById("metrics").innerHTML =
+          "Fetch failed (" + r.status + ").<br><pre>" + text.slice(0, 500) + "</pre>";
+        return;
       }
-    }
-  })
 
-  // Calories chart
-  new Chart(document.getElementById("chartCals"), {
-    type: "bar",
-    data: {
-      labels,
-      datasets: [{
-        label: "Active Calories",
-        data: cals,
-        borderWidth: 0
-      }]
-    },
-    options: {
-      responsive: true,
-      plugins: { legend: { display: true } },
-      scales: {
-        x: { ticks: { maxTicksLimit: 8 } }
+      let data;
+      try{
+        data = JSON.parse(text);
+      }catch(e){
+        document.getElementById("metrics").innerHTML =
+          "Not JSON returned. First 200 chars:<br><pre>" + text.slice(0, 200) + "</pre>";
+        return;
       }
-    }
-  })
 
-  // VO2 chart
-  new Chart(document.getElementById("chartVo2"), {
-    type: "line",
-    data: {
-      labels,
-      datasets: [{
-        label: "VO2 Max",
-        data: vo2,
-        spanGaps: true,
-        pointRadius: 0,
-        borderWidth: 2
-      }]
-    },
-    options: {
-      responsive: true,
-      plugins: { legend: { display: true } },
-      scales: {
-        x: { ticks: { maxTicksLimit: 8 } }
+      if(!Array.isArray(data) || data.length === 0){
+        document.getElementById("metrics").innerHTML = "No data returned.";
+        return;
       }
+
+      // pick the last row that has at least one real metric (avoid placeholder-only tails)
+      let last = null;
+      for(let i = data.length - 1; i >= 0; i--){
+        const d = data[i] || {};
+        if(d.weight_lb != null || d.body_fat_pct != null || d.active_calories != null || d.vo2max != null){
+          last = d;
+          break;
+        }
+      }
+      if(!last) last = data[data.length - 1];
+
+      document.getElementById("metrics").innerHTML =
+        "Date: " + (last.date ?? "NA") + "<br>" +
+        "Weight: " + (last.weight_lb ?? "NA") + " lb<br>" +
+        "Body Fat: " + (last.body_fat_pct ?? "NA") + "%<br>" +
+        "Active Calories: " + (last.active_calories ?? "NA") + "<br>" +
+        "VO2 Max: " + (last.vo2max ?? "NA");
+
+      drawCharts(data);
     }
-  })
-}
 
-loadData()
-</script>
+    function drawCharts(data){
+      // keep last 120 rows (good enough for now)
+      const tail = data.slice(-120);
 
+      const labels = tail.map(d => d?.date ?? "");
+      const weight = tail.map(d => (d?.weight_lb ?? null));
+      const cals = tail.map(d => (d?.active_calories ?? null));
+      const vo2 = tail.map(d => (d?.vo2max ?? null));
+
+      new Chart(document.getElementById("chartWeight"), {
+        type: "line",
+        data: { labels, datasets: [{ label: "Weight (lb)", data: weight, spanGaps: true, pointRadius: 0, borderWidth: 2 }]},
+        options: { responsive: true, plugins: { legend: { display: true } }, scales: { x: { ticks: { maxTicksLimit: 8 }}}}
+      });
+
+      new Chart(document.getElementById("chartCals"), {
+        type: "bar",
+        data: { labels, datasets: [{ label: "Active Calories", data: cals, borderWidth: 0 }]},
+        options: { responsive: true, plugins: { legend: { display: true } }, scales: { x: { ticks: { maxTicksLimit: 8 }}}}
+      });
+
+      new Chart(document.getElementById("chartVo2"), {
+        type: "line",
+        data: { labels, datasets: [{ label: "VO2 Max", data: vo2, spanGaps: true, pointRadius: 0, borderWidth: 2 }]},
+        options: { responsive: true, plugins: { legend: { display: true } }, scales: { x: { ticks: { maxTicksLimit: 8 }}}}
+      });
+    }
+
+    loadData();
+  </script>
 </body>
 </html>
-
-
-
-
