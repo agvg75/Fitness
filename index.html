@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 
 <html>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <head>
 <meta charset="UTF-8">
 <title>Andres Fitness Dashboard</title>
@@ -22,53 +23,137 @@ h1{margin-top:0}
 
 <script>
 
+<div class="card">
+  <h3>Latest Metrics</h3>
+  <div id="metrics">Loading...</div>
+</div>
+
+<div class="card">
+  <h3>Trends</h3>
+  <div style="max-width:1100px">
+    <canvas id="chartWeight" height="120"></canvas>
+  </div>
+  <div style="max-width:1100px;margin-top:20px">
+    <canvas id="chartCals" height="120"></canvas>
+  </div>
+  <div style="max-width:1100px;margin-top:20px">
+    <canvas id="chartVo2" height="120"></canvas>
+  </div>
+</div>
+
+<script>
 async function loadData(){
 
-const url =
-"https://rjirurdpluknrwnxlcox.supabase.co/storage/v1/object/public/Fitness/fitness.json"
+  const url =
+  "https://rjirurdpluknrwnxlcox.supabase.co/storage/v1/object/public/Fitness/fitness.json"
 
-const r = await fetch(url)
-const data = await r.json()
+  const r = await fetch(url, { cache: "no-store" })
+  if(!r.ok){
+    document.getElementById("metrics").innerHTML =
+      "Could not load data (" + r.status + "). Check bucket name and URL."
+    return
+  }
 
-const last = data[data.length-1]
+  const data = await r.json()
+  if(!Array.isArray(data) || data.length === 0){
+    document.getElementById("metrics").innerHTML = "No data returned."
+    return
+  }
 
-// safe display (handles missing values)
-document.getElementById("metrics").innerHTML =
-"Date: " + (last.date ?? "NA") + "<br>" +
-"Weight: " + (last.weight_lb ?? "NA") + " lb<br>" +
-"Body Fat: " + (last.body_fat_pct ?? "NA") + "%<br>" +
-"Active Calories: " + (last.active_calories ?? "NA") + "<br>" +
-"VO2 Max: " + (last.vo2max ?? "NA")
+  const last = data[data.length-1]
 
-drawWeightTrend(data)
+  document.getElementById("metrics").innerHTML =
+    "Date: " + (last.date ?? "NA") + "<br>" +
+    "Weight: " + (last.weight_lb ?? "NA") + " lb<br>" +
+    "Body Fat: " + (last.body_fat_pct ?? "NA") + "%<br>" +
+    "Active Calories: " + (last.active_calories ?? "NA") + "<br>" +
+    "VO2 Max: " + (last.vo2max ?? "NA")
 
+  drawCharts(data)
 }
 
-function drawWeightTrend(data){
+function drawCharts(data){
 
-const weights = data
-.filter(d => d.weight_lb !== null)
-.slice(-30)
+  // Keep last 120 days worth of entries (by row order, not perfect time slicing, but robust)
+  const tail = data.slice(-120)
 
-if(weights.length === 0) return
+  const labels = tail.map(d => d.date ?? "")
 
-let html = "<h3>Weight Trend (last entries)</h3>"
+  const weight = tail.map(d => d.weight_lb ?? null)
+  const cals = tail.map(d => d.active_calories ?? null)
+  const vo2 = tail.map(d => d.vo2max ?? null)
 
-weights.forEach(w=>{
-html += w.date + " : " + w.weight_lb + " lb<br>"
-})
+  // Weight chart
+  new Chart(document.getElementById("chartWeight"), {
+    type: "line",
+    data: {
+      labels,
+      datasets: [{
+        label: "Weight (lb)",
+        data: weight,
+        spanGaps: true,
+        pointRadius: 0,
+        borderWidth: 2
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: true } },
+      scales: {
+        x: { ticks: { maxTicksLimit: 8 } }
+      }
+    }
+  })
 
-document.body.innerHTML +=
-'<div class="card">'+html+'</div>'
+  // Calories chart
+  new Chart(document.getElementById("chartCals"), {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [{
+        label: "Active Calories",
+        data: cals,
+        borderWidth: 0
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: true } },
+      scales: {
+        x: { ticks: { maxTicksLimit: 8 } }
+      }
+    }
+  })
 
+  // VO2 chart
+  new Chart(document.getElementById("chartVo2"), {
+    type: "line",
+    data: {
+      labels,
+      datasets: [{
+        label: "VO2 Max",
+        data: vo2,
+        spanGaps: true,
+        pointRadius: 0,
+        borderWidth: 2
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: true } },
+      scales: {
+        x: { ticks: { maxTicksLimit: 8 } }
+      }
+    }
+  })
 }
 
 loadData()
-
 </script>
 
 </body>
 </html>
+
 
 
 
