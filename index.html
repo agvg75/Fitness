@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Andres Fitness Dashboard</title>
+<style>
+body{font-family:Arial;background:#07080e;color:#ced2f0;margin:40px}
+.card{background:#0d0e1c;padding:20px;border-radius:12px;margin-bottom:20px}
+h1{margin-top:0}
+</style>
+</head>
+
+<body>
+
+<h1>Fitness Dashboard</h1>
+
+<div class="card">
+<h3>Latest Metrics</h3>
+<div id="metrics">Loading...</div>
+</div>
+
+<script>
+
+async function loadData(){
+
+const url =
+"https://rjrurdpluknrwnxlcox.supabase.co/storage/v1/object/public/fitness/fitness.json"
+
+const r = await fetch(url)
+const data = await r.json()
+
+const last = data[data.length-1]
+
+document.getElementById("metrics").innerHTML =
+"Weight: " + last.weight_lb + " lb<br>" +
+"Body Fat: " + last.body_fat_pct + "%<br>" +
+"Active Calories: " + last.active_calories + "<br>" +
+"VO2 Max: " + last.vo2max
+
+}
+
+loadData()
+
+</script>
+
+</body>
+</html>
