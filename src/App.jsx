@@ -352,9 +352,26 @@ export default function App() {
       setSession(data?.session ?? null)
     })()
 
-    const sub = supabase.auth.onAuthStateChange((_evt, sess) => {
-      setSession(sess)
-    })
+const sub = supabase.auth.onAuthStateChange(async (_evt, sess) => {
+  setSession(sess)
+
+  if (sess?.user?.id) {
+    const localMeals = JSON.parse(localStorage.getItem("ufd-meal-entries") || "[]")
+
+    if (localMeals.length > 0) {
+      console.log("Migrating local meals to Supabase...")
+
+      try {
+        await syncMealsToSupabase(localMeals, sess.user.id)
+
+        // prevent duplicate uploads
+        localStorage.removeItem("ufd-meal-entries")
+      } catch (err) {
+        console.error("Meal migration failed:", err)
+      }
+    }
+  }
+})
 
     return () => sub.data.subscription.unsubscribe()
   }, [])
