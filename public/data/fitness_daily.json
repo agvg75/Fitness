@@ -1,0 +1,16 @@
+[
+  {
+    "date": "2025-12-01",
+    "weight_lb": 174.2,
+    "weight_lb_min": 173.9,
+    "weight_lb_max": 174.8,
+    "n_measurements": 3
+  },
+  {
+    "date": "2025-12-02",
+    "weight_lb": 173.8,
+    "weight_lb_min": 173.5,
+    "weight_lb_max": 174.0,
+    "n_measurements": 2
+  }
+]
