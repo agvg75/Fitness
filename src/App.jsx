@@ -166,8 +166,8 @@ export default function App() {
         const leanBmcLb = kgToLb(row["Lean+BMC (kg)"])
         const pctFat = row["% fat"] == null ? null : Number(row["% fat"])
 
-        const label = date
-        return {
+const label = date && !date.startsWith("scan-") ? date.slice(0, 7) : `scan-${idx + 1}`
+  return {
           date,
           label,
           total_lb: totalLb == null ? null : Number(totalLb.toFixed(1)),
@@ -404,10 +404,10 @@ export default function App() {
               </div>
 
               <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={dexaSeries}>
-                  <CartesianGrid stroke="#1a1b2e" />
-                  <XAxis dataKey="date" />
-                  <YAxis />
+<BarChart data={dexaSeries}>
+  <CartesianGrid stroke="#1a1b2e" />
+  <XAxis dataKey="label" />
+  <YAxis domain={[100, "dataMax + 5"]} />
                   <Tooltip />
                   <Legend />
                   <Bar dataKey="lean_lb" name="Lean (lb)" stackId="a" fill="#4a9ee8" />
@@ -422,10 +422,10 @@ export default function App() {
               </div>
 
               <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={dexaSeries}>
-                  <CartesianGrid stroke="#1a1b2e" />
-                  <XAxis dataKey="date" />
-                  <YAxis domain={[20, "dataMax + 3"]} />
+<LineChart data={dexaSeries}>
+  <CartesianGrid stroke="#1a1b2e" />
+  <XAxis dataKey="label" />
+  <YAxis domain={[20, "dataMax + 3"]} />
                   <Tooltip />
                   <Line
                     type="monotone"
