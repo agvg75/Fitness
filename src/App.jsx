@@ -10,7 +10,11 @@ import {
   ResponsiveContainer,
   BarChart,
   Bar,
-  Legend
+  Legend,
+  AreaChart,
+  Area,
+  ComposedChart,
+  ReferenceLine
 } from "recharts"
 
 const tabs = [
@@ -51,7 +55,17 @@ function f1(v) {
   if (v == null || Number.isNaN(Number(v))) return "NA"
   return Number(v).toFixed(1)
 }
+function toNum(v) {
+  const n = Number(v)
+  return Number.isFinite(n) ? n : 0
+}
 
+function fmtShortDate(dateStr) {
+  if (!dateStr) return "NA"
+  const d = new Date(dateStr)
+  if (Number.isNaN(d.getTime())) return dateStr
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" })
+}
 export default function App() {
   const [tab, setTab] = useState("Overview")
   const [rangeKey, setRangeKey] = useState("180D")
@@ -114,7 +128,108 @@ export default function App() {
     if (!injury.length) return null
     return injury[injury.length - 1]
   }, [injury])
+  const nutritionSeries = useMemo(() => {
+    if (!nutrition.length) return []
 
+    const sorted = [...nutrition]
+      .map((row, idx) => {
+        const date = row.date ?? row.Date ?? `row-${idx + 1}`
+
+        const calories = toNum(
+          row.calories ?? row.kcal ?? row.energy_kcal ?? row.Calories
+        )
+
+        const protein_g = toNum(
+          row.protein_g ?? row.protein ?? row.Protein ?? row.proteingrams
+        )
+
+        const carbs_g = toNum(
+          row.carbs_g ?? row.carbs ?? row.Carbs ?? row.carbgrams
+        )
+
+        const fat_g = toNum(
+          row.fat_g ?? row.fat ?? row.Fat ?? row.fatgrams
+        )
+
+        const fiber_g = toNum(
+          row.fiber_g ?? row.fiber ?? row.Fiber
+        )
+
+        return {
+          date,
+          label: fmtShortDate(date),
+          calories,
+          protein_g,
+          carbs_g,
+          fat_g,
+          fiber_g
+        }
+      })
+      .sort((a, b) => a.date.localeCompare(b.date))
+
+    return sorted.map((row, i) => {
+      const start = Math.max(0, i - 6)
+      const subset = sorted.slice(start, i + 1)
+
+      const avgCalories =
+        subset.reduce((sum, x) => sum + toNum(x.calories), 0) / subset.length
+
+      const avgProtein =
+        subset.reduce((sum, x) => sum + toNum(x.protein_g), 0) / subset.length
+
+      const proteinCal = row.protein_g * 4
+      const carbsCal = row.carbs_g * 4
+      const fatCal = row.fat_g * 9
+
+      return {
+        ...row,
+        calories_7d: Number(avgCalories.toFixed(1)),
+        protein_7d: Number(avgProtein.toFixed(1)),
+        protein_pct: row.calories > 0 ? Number(((proteinCal / row.calories) * 100).toFixed(1)) : 0,
+        carbs_pct: row.calories > 0 ? Number(((carbsCal / row.calories) * 100).toFixed(1)) : 0,
+        fat_pct: row.calories > 0 ? Number(((fatCal / row.calories) * 100).toFixed(1)) : 0
+      }
+    })
+  }, [nutrition])
+
+  const filteredNutrition = useMemo(() => {
+    if (!nutritionSeries.length) return []
+    if (selectedRangePoints == null) return nutritionSeries
+    return nutritionSeries.slice(-selectedRangePoints)
+  }, [nutritionSeries, selectedRangePoints])
+
+  const nutritionSummary = useMemo(() => {
+    if (!filteredNutrition.length) return null
+
+    const n = filteredNutrition.length
+
+    const avgCalories =
+      filteredNutrition.reduce((sum, row) => sum + toNum(row.calories), 0) / n
+
+    const avgProtein =
+      filteredNutrition.reduce((sum, row) => sum + toNum(row.protein_g), 0) / n
+
+    const avgCarbs =
+      filteredNutrition.reduce((sum, row) => sum + toNum(row.carbs_g), 0) / n
+
+    const avgFat =
+      filteredNutrition.reduce((sum, row) => sum + toNum(row.fat_g), 0) / n
+
+    const proteinTarget = 140
+
+    const proteinHitDays = filteredNutrition.filter(
+      row => toNum(row.protein_g) >= proteinTarget
+    ).length
+
+    return {
+      avgCalories,
+      avgProtein,
+      avgCarbs,
+      avgFat,
+      proteinTarget,
+      proteinHitDays
+    }
+  }, [filteredNutrition])
   const selectedRangePoints = useMemo(() => {
     const match = rangeOptions.find(r => r.key === rangeKey)
     return match ? match.points : 180
@@ -477,9 +592,166 @@ const label = date && !date.startsWith("scan-") ? date.slice(0, 7) : `scan-${idx
       {tab === "Calories" && (
         <div>
           <h3>Calories</h3>
-          <div>Nutrition records loaded: {nutrition.length}</div>
-          <div style={{ marginTop: "10px" }}>
-            Latest nutrition date: {latestNutrition?.date ?? "NA"}
+
+          <div style={{ display: "flex", gap: "8px", marginBottom: "14px", flexWrap: "wrap" }}>
+            {rangeOptions.map(opt => (
+              <button
+                key={opt.key}
+                onClick={() => setRangeKey(opt.key)}
+                style={{
+                  padding: "6px 10px",
+                  background: rangeKey === opt.key ? "#4a9ee8" : "#0d0e1c",
+                  border: "1px solid #1a1b2e",
+                  borderRadius: "8px",
+                  color: "#ced2f0",
+                  cursor: "pointer"
+                }}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
+          <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", marginBottom: "20px" }}>
+            <div style={cardStyle()}>
+              <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "8px" }}>Nutrition Records</div>
+              <div style={{ fontSize: "30px", fontWeight: "bold" }}>{nutrition.length}</div>
+              <div style={{ fontSize: "12px", opacity: 0.7, marginTop: "8px" }}>
+                Latest: {latestNutrition?.date ?? "NA"}
+              </div>
+            </div>
+
+            <div style={cardStyle()}>
+              <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "8px" }}>Avg Calories</div>
+              <div style={{ fontSize: "30px", fontWeight: "bold" }}>
+                {nutritionSummary ? Math.round(nutritionSummary.avgCalories) : "NA"}
+              </div>
+              <div style={{ fontSize: "12px", opacity: 0.7, marginTop: "8px" }}>
+                over {rangeKey}
+              </div>
+            </div>
+
+            <div style={cardStyle()}>
+              <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "8px" }}>Avg Protein</div>
+              <div style={{ fontSize: "30px", fontWeight: "bold" }}>
+                {nutritionSummary ? `${Math.round(nutritionSummary.avgProtein)} g` : "NA"}
+              </div>
+              <div style={{ fontSize: "12px", opacity: 0.7, marginTop: "8px" }}>
+                target days: {nutritionSummary ? `${nutritionSummary.proteinHitDays}/${filteredNutrition.length}` : "NA"}
+              </div>
+            </div>
+
+            <div style={cardStyle()}>
+              <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "8px" }}>Avg Carbs / Fat</div>
+              <div style={{ fontSize: "20px", fontWeight: "bold" }}>
+                {nutritionSummary
+                  ? `${Math.round(nutritionSummary.avgCarbs)} g / ${Math.round(nutritionSummary.avgFat)} g`
+                  : "NA"}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ ...cardStyle(), marginBottom: "20px", maxWidth: "1000px" }}>
+            <div style={{ fontWeight: "bold", marginBottom: "12px" }}>
+              Calories Trend ({rangeKey})
+            </div>
+
+            <ResponsiveContainer width="100%" height={320}>
+              <LineChart data={filteredNutrition}>
+                <CartesianGrid stroke="#1a1b2e" />
+                <XAxis dataKey="label" />
+                <YAxis />
+                <Tooltip />
+                <Legend />
+                <Line
+                  type="monotone"
+                  dataKey="calories"
+                  stroke="#4a9ee8"
+                  strokeWidth={2}
+                  dot={false}
+                  name="Calories"
+                />
+                <Line
+                  type="monotone"
+                  dataKey="calories_7d"
+                  stroke="#ffd166"
+                  strokeWidth={3}
+                  dot={false}
+                  name="7 day avg"
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "20px" }}>
+            <div style={{ ...cardStyle(), minWidth: "0" }}>
+              <div style={{ fontWeight: "bold", marginBottom: "12px" }}>
+                Daily Macros (g)
+              </div>
+
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={filteredNutrition}>
+                  <CartesianGrid stroke="#1a1b2e" />
+                  <XAxis dataKey="label" />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="protein_g" name="Protein (g)" stackId="a" fill="#4ae890" />
+                  <Bar dataKey="carbs_g" name="Carbs (g)" stackId="a" fill="#4a9ee8" />
+                  <Bar dataKey="fat_g" name="Fat (g)" stackId="a" fill="#e8c94a" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div style={{ ...cardStyle(), minWidth: "0" }}>
+              <div style={{ fontWeight: "bold", marginBottom: "12px" }}>
+                Protein vs Target
+              </div>
+
+              <ResponsiveContainer width="100%" height={300}>
+                <ComposedChart data={filteredNutrition}>
+                  <CartesianGrid stroke="#1a1b2e" />
+                  <XAxis dataKey="label" />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="protein_g" name="Protein (g)" fill="#4ae890" />
+                  <Line
+                    type="monotone"
+                    dataKey="protein_7d"
+                    stroke="#ffd166"
+                    strokeWidth={3}
+                    dot={false}
+                    name="7 day avg"
+                  />
+                  <ReferenceLine
+                    y={140}
+                    stroke="#ff6b9d"
+                    strokeDasharray="4 4"
+                    label="140g"
+                  />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div style={{ ...cardStyle(), maxWidth: "1000px" }}>
+            <div style={{ fontWeight: "bold", marginBottom: "12px" }}>
+              Macro Share of Calories (%)
+            </div>
+
+            <ResponsiveContainer width="100%" height={300}>
+              <AreaChart data={filteredNutrition}>
+                <CartesianGrid stroke="#1a1b2e" />
+                <XAxis dataKey="label" />
+                <YAxis domain={[0, 100]} />
+                <Tooltip />
+                <Legend />
+                <Area type="monotone" dataKey="protein_pct" stackId="1" stroke="#4ae890" fill="#4ae890" name="Protein %" />
+                <Area type="monotone" dataKey="carbs_pct" stackId="1" stroke="#4a9ee8" fill="#4a9ee8" name="Carbs %" />
+                <Area type="monotone" dataKey="fat_pct" stackId="1" stroke="#e8c94a" fill="#e8c94a" name="Fat %" />
+              </AreaChart>
+            </ResponsiveContainer>
           </div>
         </div>
       )}
