@@ -91,14 +91,28 @@ export default function App() {
     return daily.slice(-10).reverse()
   },[daily])
 
-  const weightSeries = useMemo(()=>{
-    if(!daily.length) return []
+ const weightSmoothed = useMemo(() => {
 
-    return daily.slice(-90).map(d=>({
-      date:d.date,
-      weight:Number(d.weight_lb)
-    }))
-  },[daily])
+  if(!daily.length) return []
+
+  const series = daily.slice(-90).map(d => Number(d.weight_lb))
+
+  return series.map((v,i) => {
+
+    const start = Math.max(0,i-6)
+    const subset = series.slice(start,i+1)
+
+    const avg = subset.reduce((a,b)=>a+b,0)/subset.length
+
+    return {
+      date: daily[daily.length-series.length+i].date,
+      weight: v,
+      avg: Number(avg.toFixed(2))
+    }
+
+  })
+
+},[daily])
 
   const latestNutrition = useMemo(()=>{
     if(!nutrition.length) return null
