@@ -220,7 +220,14 @@ export default function App() {
 
   <ResponsiveContainer width="100%" height={300}>
 
-  <LineChart data={weightSeries}>
+  <LineChart data={weightSmoothed}>
+    <Line
+type="monotone"
+dataKey="avg"
+stroke="#ffd166"
+strokeWidth={3}
+dot={false}
+/>
 
   <CartesianGrid stroke="#1a1b2e"/>
 
