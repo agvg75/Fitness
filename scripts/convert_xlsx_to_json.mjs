@@ -11,7 +11,6 @@ function sheet(name) {
 
 fs.mkdirSync("public/data", { recursive: true })
 
-// Main daily fitness data
 const bodyWeightDaily = sheet("Body_Weight_Daily").map(row => ({
   date: row.date ?? null,
   weight_lb: row.weight_lbs_mean ?? null,
@@ -28,7 +27,6 @@ fs.writeFileSync(
   JSON.stringify(bodyWeightDaily, null, 2)
 )
 
-// Optional richer sheets, if present
 fs.writeFileSync(
   "public/data/nutrition_log.json",
   JSON.stringify(sheet("Nutrition_Log"), null, 2)
