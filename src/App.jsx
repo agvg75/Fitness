@@ -279,6 +279,8 @@ function projectWeightTrend(weights, nutritionSeries, weeks = 12) {
 }
 
 export default function App() {
+  
+
   const [tab, setTab] = useState("Overview")
   const [rangeKey, setRangeKey] = useState("180D")
 
@@ -371,7 +373,20 @@ export default function App() {
       setHydrated(true)
     })()
   }, [session])
+useEffect(() => {
+  if (!hydrated) return
+  if (!session?.user?.id) return
 
+  ;(async () => {
+    try {
+      await syncMealsToSupabase(mealEntries, session.user.id)
+    } catch (err) {
+      const msg = err?.message || "Unknown sync error"
+      console.error("Initial meal sync failed:", err)
+      setAuthMsg(`Meal sync failed: ${msg}`)
+    }
+  })()
+}, [hydrated, session?.user?.id])
   const latestWeight = useMemo(() => {
     if (!daily.length) return null
     return daily[daily.length - 1]
@@ -597,10 +612,8 @@ export default function App() {
       return
     }
 
-    const redirectTo = window.location.origin + window.location.pathname
     const { error: authError } = await supabase.auth.signInWithOtp({
-      email: e,
-      options: { emailRedirectTo: redirectTo }
+      email: e
     })
 
     if (authError) setAuthMsg(`Login failed: ${authError.message}`)
@@ -613,12 +626,67 @@ export default function App() {
     const { error: authError } = await supabase.auth.signOut()
     if (authError) setAuthMsg(`Sign out failed: ${authError.message}`)
   }
+async function syncMealsToSupabase(entries, currentUserId) {
+  if (!supabase || !currentUserId) return
 
-  async function persistMealEntries(nextEntries) {
-    setMealEntries(nextEntries)
-    await store.set("ufd-meal-entries", nextEntries)
+  const rows = (entries || []).map(m => ({
+    id: crypto.randomUUID(),
+    user_id: currentUserId,
+    logged_at: m.created_at || new Date().toISOString(),
+    meal_date: m.date,
+    meal_type: m.meal_type,
+    label: m.preset_name ?? m.name ?? m.meal_type ?? null,
+    calories: Number(m.calories ?? 0),
+    protein_g: Number(m.protein_g ?? 0),
+    carbs_g: Number(m.carbs_g ?? 0),
+    fat_g: Number(m.fat_g ?? 0),
+    fiber_g: Number(m.fiber_g ?? 0),
+    source: "app"
+  }))
+
+  const { error: deleteError } = await supabase
+    .from("meals")
+    .delete()
+    .eq("user_id", currentUserId)
+
+  if (deleteError) {
+    console.error("Meal sync delete error:", deleteError)
+    throw deleteError
   }
 
+  if (rows.length > 0) {
+    const { data, error: insertError } = await supabase
+      .from("meals")
+      .insert(rows)
+      .select()
+
+    if (insertError) {
+      console.error("Meal sync insert error:", insertError)
+      throw insertError
+    }
+
+    console.log("Meals synced:", data)
+  }
+}
+async function persistMealEntries(nextEntries) {
+  setMealEntries(nextEntries)
+
+  await store.set("ufd-meal-entries", nextEntries)
+
+  const currentUserId = session?.user?.id
+  if (!currentUserId) {
+    console.log("No active session, meals saved locally only.")
+    return
+  }
+
+  try {
+    await syncMealsToSupabase(nextEntries, currentUserId)
+  } catch (err) {
+    const msg = err?.message || "Unknown sync error"
+    console.error("Meal sync failed:", err)
+    setAuthMsg(`Meal sync failed: ${msg}`)
+  }
+}
   async function persistMealPresets(nextPresets) {
     setMealPresets(nextPresets)
     await store.set("ufd-meal-presets", nextPresets)

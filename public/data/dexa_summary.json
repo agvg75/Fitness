@@ -1,18 +1,26 @@
 [
   {
-    "Scan date": "2024-07-18",
+    "Scan date": "2025-08-26",
     "Total mass (kg)": 78.9,
-    "Fat mass (kg)": 26.7,
-    "Lean mass (kg)": 49.1,
-    "Lean+BMC (kg)": 52.2,
+    "Fat mass (kg)": 26.73,
+    "Lean mass (kg)": 49.78,
+    "Lean+BMC (kg)": 52.18,
     "% fat": 33.9
   },
   {
-    "Scan date": "2025-02-11",
-    "Total mass (kg)": 75.4,
-    "Fat mass (kg)": 23.7,
-    "Lean mass (kg)": 49.5,
-    "Lean+BMC (kg)": 52.7,
+    "Scan date": "2025-11-19",
+    "Total mass (kg)": 75.47,
+    "Fat mass (kg)": 23.67,
+    "Lean mass (kg)": 49.47,
+    "Lean+BMC (kg)": 51.8,
     "% fat": 31.4
+  },
+  {
+    "Scan date": "2026-01-14",
+    "Total mass (kg)": 73.07,
+    "Fat mass (kg)": 21.76,
+    "Lean mass (kg)": 48.94,
+    "Lean+BMC (kg)": 51.31,
+    "% fat": 29.8
   }
 ]
