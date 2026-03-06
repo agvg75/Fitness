@@ -282,7 +282,7 @@ export default function App() {
         const pctFat = row["% fat"] == null ? null : Number(row["% fat"])
 
 const label = date && !date.startsWith("scan-") ? date.slice(0, 7) : `scan-${idx + 1}`
-  return {
+return {
           date,
           label,
           total_lb: totalLb == null ? null : Number(totalLb.toFixed(1)),
