@@ -1,0 +1,16 @@
+[
+  {
+    "date": "2025-12-01",
+    "calories": 2050,
+    "protein_g": 165,
+    "fat_g": 70,
+    "carbs_g": 180
+  },
+  {
+    "date": "2025-12-02",
+    "calories": 2100,
+    "protein_g": 170,
+    "fat_g": 65,
+    "carbs_g": 190
+  }
+]
