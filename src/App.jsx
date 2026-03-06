@@ -233,8 +233,7 @@ dot={false}
 
   <XAxis dataKey="date"/>
 
-  <YAxis/>
-
+<YAxis domain={[120, 'dataMax + 2']} />
   <Tooltip/>
 
   <Line
