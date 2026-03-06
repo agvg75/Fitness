@@ -55,6 +55,7 @@ function f1(v) {
   if (v == null || Number.isNaN(Number(v))) return "NA"
   return Number(v).toFixed(1)
 }
+
 function toNum(v) {
   const n = Number(v)
   return Number.isFinite(n) ? n : 0
@@ -66,6 +67,7 @@ function fmtShortDate(dateStr) {
   if (Number.isNaN(d.getTime())) return dateStr
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" })
 }
+
 export default function App() {
   const [tab, setTab] = useState("Overview")
   const [rangeKey, setRangeKey] = useState("180D")
@@ -128,6 +130,12 @@ export default function App() {
     if (!injury.length) return null
     return injury[injury.length - 1]
   }, [injury])
+
+  const selectedRangePoints = useMemo(() => {
+    const match = rangeOptions.find(r => r.key === rangeKey)
+    return match ? match.points : 180
+  }, [rangeKey])
+
   const nutritionSeries = useMemo(() => {
     if (!nutrition.length) return []
 
@@ -230,10 +238,6 @@ export default function App() {
       proteinHitDays
     }
   }, [filteredNutrition])
-  const selectedRangePoints = useMemo(() => {
-    const match = rangeOptions.find(r => r.key === rangeKey)
-    return match ? match.points : 180
-  }, [rangeKey])
 
   const filteredDaily = useMemo(() => {
     if (!daily.length) return []
@@ -281,8 +285,9 @@ export default function App() {
         const leanBmcLb = kgToLb(row["Lean+BMC (kg)"])
         const pctFat = row["% fat"] == null ? null : Number(row["% fat"])
 
-const label = date && !date.startsWith("scan-") ? date.slice(0, 7) : `scan-${idx + 1}`
-return {
+        const label = date && !date.startsWith("scan-") ? date.slice(0, 7) : `scan-${idx + 1}`
+
+        return {
           date,
           label,
           total_lb: totalLb == null ? null : Number(totalLb.toFixed(1)),
@@ -519,10 +524,10 @@ return {
               </div>
 
               <ResponsiveContainer width="100%" height={300}>
-<BarChart data={dexaSeries}>
-  <CartesianGrid stroke="#1a1b2e" />
-  <XAxis dataKey="label" />
-  <YAxis domain={[100, "dataMax + 5"]} />
+                <BarChart data={dexaSeries}>
+                  <CartesianGrid stroke="#1a1b2e" />
+                  <XAxis dataKey="label" />
+                  <YAxis domain={[100, "dataMax + 5"]} />
                   <Tooltip />
                   <Legend />
                   <Bar dataKey="lean_lb" name="Lean (lb)" stackId="a" fill="#4a9ee8" />
@@ -537,10 +542,10 @@ return {
               </div>
 
               <ResponsiveContainer width="100%" height={300}>
-<LineChart data={dexaSeries}>
-  <CartesianGrid stroke="#1a1b2e" />
-  <XAxis dataKey="label" />
-  <YAxis domain={[20, "dataMax + 3"]} />
+                <LineChart data={dexaSeries}>
+                  <CartesianGrid stroke="#1a1b2e" />
+                  <XAxis dataKey="label" />
+                  <YAxis domain={[20, "dataMax + 3"]} />
                   <Tooltip />
                   <Line
                     type="monotone"
