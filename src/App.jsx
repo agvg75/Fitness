@@ -7,7 +7,10 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  Legend
 } from "recharts"
 
 const tabs = [
@@ -39,6 +42,16 @@ function cardStyle() {
   }
 }
 
+function kgToLb(v) {
+  if (v == null || Number.isNaN(Number(v))) return null
+  return Number(v) * 2.20462
+}
+
+function f1(v) {
+  if (v == null || Number.isNaN(Number(v))) return "NA"
+  return Number(v).toFixed(1)
+}
+
 export default function App() {
   const [tab, setTab] = useState("Overview")
   const [rangeKey, setRangeKey] = useState("180D")
@@ -46,6 +59,7 @@ export default function App() {
   const [daily, setDaily] = useState([])
   const [nutrition, setNutrition] = useState([])
   const [injury, setInjury] = useState([])
+  const [dexa, setDexa] = useState([])
   const [error, setError] = useState("")
 
   useEffect(() => {
@@ -68,9 +82,15 @@ export default function App() {
           return r.json()
         })
 
+        const dx = await fetch(`${base}data/dexa_summary.json`).then(r => {
+          if (!r.ok) throw new Error("dexa_summary.json failed")
+          return r.json()
+        })
+
         setDaily(Array.isArray(d) ? d : [])
         setNutrition(Array.isArray(n) ? n : [])
         setInjury(Array.isArray(i) ? i : [])
+        setDexa(Array.isArray(dx) ? dx : [])
       } catch (err) {
         console.log(err)
         setError(String(err))
@@ -114,8 +134,6 @@ export default function App() {
   const weightSmoothed = useMemo(() => {
     if (!filteredDaily.length) return []
 
-    const series = filteredDaily.map(d => Number(d.weight_lb)).filter(v => !Number.isNaN(v))
-
     return filteredDaily.map((d, i) => {
       const currentWeight = Number(d.weight_lb)
       const start = Math.max(0, i - 6)
@@ -135,6 +153,49 @@ export default function App() {
       }
     })
   }, [filteredDaily])
+
+  const dexaSeries = useMemo(() => {
+    if (!dexa.length) return []
+
+    return dexa
+      .map((row, idx) => {
+        const date = row["Scan date"]?.slice?.(0, 10) ?? row.date ?? `scan-${idx + 1}`
+        const totalLb = kgToLb(row["Total mass (kg)"])
+        const fatLb = kgToLb(row["Fat mass (kg)"])
+        const leanLb = kgToLb(row["Lean mass (kg)"])
+        const leanBmcLb = kgToLb(row["Lean+BMC (kg)"])
+        const pctFat = row["% fat"] == null ? null : Number(row["% fat"])
+
+        const label = date
+        return {
+          date,
+          label,
+          total_lb: totalLb == null ? null : Number(totalLb.toFixed(1)),
+          fat_lb: fatLb == null ? null : Number(fatLb.toFixed(1)),
+          lean_lb: leanLb == null ? null : Number(leanLb.toFixed(1)),
+          lean_bmc_lb: leanBmcLb == null ? null : Number(leanBmcLb.toFixed(1)),
+          pct_fat: pctFat
+        }
+      })
+      .sort((a, b) => a.date.localeCompare(b.date))
+  }, [dexa])
+
+  const latestDexa = useMemo(() => {
+    if (!dexaSeries.length) return null
+    return dexaSeries[dexaSeries.length - 1]
+  }, [dexaSeries])
+
+  const latestLeanAnchor = useMemo(() => {
+    if (!latestDexa) return null
+    return latestDexa.lean_lb
+  }, [latestDexa])
+
+  const estimatedCurrentBF = useMemo(() => {
+    if (!latestWeight || latestLeanAnchor == null) return null
+    const wt = Number(latestWeight.weight_lb)
+    if (!wt || wt <= 0) return null
+    return ((wt - latestLeanAnchor) / wt) * 100
+  }, [latestWeight, latestLeanAnchor])
 
   return (
     <div
@@ -293,6 +354,126 @@ export default function App() {
         </div>
       )}
 
+      {tab === "Body Comp" && (
+        <div>
+          <h3>Body Composition</h3>
+
+          <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", marginBottom: "20px" }}>
+            <div style={cardStyle()}>
+              <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "8px" }}>Latest DEXA Weight</div>
+              <div style={{ fontSize: "30px", fontWeight: "bold" }}>
+                {latestDexa ? `${f1(latestDexa.total_lb)} lb` : "NA"}
+              </div>
+              <div style={{ fontSize: "12px", opacity: 0.7, marginTop: "8px" }}>
+                {latestDexa?.date ?? "No scan"}
+              </div>
+            </div>
+
+            <div style={cardStyle()}>
+              <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "8px" }}>Latest DEXA Body Fat</div>
+              <div style={{ fontSize: "30px", fontWeight: "bold" }}>
+                {latestDexa?.pct_fat != null ? `${f1(latestDexa.pct_fat)}%` : "NA"}
+              </div>
+            </div>
+
+            <div style={cardStyle()}>
+              <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "8px" }}>Lean Mass Anchor</div>
+              <div style={{ fontSize: "30px", fontWeight: "bold" }}>
+                {latestLeanAnchor != null ? `${f1(latestLeanAnchor)} lb` : "NA"}
+              </div>
+              <div style={{ fontSize: "12px", opacity: 0.7, marginTop: "8px" }}>
+                latest DEXA lean mass
+              </div>
+            </div>
+
+            <div style={cardStyle()}>
+              <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "8px" }}>Estimated Current BF%</div>
+              <div style={{ fontSize: "30px", fontWeight: "bold" }}>
+                {estimatedCurrentBF != null ? `${f1(estimatedCurrentBF)}%` : "NA"}
+              </div>
+              <div style={{ fontSize: "12px", opacity: 0.7, marginTop: "8px" }}>
+                from current weight and latest lean anchor
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "20px" }}>
+            <div style={{ ...cardStyle(), minWidth: "0" }}>
+              <div style={{ fontWeight: "bold", marginBottom: "12px" }}>
+                DEXA Composition by Scan
+              </div>
+
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={dexaSeries}>
+                  <CartesianGrid stroke="#1a1b2e" />
+                  <XAxis dataKey="date" />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="lean_lb" name="Lean (lb)" stackId="a" fill="#4a9ee8" />
+                  <Bar dataKey="fat_lb" name="Fat (lb)" stackId="a" fill="#e8704a" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div style={{ ...cardStyle(), minWidth: "0" }}>
+              <div style={{ fontWeight: "bold", marginBottom: "12px" }}>
+                DEXA Body Fat %
+              </div>
+
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={dexaSeries}>
+                  <CartesianGrid stroke="#1a1b2e" />
+                  <XAxis dataKey="date" />
+                  <YAxis domain={[20, "dataMax + 3"]} />
+                  <Tooltip />
+                  <Line
+                    type="monotone"
+                    dataKey="pct_fat"
+                    stroke="#ffd166"
+                    strokeWidth={3}
+                    dot={true}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div style={{ ...cardStyle(), maxWidth: "1000px" }}>
+            <div style={{ fontWeight: "bold", marginBottom: "12px" }}>
+              DEXA Scan Summary
+            </div>
+
+            {!dexaSeries.length ? (
+              <div>No DEXA data loaded.</div>
+            ) : (
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "14px" }}>
+                <thead>
+                  <tr style={{ textAlign: "left", borderBottom: "1px solid #252640" }}>
+                    <th style={{ padding: "8px 4px" }}>Date</th>
+                    <th style={{ padding: "8px 4px" }}>Total</th>
+                    <th style={{ padding: "8px 4px" }}>Lean</th>
+                    <th style={{ padding: "8px 4px" }}>Fat</th>
+                    <th style={{ padding: "8px 4px" }}>Body Fat %</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dexaSeries.map((row, idx) => (
+                    <tr key={idx} style={{ borderBottom: "1px solid #1a1b2e" }}>
+                      <td style={{ padding: "8px 4px" }}>{row.date}</td>
+                      <td style={{ padding: "8px 4px" }}>{f1(row.total_lb)} lb</td>
+                      <td style={{ padding: "8px 4px" }}>{f1(row.lean_lb)} lb</td>
+                      <td style={{ padding: "8px 4px" }}>{f1(row.fat_lb)} lb</td>
+                      <td style={{ padding: "8px 4px" }}>{f1(row.pct_fat)}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
+
       {tab === "Calories" && (
         <div>
           <h3>Calories</h3>
@@ -313,7 +494,7 @@ export default function App() {
         </div>
       )}
 
-      {tab !== "Overview" && tab !== "Calories" && tab !== "Injury" && (
+      {tab !== "Overview" && tab !== "Body Comp" && tab !== "Calories" && tab !== "Injury" && (
         <div>
           <h3>{tab}</h3>
           <div>This tab is next.</div>
