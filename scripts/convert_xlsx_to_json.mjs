@@ -3,68 +3,98 @@ import xlsx from "xlsx"
 
 const workbook = xlsx.readFile("data_source/Andres_Fitness_AllData.xlsx")
 
-function excelDateToISO(serial) {
-  if (!serial) return null
-
-  const utc_days = Math.floor(serial - 25569)
-  const utc_value = utc_days * 86400
-
-  const date = new Date(utc_value * 1000)
-
-  return date.toISOString().slice(0,10)
-}
-
-function sheet(name){
+function sheet(name) {
   const ws = workbook.Sheets[name]
-  if(!ws) return []
-  return xlsx.utils.sheet_to_json(ws,{defval:null})
+  if (!ws) {
+    console.warn(`Missing sheet: ${name}`)
+    return []
+  }
+  return xlsx.utils.sheet_to_json(ws, { defval: null })
 }
 
-fs.mkdirSync("public/data",{recursive:true})
+function round1(v) {
+  const n = Number(v)
+  return Number.isFinite(n) ? Number(n.toFixed(1)) : null
+}
 
-const bodyWeightDaily = sheet("Body_Weight_Daily").map(r=>({
+function round2(v) {
+  const n = Number(v)
+  return Number.isFinite(n) ? Number(n.toFixed(2)) : null
+}
 
-  date: excelDateToISO(r.date),
+function normalizeDate(v) {
+  if (v == null || v === "") return null
 
-  weight_lb: r.weight_lbs_mean ? Number(r.weight_lbs_mean.toFixed(1)) : null,
+  if (typeof v === "string") {
+    const s = v.trim()
+    if (!s) return null
 
-  weight_lb_min: r.weight_lbs_min ? Number(r.weight_lbs_min.toFixed(1)) : null,
+    const d = new Date(s)
+    if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10)
 
-  weight_lb_max: r.weight_lbs_max ? Number(r.weight_lbs_max.toFixed(1)) : null,
+    return s
+  }
 
-  n_measurements: r.n_measurements ?? null,
+  if (typeof v === "number") {
+    const parsed = xlsx.SSF.parse_date_code(v)
+    if (parsed) {
+      const yyyy = String(parsed.y).padStart(4, "0")
+      const mm = String(parsed.m).padStart(2, "0")
+      const dd = String(parsed.d).padStart(2, "0")
+      return `${yyyy}-${mm}-${dd}`
+    }
+  }
 
-  body_fat_pct: null,
+  return null
+}
 
-  active_calories: null,
+fs.mkdirSync("public/data", { recursive: true })
 
-  vo2max: null
-
+const weightDaily = sheet("Body_Weight_Daily").map(row => ({
+  date: normalizeDate(row.date),
+  weight_lb: round1(row.weight_lbs_mean),
+  weight_lb_min: round1(row.weight_lbs_min),
+  weight_lb_max: round1(row.weight_lbs_max),
+  n_measurements: row.n_measurements == null ? null : Number(row.n_measurements)
 }))
 
-fs.writeFileSync(
-  "public/data/fitness_daily.json",
-  JSON.stringify(bodyWeightDaily,null,2)
-)
+const nutritionDaily = sheet("Nutrition_Daily").map(row => ({
+  date: normalizeDate(row.date ?? row.Date),
+  calories: row.calories ?? row.Calories ?? row.kcal ?? row.Kcal ?? null,
+  protein_g: row.protein_g ?? row["Protein (g)"] ?? row.protein ?? null,
+  carbs_g: row.carbs_g ?? row["Carbs (g)"] ?? row.carbs ?? null,
+  fat_g: row.fat_g ?? row["Fat (g)"] ?? row.fat ?? null,
+  notes: row.notes ?? row.Notes ?? null
+}))
 
-fs.writeFileSync(
-  "public/data/nutrition_daily.json",
-  JSON.stringify(sheet("Nutrition_Daily"),null,2)
-)
+const injuryDaily = sheet("Injury_Daily").map(row => ({
+  date: normalizeDate(row.date ?? row.Date),
+  injury: row.injury ?? row.Injury ?? row.area ?? row.Area ?? null,
+  status: row.status ?? row.Status ?? null,
+  pain: row.pain ?? row.Pain ?? row.pain_score ?? row["Pain Score"] ?? null,
+  notes: row.notes ?? row.Notes ?? null
+}))
 
-fs.writeFileSync(
-  "public/data/injury_daily.json",
-  JSON.stringify(sheet("Injury_Daily"),null,2)
-)
+const dexaSummary = sheet("DEXA_Summary").map(row => ({
+  "Scan date": normalizeDate(row["Scan date"] ?? row["Scan Date"] ?? row.date ?? row.Date),
+  "Total mass (kg)": round2(row["Total mass (kg)"] ?? row["Total mass"] ?? row["Total (kg)"]),
+  "Fat mass (kg)": round2(row["Fat mass (kg)"] ?? row["Fat mass"] ?? row["Fat (kg)"]),
+  "Lean mass (kg)": round2(row["Lean mass (kg)"] ?? row["Lean mass"] ?? row["Lean (kg)"]),
+  "Lean+BMC (kg)": round2(row["Lean+BMC (kg)"] ?? row["Lean + BMC (kg)"] ?? row["Lean+BMC"]),
+  "% fat": round1(row["% fat"] ?? row["Percent fat"] ?? row["Body fat %"])
+}))
 
-fs.writeFileSync(
-  "public/data/workout_log.json",
-  JSON.stringify(sheet("Workout_Log"),null,2)
-)
+const workoutLog = sheet("Workout_Log").map(row => ({
+  date: normalizeDate(row.date ?? row.Date),
+  workout_type: row.workout_type ?? row["Workout Type"] ?? row.type ?? null,
+  duration_min: row.duration_min ?? row["Duration (min)"] ?? row.duration ?? null,
+  notes: row.notes ?? row.Notes ?? null
+}))
 
-fs.writeFileSync(
-  "public/data/dexa_summary.json",
-  JSON.stringify(sheet("DEXA_Summary"),null,2)
-)
+fs.writeFileSync("public/data/fitness_daily.json", JSON.stringify(weightDaily, null, 2))
+fs.writeFileSync("public/data/nutrition_daily.json", JSON.stringify(nutritionDaily, null, 2))
+fs.writeFileSync("public/data/injury_daily.json", JSON.stringify(injuryDaily, null, 2))
+fs.writeFileSync("public/data/dexa_summary.json", JSON.stringify(dexaSummary, null, 2))
+fs.writeFileSync("public/data/workout_log.json", JSON.stringify(workoutLog, null, 2))
 
 console.log("Excel converted to JSON")
