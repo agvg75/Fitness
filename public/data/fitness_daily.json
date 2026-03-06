@@ -1,16 +1,1619 @@
 [
   {
-    "date": "2025-12-01",
-    "weight_lb": 174.2,
-    "weight_lb_min": 173.9,
-    "weight_lb_max": 174.8,
+    "date": "2024-12-14",
+    "weight_lb": 232,
+    "weight_lb_min": 232,
+    "weight_lb_max": 232,
+    "n_measurements": 1
+  },
+  {
+    "date": "2024-12-16",
+    "weight_lb": 226.2,
+    "weight_lb_min": 226.2,
+    "weight_lb_max": 226.2,
+    "n_measurements": 1
+  },
+  {
+    "date": "2024-12-17",
+    "weight_lb": 224.9,
+    "weight_lb_min": 224.2,
+    "weight_lb_max": 225.6,
+    "n_measurements": 2
+  },
+  {
+    "date": "2024-12-18",
+    "weight_lb": 223.4,
+    "weight_lb_min": 223.4,
+    "weight_lb_max": 223.4,
+    "n_measurements": 1
+  },
+  {
+    "date": "2024-12-19",
+    "weight_lb": 223,
+    "weight_lb_min": 223,
+    "weight_lb_max": 223,
+    "n_measurements": 1
+  },
+  {
+    "date": "2024-12-20",
+    "weight_lb": 222.4,
+    "weight_lb_min": 222.4,
+    "weight_lb_max": 222.4,
+    "n_measurements": 1
+  },
+  {
+    "date": "2024-12-21",
+    "weight_lb": 222.6,
+    "weight_lb_min": 222.6,
+    "weight_lb_max": 222.6,
+    "n_measurements": 1
+  },
+  {
+    "date": "2024-12-23",
+    "weight_lb": 222,
+    "weight_lb_min": 222,
+    "weight_lb_max": 222,
+    "n_measurements": 1
+  },
+  {
+    "date": "2024-12-24",
+    "weight_lb": 220.6,
+    "weight_lb_min": 220.6,
+    "weight_lb_max": 220.6,
+    "n_measurements": 1
+  },
+  {
+    "date": "2024-12-25",
+    "weight_lb": 220,
+    "weight_lb_min": 220,
+    "weight_lb_max": 220,
+    "n_measurements": 1
+  },
+  {
+    "date": "2024-12-26",
+    "weight_lb": 219.2,
+    "weight_lb_min": 219.2,
+    "weight_lb_max": 219.2,
+    "n_measurements": 1
+  },
+  {
+    "date": "2024-12-27",
+    "weight_lb": 220,
+    "weight_lb_min": 220,
+    "weight_lb_max": 220,
+    "n_measurements": 1
+  },
+  {
+    "date": "2024-12-28",
+    "weight_lb": 219.2,
+    "weight_lb_min": 219.2,
+    "weight_lb_max": 219.2,
+    "n_measurements": 1
+  },
+  {
+    "date": "2024-12-31",
+    "weight_lb": 219,
+    "weight_lb_min": 219,
+    "weight_lb_max": 219,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-01-04",
+    "weight_lb": 219.2,
+    "weight_lb_min": 218.8,
+    "weight_lb_max": 219.8,
     "n_measurements": 3
   },
   {
-    "date": "2025-12-02",
-    "weight_lb": 173.8,
-    "weight_lb_min": 173.5,
-    "weight_lb_max": 174.0,
+    "date": "2025-01-05",
+    "weight_lb": 218.7,
+    "weight_lb_min": 218.7,
+    "weight_lb_max": 218.7,
     "n_measurements": 2
+  },
+  {
+    "date": "2025-01-06",
+    "weight_lb": 217.9,
+    "weight_lb_min": 217.9,
+    "weight_lb_max": 217.9,
+    "n_measurements": 4
+  },
+  {
+    "date": "2025-01-08",
+    "weight_lb": 217.6,
+    "weight_lb_min": 217,
+    "weight_lb_max": 218,
+    "n_measurements": 8
+  },
+  {
+    "date": "2025-01-09",
+    "weight_lb": 217.7,
+    "weight_lb_min": 217.6,
+    "weight_lb_max": 217.7,
+    "n_measurements": 4
+  },
+  {
+    "date": "2025-01-10",
+    "weight_lb": 216.9,
+    "weight_lb_min": 216.9,
+    "weight_lb_max": 216.9,
+    "n_measurements": 4
+  },
+  {
+    "date": "2025-01-11",
+    "weight_lb": 216.9,
+    "weight_lb_min": 216.9,
+    "weight_lb_max": 216.9,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-01-12",
+    "weight_lb": 216.8,
+    "weight_lb_min": 216.8,
+    "weight_lb_max": 216.8,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-01-13",
+    "weight_lb": 215.3,
+    "weight_lb_min": 215.3,
+    "weight_lb_max": 215.3,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-01-14",
+    "weight_lb": 214.4,
+    "weight_lb_min": 214.3,
+    "weight_lb_max": 214.6,
+    "n_measurements": 4
+  },
+  {
+    "date": "2025-01-16",
+    "weight_lb": 215.2,
+    "weight_lb_min": 215.2,
+    "weight_lb_max": 215.2,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-01-17",
+    "weight_lb": 215.6,
+    "weight_lb_min": 215.6,
+    "weight_lb_max": 215.6,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-01-18",
+    "weight_lb": 215.4,
+    "weight_lb_min": 215,
+    "weight_lb_max": 215.9,
+    "n_measurements": 4
+  },
+  {
+    "date": "2025-01-19",
+    "weight_lb": 213.6,
+    "weight_lb_min": 213.3,
+    "weight_lb_max": 214.2,
+    "n_measurements": 6
+  },
+  {
+    "date": "2025-01-20",
+    "weight_lb": 211.9,
+    "weight_lb_min": 211.9,
+    "weight_lb_max": 211.9,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-01-21",
+    "weight_lb": 210.2,
+    "weight_lb_min": 204.9,
+    "weight_lb_max": 212.9,
+    "n_measurements": 6
+  },
+  {
+    "date": "2025-01-22",
+    "weight_lb": 214.3,
+    "weight_lb_min": 214.3,
+    "weight_lb_max": 214.3,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-01-23",
+    "weight_lb": 212.2,
+    "weight_lb_min": 212.2,
+    "weight_lb_max": 212.3,
+    "n_measurements": 6
+  },
+  {
+    "date": "2025-01-25",
+    "weight_lb": 213.1,
+    "weight_lb_min": 213.1,
+    "weight_lb_max": 213.1,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-01-26",
+    "weight_lb": 213,
+    "weight_lb_min": 213,
+    "weight_lb_max": 213,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-01-27",
+    "weight_lb": 211.2,
+    "weight_lb_min": 211.2,
+    "weight_lb_max": 211.2,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-01-28",
+    "weight_lb": 210.6,
+    "weight_lb_min": 210.6,
+    "weight_lb_max": 210.6,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-01-29",
+    "weight_lb": 209.7,
+    "weight_lb_min": 209.6,
+    "weight_lb_max": 209.7,
+    "n_measurements": 4
+  },
+  {
+    "date": "2025-01-30",
+    "weight_lb": 209.4,
+    "weight_lb_min": 209.4,
+    "weight_lb_max": 209.4,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-01-31",
+    "weight_lb": 209.6,
+    "weight_lb_min": 209.6,
+    "weight_lb_max": 209.6,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-02-02",
+    "weight_lb": 210,
+    "weight_lb_min": 210,
+    "weight_lb_max": 210,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-02-03",
+    "weight_lb": 210,
+    "weight_lb_min": 210,
+    "weight_lb_max": 210,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-02-04",
+    "weight_lb": 209.9,
+    "weight_lb_min": 209.9,
+    "weight_lb_max": 209.9,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-02-05",
+    "weight_lb": 208.1,
+    "weight_lb_min": 208.1,
+    "weight_lb_max": 208.1,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-02-06",
+    "weight_lb": 207.6,
+    "weight_lb_min": 207.2,
+    "weight_lb_max": 208,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-02-07",
+    "weight_lb": 208,
+    "weight_lb_min": 208,
+    "weight_lb_max": 208,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-02-09",
+    "weight_lb": 209.1,
+    "weight_lb_min": 209.1,
+    "weight_lb_max": 209.1,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-02-10",
+    "weight_lb": 208.1,
+    "weight_lb_min": 208.1,
+    "weight_lb_max": 208.1,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-02-12",
+    "weight_lb": 205.6,
+    "weight_lb_min": 205.4,
+    "weight_lb_max": 205.9,
+    "n_measurements": 3
+  },
+  {
+    "date": "2025-02-13",
+    "weight_lb": 205.2,
+    "weight_lb_min": 205.2,
+    "weight_lb_max": 205.2,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-02-15",
+    "weight_lb": 205.7,
+    "weight_lb_min": 205.7,
+    "weight_lb_max": 205.7,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-02-16",
+    "weight_lb": 206.2,
+    "weight_lb_min": 206.2,
+    "weight_lb_max": 206.2,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-02-17",
+    "weight_lb": 205.4,
+    "weight_lb_min": 205.4,
+    "weight_lb_max": 205.4,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-02-18",
+    "weight_lb": 204.7,
+    "weight_lb_min": 204.7,
+    "weight_lb_max": 204.7,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-02-19",
+    "weight_lb": 203.7,
+    "weight_lb_min": 203.7,
+    "weight_lb_max": 203.7,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-02-20",
+    "weight_lb": 202.8,
+    "weight_lb_min": 202.8,
+    "weight_lb_max": 202.8,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-02-21",
+    "weight_lb": 203.4,
+    "weight_lb_min": 203.4,
+    "weight_lb_max": 203.4,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-02-22",
+    "weight_lb": 202.9,
+    "weight_lb_min": 202.9,
+    "weight_lb_max": 202.9,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-02-24",
+    "weight_lb": 202,
+    "weight_lb_min": 202,
+    "weight_lb_max": 202,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-02-26",
+    "weight_lb": 201.5,
+    "weight_lb_min": 201.5,
+    "weight_lb_max": 201.5,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-02-27",
+    "weight_lb": 202.4,
+    "weight_lb_min": 202.4,
+    "weight_lb_max": 202.4,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-02-28",
+    "weight_lb": 201.9,
+    "weight_lb_min": 201.9,
+    "weight_lb_max": 201.9,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-03-01",
+    "weight_lb": 201.2,
+    "weight_lb_min": 201.1,
+    "weight_lb_max": 201.4,
+    "n_measurements": 3
+  },
+  {
+    "date": "2025-03-02",
+    "weight_lb": 201.8,
+    "weight_lb_min": 201.3,
+    "weight_lb_max": 202.2,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-03-04",
+    "weight_lb": 198.9,
+    "weight_lb_min": 198.9,
+    "weight_lb_max": 198.9,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-03-05",
+    "weight_lb": 198.3,
+    "weight_lb_min": 198.3,
+    "weight_lb_max": 198.3,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-03-06",
+    "weight_lb": 197,
+    "weight_lb_min": 197,
+    "weight_lb_max": 197,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-03-07",
+    "weight_lb": 196.4,
+    "weight_lb_min": 196.4,
+    "weight_lb_max": 196.4,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-03-09",
+    "weight_lb": 196.3,
+    "weight_lb_min": 196.3,
+    "weight_lb_max": 196.3,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-03-10",
+    "weight_lb": 195.4,
+    "weight_lb_min": 195.4,
+    "weight_lb_max": 195.4,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-03-11",
+    "weight_lb": 195.4,
+    "weight_lb_min": 195.4,
+    "weight_lb_max": 195.4,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-03-12",
+    "weight_lb": 195.3,
+    "weight_lb_min": 195.3,
+    "weight_lb_max": 195.3,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-03-13",
+    "weight_lb": 196.3,
+    "weight_lb_min": 196.3,
+    "weight_lb_max": 196.3,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-03-15",
+    "weight_lb": 196.9,
+    "weight_lb_min": 196.9,
+    "weight_lb_max": 196.9,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-03-24",
+    "weight_lb": 194.1,
+    "weight_lb_min": 194.1,
+    "weight_lb_max": 194.1,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-03-25",
+    "weight_lb": 192.8,
+    "weight_lb_min": 192.8,
+    "weight_lb_max": 192.8,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-03-27",
+    "weight_lb": 191.2,
+    "weight_lb_min": 191.2,
+    "weight_lb_max": 191.2,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-03-28",
+    "weight_lb": 191.1,
+    "weight_lb_min": 191,
+    "weight_lb_max": 191.1,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-03-29",
+    "weight_lb": 190.8,
+    "weight_lb_min": 190.8,
+    "weight_lb_max": 190.8,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-03-30",
+    "weight_lb": 191.5,
+    "weight_lb_min": 191.5,
+    "weight_lb_max": 191.5,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-03-31",
+    "weight_lb": 192.1,
+    "weight_lb_min": 192.1,
+    "weight_lb_max": 192.1,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-04-01",
+    "weight_lb": 191.5,
+    "weight_lb_min": 191.5,
+    "weight_lb_max": 191.5,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-04-02",
+    "weight_lb": 191.1,
+    "weight_lb_min": 191.1,
+    "weight_lb_max": 191.1,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-04-04",
+    "weight_lb": 190,
+    "weight_lb_min": 190,
+    "weight_lb_max": 190,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-04-06",
+    "weight_lb": 189.6,
+    "weight_lb_min": 189.5,
+    "weight_lb_max": 189.6,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-04-07",
+    "weight_lb": 189.4,
+    "weight_lb_min": 189.4,
+    "weight_lb_max": 189.4,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-04-08",
+    "weight_lb": 189,
+    "weight_lb_min": 189,
+    "weight_lb_max": 189,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-04-09",
+    "weight_lb": 190,
+    "weight_lb_min": 190,
+    "weight_lb_max": 190,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-04-13",
+    "weight_lb": 189.9,
+    "weight_lb_min": 189.9,
+    "weight_lb_max": 189.9,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-04-14",
+    "weight_lb": 189.8,
+    "weight_lb_min": 189.8,
+    "weight_lb_max": 189.8,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-04-15",
+    "weight_lb": 188.8,
+    "weight_lb_min": 188.8,
+    "weight_lb_max": 188.8,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-04-16",
+    "weight_lb": 188.7,
+    "weight_lb_min": 188.7,
+    "weight_lb_max": 188.7,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-04-17",
+    "weight_lb": 187.5,
+    "weight_lb_min": 187.5,
+    "weight_lb_max": 187.5,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-04-18",
+    "weight_lb": 187.3,
+    "weight_lb_min": 187.3,
+    "weight_lb_max": 187.3,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-04-19",
+    "weight_lb": 188,
+    "weight_lb_min": 188,
+    "weight_lb_max": 188,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-04-22",
+    "weight_lb": 188,
+    "weight_lb_min": 188,
+    "weight_lb_max": 188,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-04-23",
+    "weight_lb": 186.6,
+    "weight_lb_min": 186.6,
+    "weight_lb_max": 186.6,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-04-24",
+    "weight_lb": 186.1,
+    "weight_lb_min": 186,
+    "weight_lb_max": 186.1,
+    "n_measurements": 4
+  },
+  {
+    "date": "2025-05-02",
+    "weight_lb": 187.1,
+    "weight_lb_min": 187.1,
+    "weight_lb_max": 187.1,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-05-03",
+    "weight_lb": 188,
+    "weight_lb_min": 188,
+    "weight_lb_max": 188,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-05-06",
+    "weight_lb": 185.1,
+    "weight_lb_min": 185,
+    "weight_lb_max": 185.1,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-05-07",
+    "weight_lb": 184.8,
+    "weight_lb_min": 184.7,
+    "weight_lb_max": 184.8,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-05-08",
+    "weight_lb": 184.6,
+    "weight_lb_min": 184.6,
+    "weight_lb_max": 184.6,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-05-09",
+    "weight_lb": 185.2,
+    "weight_lb_min": 185.2,
+    "weight_lb_max": 185.2,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-05-12",
+    "weight_lb": 186,
+    "weight_lb_min": 186,
+    "weight_lb_max": 186,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-05-14",
+    "weight_lb": 187,
+    "weight_lb_min": 187,
+    "weight_lb_max": 187,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-05-15",
+    "weight_lb": 186.5,
+    "weight_lb_min": 186.5,
+    "weight_lb_max": 186.5,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-05-16",
+    "weight_lb": 185.1,
+    "weight_lb_min": 185.1,
+    "weight_lb_max": 185.1,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-05-17",
+    "weight_lb": 183.9,
+    "weight_lb_min": 183.6,
+    "weight_lb_max": 184.4,
+    "n_measurements": 3
+  },
+  {
+    "date": "2025-05-18",
+    "weight_lb": 182.4,
+    "weight_lb_min": 182.4,
+    "weight_lb_max": 182.4,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-05-19",
+    "weight_lb": 182.9,
+    "weight_lb_min": 182.9,
+    "weight_lb_max": 183,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-05-20",
+    "weight_lb": 183.5,
+    "weight_lb_min": 182.8,
+    "weight_lb_max": 184.2,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-05-21",
+    "weight_lb": 182.8,
+    "weight_lb_min": 182.8,
+    "weight_lb_max": 182.9,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-05-29",
+    "weight_lb": 184.9,
+    "weight_lb_min": 184.9,
+    "weight_lb_max": 184.9,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-05-30",
+    "weight_lb": 183.9,
+    "weight_lb_min": 183.9,
+    "weight_lb_max": 183.9,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-06-01",
+    "weight_lb": 184.1,
+    "weight_lb_min": 184.1,
+    "weight_lb_max": 184.1,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-06-03",
+    "weight_lb": 184.6,
+    "weight_lb_min": 184.6,
+    "weight_lb_max": 184.6,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-06-10",
+    "weight_lb": 183.4,
+    "weight_lb_min": 183.4,
+    "weight_lb_max": 183.4,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-06-17",
+    "weight_lb": 183.8,
+    "weight_lb_min": 183.8,
+    "weight_lb_max": 183.8,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-06-18",
+    "weight_lb": 182.3,
+    "weight_lb_min": 182.3,
+    "weight_lb_max": 182.3,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-06-19",
+    "weight_lb": 182.2,
+    "weight_lb_min": 182.2,
+    "weight_lb_max": 182.2,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-06-20",
+    "weight_lb": 182.1,
+    "weight_lb_min": 182,
+    "weight_lb_max": 182.1,
+    "n_measurements": 3
+  },
+  {
+    "date": "2025-06-21",
+    "weight_lb": 182.6,
+    "weight_lb_min": 182.6,
+    "weight_lb_max": 182.6,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-06-24",
+    "weight_lb": 183.4,
+    "weight_lb_min": 183.4,
+    "weight_lb_max": 183.4,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-06-25",
+    "weight_lb": 182.3,
+    "weight_lb_min": 182.3,
+    "weight_lb_max": 182.3,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-06-26",
+    "weight_lb": 182.4,
+    "weight_lb_min": 182.4,
+    "weight_lb_max": 182.4,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-06-28",
+    "weight_lb": 180.7,
+    "weight_lb_min": 180.7,
+    "weight_lb_max": 180.7,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-07-03",
+    "weight_lb": 182.8,
+    "weight_lb_min": 182.8,
+    "weight_lb_max": 182.8,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-07-06",
+    "weight_lb": 182.4,
+    "weight_lb_min": 182.4,
+    "weight_lb_max": 182.4,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-07-07",
+    "weight_lb": 183.2,
+    "weight_lb_min": 183.2,
+    "weight_lb_max": 183.2,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-07-08",
+    "weight_lb": 182.8,
+    "weight_lb_min": 182.8,
+    "weight_lb_max": 182.8,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-07-09",
+    "weight_lb": 181.4,
+    "weight_lb_min": 181.1,
+    "weight_lb_max": 181.7,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-07-10",
+    "weight_lb": 180.6,
+    "weight_lb_min": 180.6,
+    "weight_lb_max": 180.6,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-07-11",
+    "weight_lb": 180.9,
+    "weight_lb_min": 180.9,
+    "weight_lb_max": 180.9,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-07-13",
+    "weight_lb": 181.8,
+    "weight_lb_min": 181.8,
+    "weight_lb_max": 181.8,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-07-15",
+    "weight_lb": 180.1,
+    "weight_lb_min": 180.1,
+    "weight_lb_max": 180.1,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-07-16",
+    "weight_lb": 179.8,
+    "weight_lb_min": 179.8,
+    "weight_lb_max": 179.8,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-07-19",
+    "weight_lb": 177.4,
+    "weight_lb_min": 177.4,
+    "weight_lb_max": 177.4,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-07-20",
+    "weight_lb": 177.4,
+    "weight_lb_min": 177,
+    "weight_lb_max": 177.8,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-07-21",
+    "weight_lb": 180.6,
+    "weight_lb_min": 177.4,
+    "weight_lb_max": 182.2,
+    "n_measurements": 3
+  },
+  {
+    "date": "2025-07-23",
+    "weight_lb": 178.6,
+    "weight_lb_min": 178.6,
+    "weight_lb_max": 178.6,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-07-24",
+    "weight_lb": 177,
+    "weight_lb_min": 177,
+    "weight_lb_max": 177,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-07-25",
+    "weight_lb": 177.4,
+    "weight_lb_min": 177.3,
+    "weight_lb_max": 177.6,
+    "n_measurements": 3
+  },
+  {
+    "date": "2025-07-26",
+    "weight_lb": 177.4,
+    "weight_lb_min": 177.4,
+    "weight_lb_max": 177.4,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-07-27",
+    "weight_lb": 177.1,
+    "weight_lb_min": 176.8,
+    "weight_lb_max": 177.7,
+    "n_measurements": 3
+  },
+  {
+    "date": "2025-07-28",
+    "weight_lb": 176.7,
+    "weight_lb_min": 176.6,
+    "weight_lb_max": 176.7,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-07-29",
+    "weight_lb": 176.5,
+    "weight_lb_min": 176.4,
+    "weight_lb_max": 176.6,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-07-30",
+    "weight_lb": 177,
+    "weight_lb_min": 177,
+    "weight_lb_max": 177,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-07-31",
+    "weight_lb": 176.8,
+    "weight_lb_min": 176.8,
+    "weight_lb_max": 176.8,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-08-02",
+    "weight_lb": 176.7,
+    "weight_lb_min": 176.7,
+    "weight_lb_max": 176.7,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-08-09",
+    "weight_lb": 176.5,
+    "weight_lb_min": 176.5,
+    "weight_lb_max": 176.5,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-08-10",
+    "weight_lb": 175.7,
+    "weight_lb_min": 175.7,
+    "weight_lb_max": 175.7,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-08-12",
+    "weight_lb": 175.8,
+    "weight_lb_min": 175.8,
+    "weight_lb_max": 175.8,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-08-13",
+    "weight_lb": 176.1,
+    "weight_lb_min": 175.9,
+    "weight_lb_max": 176.2,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-08-15",
+    "weight_lb": 176.8,
+    "weight_lb_min": 176.8,
+    "weight_lb_max": 176.8,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-08-18",
+    "weight_lb": 176.4,
+    "weight_lb_min": 176.4,
+    "weight_lb_max": 176.5,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-08-19",
+    "weight_lb": 175.3,
+    "weight_lb_min": 175.3,
+    "weight_lb_max": 175.3,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-08-20",
+    "weight_lb": 173.4,
+    "weight_lb_min": 171.8,
+    "weight_lb_max": 174,
+    "n_measurements": 6
+  },
+  {
+    "date": "2025-08-22",
+    "weight_lb": 175.2,
+    "weight_lb_min": 175.2,
+    "weight_lb_max": 175.2,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-08-24",
+    "weight_lb": 175.2,
+    "weight_lb_min": 175.2,
+    "weight_lb_max": 175.2,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-08-25",
+    "weight_lb": 174.5,
+    "weight_lb_min": 174.5,
+    "weight_lb_max": 174.5,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-08-26",
+    "weight_lb": 158.2,
+    "weight_lb_min": 142.1,
+    "weight_lb_max": 174.2,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-08-27",
+    "weight_lb": 174,
+    "weight_lb_min": 174,
+    "weight_lb_max": 174,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-08-28",
+    "weight_lb": 173.9,
+    "weight_lb_min": 173.9,
+    "weight_lb_max": 173.9,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-08-29",
+    "weight_lb": 173.3,
+    "weight_lb_min": 173.3,
+    "weight_lb_max": 173.3,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-08-30",
+    "weight_lb": 173,
+    "weight_lb_min": 173,
+    "weight_lb_max": 173,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-08-31",
+    "weight_lb": 173.8,
+    "weight_lb_min": 173.8,
+    "weight_lb_max": 173.8,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-09-01",
+    "weight_lb": 173.3,
+    "weight_lb_min": 173.3,
+    "weight_lb_max": 173.3,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-09-03",
+    "weight_lb": 173,
+    "weight_lb_min": 173,
+    "weight_lb_max": 173,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-09-04",
+    "weight_lb": 172.6,
+    "weight_lb_min": 172.6,
+    "weight_lb_max": 172.6,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-09-05",
+    "weight_lb": 172.3,
+    "weight_lb_min": 172.3,
+    "weight_lb_max": 172.3,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-09-06",
+    "weight_lb": 172.5,
+    "weight_lb_min": 172.5,
+    "weight_lb_max": 172.5,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-09-07",
+    "weight_lb": 174,
+    "weight_lb_min": 174,
+    "weight_lb_max": 174,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-09-09",
+    "weight_lb": 171.8,
+    "weight_lb_min": 171.6,
+    "weight_lb_max": 172.2,
+    "n_measurements": 3
+  },
+  {
+    "date": "2025-09-10",
+    "weight_lb": 170.5,
+    "weight_lb_min": 170.5,
+    "weight_lb_max": 170.5,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-09-16",
+    "weight_lb": 171.4,
+    "weight_lb_min": 171.4,
+    "weight_lb_max": 171.4,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-09-17",
+    "weight_lb": 170.3,
+    "weight_lb_min": 170.3,
+    "weight_lb_max": 170.3,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-09-18",
+    "weight_lb": 171.4,
+    "weight_lb_min": 171.4,
+    "weight_lb_max": 171.4,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-09-19",
+    "weight_lb": 171.6,
+    "weight_lb_min": 171.6,
+    "weight_lb_max": 171.6,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-09-21",
+    "weight_lb": 173.1,
+    "weight_lb_min": 173.1,
+    "weight_lb_max": 173.1,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-09-22",
+    "weight_lb": 173.4,
+    "weight_lb_min": 173.4,
+    "weight_lb_max": 173.4,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-09-23",
+    "weight_lb": 171.8,
+    "weight_lb_min": 171.8,
+    "weight_lb_max": 171.8,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-09-24",
+    "weight_lb": 170.6,
+    "weight_lb_min": 170.2,
+    "weight_lb_max": 171,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-09-26",
+    "weight_lb": 170.2,
+    "weight_lb_min": 169.4,
+    "weight_lb_max": 170.9,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-09-27",
+    "weight_lb": 171.1,
+    "weight_lb_min": 171.1,
+    "weight_lb_max": 171.1,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-09-30",
+    "weight_lb": 170.8,
+    "weight_lb_min": 170.8,
+    "weight_lb_max": 170.8,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-10-01",
+    "weight_lb": 169.3,
+    "weight_lb_min": 169.2,
+    "weight_lb_max": 169.5,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-10-02",
+    "weight_lb": 169.1,
+    "weight_lb_min": 169.1,
+    "weight_lb_max": 169.1,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-10-03",
+    "weight_lb": 170.2,
+    "weight_lb_min": 170.2,
+    "weight_lb_max": 170.2,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-10-05",
+    "weight_lb": 171.3,
+    "weight_lb_min": 171.3,
+    "weight_lb_max": 171.3,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-10-06",
+    "weight_lb": 171.8,
+    "weight_lb_min": 171.8,
+    "weight_lb_max": 171.8,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-10-07",
+    "weight_lb": 170.3,
+    "weight_lb_min": 170.3,
+    "weight_lb_max": 170.3,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-10-08",
+    "weight_lb": 168.7,
+    "weight_lb_min": 168.4,
+    "weight_lb_max": 169.4,
+    "n_measurements": 3
+  },
+  {
+    "date": "2025-10-13",
+    "weight_lb": 170.5,
+    "weight_lb_min": 170.5,
+    "weight_lb_max": 170.5,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-10-14",
+    "weight_lb": 170,
+    "weight_lb_min": 170,
+    "weight_lb_max": 170,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-10-15",
+    "weight_lb": 168.5,
+    "weight_lb_min": 168.5,
+    "weight_lb_max": 168.5,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-10-16",
+    "weight_lb": 169,
+    "weight_lb_min": 169,
+    "weight_lb_max": 169,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-10-17",
+    "weight_lb": 168.6,
+    "weight_lb_min": 168.6,
+    "weight_lb_max": 168.6,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-10-19",
+    "weight_lb": 169.5,
+    "weight_lb_min": 169.5,
+    "weight_lb_max": 169.5,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-10-21",
+    "weight_lb": 168,
+    "weight_lb_min": 167.9,
+    "weight_lb_max": 168.2,
+    "n_measurements": 3
+  },
+  {
+    "date": "2025-10-24",
+    "weight_lb": 168.2,
+    "weight_lb_min": 168,
+    "weight_lb_max": 168.4,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-10-27",
+    "weight_lb": 171,
+    "weight_lb_min": 171,
+    "weight_lb_max": 171,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-10-29",
+    "weight_lb": 169,
+    "weight_lb_min": 169,
+    "weight_lb_max": 169,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-10-30",
+    "weight_lb": 169.4,
+    "weight_lb_min": 169.4,
+    "weight_lb_max": 169.4,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-10-31",
+    "weight_lb": 167.2,
+    "weight_lb_min": 167.2,
+    "weight_lb_max": 167.2,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-11-04",
+    "weight_lb": 168.8,
+    "weight_lb_min": 168.8,
+    "weight_lb_max": 168.8,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-11-05",
+    "weight_lb": 169.6,
+    "weight_lb_min": 169.6,
+    "weight_lb_max": 169.6,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-11-08",
+    "weight_lb": 168.4,
+    "weight_lb_min": 168.4,
+    "weight_lb_max": 168.5,
+    "n_measurements": 3
+  },
+  {
+    "date": "2025-11-11",
+    "weight_lb": 168.5,
+    "weight_lb_min": 168.5,
+    "weight_lb_max": 168.5,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-11-12",
+    "weight_lb": 168.4,
+    "weight_lb_min": 168.4,
+    "weight_lb_max": 168.4,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-11-13",
+    "weight_lb": 167.6,
+    "weight_lb_min": 166.9,
+    "weight_lb_max": 168.3,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-11-14",
+    "weight_lb": 170,
+    "weight_lb_min": 170,
+    "weight_lb_max": 170,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-11-15",
+    "weight_lb": 169.2,
+    "weight_lb_min": 169.2,
+    "weight_lb_max": 169.2,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-11-16",
+    "weight_lb": 168,
+    "weight_lb_min": 167,
+    "weight_lb_max": 169,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-11-17",
+    "weight_lb": 169.9,
+    "weight_lb_min": 169.9,
+    "weight_lb_max": 169.9,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-11-18",
+    "weight_lb": 167.8,
+    "weight_lb_min": 167.8,
+    "weight_lb_max": 167.8,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-11-19",
+    "weight_lb": 166.1,
+    "weight_lb_min": 166.1,
+    "weight_lb_max": 166.1,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-11-26",
+    "weight_lb": 166.1,
+    "weight_lb_min": 166.1,
+    "weight_lb_max": 166.1,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-12-01",
+    "weight_lb": 169.1,
+    "weight_lb_min": 169.1,
+    "weight_lb_max": 169.1,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-12-03",
+    "weight_lb": 165.7,
+    "weight_lb_min": 165.6,
+    "weight_lb_max": 165.8,
+    "n_measurements": 4
+  },
+  {
+    "date": "2025-12-04",
+    "weight_lb": 166.8,
+    "weight_lb_min": 166.8,
+    "weight_lb_max": 166.8,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-12-05",
+    "weight_lb": 165.1,
+    "weight_lb_min": 164.2,
+    "weight_lb_max": 165.9,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-12-07",
+    "weight_lb": 167.1,
+    "weight_lb_min": 167.1,
+    "weight_lb_max": 167.1,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-12-08",
+    "weight_lb": 164.4,
+    "weight_lb_min": 164.4,
+    "weight_lb_max": 164.4,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-12-09",
+    "weight_lb": 163.8,
+    "weight_lb_min": 162.9,
+    "weight_lb_max": 165.4,
+    "n_measurements": 6
+  },
+  {
+    "date": "2025-12-10",
+    "weight_lb": 163.1,
+    "weight_lb_min": 163.1,
+    "weight_lb_max": 163.1,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-12-11",
+    "weight_lb": 162.6,
+    "weight_lb_min": 162.5,
+    "weight_lb_max": 162.8,
+    "n_measurements": 6
+  },
+  {
+    "date": "2025-12-12",
+    "weight_lb": 162.4,
+    "weight_lb_min": 162.4,
+    "weight_lb_max": 162.4,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-12-13",
+    "weight_lb": 163.1,
+    "weight_lb_min": 163,
+    "weight_lb_max": 163.1,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-12-15",
+    "weight_lb": 164.5,
+    "weight_lb_min": 164.5,
+    "weight_lb_max": 164.5,
+    "n_measurements": 1
+  },
+  {
+    "date": "2025-12-16",
+    "weight_lb": 162.3,
+    "weight_lb_min": 162.2,
+    "weight_lb_max": 162.3,
+    "n_measurements": 2
+  },
+  {
+    "date": "2025-12-17",
+    "weight_lb": 161.8,
+    "weight_lb_min": 161.4,
+    "weight_lb_max": 162.5,
+    "n_measurements": 3
   }
 ]

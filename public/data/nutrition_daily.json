@@ -1,16 +1,26 @@
 [
   {
-    "date": "2025-12-01",
-    "calories": 2050,
-    "protein_g": 165,
-    "fat_g": 70,
-    "carbs_g": 180
+    "date": "2024-12-01",
+    "calories": null,
+    "protein_g": null,
+    "carbs_g": null,
+    "fat_g": null,
+    "notes": null
   },
   {
-    "date": "2025-12-02",
-    "calories": 2100,
-    "protein_g": 170,
-    "fat_g": 65,
-    "carbs_g": 190
+    "date": "2026-02-01",
+    "calories": null,
+    "protein_g": null,
+    "carbs_g": null,
+    "fat_g": null,
+    "notes": null
+  },
+  {
+    "date": "2026-02-03",
+    "calories": null,
+    "protein_g": null,
+    "carbs_g": null,
+    "fat_g": null,
+    "notes": null
   }
 ]
