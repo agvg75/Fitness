@@ -629,10 +629,17 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session }) {
   const [sessionDate, setSessionDate] = useState(todayISO())
   const [sessionDur, setSessionDur] = useState("")
   const [toast, setToast] = useState(null)
-  const saveScheduleKey = async (key, value) => {
+ const saveScheduleKey = async (key, value) => {
   await store.set(key, value)
 
+  console.log("saveScheduleKey", {
+    key,
+    hasSupabase: !!supabase,
+    sessionUserId: session?.user?.id || null
+  })
+
   if (!supabase || !session?.user?.id) return
+
 
   const { error } = await supabase
     .from("user_kv")
