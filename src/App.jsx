@@ -278,134 +278,134 @@ Mon: {
 },
 
   Wed: {
-    cardio: "Easy run, 30 min, Zone 2, conversational pace, run before lifting",
-    warmup: [],
-    topNote: null,
-    sections: [
-      {
-        h: "Rear / Side Delt",
-        ex: [
-          { id: "w1", name: "Rear Delt Fly", sub: "Reverse pec deck / cable", def: [mk("12-15",7), mk("12-15",7), mk("12-15",7)], note: "Perfect control" },
-          { id: "w2", name: "Lateral Raise", sub: "Cable / DB", def: [mk("12-20","—"), mk("12-20","—"), mk("12-20","—"), mk("12-20","—")], note: "No swing" }
-        ]
-      },
-      {
-        h: "Shoulder Health",
-        ex: [
-          { id: "w3", name: "Face Pull / ER", sub: "Cable / band", def: [mk("12-15","—"), mk("12-15","—")], note: "Skip if done Monday" }
-        ]
-      },
-      {
-        h: "Triceps",
-        ex: [
-          { id: "w4", name: "Triceps Pushdown", sub: "Cable pressdown", def: [mk(10,35), mk(10,35), mk(10,35)], note: "2-0-2 tempo" }
-        ]
-      }
-    ]
-  },
+  cardio: "Easy run, 30 min, Zone 2, conversational pace, run before lifting",
+  warmup: [],
+  topNote: null,
+  sections: [
+    {
+      h: "Rear / Side Delt",
+      ex: [
+        { id: "w1", name: "Rear Delt Fly", sub: "Reverse pec deck / cable", def: [mk(12,7), mk(12,7), mk(12,7)], note: "Perfect control" },
+        { id: "w2", name: "Lateral Raise", sub: "Cable / DB", def: [mk(12,"—"), mk(12,"—"), mk(12,"—"), mk(12,"—")], note: "No swing" }
+      ]
+    },
+    {
+      h: "Shoulder Health",
+      ex: [
+        { id: "w3", name: "Face Pull / ER", sub: "Cable / band", def: [mk(12,"—"), mk(12,"—")], note: "Skip if done Monday" }
+      ]
+    },
+    {
+      h: "Triceps",
+      ex: [
+        { id: "w4", name: "Triceps Pushdown", sub: "Cable pressdown", def: [mk(10,35), mk(10,35), mk(10,35)], note: "2-0-2 tempo" }
+      ]
+    }
+  ]
+},
 
   Thu: {
-    cardio: null,
-    warmup: [
-      "Cable shoulder ER/IR 2x10",
-      "Banded X's 2x8 each side",
-      "Arm circles 2x30 sec"
-    ],
-    topNote: "KNR Day 4, confirm exact movements and loads with your kinesiologist each session.",
-    sections: [
-      {
-        h: "Back Primary",
-        ex: [
-          { id: "th1", name: "Lat Pulldown", sub: "Machine or cable", def: [mk("8-12","—"), mk("8-12","—"), mk("8-12","—")], note: "Elbows to ribs" },
-          { id: "th2", name: "Seated Row", sub: "Cable", def: [mk("8-12","—"), mk("8-12","—"), mk("8-12","—")], note: "Scap retraction" },
-          { id: "th3", name: "Chest-Supported Row", sub: "Machine or incline DB", def: [mk("10-12","—"), mk("10-12","—"), mk("10-12","—")], note: "Chest on pad" }
-        ]
-      },
-      {
-        h: "Biceps",
-        ex: [
-          { id: "th4", name: "Biceps Curl", sub: "Cable or DB", def: [mk("8-12",25), mk("8-12",25), mk("8-12",25)], note: "No sway" },
-          { id: "th5", name: "Hammer Curl", sub: "DB alternating", def: [mk("10-12","—"), mk("10-12","—")], note: "Neutral grip" }
-        ]
-      }
-    ]
-  },
+  cardio: null,
+  warmup: [
+    "Cable shoulder ER/IR 2x10",
+    "Banded X's 2x8 each side",
+    "Arm circles 2x30 sec"
+  ],
+  topNote: "KNR Day 4, confirm exact movements and loads with your kinesiologist each session.",
+  sections: [
+    {
+      h: "Back Primary",
+      ex: [
+        { id: "th1", name: "Lat Pulldown", sub: "Machine or cable", def: [mk(10,"—"), mk(10,"—"), mk(10,"—")], note: "Elbows to ribs" },
+        { id: "th2", name: "Seated Row", sub: "Cable", def: [mk(10,"—"), mk(10,"—"), mk(10,"—")], note: "Scap retraction" },
+        { id: "th3", name: "Chest-Supported Row", sub: "Machine or incline DB", def: [mk(10,"—"), mk(10,"—"), mk(10,"—")], note: "Chest on pad" }
+      ]
+    },
+    {
+      h: "Biceps",
+      ex: [
+        { id: "th4", name: "Biceps Curl", sub: "Cable or DB", def: [mk(10,25), mk(10,25), mk(10,25)], note: "No sway" },
+        { id: "th5", name: "Hammer Curl", sub: "DB alternating", def: [mk(10,"—"), mk(10,"—")], note: "Neutral grip" }
+      ]
+    }
+  ]
+},
 
-  Fri: {
-    cardio: "Swim, 1000 m, no backstroke, pull buoy or fins if toe irritated",
-    warmup: [
-      "Cat/Cows 10 slow",
-      "Glute Bridges 2x10",
-      "Hip CARs 8 each side",
-      "Arm circles 2x30 sec"
-    ],
-    topNote: null,
-    sections: [
-      {
-        h: "Hip",
-        ex: [
-          { id: "f1", name: "Hip Abduction", sub: "Abductor machine", def: [mk(10,100), mk(10,100), mk(10,100)], note: "Controlled return" },
-          { id: "f2", name: "Hip Adduction", sub: "Adductor machine", def: [mk(10,60), mk(10,60), mk(10,60)], note: "Pelvic control" },
-          { id: "f3", name: "KB Swing", sub: "Kettlebell", def: [mk(8,25), mk(8,25), mk(8,25)], note: "Power from glutes" }
-        ]
-      },
-      {
-        h: "Anti-rotation Core",
-        ex: [
-          { id: "f4", name: "Pallof Press", sub: "Cable", def: [mk("8e",30), mk("8e",30), mk("8e",30)], note: "No rotation" }
-        ]
-      },
-      {
-        h: "Shoulder Health",
-        ex: [
-          { id: "f5", name: "Shoulder Clock w/ Band", sub: "Band", def: [mk("5e","band"), mk("5e","band"), mk("5e","band")], note: "Light only" }
-        ]
-      },
-      {
-        h: "Core",
-        ex: [
-          { id: "f6", name: "Russian Twists", sub: "3x30 sec", def: [mk("30s","BW"), mk("30s","BW"), mk("30s","BW")], note: "Controlled" }
-        ]
-      }
-    ]
-  },
+Fri: {
+  cardio: "Swim, 1000 m, no backstroke, pull buoy or fins if toe irritated",
+  warmup: [
+    "Cat/Cows 10 slow",
+    "Glute Bridges 2x10",
+    "Hip CARs 8 each side",
+    "Arm circles 2x30 sec"
+  ],
+  topNote: null,
+  sections: [
+    {
+      h: "Hip",
+      ex: [
+        { id: "f1", name: "Hip Abduction", sub: "Abductor machine", def: [mk(10,100), mk(10,100), mk(10,100)], note: "Controlled return" },
+        { id: "f2", name: "Hip Adduction", sub: "Adductor machine", def: [mk(10,60), mk(10,60), mk(10,60)], note: "Pelvic control" },
+        { id: "f3", name: "KB Swing", sub: "Kettlebell", def: [mk(10,25), mk(10,25), mk(10,25)], note: "Power from glutes" }
+      ]
+    },
+    {
+      h: "Anti-rotation Core",
+      ex: [
+        { id: "f4", name: "Pallof Press", sub: "Cable", def: [mk("10e",30), mk("10e",30), mk("10e",30)], note: "No rotation" }
+      ]
+    },
+    {
+      h: "Shoulder Health",
+      ex: [
+        { id: "f5", name: "Shoulder Clock w/ Band", sub: "Band", def: [mk("5e","band"), mk("5e","band"), mk("5e","band")], note: "Light only" }
+      ]
+    },
+    {
+      h: "Core",
+      ex: [
+        { id: "f6", name: "Russian Twists", sub: "3x30 sec", def: [mk("30s","BW"), mk("30s","BW"), mk("30s","BW")], note: "Controlled" }
+      ]
+    }
+  ]
+},
 
-  Sat: {
-    cardio: "Long easy run, 45 to 60 min, Zone 2, conversational, run before lifting",
-    warmup: [],
-    topNote: null,
-    sections: [
-      {
-        h: "A, Calf / Ankle",
-        ex: [
-          { id: "s1", name: "Seated Calf Raise", sub: "Machine or seated DB", def: [mk("10-15","—"), mk("10-15","—"), mk("10-15","—"), mk("10-15","—")], note: "Soleus focus" },
-          { id: "s2", name: "Single-Leg Calf Raise", sub: "DB or BW", def: [mk("8-10/leg","BW"), mk("8-10/leg","BW"), mk("8-10/leg","BW")], note: "3-count lower" },
-          { id: "s3", name: "Tibialis Raise", sub: "Wall shin raises", def: [mk("15-25","BW"), mk("15-25","BW"), mk("15-25","BW")], note: "Toes up" }
-        ]
-      },
-      {
-        h: "B, Hip-Dominant Posterior Chain",
-        ex: [
-          { id: "s4", name: "Romanian Deadlift", sub: "DB or barbell", def: [mk("10-12","—"), mk("10-12","—"), mk("10-12","—")], note: "Flat back" },
-          { id: "s5", name: "Hamstring Eccentric Curl", sub: "Leg curl", def: [mk("8-10","—"), mk("8-10","—"), mk("8-10","—")], note: "4 sec lowering" },
-          { id: "s6", name: "Hip Thrust", sub: "Machine or Smith", def: [mk("10-12","—"), mk("10-12","—"), mk("10-12","—")], note: "Lighter than Tue" }
-        ]
-      },
-      {
-        h: "C, Hip Stability / Core",
-        ex: [
-          { id: "s7", name: "Adductor Machine", sub: "Inner thigh", def: [mk("10-15","—"), mk("10-15","—"), mk("10-15","—")], note: "Progress slowly" },
-          { id: "s8", name: "Pallof Press", sub: "Cable anti-rotation", def: [mk("10-15","—"), mk("10-15","—"), mk("10-15","—")], note: "Brace" }
-        ]
-      }
-    ]
-  },
+Sat: {
+  cardio: "Long easy run, 45 to 60 min, Zone 2, conversational, run before lifting",
+  warmup: [],
+  topNote: null,
+  sections: [
+    {
+      h: "A, Calf / Ankle",
+      ex: [
+        { id: "s1", name: "Seated Calf Raise", sub: "Machine or seated DB", def: [mk(12,"—"), mk(12,"—"), mk(12,"—"), mk(12,"—")], note: "Soleus focus" },
+        { id: "s2", name: "Single-Leg Calf Raise", sub: "DB or BW", def: [mk("10/leg","BW"), mk("10/leg","BW"), mk("10/leg","BW")], note: "3-count lower" },
+        { id: "s3", name: "Tibialis Raise", sub: "Wall shin raises", def: [mk(15,"BW"), mk(15,"BW"), mk(15,"BW")], note: "Toes up" }
+      ]
+    },
+    {
+      h: "B, Hip-Dominant Posterior Chain",
+      ex: [
+        { id: "s4", name: "Romanian Deadlift", sub: "DB or barbell", def: [mk(10,"—"), mk(10,"—"), mk(10,"—")], note: "Flat back" },
+        { id: "s5", name: "Hamstring Eccentric Curl", sub: "Leg curl", def: [mk(10,"—"), mk(10,"—"), mk(10,"—")], note: "4 sec lowering" },
+        { id: "s6", name: "Hip Thrust", sub: "Machine or Smith", def: [mk(10,"—"), mk(10,"—"), mk(10,"—")], note: "Lighter than Tue" }
+      ]
+    },
+    {
+      h: "C, Hip Stability / Core",
+      ex: [
+        { id: "s7", name: "Adductor Machine", sub: "Inner thigh", def: [mk(10,"—"), mk(10,"—"), mk(10,"—")], note: "Progress slowly" },
+        { id: "s8", name: "Pallof Press", sub: "Cable anti-rotation", def: [mk(10,"—"), mk(10,"—"), mk(10,"—")], note: "Brace" }
+      ]
+    }
+  ]
+},
 
-  Sun: {
-    cardio: "Rest or easy swim, optional 20 to 30 min, no resistance training today",
-    warmup: [],
-    topNote: null,
-    sections: []
+Sun: {
+  cardio: "Rest or easy swim, optional 20 to 30 min, no resistance training today",
+  warmup: [],
+  topNote: null,
+  sections: []
   }
 }
 
@@ -615,7 +615,7 @@ function ScheduleLogView({ log, expanded, setExpanded, onDelete, onEdit }) {
   )
 }
 
-function TabSchedule({ storedWorkouts, setStoredWorkouts }) {
+function TabSchedule({ storedWorkouts, setStoredWorkouts, session }) {
   const [activeDay, setActiveDay] = useState(todayDayKey())
   const [schedView, setSchedView] = useState("schedule")
   const [sessions, setSessions] = useState(() => {
@@ -629,23 +629,46 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts }) {
   const [sessionDate, setSessionDate] = useState(todayISO())
   const [sessionDur, setSessionDur] = useState("")
   const [toast, setToast] = useState(null)
+  const saveScheduleKey = async (key, value) => {
+  await store.set(key, value)
+
+  if (!supabase || !session?.user?.id) return
+
+  const { error } = await supabase
+    .from("user_kv")
+    .upsert(
+      {
+        user_id: session.user.id,
+        key,
+        value,
+        updated_at: new Date().toISOString()
+      },
+      { onConflict: "user_id,key" }
+    )
+
+  if (error) {
+    console.error(`Failed to sync ${key}:`, error)
+  }
+}
 
   useEffect(() => {
-    ;(async () => {
-      const lg = await store.get("wt-log")
-      const ss = await store.get("wt-sessions")
-      if (lg) setSchedLog(lg)
-      if (ss) {
-        setSessions(prev => {
-          const next = { ...prev }
-          SDAYS.forEach(d => {
-            if (ss[d]) next[d] = { ...prev[d], ...ss[d] }
-          })
-          return next
+  ;(async () => {
+    const lg = await store.get("wt-log")
+    const ss = await store.get("wt-sessions")
+
+    if (Array.isArray(lg)) setSchedLog(lg)
+
+    if (ss && typeof ss === "object") {
+      setSessions(prev => {
+        const next = { ...prev }
+        SDAYS.forEach(d => {
+          if (ss[d]) next[d] = { ...prev[d], ...ss[d] }
         })
-      }
-    })()
-  }, [])
+        return next
+      })
+    }
+  })()
+}, [session?.user?.id])
 
   const showToast = useCallback((msg) => {
     setToast(msg)
@@ -719,19 +742,19 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts }) {
       _scheduleId: entry.id
     }))
 
-    if (summaryEntries.length > 0) {
-      const existing = await store.get("ufd-workouts") || storedWorkouts
-      const merged = [...(Array.isArray(existing) ? existing : []), ...summaryEntries]
-        .sort((a, b) => String(a.date).localeCompare(String(b.date)))
+if (summaryEntries.length > 0) {
+  const existing = await store.get("ufd-workouts") || storedWorkouts
+  const merged = [...(Array.isArray(existing) ? existing : []), ...summaryEntries]
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)))
 
-      setStoredWorkouts(merged)
-      await store.set("ufd-workouts", merged)
-    }
+  setStoredWorkouts(merged)
+  await saveScheduleKey("ufd-workouts", merged)
+}
 
-    setUndo(entry)
-    await store.set("wt-log", newLog)
-    await store.set("wt-sessions", sessions)
-    showToast("Session saved")
+setUndo(entry)
+await saveScheduleKey("wt-log", newLog)
+await saveScheduleKey("wt-sessions", sessions)
+showToast("Session saved")
   }
 
   const undoSave = async () => {
@@ -743,17 +766,17 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts }) {
     const newWorkouts = storedWorkouts.filter(w => w._scheduleId !== undo.id)
     setStoredWorkouts(newWorkouts)
 
-    setUndo(null)
-    await store.set("wt-log", newLog)
-    await store.set("ufd-workouts", newWorkouts)
-    showToast("Entry removed")
+setUndo(null)
+await saveScheduleKey("wt-log", newLog)
+await saveScheduleKey("ufd-workouts", newWorkouts)
+showToast("Entry removed")
   }
 
   const deleteEntry = async id => {
-    const newLog = schedLog.filter(e => e.id !== id)
-    setSchedLog(newLog)
-    await store.set("wt-log", newLog)
-    showToast("Entry deleted")
+  const newLog = schedLog.filter(e => e.id !== id)
+setSchedLog(newLog)
+await saveScheduleKey("wt-log", newLog)
+showToast("Entry deleted")
   }
 
   const editEntry = id => {
@@ -763,7 +786,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts }) {
     setSessions(prev => ({ ...prev, [entry.day]: JSON.parse(JSON.stringify(entry.data)) }))
     const newLog = schedLog.filter(e => e.id !== id)
     setSchedLog(newLog)
-    store.set("wt-log", newLog)
+   saveScheduleKey("wt-log", newLog)
     setActiveDay(entry.day)
     setSchedView("schedule")
     showToast(`Loaded ${entry.dayLabel} for editing`)
@@ -2063,7 +2086,11 @@ async function persistMealEntries(nextEntries) {
       )}
 
 {tab === "Schedule" && (
-  <TabSchedule storedWorkouts={storedWorkouts} setStoredWorkouts={setStoredWorkouts} />
+  <TabSchedule
+    storedWorkouts={storedWorkouts}
+    setStoredWorkouts={setStoredWorkouts}
+    session={session}
+  />
 )}
 
 {tab === "Training" && (
