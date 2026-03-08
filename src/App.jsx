@@ -2531,6 +2531,60 @@ const trainingForecast = useMemo(() => {
 {tab === "Training" && (
   <TrainingDashboard workouts={storedWorkouts} />
 )}
+{tab === "Injury" && (
+  <div style={{ padding: "16px" }}>
+    <h3>Injury Log</h3>
+
+    <div style={{ display: "grid", gap: "10px", maxWidth: "500px" }}>
+
+      <input
+        placeholder="Injury name"
+        onChange={e => window.injuryName = e.target.value}
+      />
+
+      <input
+        placeholder="Body region"
+        onChange={e => window.injuryRegion = e.target.value}
+      />
+
+      <input
+        type="number"
+        placeholder="Severity 1-10"
+        onChange={e => window.injurySeverity = e.target.value}
+      />
+
+      <input
+        type="number"
+        placeholder="Recovery days"
+        onChange={e => window.injuryRecovery = e.target.value}
+      />
+
+      <button
+        onClick={() => {
+
+          const entry = {
+            id: Date.now(),
+            name: window.injuryName || "",
+            region: window.injuryRegion || "",
+            severity: Number(window.injurySeverity || 0),
+            recoveryDays: Number(window.injuryRecovery || 0)
+          }
+
+          const existing = JSON.parse(localStorage.getItem("injuries") || "[]")
+          existing.push(entry)
+          localStorage.setItem("injuries", JSON.stringify(existing))
+
+          alert("Injury saved")
+
+        }}
+      >
+        Save Injury
+      </button>
+
+    </div>
+
+  </div>
+)}
 {tab === "Forecast" && (
   <div>
 
