@@ -2583,6 +2583,28 @@ const trainingForecast = useMemo(() => {
 
     </div>
 
+    <div style={{ marginTop: "24px" }}>
+      <h4>Saved injuries</h4>
+
+      {(JSON.parse(localStorage.getItem("injuries") || "[]")).map(entry => (
+        <div
+          key={entry.id}
+          style={{
+            border: "1px solid #1a1b2e",
+            borderRadius: "8px",
+            padding: "10px",
+            marginBottom: "10px",
+            maxWidth: "500px"
+          }}
+        >
+          <div><strong>{entry.name}</strong></div>
+          <div>Region: {entry.region}</div>
+          <div>Severity: {entry.severity}</div>
+          <div>Recovery days: {entry.recoveryDays}</div>
+        </div>
+      ))}
+    </div>
+
   </div>
 )}
 {tab === "Forecast" && (
