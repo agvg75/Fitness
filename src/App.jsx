@@ -1495,10 +1495,10 @@ function buildBodyForecast(daily) {
     eta145: estimateMilestoneDate(currentWeight, slopeWeight, 145)
   }
 }
-function buildTrainingForecast(summary) {
+function buildTrainingForecast(summary, runningPenalty = 1) {
   if (!summary) return null
 
-  const runningSlope = summary.runningDistanceWeekly / 28
+const runningSlope = (summary.runningDistanceWeekly / 28) * runningPenalty
   const swimmingSlope = summary.swimmingDistanceWeekly / 28
   const cyclingSlope = summary.cyclingDistanceWeekly / 28
   const strengthSlope = summary.strengthSessionsWeekly / 28
@@ -1544,6 +1544,28 @@ function buildTrainingForecast(summary) {
     cardioMinutes6m: projectValue(cardioMinutesCurrent, cardioMinutesSlope, 180),
     cardioMinutes12m: projectValue(cardioMinutesCurrent, cardioMinutesSlope, 365)
   }
+}
+function getRunningInjuryPenalty() {
+  const injuries = JSON.parse(localStorage.getItem("injuries") || "[]")
+  const today = new Date()
+
+  let penalty = 1
+
+  injuries.forEach(entry => {
+    const start = new Date()
+    const recoveryDays = Number(entry.recoveryDays || 0)
+    const severity = Number(entry.severity || 0)
+
+    const end = new Date(start)
+    end.setDate(start.getDate() + recoveryDays)
+
+    if (today <= end) {
+      const reduction = Math.min(0.8, severity / 10)
+      penalty = Math.min(penalty, 1 - reduction)
+    }
+  })
+
+  return penalty
 }
 export default function App() {
   
@@ -2109,9 +2131,13 @@ const bodyForecast = useMemo(() => {
   return buildBodyForecast(daily)
 }, [daily])
 
+const runningPenalty = useMemo(() => {
+  return getRunningInjuryPenalty()
+}, [tab, storedWorkouts])
+
 const trainingForecast = useMemo(() => {
-  return buildTrainingForecast(trainingSummary)
-}, [trainingSummary])
+  return buildTrainingForecast(trainingSummary, runningPenalty)
+}, [trainingSummary, runningPenalty])
   return (
     <div
       style={{
@@ -2638,6 +2664,7 @@ const trainingForecast = useMemo(() => {
         <div>
           <h4>Running Volume</h4>
           <div>Current weekly: {trainingSummary.runningDistanceWeekly.toFixed(1)} mi</div>
+          <div>Injury modifier: {runningPenalty.toFixed(2)}</div>
           <div>1 month: {trainingForecast.running1m.toFixed(1)}</div>
           <div>3 months: {trainingForecast.running3m.toFixed(1)}</div>
           <div>6 months: {trainingForecast.running6m.toFixed(1)}</div>
