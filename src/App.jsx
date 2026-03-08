@@ -1495,22 +1495,54 @@ function buildBodyForecast(daily) {
     eta145: estimateMilestoneDate(currentWeight, slopeWeight, 145)
   }
 }
-
 function buildTrainingForecast(summary) {
   if (!summary) return null
 
-  const slope = summary.runningDistanceWeekly / 28
+  const runningSlope = summary.runningDistanceWeekly / 28
+  const swimmingSlope = summary.swimmingDistanceWeekly / 28
+  const cyclingSlope = summary.cyclingDistanceWeekly / 28
+  const strengthSlope = summary.strengthSessionsWeekly / 28
+  const cardioMinutesSlope = summary.cardioMinutesWeekly / 28
 
-  const current = summary.runningDistanceWeekly
+  const runningCurrent = summary.runningDistanceWeekly
+  const swimmingCurrent = summary.swimmingDistanceWeekly
+  const cyclingCurrent = summary.cyclingDistanceWeekly
+  const strengthCurrent = summary.strengthSessionsWeekly
+  const cardioMinutesCurrent = summary.cardioMinutesWeekly
 
   return {
-    running1m: projectValue(current, slope, 30),
-    running3m: projectValue(current, slope, 90),
-    running6m: projectValue(current, slope, 180),
-    running12m: projectValue(current, slope, 365),
+    running1m: projectValue(runningCurrent, runningSlope, 30),
+    running3m: projectValue(runningCurrent, runningSlope, 90),
+    running6m: projectValue(runningCurrent, runningSlope, 180),
+    running12m: projectValue(runningCurrent, runningSlope, 365),
+    eta20Run: estimateMilestoneDate(runningCurrent, runningSlope, 20),
+    eta30Run: estimateMilestoneDate(runningCurrent, runningSlope, 30),
 
-    eta20mi: estimateMilestoneDate(current, slope, 20),
-    eta30mi: estimateMilestoneDate(current, slope, 30)
+    swimming1m: projectValue(swimmingCurrent, swimmingSlope, 30),
+    swimming3m: projectValue(swimmingCurrent, swimmingSlope, 90),
+    swimming6m: projectValue(swimmingCurrent, swimmingSlope, 180),
+    swimming12m: projectValue(swimmingCurrent, swimmingSlope, 365),
+    eta2Swim: estimateMilestoneDate(swimmingCurrent, swimmingSlope, 2),
+    eta5Swim: estimateMilestoneDate(swimmingCurrent, swimmingSlope, 5),
+
+    cycling1m: projectValue(cyclingCurrent, cyclingSlope, 30),
+    cycling3m: projectValue(cyclingCurrent, cyclingSlope, 90),
+    cycling6m: projectValue(cyclingCurrent, cyclingSlope, 180),
+    cycling12m: projectValue(cyclingCurrent, cyclingSlope, 365),
+    eta25Bike: estimateMilestoneDate(cyclingCurrent, cyclingSlope, 25),
+    eta50Bike: estimateMilestoneDate(cyclingCurrent, cyclingSlope, 50),
+
+    strength1m: projectValue(strengthCurrent, strengthSlope, 30),
+    strength3m: projectValue(strengthCurrent, strengthSlope, 90),
+    strength6m: projectValue(strengthCurrent, strengthSlope, 180),
+    strength12m: projectValue(strengthCurrent, strengthSlope, 365),
+    eta3Strength: estimateMilestoneDate(strengthCurrent, strengthSlope, 3),
+    eta4Strength: estimateMilestoneDate(strengthCurrent, strengthSlope, 4),
+
+    cardioMinutes1m: projectValue(cardioMinutesCurrent, cardioMinutesSlope, 30),
+    cardioMinutes3m: projectValue(cardioMinutesCurrent, cardioMinutesSlope, 90),
+    cardioMinutes6m: projectValue(cardioMinutesCurrent, cardioMinutesSlope, 180),
+    cardioMinutes12m: projectValue(cardioMinutesCurrent, cardioMinutesSlope, 365)
   }
 }
 export default function App() {
@@ -2479,60 +2511,7 @@ const trainingForecast = useMemo(() => {
         </div>
       )}
 
-{tab === "Forecast" && (
-  <div>
 
-    <h3>Forecast</h3>
-
-    {bodyForecast && (
-      <div style={{ marginBottom: "30px" }}>
-
-        <h4>Body Weight</h4>
-
-        <div>Current: {bodyForecast.currentWeight.toFixed(1)} lb</div>
-        <div>1 month: {bodyForecast.weight1m.toFixed(1)}</div>
-        <div>3 months: {bodyForecast.weight3m.toFixed(1)}</div>
-        <div>6 months: {bodyForecast.weight6m.toFixed(1)}</div>
-        <div>12 months: {bodyForecast.weight12m.toFixed(1)}</div>
-
-        <div style={{ marginTop: "10px" }}>
-          ETA 150 lb: {bodyForecast.eta150 || "not on current trend"}
-        </div>
-
-        <div>
-          ETA 145 lb: {bodyForecast.eta145 || "not on current trend"}
-        </div>
-
-      </div>
-    )}
-
-    {trainingForecast && (
-      <div>
-
-        <h4>Running Volume</h4>
-
-        <div>
-          Current weekly: {trainingSummary.runningDistanceWeekly.toFixed(1)} mi
-        </div>
-
-        <div>1 month: {trainingForecast.running1m.toFixed(1)}</div>
-        <div>3 months: {trainingForecast.running3m.toFixed(1)}</div>
-        <div>6 months: {trainingForecast.running6m.toFixed(1)}</div>
-        <div>12 months: {trainingForecast.running12m.toFixed(1)}</div>
-
-        <div style={{ marginTop: "10px" }}>
-          ETA 20 mi/week: {trainingForecast.eta20mi || "not on trend"}
-        </div>
-
-        <div>
-          ETA 30 mi/week: {trainingForecast.eta30mi || "not on trend"}
-        </div>
-
-      </div>
-    )}
-
-  </div>
-)}
 
       {tab === "Injury" && (
         <div>
@@ -2552,7 +2531,99 @@ const trainingForecast = useMemo(() => {
 {tab === "Training" && (
   <TrainingDashboard workouts={storedWorkouts} />
 )}
+{tab === "Forecast" && (
+  <div>
 
+    <h3>Forecast</h3>
+
+    {bodyForecast && (
+      <div style={{ marginBottom: "30px" }}>
+        <h4>Body Weight</h4>
+
+        <div>Current: {bodyForecast.currentWeight.toFixed(1)} lb</div>
+        <div>1 month: {bodyForecast.weight1m.toFixed(1)}</div>
+        <div>3 months: {bodyForecast.weight3m.toFixed(1)}</div>
+        <div>6 months: {bodyForecast.weight6m.toFixed(1)}</div>
+        <div>12 months: {bodyForecast.weight12m.toFixed(1)}</div>
+
+        <div style={{ marginTop: "10px" }}>
+          ETA 150 lb: {bodyForecast.eta150 || "not on trend"}
+        </div>
+
+        <div>
+          ETA 145 lb: {bodyForecast.eta145 || "not on trend"}
+        </div>
+      </div>
+    )}
+
+    {trainingForecast && (
+      <div style={{ display: "grid", gap: "20px" }}>
+
+        <div>
+          <h4>Running Volume</h4>
+          <div>Current weekly: {trainingSummary.runningDistanceWeekly.toFixed(1)} mi</div>
+          <div>1 month: {trainingForecast.running1m.toFixed(1)}</div>
+          <div>3 months: {trainingForecast.running3m.toFixed(1)}</div>
+          <div>6 months: {trainingForecast.running6m.toFixed(1)}</div>
+          <div>12 months: {trainingForecast.running12m.toFixed(1)}</div>
+          <div style={{ marginTop: "10px" }}>
+            ETA 20 mi/week: {trainingForecast.eta20Run || "not on trend"}
+          </div>
+          <div>
+            ETA 30 mi/week: {trainingForecast.eta30Run || "not on trend"}
+          </div>
+        </div>
+
+        <div>
+          <h4>Swimming Volume</h4>
+          <div>Current weekly: {trainingSummary.swimmingDistanceWeekly.toFixed(1)} mi</div>
+          <div>1 month: {trainingForecast.swimming1m.toFixed(1)}</div>
+          <div>3 months: {trainingForecast.swimming3m.toFixed(1)}</div>
+          <div>6 months: {trainingForecast.swimming6m.toFixed(1)}</div>
+          <div>12 months: {trainingForecast.swimming12m.toFixed(1)}</div>
+          <div style={{ marginTop: "10px" }}>
+            ETA 2 mi/week: {trainingForecast.eta2Swim || "not on trend"}
+          </div>
+          <div>
+            ETA 5 mi/week: {trainingForecast.eta5Swim || "not on trend"}
+          </div>
+        </div>
+
+        <div>
+          <h4>Cycling Volume</h4>
+          <div>Current weekly: {trainingSummary.cyclingDistanceWeekly.toFixed(1)} mi</div>
+          <div>1 month: {trainingForecast.cycling1m.toFixed(1)}</div>
+          <div>3 months: {trainingForecast.cycling3m.toFixed(1)}</div>
+          <div>6 months: {trainingForecast.cycling6m.toFixed(1)}</div>
+          <div>12 months: {trainingForecast.cycling12m.toFixed(1)}</div>
+          <div style={{ marginTop: "10px" }}>
+            ETA 25 mi/week: {trainingForecast.eta25Bike || "not on trend"}
+          </div>
+          <div>
+            ETA 50 mi/week: {trainingForecast.eta50Bike || "not on trend"}
+          </div>
+        </div>
+
+        <div>
+          <h4>Strength Sessions</h4>
+          <div>Current weekly: {trainingSummary.strengthSessionsWeekly.toFixed(1)}</div>
+          <div>1 month: {trainingForecast.strength1m.toFixed(1)}</div>
+          <div>3 months: {trainingForecast.strength3m.toFixed(1)}</div>
+          <div>6 months: {trainingForecast.strength6m.toFixed(1)}</div>
+          <div>12 months: {trainingForecast.strength12m.toFixed(1)}</div>
+          <div style={{ marginTop: "10px" }}>
+            ETA 3 sessions/week: {trainingForecast.eta3Strength || "not on trend"}
+          </div>
+          <div>
+            ETA 4 sessions/week: {trainingForecast.eta4Strength || "not on trend"}
+          </div>
+        </div>
+
+      </div>
+    )}
+
+  </div>
+)}
 {tab === "Log" && (
   <div>
     <h3>Log</h3>
