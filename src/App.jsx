@@ -1149,6 +1149,370 @@ function projectWeightTrend(weights, nutritionSeries, weeks = 12) {
   return out
 }
 
+function TrainingDashboard({ workouts }) {
+  const [rangeMode, setRangeMode] = useState("weekly")
+
+  const startOfWeek = d => {
+    const x = new Date(d)
+    const day = x.getDay()
+    const diff = day === 0 ? -6 : 1 - day
+    x.setDate(x.getDate() + diff)
+    x.setHours(0, 0, 0, 0)
+    return x
+  }
+
+  const startOfMonth = d => {
+    const x = new Date(d)
+    x.setDate(1)
+    x.setHours(0, 0, 0, 0)
+    return x
+  }
+
+  const startOfYear = d => {
+    const x = new Date(d)
+    x.setMonth(0, 1)
+    x.setHours(0, 0, 0, 0)
+    return x
+  }
+
+  const formatBucketLabel = (date, mode) => {
+    const d = new Date(date)
+    if (mode === "weekly") return `${d.getMonth() + 1}/${d.getDate()}`
+    if (mode === "monthly") return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
+    if (mode === "yearly") return `${d.getFullYear()}`
+    return `${d.getMonth() + 1}/${d.getDate()}`
+  }
+
+  const chartData = useMemo(() => {
+    const grouped = {}
+
+    workouts.forEach(w => {
+      const rawDate = new Date(w.date)
+      let bucketDate
+
+      if (rangeMode === "weekly") {
+        bucketDate = startOfWeek(rawDate)
+      } else if (rangeMode === "monthly") {
+        bucketDate = startOfMonth(rawDate)
+      } else if (rangeMode === "yearly") {
+        bucketDate = startOfYear(rawDate)
+      } else {
+        bucketDate = new Date(rawDate)
+        bucketDate.setHours(0, 0, 0, 0)
+      }
+
+      const key = bucketDate.toISOString().slice(0, 10)
+
+      if (!grouped[key]) {
+        grouped[key] = {
+          bucket: key,
+          label: formatBucketLabel(bucketDate, rangeMode),
+          cardioDistance: 0,
+          cardioCalories: 0,
+          cardioMinutes: 0,
+          strengthSessions: 0,
+          totalWorkouts: 0
+        }
+      }
+
+      grouped[key].totalWorkouts += 1
+
+      if (w.type === "Traditional Strength Training") {
+        grouped[key].strengthSessions += 1
+      } else {
+        grouped[key].cardioDistance += Number(w.distance || 0)
+        grouped[key].cardioCalories += Number(w.calories || 0)
+        grouped[key].cardioMinutes += Number(w.dur || 0)
+      }
+    })
+
+    return Object.values(grouped).sort((a, b) => a.bucket.localeCompare(b.bucket))
+  }, [workouts, rangeMode])
+
+  const totals = useMemo(() => {
+    return chartData.reduce(
+      (acc, row) => {
+        acc.cardioDistance += row.cardioDistance
+        acc.cardioCalories += row.cardioCalories
+        acc.cardioMinutes += row.cardioMinutes
+        acc.strengthSessions += row.strengthSessions
+        acc.totalWorkouts += row.totalWorkouts
+        return acc
+      },
+      {
+        cardioDistance: 0,
+        cardioCalories: 0,
+        cardioMinutes: 0,
+        strengthSessions: 0,
+        totalWorkouts: 0
+      }
+    )
+  }, [chartData])
+
+  const cardStyle = {
+    background: "#101622",
+    border: "1px solid #1a2a44",
+    borderRadius: "8px",
+    padding: "14px",
+    textAlign: "center"
+  }
+
+  const labelStyle = {
+    fontSize: "11px",
+    color: "#8fa8d8",
+    letterSpacing: "0.08em",
+    textTransform: "uppercase"
+  }
+
+  const valueStyle = {
+    fontSize: "22px",
+    fontWeight: "700",
+    marginTop: "4px",
+    color: "#ced2f0"
+  }
+
+  const rangeButton = mode => ({
+    padding: "8px 12px",
+    background: rangeMode === mode ? "#252640" : "#0d0e1c",
+    border: "1px solid #1a1b2e",
+    borderRadius: "8px",
+    color: "#ced2f0",
+    cursor: "pointer"
+  })
+
+  return (
+    <div style={{ padding: "16px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", flexWrap: "wrap", marginBottom: "14px" }}>
+        <div style={{ fontSize: "18px", fontWeight: "700", color: "#ced2f0" }}>
+          Training Dashboard
+        </div>
+
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          <button onClick={() => setRangeMode("weekly")} style={rangeButton("weekly")}>Weekly</button>
+          <button onClick={() => setRangeMode("monthly")} style={rangeButton("monthly")}>Monthly</button>
+          <button onClick={() => setRangeMode("yearly")} style={rangeButton("yearly")}>Yearly</button>
+          <button onClick={() => setRangeMode("all")} style={rangeButton("all")}>All</button>
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "12px", marginBottom: "18px" }}>
+        <div style={cardStyle}>
+          <div style={labelStyle}>Cardio Distance</div>
+          <div style={valueStyle}>{totals.cardioDistance.toFixed(1)}</div>
+        </div>
+
+        <div style={cardStyle}>
+          <div style={labelStyle}>Cardio Calories</div>
+          <div style={valueStyle}>{Math.round(totals.cardioCalories)}</div>
+        </div>
+
+        <div style={cardStyle}>
+          <div style={labelStyle}>Cardio Minutes</div>
+          <div style={valueStyle}>{totals.cardioMinutes}</div>
+        </div>
+
+        <div style={cardStyle}>
+          <div style={labelStyle}>Strength Sessions</div>
+          <div style={valueStyle}>{totals.strengthSessions}</div>
+        </div>
+
+        <div style={cardStyle}>
+          <div style={labelStyle}>Total Workouts</div>
+          <div style={valueStyle}>{totals.totalWorkouts}</div>
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gap: "14px" }}>
+        <div style={{ background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: "12px", padding: "16px" }}>
+          <div style={{ fontSize: "14px", fontWeight: "700", color: "#ced2f0", marginBottom: "12px" }}>
+            Cardio Distance
+          </div>
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart data={chartData}>
+              <CartesianGrid stroke="#1a1b2e" />
+              <XAxis dataKey="label" />
+              <YAxis />
+              <Tooltip />
+              <Bar dataKey="cardioDistance" name="Cardio Distance" fill="#4a9ee8" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div style={{ background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: "12px", padding: "16px" }}>
+          <div style={{ fontSize: "14px", fontWeight: "700", color: "#ced2f0", marginBottom: "12px" }}>
+            Cardio Calories
+          </div>
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart data={chartData}>
+              <CartesianGrid stroke="#1a1b2e" />
+              <XAxis dataKey="label" />
+              <YAxis />
+              <Tooltip />
+              <Bar dataKey="cardioCalories" name="Cardio Calories" fill="#ff9f6e" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div style={{ background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: "12px", padding: "16px" }}>
+          <div style={{ fontSize: "14px", fontWeight: "700", color: "#ced2f0", marginBottom: "12px" }}>
+            Cardio Minutes
+          </div>
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart data={chartData}>
+              <CartesianGrid stroke="#1a1b2e" />
+              <XAxis dataKey="label" />
+              <YAxis />
+              <Tooltip />
+              <Bar dataKey="cardioMinutes" name="Cardio Minutes" fill="#4ae890" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div style={{ background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: "12px", padding: "16px" }}>
+          <div style={{ fontSize: "14px", fontWeight: "700", color: "#ced2f0", marginBottom: "12px" }}>
+            Strength Sessions
+          </div>
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart data={chartData}>
+              <CartesianGrid stroke="#1a1b2e" />
+              <XAxis dataKey="label" />
+              <YAxis allowDecimals={false} />
+              <Tooltip />
+              <Bar dataKey="strengthSessions" name="Strength Sessions" fill="#ffd166" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    </div>
+  )
+}
+function buildTrainingSummary(workouts) {
+  const now = new Date()
+  const daysAgo = n => {
+    const d = new Date(now)
+    d.setDate(d.getDate() - n)
+    d.setHours(0, 0, 0, 0)
+    return d
+  }
+
+  const last28 = workouts.filter(w => new Date(w.date) >= daysAgo(28))
+
+  const summary = {
+    runningDistance28: 0,
+    swimmingDistance28: 0,
+    cyclingDistance28: 0,
+    cardioMinutes28: 0,
+    strengthSessions28: 0,
+    totalWorkouts28: 0
+  }
+
+  last28.forEach(w => {
+    summary.totalWorkouts28 += 1
+
+    if (w.type === "Traditional Strength Training") {
+      summary.strengthSessions28 += 1
+      return
+    }
+
+    summary.cardioMinutes28 += Number(w.dur || 0)
+
+    if (w.type === "Running") {
+      summary.runningDistance28 += Number(w.distance || 0)
+    } else if (w.type === "Swimming") {
+      summary.swimmingDistance28 += Number(w.distance || 0)
+    } else if (w.type === "Cycling") {
+      summary.cyclingDistance28 += Number(w.distance || 0)
+    }
+  })
+
+  return {
+    ...summary,
+    runningDistanceWeekly: summary.runningDistance28 / 4,
+    swimmingDistanceWeekly: summary.swimmingDistance28 / 4,
+    cyclingDistanceWeekly: summary.cyclingDistance28 / 4,
+    cardioMinutesWeekly: summary.cardioMinutes28 / 4,
+    strengthSessionsWeekly: summary.strengthSessions28 / 4
+  }
+}
+function linearSlope(data, getValue) {
+  if (!data || data.length < 2) return 0
+
+  const first = data[0]
+  const last = data[data.length - 1]
+
+  const days =
+    (new Date(last.date) - new Date(first.date)) /
+    (1000 * 60 * 60 * 24)
+
+  if (days === 0) return 0
+
+  const change = getValue(last) - getValue(first)
+
+  return change / days
+}
+
+function projectValue(current, slopePerDay, days) {
+  return current + slopePerDay * days
+}
+
+function estimateMilestoneDate(current, slopePerDay, target) {
+  if (slopePerDay === 0) return null
+
+  const days = (target - current) / slopePerDay
+
+  if (days <= 0) return null
+
+  const d = new Date()
+  d.setDate(d.getDate() + days)
+
+  return d.toISOString().slice(0, 10)
+}
+
+function buildBodyForecast(daily) {
+  if (!daily.length) return null
+
+  const sorted = [...daily].sort(
+    (a, b) => new Date(a.date) - new Date(b.date)
+  )
+
+  const recent = sorted.slice(-28)
+
+  const slopeWeight = linearSlope(recent, d => Number(d.weight || 0))
+
+  const currentWeight = Number(
+    sorted[sorted.length - 1]?.weight || 0
+  )
+
+  return {
+    currentWeight,
+
+    weight1m: projectValue(currentWeight, slopeWeight, 30),
+    weight3m: projectValue(currentWeight, slopeWeight, 90),
+    weight6m: projectValue(currentWeight, slopeWeight, 180),
+    weight12m: projectValue(currentWeight, slopeWeight, 365),
+
+    eta150: estimateMilestoneDate(currentWeight, slopeWeight, 150),
+    eta145: estimateMilestoneDate(currentWeight, slopeWeight, 145)
+  }
+}
+
+function buildTrainingForecast(summary) {
+  if (!summary) return null
+
+  const slope = summary.runningDistanceWeekly / 28
+
+  const current = summary.runningDistanceWeekly
+
+  return {
+    running1m: projectValue(current, slope, 30),
+    running3m: projectValue(current, slope, 90),
+    running6m: projectValue(current, slope, 180),
+    running12m: projectValue(current, slope, 365),
+
+    eta20mi: estimateMilestoneDate(current, slope, 20),
+    eta30mi: estimateMilestoneDate(current, slope, 30)
+  }
+}
 export default function App() {
   
 
@@ -1706,7 +2070,16 @@ async function persistMealEntries(nextEntries) {
     if (!filteredNutrition.length) return 2500
     return Math.max(2500, ...filteredNutrition.map(r => toNum(r.calories) + 100))
   }, [filteredNutrition])
+const trainingSummary = useMemo(() => {
+  return buildTrainingSummary(storedWorkouts)
+}, [storedWorkouts])
+const bodyForecast = useMemo(() => {
+  return buildBodyForecast(daily)
+}, [daily])
 
+const trainingForecast = useMemo(() => {
+  return buildTrainingForecast(trainingSummary)
+}, [trainingSummary])
   return (
     <div
       style={{
@@ -2106,68 +2479,60 @@ async function persistMealEntries(nextEntries) {
         </div>
       )}
 
-      {tab === "Forecast" && (
-        <div>
-          <h3>Forecast</h3>
+{tab === "Forecast" && (
+  <div>
 
-          <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", marginBottom: "20px" }}>
-            <div style={cardStyle()}>
-              <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "8px" }}>Forecast Basis</div>
-              <div style={{ fontSize: "20px", fontWeight: "bold" }}>Recent weight trend</div>
-              <div style={{ fontSize: "12px", opacity: 0.7, marginTop: "8px" }}>weighted by recent nutrition logging and protein adherence</div>
-            </div>
+    <h3>Forecast</h3>
 
-            <div style={cardStyle()}>
-              <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "8px" }}>7 day Calories</div>
-              <div style={{ fontSize: "30px", fontWeight: "bold" }}>{nutritionSeries.length ? Math.round(toNum(nutritionSeries[nutritionSeries.length - 1].calories_7d)) : "NA"}</div>
-            </div>
+    {bodyForecast && (
+      <div style={{ marginBottom: "30px" }}>
 
-            <div style={cardStyle()}>
-              <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "8px" }}>7 day Protein</div>
-              <div style={{ fontSize: "30px", fontWeight: "bold" }}>{nutritionSeries.length ? `${Math.round(toNum(nutritionSeries[nutritionSeries.length - 1].protein_7d))} g` : "NA"}</div>
-            </div>
+        <h4>Body Weight</h4>
 
-            <div style={cardStyle()}>
-              <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "8px" }}>Projection Confidence</div>
-              <div style={{ fontSize: "30px", fontWeight: "bold" }}>{forecastSeries.length ? `${forecastSeries[0].confidence_pct}%` : "NA"}</div>
-              <div style={{ fontSize: "12px", opacity: 0.7, marginTop: "8px" }}>depends on recent weight and nutrition completeness</div>
-            </div>
-          </div>
+        <div>Current: {bodyForecast.currentWeight.toFixed(1)} lb</div>
+        <div>1 month: {bodyForecast.weight1m.toFixed(1)}</div>
+        <div>3 months: {bodyForecast.weight3m.toFixed(1)}</div>
+        <div>6 months: {bodyForecast.weight6m.toFixed(1)}</div>
+        <div>12 months: {bodyForecast.weight12m.toFixed(1)}</div>
 
-          <div style={{ ...cardStyle(), marginBottom: "20px", maxWidth: "1000px" }}>
-            <div style={{ fontWeight: "bold", marginBottom: "12px" }}>Combined Recent Trends, Weight with Nutrition</div>
-            <ResponsiveContainer width="100%" height={320}>
-              <ComposedChart data={forecastOverlay}>
-                <CartesianGrid stroke="#1a1b2e" />
-                <XAxis dataKey="label" />
-                <YAxis yAxisId="left" domain={[120, "dataMax + 5"]} />
-                <YAxis yAxisId="right" orientation="right" domain={[0, "dataMax + 200"]} />
-                <Tooltip />
-                <Legend />
-                <Line yAxisId="left" type="monotone" dataKey="weight_lb" stroke="#4a9ee8" strokeWidth={3} dot={false} name="Weight" />
-                <Line yAxisId="right" type="monotone" dataKey="calories_7d" stroke="#ffd166" strokeWidth={2} dot={false} name="Calories 7d" />
-                <Line yAxisId="right" type="monotone" dataKey="protein_7d" stroke="#4ae890" strokeWidth={2} dot={false} name="Protein 7d" />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div style={{ ...cardStyle(), maxWidth: "1000px" }}>
-            <div style={{ fontWeight: "bold", marginBottom: "12px" }}>12 Week Trend Projection</div>
-            <ResponsiveContainer width="100%" height={320}>
-              <LineChart data={forecastSeries}>
-                <CartesianGrid stroke="#1a1b2e" />
-                <XAxis dataKey="label" />
-                <YAxis domain={[120, "dataMax + 4"]} />
-                <Tooltip />
-                <Legend />
-                <Line type="monotone" dataKey="baseline" stroke="#4a9ee8" strokeWidth={3} dot={false} name="Baseline trend" />
-                <Line type="monotone" dataKey="optimistic" stroke="#4ae890" strokeWidth={2} dot={false} name="Optimistic" />
-                <Line type="monotone" dataKey="conservative" stroke="#e8c94a" strokeWidth={2} dot={false} name="Conservative" />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+        <div style={{ marginTop: "10px" }}>
+          ETA 150 lb: {bodyForecast.eta150 || "not on current trend"}
         </div>
-      )}
+
+        <div>
+          ETA 145 lb: {bodyForecast.eta145 || "not on current trend"}
+        </div>
+
+      </div>
+    )}
+
+    {trainingForecast && (
+      <div>
+
+        <h4>Running Volume</h4>
+
+        <div>
+          Current weekly: {trainingSummary.runningDistanceWeekly.toFixed(1)} mi
+        </div>
+
+        <div>1 month: {trainingForecast.running1m.toFixed(1)}</div>
+        <div>3 months: {trainingForecast.running3m.toFixed(1)}</div>
+        <div>6 months: {trainingForecast.running6m.toFixed(1)}</div>
+        <div>12 months: {trainingForecast.running12m.toFixed(1)}</div>
+
+        <div style={{ marginTop: "10px" }}>
+          ETA 20 mi/week: {trainingForecast.eta20mi || "not on trend"}
+        </div>
+
+        <div>
+          ETA 30 mi/week: {trainingForecast.eta30mi || "not on trend"}
+        </div>
+
+      </div>
+    )}
+
+  </div>
+)}
 
       {tab === "Injury" && (
         <div>
@@ -2185,10 +2550,7 @@ async function persistMealEntries(nextEntries) {
 )}
 
 {tab === "Training" && (
-  <div>
-    <h3>Training</h3>
-    <div>This tab is next.</div>
-  </div>
+  <TrainingDashboard workouts={storedWorkouts} />
 )}
 
 {tab === "Log" && (
