@@ -588,10 +588,21 @@ function ScheduleLogView({ log, expanded, setExpanded, onDelete, onEdit }) {
               </div>
             </div>
 
-            {open && (
-              <div style={{ padding: "10px 14px 14px", borderTop: "1px solid #161616" }}>
-                {allEx.length === 0 && <div style={{ fontSize: "12px", color: "#333" }}>No exercise data recorded.</div>}
-                {allEx.map(({ ex, sets }) => (
+{open && (
+  <div style={{ padding: "10px 14px 14px", borderTop: "1px solid #161616" }}>
+    {entry.cardio && (
+      <div style={{ marginBottom: "10px", padding: "8px 10px", background: "#101622", border: "1px solid #1a2a44", borderRadius: "6px", fontSize: "11px", color: "#9ec5ff" }}>
+        <strong>{entry.cardio.type}</strong>
+        {entry.cardio.distance != null && <> , distance: {entry.cardio.distance}</>}
+        {entry.cardio.duration != null && <> , duration: {entry.cardio.duration} min</>}
+        {entry.cardio.calories != null && <> , calories: {entry.cardio.calories}</>}
+        {entry.cardio.avg_hr != null && <> , avg HR: {entry.cardio.avg_hr}</>}
+        {entry.cardio.notes && <div style={{ marginTop: "4px", color: "#7f93b8" }}>{entry.cardio.notes}</div>}
+      </div>
+    )}
+
+    {allEx.length === 0 && <div style={{ fontSize: "12px", color: "#333" }}>No exercise data recorded.</div>}
+    {allEx.map(({ ex, sets }) => (
                   <div key={ex.id} style={{ display: "flex", alignItems: "baseline", gap: "12px", padding: "3px 0", borderBottom: "1px solid #121212" }}>
                     <span style={{ fontSize: "13px", fontWeight: "600", color: "#a0a0a0", minWidth: "190px" }}>{ex.name}</span>
                     <span style={{ fontSize: "11px", color: "#444" }}>
@@ -626,19 +637,22 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session }) {
   const [schedLog, setSchedLog] = useState([])
   const [undo, setUndo] = useState(null)
   const [expandedLog, setExpandedLog] = useState({})
-  const [sessionDate, setSessionDate] = useState(todayISO())
-  const [sessionDur, setSessionDur] = useState("")
-  const [toast, setToast] = useState(null)
+const [sessionDate, setSessionDate] = useState(todayISO())
+const [sessionDur, setSessionDur] = useState("")
+const [toast, setToast] = useState(null)
+
+const [cardioType, setCardioType] = useState("")
+const [cardioDistance, setCardioDistance] = useState("")
+const [cardioCalories, setCardioCalories] = useState("")
+const [cardioAvgHr, setCardioAvgHr] = useState("")
+const [cardioNotes, setCardioNotes] = useState("")
  const saveScheduleKey = async (key, value) => {
   await store.set(key, value)
 
-  console.log("saveScheduleKey", {
-    key,
-    hasSupabase: !!supabase,
-    sessionUserId: session?.user?.id || null
-  })
+  
 
   if (!supabase || !session?.user?.id) return
+
 
 
   const { error } = await supabase
@@ -723,15 +737,25 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session }) {
     const dateStr = sessionDate || todayISO()
     const isoNow = dateStr + "T12:00:00.000Z"
 
-    const entry = {
-      id: Date.now(),
-      date: isoNow,
-      day: activeDay,
-      dayLabel: SMETA[activeDay].label,
-      theme: SMETA[activeDay].theme,
-      venue: SMETA[activeDay].venue,
-      data: JSON.parse(JSON.stringify(sessions[activeDay]))
-    }
+const entry = {
+  id: Date.now(),
+  date: isoNow,
+  day: activeDay,
+  dayLabel: SMETA[activeDay].label,
+  theme: SMETA[activeDay].theme,
+  venue: SMETA[activeDay].venue,
+  data: JSON.parse(JSON.stringify(sessions[activeDay])),
+  cardio: cardioType
+    ? {
+        type: cardioType,
+        distance: cardioDistance ? Number(cardioDistance) : null,
+        duration: sessionDur ? Number(sessionDur) : null,
+        calories: cardioCalories ? Number(cardioCalories) : null,
+        avg_hr: cardioAvgHr ? Number(cardioAvgHr) : null,
+        notes: cardioNotes || ""
+      }
+    : null
+}
 
     const newLog = [entry, ...schedLog]
     setSchedLog(newLog)
@@ -739,15 +763,19 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session }) {
     const types = SDAY_TYPES[activeDay] || []
     const summaryIds = types.map((_, i) => entry.id + i)
 
-    const summaryEntries = types.map((type, i) => ({
-      id: summaryIds[i],
-      date: dateStr,
-      type,
-      dur: sessionDur ? parseInt(sessionDur) : 0,
-      hr: null,
-      notes: `from Schedule , ${SMETA[activeDay].theme}`,
-      _scheduleId: entry.id
-    }))
+const summaryEntries = types.map((type, i) => ({
+  id: summaryIds[i],
+  date: dateStr,
+  type,
+  dur: sessionDur ? parseInt(sessionDur) : 0,
+  hr: cardioAvgHr ? Number(cardioAvgHr) : null,
+  distance: cardioDistance ? Number(cardioDistance) : null,
+  calories: cardioCalories ? Number(cardioCalories) : null,
+  notes: cardioNotes
+    ? `from Schedule , ${SMETA[activeDay].theme} , ${cardioNotes}`
+    : `from Schedule , ${SMETA[activeDay].theme}`,
+  _scheduleId: entry.id
+}))
 
 if (summaryEntries.length > 0) {
   const existing = await store.get("ufd-workouts") || storedWorkouts
@@ -761,6 +789,11 @@ if (summaryEntries.length > 0) {
 setUndo(entry)
 await saveScheduleKey("wt-log", newLog)
 await saveScheduleKey("wt-sessions", sessions)
+setCardioType("")
+setCardioDistance("")
+setCardioCalories("")
+setCardioAvgHr("")
+setCardioNotes("")
 showToast("Session saved")
   }
 
@@ -935,7 +968,59 @@ showToast("Entry deleted")
                 </div>
                 <button onClick={() => setSessionDate(todayISO())} style={buttonStyle(false)}>Today</button>
               </div>
+<div style={{ background: "#111", border: "1px solid #1a1a1a", borderRadius: "8px", padding: "12px", marginBottom: "10px" }}>
+  <div style={{ fontSize: "10px", color: "#4a4d6a", textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: "10px" }}>
+    Cardio details
+  </div>
 
+  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "8px", marginBottom: "8px" }}>
+    <select
+      value={cardioType}
+      onChange={e => setCardioType(e.target.value)}
+      style={{ background: "#111", border: "1px solid #1a1b2e", borderRadius: "6px", color: "#ced2f0", fontSize: "11px", padding: "8px" }}
+    >
+      <option value="">No cardio</option>
+      <option value="Running">Running</option>
+      <option value="Cycling">Cycling</option>
+      <option value="Swimming">Swimming</option>
+      <option value="Rowing">Rowing</option>
+      <option value="Walking">Walking</option>
+      <option value="Other">Other</option>
+    </select>
+
+    <input
+      type="number"
+      step="0.1"
+      placeholder="Distance"
+      value={cardioDistance}
+      onChange={e => setCardioDistance(e.target.value)}
+      style={{ background: "#111", border: "1px solid #1a1b2e", borderRadius: "6px", color: "#ced2f0", fontSize: "11px", padding: "8px" }}
+    />
+
+    <input
+      type="number"
+      placeholder="Active calories"
+      value={cardioCalories}
+      onChange={e => setCardioCalories(e.target.value)}
+      style={{ background: "#111", border: "1px solid #1a1b2e", borderRadius: "6px", color: "#ced2f0", fontSize: "11px", padding: "8px" }}
+    />
+
+    <input
+      type="number"
+      placeholder="Avg HR"
+      value={cardioAvgHr}
+      onChange={e => setCardioAvgHr(e.target.value)}
+      style={{ background: "#111", border: "1px solid #1a1b2e", borderRadius: "6px", color: "#ced2f0", fontSize: "11px", padding: "8px" }}
+    />
+  </div>
+
+  <textarea
+    value={cardioNotes}
+    onChange={e => setCardioNotes(e.target.value)}
+    placeholder="Cardio notes, pace, splits, pool length, route, etc."
+    style={{ width: "100%", minHeight: "60px", resize: "vertical", background: "#111", border: "1px solid #1a1b2e", borderRadius: "6px", color: "#ced2f0", fontSize: "11px", padding: "8px", boxSizing: "border-box" }}
+  />
+</div>
               <div style={{ display: "flex", gap: "8px" }}>
                 <button
                   onClick={saveSession}
@@ -2091,7 +2176,6 @@ async function persistMealEntries(nextEntries) {
           <div style={{ marginTop: "10px" }}>Latest injury date: {latestInjury?.date ?? "NA"}</div>
         </div>
       )}
-
 {tab === "Schedule" && (
   <TabSchedule
     storedWorkouts={storedWorkouts}
