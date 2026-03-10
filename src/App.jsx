@@ -1494,6 +1494,8 @@ function estimateMilestoneDate(current, slopePerDay, target) {
 }
 
 function buildBodyForecast(daily) {
+  const phase1TargetWeight = 150
+const finalTargetWeight = 145
   if (!daily || !daily.length) return null
 
   const getWeight = d => {
@@ -1530,10 +1532,12 @@ function buildBodyForecast(daily) {
 
   return {
     currentWeight,
-    weight1m: projectValue(currentWeight, slopeWeight, 30, -Infinity),
-    weight3m: projectValue(currentWeight, slopeWeight, 90, -Infinity),
-    weight6m: projectValue(currentWeight, slopeWeight, 180, -Infinity),
-    weight12m: projectValue(currentWeight, slopeWeight, 365, -Infinity),
+    phase1TargetWeight,
+finalTargetWeight,
+    weight1m: Math.max(finalTargetWeight, projectValue(currentWeight, slopeWeight, 30)),
+weight3m: Math.max(finalTargetWeight, projectValue(currentWeight, slopeWeight, 90)),
+weight6m: Math.max(finalTargetWeight, projectValue(currentWeight, slopeWeight, 180)),
+weight12m: Math.max(finalTargetWeight, projectValue(currentWeight, slopeWeight, 365)),
     eta150: estimateMilestoneDate(currentWeight, slopeWeight, 150),
     eta145: estimateMilestoneDate(currentWeight, slopeWeight, 145)
   }
@@ -3030,10 +3034,61 @@ return (
         <h4>Body Weight</h4>
 
 <div><strong>Current:</strong> {bodyForecast.currentWeight.toFixed(1)} lb</div>
-<div><strong>1 month:</strong> {bodyForecast.weight1m.toFixed(1)} lb</div>
-<div><strong>3 months:</strong> {bodyForecast.weight3m.toFixed(1)} lb</div>
-<div><strong>6 months:</strong> {bodyForecast.weight6m.toFixed(1)} lb</div>
-<div><strong>12 months:</strong> {bodyForecast.weight12m.toFixed(1)} lb</div>
+<div>
+<strong>1 month:</strong>{" "}
+<span style={{
+  color:
+    bodyForecast.weight1m <= bodyForecast.finalTargetWeight
+      ? "#4ade80"
+      : bodyForecast.weight1m <= bodyForecast.phase1TargetWeight
+      ? "#ffd166"
+      : "#ced2f0"
+}}>
+{bodyForecast.weight1m.toFixed(1)} lb
+</span>
+</div>
+
+<div>
+<strong>3 months:</strong>{" "}
+<span style={{
+  color:
+    bodyForecast.weight3m <= bodyForecast.finalTargetWeight
+      ? "#4ade80"
+      : bodyForecast.weight3m <= bodyForecast.phase1TargetWeight
+      ? "#ffd166"
+      : "#ced2f0"
+}}>
+{bodyForecast.weight3m.toFixed(1)} lb
+</span>
+</div>
+
+<div>
+<strong>6 months:</strong>{" "}
+<span style={{
+  color:
+    bodyForecast.weight6m <= bodyForecast.finalTargetWeight
+      ? "#4ade80"
+      : bodyForecast.weight6m <= bodyForecast.phase1TargetWeight
+      ? "#ffd166"
+      : "#ced2f0"
+}}>
+{bodyForecast.weight6m.toFixed(1)} lb
+</span>
+</div>
+
+<div>
+<strong>12 months:</strong>{" "}
+<span style={{
+  color:
+    bodyForecast.weight12m <= bodyForecast.finalTargetWeight
+      ? "#4ade80"
+      : bodyForecast.weight12m <= bodyForecast.phase1TargetWeight
+      ? "#ffd166"
+      : "#ced2f0"
+}}>
+{bodyForecast.weight12m.toFixed(1)} lb
+</span>
+</div>
 
         <div style={{ marginTop: "10px" }}>
           ETA 150 lb: {bodyForecast.eta150 || "not on trend"}
@@ -3052,17 +3107,32 @@ return (
   <div style={{ fontSize: "14px", fontWeight: "700", color: "#ced2f0", marginBottom: "12px" }}>
     Cardio Minutes, Actual vs Forecast
   </div>
-  <ResponsiveContainer width="100%" height={260}>
-    <LineChart data={cardioMinutesForecastChart}>
-      <CartesianGrid stroke="#1a1b2e" />
-      <XAxis dataKey="label" />
-      <YAxis tickFormatter={(v) => fmt0(v)} />
-      <Tooltip
-        formatter={(value, name) => [
-          value == null ? "—" : fmt0(value),
-          name === "actual" ? "Actual min/week" : "Forecast min/week"
-        ]}
-      />
+<ResponsiveContainer width="100%" height={260}> 
+  <LineChart data={cardioMinutesForecastChart}>
+    <CartesianGrid stroke="#1a1b2e" />
+    <XAxis dataKey="label" />
+    <YAxis tickFormatter={(v) => fmt0(v)} />
+
+    <ReferenceLine
+      y={150}
+      stroke="#ffd166"
+      strokeDasharray="6 4"
+      label={{ value: "Phase 1 target (150 lb)", fill: "#ffd166", position: "right" }}
+    />
+
+    <ReferenceLine
+      y={145}
+      stroke="#4ade80"
+      strokeDasharray="6 4"
+      label={{ value: "Final target (145 lb)", fill: "#4ade80", position: "right" }}
+    />
+
+    <Tooltip
+      formatter={(value, name) => [
+        value == null ? "—" : fmt0(value),
+        name === "actual" ? "Actual min/week" : "Forecast min/week"
+      ]}
+    />
       <Legend />
       <Line
         type="monotone"
