@@ -638,6 +638,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session }) {
   const [undo, setUndo] = useState(null)
   const [expandedLog, setExpandedLog] = useState({})
 const [sessionDate, setSessionDate] = useState(todayISO())
+const [sessionTime, setSessionTime] = useState("")
 const [sessionDur, setSessionDur] = useState("")
 const [toast, setToast] = useState(null)
 
@@ -740,6 +741,9 @@ const [cardioNotes, setCardioNotes] = useState("")
 const entry = {
   id: Date.now(),
   date: isoNow,
+  sessionDate: dateStr,
+  sessionTime: sessionTime || "",
+  dateTime: sessionTime ? `${dateStr}T${sessionTime}` : dateStr,
   day: activeDay,
   dayLabel: SMETA[activeDay].label,
   theme: SMETA[activeDay].theme,
@@ -766,6 +770,8 @@ const entry = {
 const summaryEntries = types.map((type, i) => ({
   id: summaryIds[i],
   date: dateStr,
+  time: sessionTime || "",
+  dateTime: sessionTime ? `${dateStr}T${sessionTime}` : dateStr,
   type,
   dur: sessionDur ? parseInt(sessionDur) : 0,
   hr: cardioAvgHr ? Number(cardioAvgHr) : null,
@@ -779,8 +785,10 @@ const summaryEntries = types.map((type, i) => ({
 
 if (summaryEntries.length > 0) {
   const existing = await store.get("ufd-workouts") || storedWorkouts
-  const merged = [...(Array.isArray(existing) ? existing : []), ...summaryEntries]
-    .sort((a, b) => String(a.date).localeCompare(String(b.date)))
+const merged = [...(Array.isArray(existing) ? existing : []), ...summaryEntries]
+  .sort((a, b) =>
+    String(a.dateTime || a.date || "").localeCompare(String(b.dateTime || b.date || ""))
+  )
 
   setStoredWorkouts(merged)
   await saveScheduleKey("ufd-workouts", merged)
@@ -947,13 +955,20 @@ showToast("Entry deleted")
             <div style={{ marginTop: "16px", paddingTop: "12px", borderTop: "1px solid #1a1a1a" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px", flexWrap: "wrap" }}>
                 <div style={{ fontSize: "10px", color: "#4a4d6a", whiteSpace: "nowrap" }}>Session date</div>
-                <input
-                  type="date"
-                  value={sessionDate}
-                  max={todayISO()}
-                  onChange={e => setSessionDate(e.target.value)}
-                  style={{ background: "#111", border: "1px solid #1a1b2e", borderRadius: "6px", color: "#ced2f0", fontSize: "11px", padding: "5px 8px" }}
-                />
+<input
+  type="date"
+  value={sessionDate}
+  max={todayISO()}
+  onChange={e => setSessionDate(e.target.value)}
+  style={{ background: "#111", border: "1px solid #1a1b2e", borderRadius: "6px", color: "#ced2f0", fontSize: "11px", padding: "5px 8px" }}
+/>
+
+<input
+  type="time"
+  value={sessionTime}
+  onChange={e => setSessionTime(e.target.value)}
+  style={{ background: "#111", border: "1px solid #1a1b2e", borderRadius: "6px", color: "#ced2f0", fontSize: "11px", padding: "5px 8px", marginLeft: "8px" }}
+/>
                 <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                   <div style={{ fontSize: "10px", color: "#4a4d6a", whiteSpace: "nowrap" }}>Duration</div>
                   <input
@@ -1150,7 +1165,12 @@ function projectWeightTrend(weights, nutritionSeries, weeks = 12) {
 }
 
 function TrainingDashboard({ workouts }) {
+  const fmt0 = n => Number.isFinite(Number(n)) ? Math.round(Number(n)).toLocaleString() : "0"
+  const fmt1 = n => Number.isFinite(Number(n)) ? Number(n).toFixed(1) : "0.0"
+
   const [rangeMode, setRangeMode] = useState("weekly")
+
+  // rest of component...const [rangeMode, setRangeMode] = useState("weekly")
 
   const startOfWeek = d => {
     const x = new Date(d)
@@ -1187,7 +1207,7 @@ function TrainingDashboard({ workouts }) {
     const grouped = {}
 
     workouts.forEach(w => {
-      const rawDate = new Date(w.date)
+      const rawDate = new Date(w.dateTime || w.date)
       let bucketDate
 
       if (rangeMode === "weekly") {
@@ -1217,13 +1237,15 @@ function TrainingDashboard({ workouts }) {
 
       grouped[key].totalWorkouts += 1
 
-      if (w.type === "Traditional Strength Training") {
-        grouped[key].strengthSessions += 1
-      } else {
-        grouped[key].cardioDistance += Number(w.distance || 0)
-        grouped[key].cardioCalories += Number(w.calories || 0)
-        grouped[key].cardioMinutes += Number(w.dur || 0)
-      }
+if (w.category === "Strength") {
+  grouped[key].strengthSessions += 1
+} else if (
+  ["Running", "Walking", "Cycling", "Swimming", "Elliptical", "Rowing", "Stairs", "Machine Cardio"].includes(w.category)
+) {
+  grouped[key].cardioDistance += Number(w.distance || 0)
+  grouped[key].cardioCalories += Number(w.calories || 0)
+  grouped[key].cardioMinutes += Number(w.dur || 0)
+}
     })
 
     return Object.values(grouped).sort((a, b) => a.bucket.localeCompare(b.bucket))
@@ -1297,45 +1319,45 @@ function TrainingDashboard({ workouts }) {
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "12px", marginBottom: "18px" }}>
         <div style={cardStyle}>
-          <div style={labelStyle}>Cardio Distance</div>
-          <div style={valueStyle}>{totals.cardioDistance.toFixed(1)}</div>
+          <div style={labelStyle}>Cardio Distance (mi)</div>
+<div style={valueStyle}>{fmt1(totals.cardioDistance)}</div>
         </div>
 
         <div style={cardStyle}>
-          <div style={labelStyle}>Cardio Calories</div>
-          <div style={valueStyle}>{Math.round(totals.cardioCalories)}</div>
+          <div style={labelStyle}>Cardio Calories (kcal)</div>
+<div style={valueStyle}>{fmt0(totals.cardioCalories)}</div>
         </div>
 
         <div style={cardStyle}>
-          <div style={labelStyle}>Cardio Minutes</div>
-          <div style={valueStyle}>{totals.cardioMinutes}</div>
+          <div style={labelStyle}>Cardio Minutes (min)</div>
+<div style={valueStyle}>{fmt0(totals.cardioMinutes)}</div>
         </div>
 
         <div style={cardStyle}>
           <div style={labelStyle}>Strength Sessions</div>
-          <div style={valueStyle}>{totals.strengthSessions}</div>
+<div style={valueStyle}>{fmt0(totals.strengthSessions)}</div>
         </div>
 
         <div style={cardStyle}>
           <div style={labelStyle}>Total Workouts</div>
-          <div style={valueStyle}>{totals.totalWorkouts}</div>
+<div style={valueStyle}>{fmt0(totals.totalWorkouts)}</div>
         </div>
       </div>
 
       <div style={{ display: "grid", gap: "14px" }}>
         <div style={{ background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: "12px", padding: "16px" }}>
           <div style={{ fontSize: "14px", fontWeight: "700", color: "#ced2f0", marginBottom: "12px" }}>
-            Cardio Distance
-          </div>
-          <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={chartData}>
-              <CartesianGrid stroke="#1a1b2e" />
-              <XAxis dataKey="label" />
-              <YAxis />
-              <Tooltip />
-              <Bar dataKey="cardioDistance" name="Cardio Distance" fill="#4a9ee8" />
-            </BarChart>
-          </ResponsiveContainer>
+  Cardio Distance (mi)
+</div>
+<ResponsiveContainer width="100%" height={240}>
+  <BarChart data={chartData}>
+    <CartesianGrid stroke="#1a1b2e" />
+    <XAxis dataKey="label" />
+    <YAxis unit="" />
+    <Tooltip formatter={(value) => [fmt1(value), "Distance (mi)"]} />
+<Bar dataKey="cardioDistance" name="Cardio Distance (mi)" fill="#4a9ee8" />
+  </BarChart>
+</ResponsiveContainer>
         </div>
 
         <div style={{ background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: "12px", padding: "16px" }}>
@@ -1395,8 +1417,7 @@ function buildTrainingSummary(workouts) {
     return d
   }
 
-  const last28 = workouts.filter(w => new Date(w.date) >= daysAgo(28))
-
+const last28 = workouts.filter(w => new Date(w.dateTime || w.date) >= daysAgo(28))
   const summary = {
     runningDistance28: 0,
     swimmingDistance28: 0,
@@ -1409,18 +1430,22 @@ function buildTrainingSummary(workouts) {
   last28.forEach(w => {
     summary.totalWorkouts28 += 1
 
-    if (w.type === "Traditional Strength Training") {
+    if (w.category === "Strength") {
       summary.strengthSessions28 += 1
       return
     }
 
-    summary.cardioMinutes28 += Number(w.dur || 0)
+    if (
+      ["Running", "Walking", "Cycling", "Swimming", "Elliptical", "Rowing", "Stairs", "Machine Cardio"].includes(w.category)
+    ) {
+      summary.cardioMinutes28 += Number(w.dur || 0)
+    }
 
-    if (w.type === "Running") {
+    if (w.category === "Running" || w.category === "Walking") {
       summary.runningDistance28 += Number(w.distance || 0)
-    } else if (w.type === "Swimming") {
+    } else if (w.category === "Swimming") {
       summary.swimmingDistance28 += Number(w.distance || 0)
-    } else if (w.type === "Cycling") {
+    } else if (w.category === "Cycling") {
       summary.cyclingDistance28 += Number(w.distance || 0)
     }
   })
@@ -1451,8 +1476,8 @@ function linearSlope(data, getValue) {
   return change / days
 }
 
-function projectValue(current, slopePerDay, days) {
-  return current + slopePerDay * days
+function projectValue(current, slopePerDay, days, floor = 0) {
+  return Math.max(floor, current + slopePerDay * days)
 }
 
 function estimateMilestoneDate(current, slopePerDay, target) {
@@ -1469,40 +1494,66 @@ function estimateMilestoneDate(current, slopePerDay, target) {
 }
 
 function buildBodyForecast(daily) {
-  if (!daily.length) return null
+  if (!daily || !daily.length) return null
 
-  const sorted = [...daily].sort(
-    (a, b) => new Date(a.date) - new Date(b.date)
-  )
+  const getWeight = d => {
+    const candidates = [
+      d.weight_lb,
+      d.weight,
+      d.weight_lbs_mean,
+      d.weight_lbs,
+      d["Weight (lb)"],
+      d["Weight (lb, same-day if available)"]
+    ]
 
-  const recent = sorted.slice(-28)
+    for (const v of candidates) {
+      const n = Number(v)
+      if (Number.isFinite(n) && n > 0) return n
+    }
 
-  const slopeWeight = linearSlope(recent, d => Number(d.weight || 0))
+    return null
+  }
 
-  const currentWeight = Number(
-    sorted[sorted.length - 1]?.weight || 0
-  )
+  const weightRows = daily
+    .map(d => ({
+      ...d,
+      _weight: getWeight(d)
+    }))
+    .filter(d => d._weight != null)
+    .sort((a, b) => new Date(a.date) - new Date(b.date))
+
+  if (!weightRows.length) return null
+
+  const recent = weightRows.slice(-28)
+  const slopeWeight = linearSlope(recent, d => d._weight)
+  const currentWeight = weightRows[weightRows.length - 1]._weight
 
   return {
     currentWeight,
-
-    weight1m: projectValue(currentWeight, slopeWeight, 30),
-    weight3m: projectValue(currentWeight, slopeWeight, 90),
-    weight6m: projectValue(currentWeight, slopeWeight, 180),
-    weight12m: projectValue(currentWeight, slopeWeight, 365),
-
+    weight1m: projectValue(currentWeight, slopeWeight, 30, -Infinity),
+    weight3m: projectValue(currentWeight, slopeWeight, 90, -Infinity),
+    weight6m: projectValue(currentWeight, slopeWeight, 180, -Infinity),
+    weight12m: projectValue(currentWeight, slopeWeight, 365, -Infinity),
     eta150: estimateMilestoneDate(currentWeight, slopeWeight, 150),
     eta145: estimateMilestoneDate(currentWeight, slopeWeight, 145)
   }
 }
-function buildTrainingForecast(summary, runningPenalty = 1) {
+function buildTrainingForecast(
+  summary,
+  penalties = { running: 1, swimming: 1, cycling: 1, lifting: 1 },
+  weeklyBuckets = []
+) {
   if (!summary) return null
 
-const runningSlope = (summary.runningDistanceWeekly / 28) * runningPenalty
-  const swimmingSlope = summary.swimmingDistanceWeekly / 28
-  const cyclingSlope = summary.cyclingDistanceWeekly / 28
-  const strengthSlope = summary.strengthSessionsWeekly / 28
-  const cardioMinutesSlope = summary.cardioMinutesWeekly / 28
+const runningSlope = computeWeeklySlope(weeklyBuckets, "running") * penalties.running
+const swimmingSlope = computeWeeklySlope(weeklyBuckets, "swimming") * penalties.swimming
+const cyclingSlope = computeWeeklySlope(weeklyBuckets, "cycling") * penalties.cycling
+let strengthSlope = computeWeeklySlope(weeklyBuckets, "strength") * penalties.lifting
+
+strengthSlope = Math.max(-0.25, Math.min(0.25, strengthSlope))
+const cardioMinutesSlope =
+  computeWeeklySlope(weeklyBuckets, "cardioMinutes") *
+  Math.min(penalties.running, penalties.swimming, penalties.cycling)
 
   const runningCurrent = summary.runningDistanceWeekly
   const swimmingCurrent = summary.swimmingDistanceWeekly
@@ -1511,74 +1562,272 @@ const runningSlope = (summary.runningDistanceWeekly / 28) * runningPenalty
   const cardioMinutesCurrent = summary.cardioMinutesWeekly
 
   return {
-    running1m: projectValue(runningCurrent, runningSlope, 30),
-    running3m: projectValue(runningCurrent, runningSlope, 90),
-    running6m: projectValue(runningCurrent, runningSlope, 180),
-    running12m: projectValue(runningCurrent, runningSlope, 365),
-    eta20Run: estimateMilestoneDate(runningCurrent, runningSlope, 20),
+    running1m: projectValue(runningCurrent, runningSlope, 4),
+    running3m: projectValue(runningCurrent, runningSlope, 13),
+    running6m: projectValue(runningCurrent, runningSlope, 26),
+    running12m: projectValue(runningCurrent, runningSlope, 52),
+    eta20Run: estimateMilestoneDate(runningCurrent, runningSlope / 7, 20),
     eta30Run: estimateMilestoneDate(runningCurrent, runningSlope, 30),
 
-    swimming1m: projectValue(swimmingCurrent, swimmingSlope, 30),
-    swimming3m: projectValue(swimmingCurrent, swimmingSlope, 90),
-    swimming6m: projectValue(swimmingCurrent, swimmingSlope, 180),
-    swimming12m: projectValue(swimmingCurrent, swimmingSlope, 365),
-    eta2Swim: estimateMilestoneDate(swimmingCurrent, swimmingSlope, 2),
-    eta5Swim: estimateMilestoneDate(swimmingCurrent, swimmingSlope, 5),
+    swimming1m: projectValue(swimmingCurrent, swimmingSlope, 4),
+    swimming3m: projectValue(swimmingCurrent, swimmingSlope, 13),
+    swimming6m: projectValue(swimmingCurrent, swimmingSlope, 26),
+    swimming12m: projectValue(swimmingCurrent, swimmingSlope, 52),
+    eta2Swim: estimateMilestoneDate(swimmingCurrent, swimmingSlope / 7, 20),
+    eta5Swim: estimateMilestoneDate(swimmingCurrent, swimmingSlope / 7, 5),
 
-    cycling1m: projectValue(cyclingCurrent, cyclingSlope, 30),
-    cycling3m: projectValue(cyclingCurrent, cyclingSlope, 90),
-    cycling6m: projectValue(cyclingCurrent, cyclingSlope, 180),
-    cycling12m: projectValue(cyclingCurrent, cyclingSlope, 365),
-    eta25Bike: estimateMilestoneDate(cyclingCurrent, cyclingSlope, 25),
-    eta50Bike: estimateMilestoneDate(cyclingCurrent, cyclingSlope, 50),
+    cycling1m: projectValue(cyclingCurrent, cyclingSlope, 4),
+    cycling3m: projectValue(cyclingCurrent, cyclingSlope, 13),
+    cycling6m: projectValue(cyclingCurrent, cyclingSlope, 26),
+    cycling12m: projectValue(cyclingCurrent, cyclingSlope, 52),
+    eta25Bike: estimateMilestoneDate(cyclingCurrent, cyclingSlope / 7, 25),
+    eta50Bike: estimateMilestoneDate(cyclingCurrent, cyclingSlope / 7, 50),
 
-    strength1m: projectValue(strengthCurrent, strengthSlope, 30),
-    strength3m: projectValue(strengthCurrent, strengthSlope, 90),
-    strength6m: projectValue(strengthCurrent, strengthSlope, 180),
-    strength12m: projectValue(strengthCurrent, strengthSlope, 365),
-    eta3Strength: estimateMilestoneDate(strengthCurrent, strengthSlope, 3),
-    eta4Strength: estimateMilestoneDate(strengthCurrent, strengthSlope, 4),
+    strength1m: projectValue(strengthCurrent, strengthSlope, 4),
+    strength3m: projectValue(strengthCurrent, strengthSlope, 13),
+    strength6m: projectValue(strengthCurrent, strengthSlope, 26),
+    strength12m: projectValue(strengthCurrent, strengthSlope, 52),
+    eta3Strength: estimateMilestoneDate(strengthCurrent, strengthSlope / 7, 3),
+    eta4Strength: estimateMilestoneDate(strengthCurrent, strengthSlope / 7, 4),
 
-    cardioMinutes1m: projectValue(cardioMinutesCurrent, cardioMinutesSlope, 30),
-    cardioMinutes3m: projectValue(cardioMinutesCurrent, cardioMinutesSlope, 90),
-    cardioMinutes6m: projectValue(cardioMinutesCurrent, cardioMinutesSlope, 180),
-    cardioMinutes12m: projectValue(cardioMinutesCurrent, cardioMinutesSlope, 365)
+    cardioMinutes1m: Math.max(0, projectValue(cardioMinutesCurrent, cardioMinutesSlope, 4)),
+cardioMinutes3m: Math.max(0, projectValue(cardioMinutesCurrent, cardioMinutesSlope, 13)),
+cardioMinutes6m: Math.max(0, projectValue(cardioMinutesCurrent, cardioMinutesSlope, 26)),
+cardioMinutes12m: Math.max(0, projectValue(cardioMinutesCurrent, cardioMinutesSlope, 52))
   }
+
 }
-function getRunningInjuryPenalty() {
+function getInjuryPenalties() {
   const injuries = JSON.parse(localStorage.getItem("injuries") || "[]")
   const today = new Date()
 
-  let penalty = 1
+  const penalties = {
+    running: 1,
+    swimming: 1,
+    cycling: 1,
+    lifting: 1
+  }
 
   injuries.forEach(entry => {
-    const start = new Date()
     const recoveryDays = Number(entry.recoveryDays || 0)
     const severity = Number(entry.severity || 0)
 
+    const start = new Date()
     const end = new Date(start)
     end.setDate(start.getDate() + recoveryDays)
 
     if (today <= end) {
       const reduction = Math.min(0.8, severity / 10)
-      penalty = Math.min(penalty, 1 - reduction)
+      const multiplier = 1 - reduction
+
+      if (entry.affectsRunning) penalties.running = Math.min(penalties.running, multiplier)
+      if (entry.affectsSwimming) penalties.swimming = Math.min(penalties.swimming, multiplier)
+      if (entry.affectsCycling) penalties.cycling = Math.min(penalties.cycling, multiplier)
+      if (entry.affectsLifting) penalties.lifting = Math.min(penalties.lifting, multiplier)
     }
   })
 
-  return penalty
+  return penalties
+}
+function buildWeeklyTrainingBuckets(workouts) {
+  const startOfWeek = dateValue => {
+    const d = new Date(dateValue)
+    const day = d.getDay()
+    const diff = day === 0 ? -6 : 1 - day
+    d.setDate(d.getDate() + diff)
+    d.setHours(0, 0, 0, 0)
+    return d
+  }
+
+  const buckets = {}
+
+  workouts.forEach(w => {
+    const weekStart = startOfWeek(w.dateTime || w.date)
+    const key = weekStart.toISOString().slice(0, 10)
+
+    if (!buckets[key]) {
+      buckets[key] = {
+        weekStart: key,
+        running: 0,
+        swimming: 0,
+        cycling: 0,
+        strength: 0,
+        cardioMinutes: 0
+      }
+    }
+
+    if (w.category === "Running" || w.category === "Walking") {
+      buckets[key].running += Number(w.distance || 0)
+      buckets[key].cardioMinutes += Number(w.dur || 0)
+    } else if (w.category === "Swimming") {
+      buckets[key].swimming += Number(w.distance || 0)
+      buckets[key].cardioMinutes += Number(w.dur || 0)
+    } else if (w.category === "Cycling") {
+      buckets[key].cycling += Number(w.distance || 0)
+      buckets[key].cardioMinutes += Number(w.dur || 0)
+    } else if (w.category === "Strength") {
+      buckets[key].strength += 1
+    } else if (
+      ["Elliptical", "Rowing", "Stairs", "Machine Cardio"].includes(w.category)
+    ) {
+      buckets[key].cardioMinutes += Number(w.dur || 0)
+    }
+  })
+
+  const ordered = Object.values(buckets).sort((a, b) =>
+    a.weekStart.localeCompare(b.weekStart)
+  )
+
+  return ordered.slice(-4)
+}
+function computeWeeklySlope(buckets, key) {
+  if (!buckets || buckets.length < 2) return 0
+
+  const values = buckets.map((b, i) => ({
+    x: i,
+    y: Number(b[key] || 0)
+  }))
+
+  const n = values.length
+  const sumX = values.reduce((s, p) => s + p.x, 0)
+  const sumY = values.reduce((s, p) => s + p.y, 0)
+  const sumXY = values.reduce((s, p) => s + p.x * p.y, 0)
+  const sumXX = values.reduce((s, p) => s + p.x * p.x, 0)
+
+  const denom = n * sumXX - sumX * sumX
+  if (denom === 0) return 0
+
+  return (n * sumXY - sumX * sumY) / denom
 }
 export default function App() {
-  
-
   const [tab, setTab] = useState("Overview")
   const [rangeKey, setRangeKey] = useState("180D")
-
+  const [workouts, setWorkouts] = useState([])
   const [daily, setDaily] = useState([])
   const [nutrition, setNutrition] = useState([])
   const [injury, setInjury] = useState([])
   const [dexa, setDexa] = useState([])
   const [error, setError] = useState("")
   const [storedWorkouts, setStoredWorkouts] = useState([])
+  const [canonicalSessions, setCanonicalSessions] = useState([])
+
+  const activeWorkouts =
+    canonicalSessions && canonicalSessions.length > 0
+      ? canonicalSessions
+      : workouts
+const fmt0 = n => Number.isFinite(Number(n)) ? Math.round(Number(n)).toLocaleString() : "0"
+const fmt1 = n => Number.isFinite(Number(n)) ? Number(n).toFixed(1) : "0.0"
+
+function normalizeWorkoutType(type) {
+  const t = String(type || "").toLowerCase()
+
+  if (t.includes("traditional strength")) return "Strength"
+  if (t.includes("functional strength")) return "Strength"
+  if (t.includes("core")) return "Strength"
+
+  if (t.includes("running")) return "Running"
+  if (t.includes("walking")) return "Walking"
+  if (t.includes("cycling")) return "Cycling"
+  if (t.includes("swimming")) return "Swimming"
+  if (t.includes("elliptical")) return "Elliptical"
+  if (t.includes("rowing")) return "Rowing"
+  if (t.includes("stair")) return "Stairs"
+  if (t.includes("machine cardio")) return "Machine Cardio"
+
+  return "Other"
+}
+
+function formatBucketLabel(dateStr, mode) {
+  const d = new Date(dateStr)
+  if (!Number.isFinite(d.getTime())) return String(dateStr || "")
+
+  const dd = String(d.getDate()).padStart(2, "0")
+  const mm = String(d.getMonth() + 1).padStart(2, "0")
+  const yy = String(d.getFullYear()).slice(-2)
+
+  if (mode === "weekly") return `${dd}/${mm}`
+  if (mode === "monthly") return `${dd}/${mm}`
+  if (mode === "yearly") return `${mm}/${yy}`
+  return `${mm}/${yy}`
+}
+function normalizeDistanceToMiles(workout, rawDistance) {
+  const d = Number(rawDistance || 0)
+  if (!Number.isFinite(d) || d <= 0) return 0
+
+  if (workout?.source === "ManualSchedule") {
+    return d
+  }
+
+  if (workout?.source === "Technogym") {
+    return d / 1609.34
+  }
+
+  if (workout?.sources?.technogym && !workout?.sources?.apple) {
+    return d / 1609.34
+  }
+
+  if (workout?.sources?.technogym && workout?.sources?.apple) {
+    return d / 1609.34
+  }
+
+  return d
+}
+const normalizedActiveWorkouts = useMemo(() => {
+  return activeWorkouts.map(w => {
+    const rawType = w.canonical_type || w.type || "Other"
+    const category = normalizeWorkoutType(rawType)
+
+    return {
+      ...w,
+      date: w.date || (w.start_date ? String(w.start_date).slice(0, 10) : null),
+      type: rawType,
+      category,
+      distance: normalizeDistanceToMiles(
+        w,
+        w.preferred_metrics?.distance?.value ?? w.distance ?? 0
+      ),
+      calories: w.preferred_metrics?.calories?.value ?? w.calories ?? 0,
+      hr: w.preferred_metrics?.hr?.value ?? w.hr ?? null,
+      dur: w.dur ?? w.duration_min ?? 0
+    }
+  })
+}, [activeWorkouts])
+function sameDay(a, b) {
+  return String(a || "").slice(0, 10) === String(b || "").slice(0, 10)
+}
+
+function closeEnough(a, b, tol = 10) {
+  return Math.abs(Number(a || 0) - Number(b || 0)) <= tol
+}
+const normalizedStoredWorkouts = useMemo(() => {
+  return (Array.isArray(storedWorkouts) ? storedWorkouts : []).map(w => {
+    const rawType = w.type || "Other"
+    const category = normalizeWorkoutType(rawType)
+
+    return {
+      ...w,
+      source: "ManualSchedule",
+      date: w.date || null,
+      time: w.time || "",
+      dateTime: w.dateTime || (w.date && w.time ? `${w.date}T${w.time}` : w.date || null),
+      type: rawType,
+      category,
+      distance: normalizeDistanceToMiles(w, w.distance || 0),
+      calories: Number(w.calories || 0),
+      hr: w.hr != null ? Number(w.hr) : null,
+      dur: Number(w.dur || 0)
+    }
+  })
+}, [storedWorkouts])
+
+const operationalWorkouts = useMemo(() => {
+  const imported = Array.isArray(normalizedActiveWorkouts) ? normalizedActiveWorkouts : []
+  const manual = Array.isArray(normalizedStoredWorkouts) ? normalizedStoredWorkouts : []
+
+  return [...imported, ...manual].sort((a, b) =>
+    String(a.dateTime || a.date || "").localeCompare(String(b.dateTime || b.date || ""))
+  )
+}, [normalizedActiveWorkouts, normalizedStoredWorkouts])
 
   const [session, setSession] = useState(null)
   const [email, setEmail] = useState("avidal@ilstu.edu")
@@ -1595,8 +1844,16 @@ export default function App() {
   const [customMeal, setCustomMeal] = useState({ calories: "", protein_g: "", carbs_g: "", fat_g: "", fiber_g: "" })
   const [saveAsPreset, setSaveAsPreset] = useState(false)
   const [rawNutrition, setRawNutrition] = useState({ breakfast: "", lunch: "", dinner: "", snacks: "" })
+console.log("canonical sessions loaded:", canonicalSessions.length)
+useEffect(() => {
+  console.log(
+    "types:",
+    [...new Set(normalizedActiveWorkouts.map(w => w.type))].sort()
+  )
+}, [normalizedActiveWorkouts])
+ 
 
-  useEffect(() => {
+useEffect(() => {
     async function loadData() {
       try {
         const base = import.meta.env.BASE_URL
@@ -1620,11 +1877,20 @@ export default function App() {
           if (!r.ok) throw new Error("dexa_summary.json failed")
           return r.json()
         })
-
+        const w = await fetch(`${base}data/workouts_merged.json`).then(r => {
+          if (!r.ok) throw new Error("workouts_merged.json failed")
+          return r.json()
+        })
+        const cs = await fetch(`${base}data/workout_sessions_canonical.json`).then(r => {
+  if (!r.ok) throw new Error("workout_sessions_canonical.json failed")
+  return r.json()
+})
         setDaily(Array.isArray(d) ? d : [])
         setNutrition(Array.isArray(n) ? n : [])
         setInjury(Array.isArray(i) ? i : [])
         setDexa(Array.isArray(dx) ? dx : [])
+        setWorkouts(Array.isArray(w) ? w : [])
+        setCanonicalSessions(Array.isArray(cs?.all_sessions) ? cs.all_sessions : [])
       } catch (err) {
         console.log(err)
         setError(String(err))
@@ -2125,34 +2391,75 @@ async function persistMealEntries(nextEntries) {
     return Math.max(2500, ...filteredNutrition.map(r => toNum(r.calories) + 100))
   }, [filteredNutrition])
 const trainingSummary = useMemo(() => {
-  return buildTrainingSummary(storedWorkouts)
-}, [storedWorkouts])
+  return buildTrainingSummary(operationalWorkouts)
+}, [operationalWorkouts])
+
+const weeklyTrainingBuckets = useMemo(() => {
+  return buildWeeklyTrainingBuckets(operationalWorkouts)
+}, [operationalWorkouts])
+
 const bodyForecast = useMemo(() => {
   return buildBodyForecast(daily)
 }, [daily])
 
-const runningPenalty = useMemo(() => {
-  return getRunningInjuryPenalty()
-}, [tab, storedWorkouts])
+const injuryPenalties = useMemo(() => {
+  return getInjuryPenalties()
+}, [tab, activeWorkouts])
 
 const trainingForecast = useMemo(() => {
-  return buildTrainingForecast(trainingSummary, runningPenalty)
-}, [trainingSummary, runningPenalty])
-  return (
-    <div
-      style={{
-        background: "#07080e",
-        color: "#ced2f0",
-        minHeight: "100vh",
-        fontFamily: "Arial",
-        padding: "25px"
-      }}
+  return buildTrainingForecast(trainingSummary, injuryPenalties, weeklyTrainingBuckets)
+}, [trainingSummary, injuryPenalties, weeklyTrainingBuckets])
+const cardioMinutesForecastChart = useMemo(() => {
+  if (!weeklyTrainingBuckets || !weeklyTrainingBuckets.length) return []
+
+  const lastBucket = weeklyTrainingBuckets[weeklyTrainingBuckets.length - 1]
+  const baseDate = new Date(lastBucket.weekStart)
+
+  const actual = weeklyTrainingBuckets.map(w => ({
+    label: formatBucketLabel(new Date(w.weekStart), "monthly"),
+    actual: Number(w.cardioMinutes || 0),
+    forecast: null
+  }))
+
+  const projected = [
+    { weeks: 4, value: trainingForecast.cardioMinutes1m },
+    { weeks: 13, value: trainingForecast.cardioMinutes3m },
+    { weeks: 26, value: trainingForecast.cardioMinutes6m },
+    { weeks: 52, value: trainingForecast.cardioMinutes12m }
+  ].map(({ weeks, value }) => {
+    const d = new Date(baseDate)
+    d.setDate(d.getDate() + weeks * 7)
+
+    return {
+      label: formatBucketLabel(d, "monthly"),
+      actual: null,
+      forecast: Number(value || 0)
+    }
+  })
+
+  return [...actual, ...projected]
+}, [weeklyTrainingBuckets, trainingForecast])
+
+return (
+  <div
+    style={{
+      background: "#07080e",
+      color: "#ced2f0",
+      minHeight: "100vh",
+      fontFamily: "Arial",
+      padding: "25px"
+    }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", gap: "16px", flexWrap: "wrap", marginBottom: "16px" }}>
         <div>
-          <h2 style={{ marginTop: 0, marginBottom: "6px" }}>ANDRÉS FITNESS ARCHIVE</h2>
-          {!hydrated && <div style={{ fontSize: "12px", opacity: 0.7 }}>Loading synced data...</div>}
-        </div>
+  <div style={{ fontSize: "64px", fontWeight: "800", lineHeight: 1, marginTop: 0, marginBottom: "6px" }}>
+    L.I.F.T.
+  </div>
+  <div style={{ fontSize: "13px", opacity: 0.85, marginBottom: "4px" }}>
+    Longitudinal Integrated Fitness Tracker
+  </div>
+  {!hydrated && <div style={{ fontSize: "12px", opacity: 0.7 }}>Loading synced data...</div>}
+</div>
 
         <div style={{ ...cardStyle(), minWidth: "320px", maxWidth: "420px" }}>
           <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "8px" }}>Sync</div>
@@ -2555,7 +2862,7 @@ const trainingForecast = useMemo(() => {
 )}
 
 {tab === "Training" && (
-  <TrainingDashboard workouts={storedWorkouts} />
+<TrainingDashboard workouts={operationalWorkouts} />
 )}
 {tab === "Injury" && (
   <div style={{ padding: "16px" }}>
@@ -2579,11 +2886,75 @@ const trainingForecast = useMemo(() => {
         onChange={e => window.injurySeverity = e.target.value}
       />
 
-      <input
-        type="number"
-        placeholder="Recovery days"
-        onChange={e => window.injuryRecovery = e.target.value}
-      />
+<input
+  type="number"
+  placeholder="Recovery days"
+  onChange={e => window.injuryRecovery = e.target.value}
+/>
+
+<label>
+  <input
+    type="checkbox"
+    onChange={e => window.injuryAffectsRunning = e.target.checked}
+  />
+  Affects running
+</label>
+
+<label>
+  <input
+    type="checkbox"
+    onChange={e => window.injuryAffectsSwimming = e.target.checked}
+  />
+  Affects swimming
+</label>
+
+<label>
+  <input
+    type="checkbox"
+    onChange={e => window.injuryAffectsCycling = e.target.checked}
+  />
+  Affects cycling
+</label>
+
+<label>
+  <input
+    type="checkbox"
+    onChange={e => window.injuryAffectsLifting = e.target.checked}
+  />
+  Affects lifting
+</label>
+
+      <label>
+        <input
+          type="checkbox"
+          onChange={e => window.injuryAffectsRunning = e.target.checked}
+        />
+        Affects running
+      </label>
+
+      <label>
+        <input
+          type="checkbox"
+          onChange={e => window.injuryAffectsSwimming = e.target.checked}
+        />
+        Affects swimming
+      </label>
+
+      <label>
+        <input
+          type="checkbox"
+          onChange={e => window.injuryAffectsCycling = e.target.checked}
+        />
+        Affects cycling
+      </label>
+
+      <label>
+        <input
+          type="checkbox"
+          onChange={e => window.injuryAffectsLifting = e.target.checked}
+        />
+        Affects lifting
+      </label>
 
       <button
         onClick={() => {
@@ -2593,7 +2964,11 @@ const trainingForecast = useMemo(() => {
             name: window.injuryName || "",
             region: window.injuryRegion || "",
             severity: Number(window.injurySeverity || 0),
-            recoveryDays: Number(window.injuryRecovery || 0)
+            recoveryDays: Number(window.injuryRecovery || 0),
+            affectsRunning: !!window.injuryAffectsRunning,
+            affectsSwimming: !!window.injuryAffectsSwimming,
+            affectsCycling: !!window.injuryAffectsCycling,
+            affectsLifting: !!window.injuryAffectsLifting
           }
 
           const existing = JSON.parse(localStorage.getItem("injuries") || "[]")
@@ -2627,10 +3002,22 @@ const trainingForecast = useMemo(() => {
           <div>Region: {entry.region}</div>
           <div>Severity: {entry.severity}</div>
           <div>Recovery days: {entry.recoveryDays}</div>
+          <div>
+            Affects:
+            {entry.affectsRunning ? " running" : ""}
+            {entry.affectsSwimming ? " swimming" : ""}
+            {entry.affectsCycling ? " cycling" : ""}
+            {entry.affectsLifting ? " lifting" : ""}
+          </div>
         </div>
       ))}
     </div>
-
+<div style={{ marginTop: "24px" }}>
+  <h4>Recent weekly buckets</h4>
+  <pre style={{ whiteSpace: "pre-wrap", fontSize: "12px" }}>
+    {JSON.stringify(weeklyTrainingBuckets, null, 2)}
+  </pre>
+</div>
   </div>
 )}
 {tab === "Forecast" && (
@@ -2642,11 +3029,11 @@ const trainingForecast = useMemo(() => {
       <div style={{ marginBottom: "30px" }}>
         <h4>Body Weight</h4>
 
-        <div>Current: {bodyForecast.currentWeight.toFixed(1)} lb</div>
-        <div>1 month: {bodyForecast.weight1m.toFixed(1)}</div>
-        <div>3 months: {bodyForecast.weight3m.toFixed(1)}</div>
-        <div>6 months: {bodyForecast.weight6m.toFixed(1)}</div>
-        <div>12 months: {bodyForecast.weight12m.toFixed(1)}</div>
+<div><strong>Current:</strong> {bodyForecast.currentWeight.toFixed(1)} lb</div>
+<div><strong>1 month:</strong> {bodyForecast.weight1m.toFixed(1)} lb</div>
+<div><strong>3 months:</strong> {bodyForecast.weight3m.toFixed(1)} lb</div>
+<div><strong>6 months:</strong> {bodyForecast.weight6m.toFixed(1)} lb</div>
+<div><strong>12 months:</strong> {bodyForecast.weight12m.toFixed(1)} lb</div>
 
         <div style={{ marginTop: "10px" }}>
           ETA 150 lb: {bodyForecast.eta150 || "not on trend"}
@@ -2661,10 +3048,48 @@ const trainingForecast = useMemo(() => {
     {trainingForecast && (
       <div style={{ display: "grid", gap: "20px" }}>
 
+<div style={{ background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: "12px", padding: "16px" }}>
+  <div style={{ fontSize: "14px", fontWeight: "700", color: "#ced2f0", marginBottom: "12px" }}>
+    Cardio Minutes, Actual vs Forecast
+  </div>
+  <ResponsiveContainer width="100%" height={260}>
+    <LineChart data={cardioMinutesForecastChart}>
+      <CartesianGrid stroke="#1a1b2e" />
+      <XAxis dataKey="label" />
+      <YAxis tickFormatter={(v) => fmt0(v)} />
+      <Tooltip
+        formatter={(value, name) => [
+          value == null ? "—" : fmt0(value),
+          name === "actual" ? "Actual min/week" : "Forecast min/week"
+        ]}
+      />
+      <Legend />
+      <Line
+        type="monotone"
+        dataKey="actual"
+        name="Actual min/week"
+        stroke="#4a9ee8"
+        strokeWidth={2}
+        dot={{ r: 3 }}
+        connectNulls={false}
+      />
+      <Line
+        type="monotone"
+        dataKey="forecast"
+        name="Forecast min/week"
+        stroke="#ffd166"
+        strokeWidth={2}
+        strokeDasharray="6 4"
+        dot={{ r: 4 }}
+        connectNulls={false}
+      />
+    </LineChart>
+  </ResponsiveContainer>
+</div>
         <div>
           <h4>Running Volume</h4>
           <div>Current weekly: {trainingSummary.runningDistanceWeekly.toFixed(1)} mi</div>
-          <div>Injury modifier: {runningPenalty.toFixed(2)}</div>
+          <div>Injury modifier: {injuryPenalties.running.toFixed(2)}</div>
           <div>1 month: {trainingForecast.running1m.toFixed(1)}</div>
           <div>3 months: {trainingForecast.running3m.toFixed(1)}</div>
           <div>6 months: {trainingForecast.running6m.toFixed(1)}</div>
@@ -2680,6 +3105,7 @@ const trainingForecast = useMemo(() => {
         <div>
           <h4>Swimming Volume</h4>
           <div>Current weekly: {trainingSummary.swimmingDistanceWeekly.toFixed(1)} mi</div>
+          <div>Injury modifier: {injuryPenalties.swimming.toFixed(2)}</div>
           <div>1 month: {trainingForecast.swimming1m.toFixed(1)}</div>
           <div>3 months: {trainingForecast.swimming3m.toFixed(1)}</div>
           <div>6 months: {trainingForecast.swimming6m.toFixed(1)}</div>
@@ -2695,6 +3121,7 @@ const trainingForecast = useMemo(() => {
         <div>
           <h4>Cycling Volume</h4>
           <div>Current weekly: {trainingSummary.cyclingDistanceWeekly.toFixed(1)} mi</div>
+          <div>Injury modifier: {injuryPenalties.cycling.toFixed(2)}</div>
           <div>1 month: {trainingForecast.cycling1m.toFixed(1)}</div>
           <div>3 months: {trainingForecast.cycling3m.toFixed(1)}</div>
           <div>6 months: {trainingForecast.cycling6m.toFixed(1)}</div>
@@ -2710,6 +3137,7 @@ const trainingForecast = useMemo(() => {
         <div>
           <h4>Strength Sessions</h4>
           <div>Current weekly: {trainingSummary.strengthSessionsWeekly.toFixed(1)}</div>
+          <div>Injury modifier: {injuryPenalties.lifting.toFixed(2)}</div>
           <div>1 month: {trainingForecast.strength1m.toFixed(1)}</div>
           <div>3 months: {trainingForecast.strength3m.toFixed(1)}</div>
           <div>6 months: {trainingForecast.strength6m.toFixed(1)}</div>
