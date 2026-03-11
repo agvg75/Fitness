@@ -1164,8 +1164,7 @@ function projectWeightTrend(weights, nutritionSeries, weeks = 12) {
   return out
 }
 
-function TrainingDashboard({ workouts }) {
-  const fmt0 = n => Number.isFinite(Number(n)) ? Math.round(Number(n)).toLocaleString() : "0"
+function TrainingDashboard({ workouts, recentNutrition }) {  const fmt0 = n => Number.isFinite(Number(n)) ? Math.round(Number(n)).toLocaleString() : "0"
   const fmt1 = n => Number.isFinite(Number(n)) ? Number(n).toFixed(1) : "0.0"
 
   const [rangeMode, setRangeMode] = useState("weekly")
@@ -1338,11 +1337,22 @@ if (w.category === "Strength") {
 <div style={valueStyle}>{fmt0(totals.strengthSessions)}</div>
         </div>
 
-        <div style={cardStyle}>
-          <div style={labelStyle}>Total Workouts</div>
-<div style={valueStyle}>{fmt0(totals.totalWorkouts)}</div>
-        </div>
-      </div>
+       <div style={cardStyle}>
+  <div style={labelStyle}>Total Workouts</div>
+  <div style={valueStyle}>{fmt0(totals.totalWorkouts)}</div>
+</div>
+
+<div style={cardStyle}>
+  <div style={labelStyle}>Calories (7d avg)</div>
+  <div style={valueStyle}>{fmt0(recentNutrition.avgCalories)}</div>
+</div>
+
+<div style={cardStyle}>
+  <div style={labelStyle}>Protein (7d avg g)</div>
+  <div style={valueStyle}>{fmt0(recentNutrition.avgProtein)}</div>
+</div>
+
+</div>
 
       <div style={{ display: "grid", gap: "14px" }}>
         <div style={{ background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: "12px", padding: "16px" }}>
@@ -1492,10 +1502,27 @@ function estimateMilestoneDate(current, slopePerDay, target) {
 
   return d.toISOString().slice(0, 10)
 }
+function estimateMaintenanceCalories({ currentWeight, recentCardioMinutes, bmr }) {
+  const baseBmr =
+    Number(bmr) > 0
+      ? Number(bmr)
+      : Number(currentWeight) > 0
+      ? Number(currentWeight) * 11
+      : 1800
 
-function buildBodyForecast(daily) {
+  const activityAdjustment = Number(recentCardioMinutes || 0) * 4
+
+  return baseBmr + activityAdjustment
+}
+function buildBodyForecast({
+  daily,
+  nutritionRows = [],
+  recentCardioMinutes = 0,
+  bmr = null
+}) {
   const phase1TargetWeight = 150
-const finalTargetWeight = 145
+  const finalTargetWeight = 145
+
   if (!daily || !daily.length) return null
 
   const getWeight = d => {
@@ -1526,20 +1553,78 @@ const finalTargetWeight = 145
 
   if (!weightRows.length) return null
 
-  const recent = weightRows.slice(-28)
-  const slopeWeight = linearSlope(recent, d => d._weight)
   const currentWeight = weightRows[weightRows.length - 1]._weight
+
+  const recentWeights = weightRows.slice(-28)
+  const observedSlope = linearSlope(recentWeights, d => d._weight)
+
+  const estimatedMaintenance = estimateMaintenanceCalories({
+    currentWeight,
+    recentCardioMinutes,
+    bmr
+  })
+
+  const calorieRows = (Array.isArray(nutritionRows) ? nutritionRows : [])
+    .filter(r => Number(r.calories) > 0)
+    .sort((a, b) => new Date(a.date) - new Date(b.date))
+
+  const recentCalorieRows = calorieRows.slice(-21)
+
+  const avgLoggedCalories =
+    recentCalorieRows.length
+      ? recentCalorieRows.reduce((sum, r) => sum + Number(r.calories || 0), 0) / recentCalorieRows.length
+      : 0
+
+  const loggingCoverage = recentCalorieRows.length / 21
+
+  const energyBalanceSlope =
+    avgLoggedCalories > 0 && Number.isFinite(estimatedMaintenance)
+      ? (avgLoggedCalories - estimatedMaintenance) / 3500
+      : observedSlope
+
+  let blendedSlope =
+    loggingCoverage >= 0.5
+      ? observedSlope * 0.35 + energyBalanceSlope * 0.65
+      : observedSlope
+
+  if (!Number.isFinite(blendedSlope)) blendedSlope = observedSlope
+  if (!Number.isFinite(blendedSlope)) blendedSlope = 0
+
+  const distanceTo150 = currentWeight - phase1TargetWeight
+  const distanceTo145 = currentWeight - finalTargetWeight
+
+  let taperMultiplier = 1
+
+  if (currentWeight <= finalTargetWeight) {
+    taperMultiplier = 0
+  } else if (currentWeight <= phase1TargetWeight) {
+    taperMultiplier = 0.35
+  } else if (distanceTo150 <= 5) {
+    taperMultiplier = 0.55
+  } else if (distanceTo150 <= 10) {
+    taperMultiplier = 0.75
+  }
+
+  const projectedSlope = blendedSlope * taperMultiplier
+
+  const boundedSlope = Math.max(-0.2, Math.min(0.1, projectedSlope))
 
   return {
     currentWeight,
     phase1TargetWeight,
-finalTargetWeight,
-    weight1m: Math.max(finalTargetWeight, projectValue(currentWeight, slopeWeight, 30)),
-weight3m: Math.max(finalTargetWeight, projectValue(currentWeight, slopeWeight, 90)),
-weight6m: Math.max(finalTargetWeight, projectValue(currentWeight, slopeWeight, 180)),
-weight12m: Math.max(finalTargetWeight, projectValue(currentWeight, slopeWeight, 365)),
-    eta150: estimateMilestoneDate(currentWeight, slopeWeight, 150),
-    eta145: estimateMilestoneDate(currentWeight, slopeWeight, 145)
+    finalTargetWeight,
+    estimatedMaintenance,
+    avgLoggedCalories: Math.round(avgLoggedCalories),
+    loggingCoverage: Number(loggingCoverage.toFixed(2)),
+    observedSlope,
+    energyBalanceSlope,
+    blendedSlope: boundedSlope,
+    weight1m: Math.max(finalTargetWeight, projectValue(currentWeight, boundedSlope, 30)),
+    weight3m: Math.max(finalTargetWeight, projectValue(currentWeight, boundedSlope, 90)),
+    weight6m: Math.max(finalTargetWeight, projectValue(currentWeight, boundedSlope, 180)),
+    weight12m: Math.max(finalTargetWeight, projectValue(currentWeight, boundedSlope, 365)),
+    eta150: estimateMilestoneDate(currentWeight, boundedSlope, 150),
+    eta145: estimateMilestoneDate(currentWeight, boundedSlope, 145)
   }
 }
 function buildTrainingForecast(
@@ -1549,57 +1634,421 @@ function buildTrainingForecast(
 ) {
   if (!summary) return null
 
-const runningSlope = computeWeeklySlope(weeklyBuckets, "running") * penalties.running
-const swimmingSlope = computeWeeklySlope(weeklyBuckets, "swimming") * penalties.swimming
-const cyclingSlope = computeWeeklySlope(weeklyBuckets, "cycling") * penalties.cycling
-let strengthSlope = computeWeeklySlope(weeklyBuckets, "strength") * penalties.lifting
+  const runningSlopePerWeek =
+    clampTrainingSlope(
+      "running",
+      computeBlendedWeeklySlope(weeklyBuckets, "running") * penalties.running
+    )
 
-strengthSlope = Math.max(-0.25, Math.min(0.25, strengthSlope))
-const cardioMinutesSlope =
-  computeWeeklySlope(weeklyBuckets, "cardioMinutes") *
-  Math.min(penalties.running, penalties.swimming, penalties.cycling)
+  const swimmingSlopePerWeek =
+    clampTrainingSlope(
+      "swimming",
+      computeBlendedWeeklySlope(weeklyBuckets, "swimming") * penalties.swimming
+    )
 
-  const runningCurrent = summary.runningDistanceWeekly
-  const swimmingCurrent = summary.swimmingDistanceWeekly
-  const cyclingCurrent = summary.cyclingDistanceWeekly
-  const strengthCurrent = summary.strengthSessionsWeekly
-  const cardioMinutesCurrent = summary.cardioMinutesWeekly
+  const cyclingSlopePerWeek =
+    clampTrainingSlope(
+      "cycling",
+      computeBlendedWeeklySlope(weeklyBuckets, "cycling") * penalties.cycling
+    )
+
+  const strengthSlopePerWeek =
+    clampTrainingSlope(
+      "strength",
+      computeBlendedWeeklySlope(weeklyBuckets, "strength") * penalties.lifting
+    )
+
+  const cardioPenalty = Math.min(
+    penalties.running ?? 1,
+    penalties.swimming ?? 1,
+    penalties.cycling ?? 1
+  )
+
+  const cardioMinutesSlopePerWeek =
+    clampTrainingSlope(
+      "cardioMinutes",
+      computeBlendedWeeklySlope(weeklyBuckets, "cardioMinutes") * cardioPenalty
+    )
+
+  const runningCurrent = Number(summary.runningDistanceWeekly || 0)
+  const swimmingCurrent = Number(summary.swimmingDistanceWeekly || 0)
+  const cyclingCurrent = Number(summary.cyclingDistanceWeekly || 0)
+  const strengthCurrent = Number(summary.strengthSessionsWeekly || 0)
+  const cardioMinutesCurrent = Number(summary.cardioMinutesWeekly || 0)
+
+  const runningSlopePerDay = runningSlopePerWeek / 7
+  const swimmingSlopePerDay = swimmingSlopePerWeek / 7
+  const cyclingSlopePerDay = cyclingSlopePerWeek / 7
+  const strengthSlopePerDay = strengthSlopePerWeek / 7
+  const cardioMinutesSlopePerDay = cardioMinutesSlopePerWeek / 7
 
   return {
-    running1m: projectValue(runningCurrent, runningSlope, 4),
-    running3m: projectValue(runningCurrent, runningSlope, 13),
-    running6m: projectValue(runningCurrent, runningSlope, 26),
-    running12m: projectValue(runningCurrent, runningSlope, 52),
-    eta20Run: estimateMilestoneDate(runningCurrent, runningSlope / 7, 20),
-    eta30Run: estimateMilestoneDate(runningCurrent, runningSlope, 30),
+    runningCurrent,
+    runningSlopePerWeek,
+    running1m: projectValue(runningCurrent, runningSlopePerDay, 30),
+    running3m: projectValue(runningCurrent, runningSlopePerDay, 90),
+    running6m: projectValue(runningCurrent, runningSlopePerDay, 180),
+    running12m: projectValue(runningCurrent, runningSlopePerDay, 365),
+    eta20Run: estimateMilestoneDate(runningCurrent, runningSlopePerDay, 20),
+    eta30Run: estimateMilestoneDate(runningCurrent, runningSlopePerDay, 30),
 
-    swimming1m: projectValue(swimmingCurrent, swimmingSlope, 4),
-    swimming3m: projectValue(swimmingCurrent, swimmingSlope, 13),
-    swimming6m: projectValue(swimmingCurrent, swimmingSlope, 26),
-    swimming12m: projectValue(swimmingCurrent, swimmingSlope, 52),
-    eta2Swim: estimateMilestoneDate(swimmingCurrent, swimmingSlope / 7, 20),
-    eta5Swim: estimateMilestoneDate(swimmingCurrent, swimmingSlope / 7, 5),
+    swimmingCurrent,
+    swimmingSlopePerWeek,
+    swimming1m: projectValue(swimmingCurrent, swimmingSlopePerDay, 30),
+    swimming3m: projectValue(swimmingCurrent, swimmingSlopePerDay, 90),
+    swimming6m: projectValue(swimmingCurrent, swimmingSlopePerDay, 180),
+    swimming12m: projectValue(swimmingCurrent, swimmingSlopePerDay, 365),
+    eta2Swim: estimateMilestoneDate(swimmingCurrent, swimmingSlopePerDay, 2),
+    eta5Swim: estimateMilestoneDate(swimmingCurrent, swimmingSlopePerDay, 5),
 
-    cycling1m: projectValue(cyclingCurrent, cyclingSlope, 4),
-    cycling3m: projectValue(cyclingCurrent, cyclingSlope, 13),
-    cycling6m: projectValue(cyclingCurrent, cyclingSlope, 26),
-    cycling12m: projectValue(cyclingCurrent, cyclingSlope, 52),
-    eta25Bike: estimateMilestoneDate(cyclingCurrent, cyclingSlope / 7, 25),
-    eta50Bike: estimateMilestoneDate(cyclingCurrent, cyclingSlope / 7, 50),
+    cyclingCurrent,
+    cyclingSlopePerWeek,
+    cycling1m: projectValue(cyclingCurrent, cyclingSlopePerDay, 30),
+    cycling3m: projectValue(cyclingCurrent, cyclingSlopePerDay, 90),
+    cycling6m: projectValue(cyclingCurrent, cyclingSlopePerDay, 180),
+    cycling12m: projectValue(cyclingCurrent, cyclingSlopePerDay, 365),
+    eta25Bike: estimateMilestoneDate(cyclingCurrent, cyclingSlopePerDay, 25),
+    eta50Bike: estimateMilestoneDate(cyclingCurrent, cyclingSlopePerDay, 50),
 
-    strength1m: projectValue(strengthCurrent, strengthSlope, 4),
-    strength3m: projectValue(strengthCurrent, strengthSlope, 13),
-    strength6m: projectValue(strengthCurrent, strengthSlope, 26),
-    strength12m: projectValue(strengthCurrent, strengthSlope, 52),
-    eta3Strength: estimateMilestoneDate(strengthCurrent, strengthSlope / 7, 3),
-    eta4Strength: estimateMilestoneDate(strengthCurrent, strengthSlope / 7, 4),
+    strengthCurrent,
+    strengthSlopePerWeek,
+    strength1m: projectValue(strengthCurrent, strengthSlopePerDay, 30),
+    strength3m: projectValue(strengthCurrent, strengthSlopePerDay, 90),
+    strength6m: projectValue(strengthCurrent, strengthSlopePerDay, 180),
+    strength12m: projectValue(strengthCurrent, strengthSlopePerDay, 365),
+    eta3Strength: estimateMilestoneDate(strengthCurrent, strengthSlopePerDay, 3),
+    eta4Strength: estimateMilestoneDate(strengthCurrent, strengthSlopePerDay, 4),
 
-    cardioMinutes1m: Math.max(0, projectValue(cardioMinutesCurrent, cardioMinutesSlope, 4)),
-cardioMinutes3m: Math.max(0, projectValue(cardioMinutesCurrent, cardioMinutesSlope, 13)),
-cardioMinutes6m: Math.max(0, projectValue(cardioMinutesCurrent, cardioMinutesSlope, 26)),
-cardioMinutes12m: Math.max(0, projectValue(cardioMinutesCurrent, cardioMinutesSlope, 52))
+    cardioMinutesCurrent,
+    cardioMinutesSlopePerWeek,
+    cardioMinutes1m: Math.max(0, projectValue(cardioMinutesCurrent, cardioMinutesSlopePerDay, 30)),
+    cardioMinutes3m: Math.max(0, projectValue(cardioMinutesCurrent, cardioMinutesSlopePerDay, 90)),
+    cardioMinutes6m: Math.max(0, projectValue(cardioMinutesCurrent, cardioMinutesSlopePerDay, 180)),
+    cardioMinutes12m: Math.max(0, projectValue(cardioMinutesCurrent, cardioMinutesSlopePerDay, 365))
+  }
+}
+function safeNum(value) {
+  const n = Number(value)
+  return Number.isFinite(n) ? n : 0
+}
+
+function parseWorkoutDate(value) {
+  if (!value) return null
+  const d = new Date(value)
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
+function daysBetween(a, b) {
+  const ms = 1000 * 60 * 60 * 24
+  return Math.round((a.getTime() - b.getTime()) / ms)
+}
+
+function getWorkoutTypeLabel(workout) {
+  return String(
+    workout?.canonical_type ||
+      workout?.type ||
+      workout?.activityType ||
+      workout?.sport ||
+      workout?.category ||
+      ""
+  ).toLowerCase()
+}
+
+function extractRunDistanceMiles(workout) {
+  const type = getWorkoutTypeLabel(workout)
+  if (!type.includes("run") && !type.includes("jog") && type !== "running") return 0
+
+  const miles =
+    safeNum(workout?.distanceMiles) ||
+    safeNum(workout?.miles) ||
+    safeNum(workout?.distance_miles) ||
+    safeNum(workout?.distance)
+
+  if (miles > 0) return miles
+
+  const km =
+    safeNum(workout?.distanceKm) ||
+    safeNum(workout?.kilometers) ||
+    safeNum(workout?.distance_km)
+
+  if (km > 0) return km * 0.621371
+
+  const meters =
+    safeNum(workout?.distanceMeters) ||
+    safeNum(workout?.meters) ||
+    safeNum(workout?.distance_m)
+
+  if (meters > 0) return meters / 1609.34
+
+  return 0
+}
+
+function extractWorkoutDurationMin(workout) {
+  return (
+    safeNum(workout?.durationMin) ||
+    safeNum(workout?.duration_min) ||
+    safeNum(workout?.minutes) ||
+    safeNum(workout?.duration) ||
+    safeNum(workout?.dur) ||
+    0
+  )
+}
+
+function extractRunPaceMinPerMile(workout) {
+  const explicit =
+    safeNum(workout?.paceMinPerMile) ||
+    safeNum(workout?.pace_min_per_mile)
+
+  if (explicit > 0) return explicit
+
+  const miles = extractRunDistanceMiles(workout)
+  const mins = extractWorkoutDurationMin(workout)
+
+  if (miles > 0 && mins > 0) return mins / miles
+  return 0
+}
+
+function computeEnduranceInputs(workouts, asOfDate = new Date()) {
+  const runs28 = []
+  const runs84 = []
+
+  ;(workouts || []).forEach(workout => {
+    const dt = parseWorkoutDate(
+      workout?.start_date ||
+        workout?.dateTime ||
+        workout?.date ||
+        workout?.startDate ||
+        workout?.start
+    )
+    if (!dt) return
+
+    const ageDays = daysBetween(asOfDate, dt)
+    if (ageDays < 0) return
+
+    const type = getWorkoutTypeLabel(workout)
+    if (!type.includes("run") && !type.includes("jog") && type !== "running") return
+
+    const miles = extractRunDistanceMiles(workout)
+    const durationMin = extractWorkoutDurationMin(workout)
+    const pace = extractRunPaceMinPerMile(workout)
+
+    const row = { miles, durationMin, pace, dt }
+
+    if (ageDays <= 28) runs28.push(row)
+    if (ageDays <= 84) runs84.push(row)
+  })
+
+  const sumMiles28 = runs28.reduce((s, r) => s + safeNum(r.miles), 0)
+  const sumMiles84 = runs84.reduce((s, r) => s + safeNum(r.miles), 0)
+
+  const validPaces28 = runs28.map(r => r.pace).filter(v => v > 0)
+  const validPaces84 = runs84.map(r => r.pace).filter(v => v > 0)
+
+  const avgPace28 =
+    validPaces28.length
+      ? validPaces28.reduce((s, v) => s + v, 0) / validPaces28.length
+      : 0
+
+  const avgPace84 =
+    validPaces84.length
+      ? validPaces84.reduce((s, v) => s + v, 0) / validPaces84.length
+      : 0
+
+  return {
+    runs28Count: runs28.length,
+    runs84Count: runs84.length,
+    milesPer4Weeks: Math.round(sumMiles28 * 10) / 10,
+    milesPer12Weeks: Math.round(sumMiles84 * 10) / 10,
+    weeklyRunMiles28: Math.round((sumMiles28 / 4) * 10) / 10,
+    weeklyRunMiles84: Math.round((sumMiles84 / 12) * 10) / 10,
+    avgPace28: avgPace28 ? Math.round(avgPace28 * 100) / 100 : 0,
+    avgPace84: avgPace84 ? Math.round(avgPace84 * 100) / 100 : 0
+  }
+}
+
+function paceToScore(minPerMile) {
+  if (!Number.isFinite(minPerMile) || minPerMile <= 0) return 0
+
+  if (minPerMile <= 8.0) return 100
+  if (minPerMile <= 9.0) return 90
+  if (minPerMile <= 10.0) return 80
+  if (minPerMile <= 11.0) return 70
+  if (minPerMile <= 12.0) return 60
+  if (minPerMile <= 13.0) return 50
+  if (minPerMile <= 14.0) return 40
+  return 30
+}
+
+function mileageToScore(weeklyMiles) {
+  if (!Number.isFinite(weeklyMiles) || weeklyMiles <= 0) return 0
+
+  if (weeklyMiles >= 25) return 100
+  if (weeklyMiles >= 20) return 90
+  if (weeklyMiles >= 15) return 80
+  if (weeklyMiles >= 10) return 65
+  if (weeklyMiles >= 7) return 55
+  if (weeklyMiles >= 4) return 45
+  if (weeklyMiles >= 2) return 30
+  return 15
+}
+
+function buildEnduranceForecast({
+  workouts,
+  trainingSummary,
+  penalties
+}) {
+  const inputs = computeEnduranceInputs(workouts)
+  const cardioMinutesWeekly = safeNum(trainingSummary?.cardioMinutesWeekly)
+  const cardioScore = Math.min(100, Math.round(cardioMinutesWeekly / 2))
+
+  const runPenalty =
+    penalties?.running != null
+      ? penalties.running
+      : 1
+
+  const baseReadinessRaw =
+    paceToScore(inputs.avgPace28) * 0.45 +
+    mileageToScore(inputs.weeklyRunMiles28) * 0.4 +
+    cardioScore * 0.15
+
+  const readinessNow = Math.max(
+    0,
+    Math.min(100, Math.round(baseReadinessRaw * runPenalty))
+  )
+
+  const readinessSlopePerMonth =
+    ((inputs.weeklyRunMiles28 - inputs.weeklyRunMiles84) * 1.5) +
+    ((inputs.avgPace84 > 0 && inputs.avgPace28 > 0 ? inputs.avgPace84 - inputs.avgPace28 : 0) * 6)
+
+  const projectReadiness = months => {
+    const projected = readinessNow + readinessSlopePerMonth * months
+    return Math.max(0, Math.min(100, Math.round(projected)))
   }
 
+  return {
+    readinessNow,
+    readiness1m: projectReadiness(1),
+    readiness3m: projectReadiness(3),
+    readiness6m: projectReadiness(6),
+    readiness12m: projectReadiness(12),
+    weeklyRunMiles28: inputs.weeklyRunMiles28,
+    avgPace28: inputs.avgPace28,
+    runs28Count: inputs.runs28Count,
+    cardioMinutesWeekly,
+    runPenalty
+  }
+}
+function formatRaceTime(totalMinutes) {
+  if (!Number.isFinite(totalMinutes) || totalMinutes <= 0) return "NA"
+
+  const totalSeconds = Math.round(totalMinutes * 60)
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`
+  }
+
+  return `${minutes}:${String(seconds).padStart(2, "0")}`
+}
+
+function predictRaceTimeFromPace(distanceMiles, paceMinPerMile) {
+  if (!Number.isFinite(distanceMiles) || distanceMiles <= 0) return null
+  if (!Number.isFinite(paceMinPerMile) || paceMinPerMile <= 0) return null
+  return distanceMiles * paceMinPerMile
+}
+
+function adjustEquivalentRacePace({
+  avgPace28,
+  readiness,
+  weeklyRunMiles28,
+  runPenalty
+}) {
+  const basePace = Number(avgPace28 || 0)
+  if (!Number.isFinite(basePace) || basePace <= 0) return null
+
+  const readinessBoost =
+    readiness >= 80 ? -1.0 :
+    readiness >= 65 ? -0.7 :
+    readiness >= 50 ? -0.4 :
+    readiness >= 35 ? -0.15 :
+    readiness >= 20 ? 0 :
+    0.25
+
+  const mileageBoost =
+    weeklyRunMiles28 >= 20 ? -0.5 :
+    weeklyRunMiles28 >= 15 ? -0.35 :
+    weeklyRunMiles28 >= 10 ? -0.2 :
+    weeklyRunMiles28 >= 6 ? -0.05 :
+    weeklyRunMiles28 >= 3 ? 0.1 :
+    0.25
+
+  const injurySlowdown =
+    runPenalty >= 0.95 ? 0 :
+    runPenalty >= 0.8 ? 0.2 :
+    runPenalty >= 0.6 ? 0.45 :
+    0.8
+
+  const predictedPace = Math.max(6.5, basePace + readinessBoost + mileageBoost + injurySlowdown)
+  return Number(predictedPace.toFixed(2))
+}
+
+function buildRacePrediction(enduranceForecast) {
+  if (!enduranceForecast) return null
+
+  const {
+    readinessNow,
+    readiness1m,
+    readiness3m,
+    readiness6m,
+    readiness12m,
+    avgPace28,
+    weeklyRunMiles28,
+    runPenalty
+  } = enduranceForecast
+
+  const predictedPaceNow = adjustEquivalentRacePace({
+    avgPace28,
+    readiness: readinessNow,
+    weeklyRunMiles28,
+    runPenalty
+  })
+
+  if (!predictedPaceNow) {
+    return {
+      predictedPaceNow: null,
+      fiveK: "NA",
+      tenK: "NA",
+      halfMarathon: "NA",
+      half1m: "NA",
+      half3m: "NA",
+      half6m: "NA",
+      half12m: "NA"
+    }
+  }
+
+  const predictForReadiness = readiness => {
+    const pace = adjustEquivalentRacePace({
+      avgPace28,
+      readiness,
+      weeklyRunMiles28,
+      runPenalty
+    })
+    if (!pace) return "NA"
+    return formatRaceTime(predictRaceTimeFromPace(13.1094, pace))
+  }
+
+  return {
+    predictedPaceNow,
+    fiveK: formatRaceTime(predictRaceTimeFromPace(3.1069, predictedPaceNow)),
+    tenK: formatRaceTime(predictRaceTimeFromPace(6.2137, predictedPaceNow)),
+    halfMarathon: formatRaceTime(predictRaceTimeFromPace(13.1094, predictedPaceNow)),
+    half1m: predictForReadiness(readiness1m),
+    half3m: predictForReadiness(readiness3m),
+    half6m: predictForReadiness(readiness6m),
+    half12m: predictForReadiness(readiness12m)
+  }
 }
 function getInjuryPenalties() {
   const injuries = JSON.parse(localStorage.getItem("injuries") || "[]")
@@ -1682,12 +2131,38 @@ function buildWeeklyTrainingBuckets(workouts) {
     a.weekStart.localeCompare(b.weekStart)
   )
 
-  return ordered.slice(-4)
-}
-function computeWeeklySlope(buckets, key) {
-  if (!buckets || buckets.length < 2) return 0
+const trimmed = ordered.slice(-16)
 
-  const values = buckets.map((b, i) => ({
+const maxLoad = Math.max(
+  ...trimmed.map(w =>
+    (w.running || 0) +
+    (w.swimming || 0) * 2 +
+    (w.cycling || 0) * 0.4 +
+    (w.strength || 0) * 2
+  ),
+  1
+)
+
+return trimmed.map(w => {
+  const loadRaw =
+      (w.running || 0) +
+      (w.swimming || 0) * 2 +
+      (w.cycling || 0) * 0.4 +
+      (w.strength || 0) * 2
+
+  return {
+    ...w,
+    trainingLoad: loadRaw / maxLoad
+  }
+})
+}
+function computeWeeklySlope(buckets, key, windowSize = null) {
+  if (!Array.isArray(buckets) || buckets.length < 2) return 0
+
+  const source = windowSize ? buckets.slice(-windowSize) : buckets
+  if (source.length < 2) return 0
+
+  const values = source.map((b, i) => ({
     x: i,
     y: Number(b[key] || 0)
   }))
@@ -1702,6 +2177,37 @@ function computeWeeklySlope(buckets, key) {
   if (denom === 0) return 0
 
   return (n * sumXY - sumX * sumY) / denom
+}
+
+function computeBlendedWeeklySlope(
+  buckets,
+  key,
+  shortWindow = 4,
+  longWindow = 12,
+  shortWeight = 0.7,
+  longWeight = 0.3
+) {
+  const shortSlope = computeWeeklySlope(buckets, key, shortWindow)
+  const longSlope = computeWeeklySlope(buckets, key, longWindow)
+
+  if (!Number.isFinite(shortSlope) && !Number.isFinite(longSlope)) return 0
+  if (!Number.isFinite(shortSlope)) return longSlope || 0
+  if (!Number.isFinite(longSlope)) return shortSlope || 0
+
+  return shortSlope * shortWeight + longSlope * longWeight
+}
+
+function clampTrainingSlope(key, slope) {
+  const limits = {
+    running: [-1.5, 2.5],
+    swimming: [-0.5, 1.5],
+    cycling: [-2.5, 5],
+    strength: [-0.25, 0.25],
+    cardioMinutes: [-20, 30]
+  }
+
+  const [minVal, maxVal] = limits[key] || [-10, 10]
+  return Math.max(minVal, Math.min(maxVal, slope))
 }
 export default function App() {
   const [tab, setTab] = useState("Overview")
@@ -1740,7 +2246,6 @@ function normalizeWorkoutType(type) {
 
   return "Other"
 }
-
 function formatBucketLabel(dateStr, mode) {
   const d = new Date(dateStr)
   if (!Number.isFinite(d.getTime())) return String(dateStr || "")
@@ -1776,6 +2281,104 @@ function normalizeDistanceToMiles(workout, rawDistance) {
 
   return d
 }
+function summarizeDailyNutrition(entries) {
+  const grouped = {}
+
+  ;(Array.isArray(entries) ? entries : []).forEach(entry => {
+    const date = entry.date || null
+    if (!date) return
+
+    if (!grouped[date]) {
+      grouped[date] = {
+        date,
+        calories: 0,
+        protein_g: 0,
+        carbs_g: 0,
+        fat_g: 0
+      }
+    }
+
+    grouped[date].calories += Number(entry.calories || 0)
+    grouped[date].protein_g += Number(entry.protein_g || 0)
+    grouped[date].carbs_g += Number(entry.carbs_g || 0)
+    grouped[date].fat_g += Number(entry.fat_g || 0)
+  })
+
+  return Object.values(grouped).sort((a, b) =>
+    String(a.date || "").localeCompare(String(b.date || ""))
+  )
+}
+
+function roundToNearest(value, step = 25) {
+  if (!Number.isFinite(value)) return 0
+  return Math.round(value / step) * step
+}
+
+function estimateDynamicCalorieTarget({
+  currentWeight,
+  estimatedMaintenance,
+  primaryGoal = 150,
+  lowerGoal = 145,
+  minimumCalories = 1200
+}) {
+  const weight = Number(currentWeight || 0)
+  const maintenance = Number(estimatedMaintenance || 0)
+
+  if (!Number.isFinite(weight) || !Number.isFinite(maintenance) || maintenance <= 0) {
+    return {
+      estimatedMaintenance: maintenance || 0,
+      targetCalories: minimumCalories,
+      deficit: 0,
+      phase: "unknown",
+      distanceTo150: null,
+      distanceTo145: null
+    }
+  }
+
+  const distanceTo150 = weight - primaryGoal
+  const distanceTo145 = weight - lowerGoal
+
+  let deficit = 0
+  let phase = "maintenance"
+
+  if (weight <= lowerGoal) {
+    deficit = 0
+    phase = "at_or_below_145"
+  } else if (weight <= primaryGoal) {
+    deficit = 100
+    phase = "between_145_and_150"
+  } else if (distanceTo150 >= 30) {
+    deficit = 450
+    phase = "aggressive_cut"
+  } else if (distanceTo150 >= 20) {
+    deficit = 375
+    phase = "standard_cut"
+  } else if (distanceTo150 >= 10) {
+    deficit = 275
+    phase = "moderate_cut"
+  } else if (distanceTo150 >= 5) {
+    deficit = 175
+    phase = "gentle_cut"
+  } else {
+    deficit = 100
+    phase = "goal_approach"
+  }
+
+  const targetCalories = Math.max(
+    minimumCalories,
+    roundToNearest(maintenance - deficit, 25)
+  )
+
+  return {
+    estimatedMaintenance: maintenance,
+    targetCalories,
+    deficit,
+    phase,
+    distanceTo150: Math.round(distanceTo150 * 10) / 10,
+    distanceTo145: Math.round(distanceTo145 * 10) / 10
+  }
+}
+
 const normalizedActiveWorkouts = useMemo(() => {
   return activeWorkouts.map(w => {
     const rawType = w.canonical_type || w.type || "Other"
@@ -1799,7 +2402,6 @@ const normalizedActiveWorkouts = useMemo(() => {
 function sameDay(a, b) {
   return String(a || "").slice(0, 10) === String(b || "").slice(0, 10)
 }
-
 function closeEnough(a, b, tol = 10) {
   return Math.abs(Number(a || 0) - Number(b || 0)) <= tol
 }
@@ -1833,14 +2435,17 @@ const operationalWorkouts = useMemo(() => {
   )
 }, [normalizedActiveWorkouts, normalizedStoredWorkouts])
 
-  const [session, setSession] = useState(null)
-  const [email, setEmail] = useState("avidal@ilstu.edu")
-  const [authMsg, setAuthMsg] = useState("")
+
+const [session, setSession] = useState(null)
+const [email, setEmail] = useState("avidal@ilstu.edu")
+const [authMsg, setAuthMsg] = useState("")
   const [hydrated, setHydrated] = useState(false)
 
   const [mealEntries, setMealEntries] = useState([])
   const [mealPresets, setMealPresets] = useState(defaultMealPresets)
-
+const dailyNutritionSummary = useMemo(() => {
+  return summarizeDailyNutrition(mealEntries)
+}, [mealEntries])
   const [showMealDialog, setShowMealDialog] = useState(false)
   const [mealDate, setMealDate] = useState(todayISO())
   const [mealTab, setMealTab] = useState("Breakfast")
@@ -2004,30 +2609,44 @@ useEffect(() => {
     return filteredDaily.slice(-10).reverse()
   }, [filteredDaily])
 
-  const weightSmoothed = useMemo(() => {
-    if (!filteredDaily.length) return []
+ const weightSmoothed = useMemo(() => {
+  if (!filteredDaily.length) return []
 
-    return filteredDaily.map((d, i) => {
-      const currentWeight = Number(d.weight_lb)
-      const start = Math.max(0, i - 6)
-      const subset = filteredDaily
-        .slice(start, i + 1)
-        .map(x => Number(x.weight_lb))
-        .filter(v => !Number.isNaN(v))
+  return filteredDaily.map((d, i) => {
+    const currentWeight =
+      Number(d.weight_lb ?? d.weight ?? d.weight_lbs_mean)
 
-      const avg = subset.length
-        ? subset.reduce((a, b) => a + b, 0) / subset.length
-        : null
+    const start = Math.max(0, i - 6)
+    const subset = filteredDaily
+      .slice(start, i + 1)
+      .map(x => Number(x.weight_lb ?? x.weight ?? x.weight_lbs_mean))
+      .filter(v => !Number.isNaN(v) && Number.isFinite(v))
 
-      return {
-        date: d.date,
-        label: fmtShortDate(d.date),
-        weight: Number.isNaN(currentWeight) ? null : currentWeight,
-        avg: avg == null ? null : Number(avg.toFixed(2))
-      }
-    })
-  }, [filteredDaily])
+    const avg = subset.length
+      ? subset.reduce((a, b) => a + b, 0) / subset.length
+      : null
 
+    return {
+      date: d.date,
+      label: fmtShortDate(d.date),
+      weight: Number.isNaN(currentWeight) ? null : currentWeight,
+      avg: avg == null ? null : Number(avg.toFixed(2))
+    }
+  })
+}, [filteredDaily])
+
+const overviewWeightDomain = useMemo(() => {
+  const vals = weightSmoothed
+    .map(row => Number(row.weight))
+    .filter(v => Number.isFinite(v) && v > 0)
+
+  if (!vals.length) return [140, 190]
+
+  return [
+    Math.floor(Math.min(...vals)) - 2,
+    Math.ceil(Math.max(...vals)) + 2
+  ]
+}, [weightSmoothed])
   const dexaSeries = useMemo(() => {
     if (!dexa.length) return []
 
@@ -2390,10 +3009,11 @@ async function persistMealEntries(nextEntries) {
       .sort((a, b) => String(a.created_at || "").localeCompare(String(b.created_at || "")))
   }, [mealEntries, mealDate])
 
-  const chartMaxCalories = useMemo(() => {
+    const chartMaxCalories = useMemo(() => {
     if (!filteredNutrition.length) return 2500
     return Math.max(2500, ...filteredNutrition.map(r => toNum(r.calories) + 100))
-  }, [filteredNutrition])
+}, [filteredNutrition])
+
 const trainingSummary = useMemo(() => {
   return buildTrainingSummary(operationalWorkouts)
 }, [operationalWorkouts])
@@ -2402,17 +3022,426 @@ const weeklyTrainingBuckets = useMemo(() => {
   return buildWeeklyTrainingBuckets(operationalWorkouts)
 }, [operationalWorkouts])
 
+const trainingLoadChartData = useMemo(() => {
+  if (!weeklyTrainingBuckets?.length) return []
+
+  const daysByRange = {
+    "30D": 30,
+    "90D": 90,
+    "180D": 180,
+    "1Y": 365,
+    "ALL": null
+  }
+
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  const cutoffDays = daysByRange[rangeKey] ?? 180
+
+  let visibleBuckets = weeklyTrainingBuckets
+
+  if (cutoffDays != null) {
+    visibleBuckets = weeklyTrainingBuckets.filter(w => {
+      const dt = new Date(w.weekStart)
+      if (Number.isNaN(dt.getTime())) return false
+      const diffDays = Math.floor((today - dt) / (1000 * 60 * 60 * 24))
+      return diffDays <= cutoffDays
+    })
+  }
+
+  if (!visibleBuckets.length) return []
+
+  const maxVisibleLoad = Math.max(
+    ...visibleBuckets.map(w => Number(w.trainingLoad || 0)),
+    1
+  )
+
+  return visibleBuckets.map((w, i) => ({
+    label: fmtShortDate(w.weekStart),
+    running: w.running ?? 0,
+    swimming: w.swimming ?? 0,
+    cycling: w.cycling ?? 0,
+    strength: w.strength ?? 0,
+    trainingLoad: (Number(w.trainingLoad || 0) / maxVisibleLoad) * Math.max(
+      ...visibleBuckets.map(x =>
+        Math.max(
+          Number(x.running || 0),
+          Number(x.swimming || 0),
+          Number(x.cycling || 0)
+        )
+      ),
+      1
+    )
+  }))
+}, [weeklyTrainingBuckets, rangeKey])
+const trainingLoadDistanceMax = useMemo(() => {
+  if (!trainingLoadChartData?.length) return 12
+
+  const vals = trainingLoadChartData.flatMap(row => [
+    Number(row.running || 0),
+    Number(row.swimming || 0),
+    Number(row.cycling || 0)
+  ]).filter(Number.isFinite)
+
+  if (!vals.length) return 12
+
+  const maxVal = Math.max(...vals)
+  return Math.max(6, Math.ceil(maxVal * 1.1))
+}, [trainingLoadChartData])
 const bodyForecast = useMemo(() => {
-  return buildBodyForecast(daily)
-}, [daily])
+  return buildBodyForecast({
+    daily,
+    nutritionRows: dailyNutritionSummary,
+    recentCardioMinutes: trainingSummary?.cardioMinutesWeekly || 0,
+    bmr: null
+  })
+}, [daily, dailyNutritionSummary, trainingSummary])
 
 const injuryPenalties = useMemo(() => {
   return getInjuryPenalties()
 }, [tab, activeWorkouts])
+const latestTrainingLoadPct = useMemo(() => {
+  const last = weeklyTrainingBuckets?.[weeklyTrainingBuckets.length - 1]
+  if (!last) return null
+  return Math.round((Number(last.trainingLoad || 0)) * 100)
+}, [weeklyTrainingBuckets])
 
+
+
+const operationalScore = useMemo(() => {
+  const vals = [
+    injuryPenalties?.running ?? 1,
+    injuryPenalties?.swimming ?? 1,
+    injuryPenalties?.cycling ?? 1,
+    injuryPenalties?.lifting ?? 1
+  ]
+    .map(Number)
+    .filter(Number.isFinite)
+
+  const pct = vals.length
+    ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 100)
+    : 100
+
+  const background =
+    pct >= 85
+      ? "rgba(34,197,94,0.16)"
+      : pct >= 60
+      ? "rgba(250,204,21,0.16)"
+      : "rgba(239,68,68,0.16)"
+
+  return { pct, background }
+}, [injuryPenalties])
+const operationalCapacityData = useMemo(() => {
+  const entries = Array.isArray(injury) ? injury : []
+  if (!entries.length) return []
+
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  const parseDate = value => {
+    if (!value) return null
+    const d = new Date(value)
+    return Number.isNaN(d.getTime()) ? null : d
+  }
+
+  const daysBetween = (a, b) =>
+    Math.floor((a.getTime() - b.getTime()) / (1000 * 60 * 60 * 24))
+
+  const classifyInjury = row => {
+    const text = String(
+      row?.type ||
+      row?.injury_type ||
+      row?.category ||
+      row?.name ||
+      row?.label ||
+      ""
+    ).toLowerCase()
+
+    if (
+      text.includes("flu") ||
+      text.includes("covid") ||
+      text.includes("cold") ||
+      text.includes("virus") ||
+      text.includes("strep") ||
+      text.includes("infection") ||
+      text.includes("illness")
+    ) {
+      return "disease"
+    }
+
+    if (
+      text.includes("fatigue") ||
+      text.includes("sore") ||
+      text.includes("soreness") ||
+      text.includes("sleep") ||
+      text.includes("recovery") ||
+      text.includes("tired")
+    ) {
+      return "fatigue"
+    }
+
+    return "acute"
+  }
+
+  const categoryTau = {
+    acute: 28,
+    disease: 10,
+    fatigue: 5
+  }
+
+  const getSeverity = row => {
+    const val =
+      Number(row?.severity) ||
+      Number(row?.severityScore) ||
+      Number(row?.score) ||
+      0
+
+    return Math.max(0, Math.min(10, val))
+  }
+
+  const getPeakLoss = row => {
+    const severity = getSeverity(row)
+    return Math.max(0, Math.min(0.8, severity / 10))
+  }
+
+  const datedEntries = entries
+    .map(row => {
+      const start =
+        parseDate(row?.date) ||
+        parseDate(row?.start_date) ||
+        parseDate(row?.startDate)
+
+      if (!start) return null
+
+      return {
+        ...row,
+        _start: start,
+        _category: classifyInjury(row),
+        _peakLoss: getPeakLoss(row)
+      }
+    })
+    .filter(Boolean)
+    .sort((a, b) => a._start - b._start)
+
+  if (!datedEntries.length) return []
+
+  const firstDate = new Date(datedEntries[0]._start)
+  firstDate.setHours(0, 0, 0, 0)
+
+  const endDate = new Date(today)
+  endDate.setDate(endDate.getDate() + 60)
+
+  const series = []
+
+  for (
+    let d = new Date(firstDate);
+    d <= endDate;
+    d.setDate(d.getDate() + 1)
+  ) {
+    const acuteLoss = datedEntries
+      .filter(e => e._category === "acute")
+      .reduce((sum, e) => {
+        const age = daysBetween(d, e._start)
+        if (age < 0) return sum
+        const tau = categoryTau.acute
+        return sum + e._peakLoss * Math.exp(-age / tau)
+      }, 0)
+
+    const diseaseLoss = datedEntries
+      .filter(e => e._category === "disease")
+      .reduce((sum, e) => {
+        const age = daysBetween(d, e._start)
+        if (age < 0) return sum
+        const tau = categoryTau.disease
+        return sum + e._peakLoss * Math.exp(-age / tau)
+      }, 0)
+
+    const fatigueLoss = datedEntries
+      .filter(e => e._category === "fatigue")
+      .reduce((sum, e) => {
+        const age = daysBetween(d, e._start)
+        if (age < 0) return sum
+        const tau = categoryTau.fatigue
+        return sum + e._peakLoss * Math.exp(-age / tau)
+      }, 0)
+
+    const totalMultiplier =
+      Math.max(0, 1 - acuteLoss) *
+      Math.max(0, 1 - diseaseLoss) *
+      Math.max(0, 1 - fatigueLoss)
+
+    series.push({
+      date: d.toISOString().slice(0, 10),
+      label: fmtShortDate(d.toISOString().slice(0, 10)),
+      acuteLossPct: Number((acuteLoss * 100).toFixed(1)),
+      diseaseLossPct: Number((diseaseLoss * 100).toFixed(1)),
+      fatigueLossPct: Number((fatigueLoss * 100).toFixed(1)),
+      operationalPct: Number((totalMultiplier * 100).toFixed(1))
+    })
+  }
+
+  return series
+}, [injury])
+
+const operationalCapacityDomain = useMemo(() => {
+  return [0, 100]
+}, [])
+const bodyCompositionOverviewData = useMemo(() => {
+  const dexaPts = Array.isArray(dexaSeries)
+    ? dexaSeries
+        .filter(row => row?.date)
+        .map(row => ({
+          date: row.date,
+          label: fmtShortDate(row.date),
+          dexaBF: row?.pct_fat != null ? Number(row.pct_fat) : null,
+          estimatedBF: null
+        }))
+    : []
+
+  const currentPt =
+    estimatedCurrentBF != null
+      ? [{
+          date: daily?.length ? daily[daily.length - 1]?.date : "current",
+          label: daily?.length ? fmtShortDate(daily[daily.length - 1]?.date) : "Current",
+          dexaBF: null,
+          estimatedBF: Number(estimatedCurrentBF)
+        }]
+      : []
+
+  const merged = [...dexaPts, ...currentPt]
+    .filter(row => row.date)
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)))
+
+  return merged
+}, [dexaSeries, estimatedCurrentBF, daily])
+
+const bodyCompositionOverviewDomain = useMemo(() => {
+  const vals = bodyCompositionOverviewData
+    .flatMap(row => [Number(row.dexaBF), Number(row.estimatedBF)])
+    .filter(v => Number.isFinite(v) && v > 0)
+
+  if (!vals.length) return [10, 35]
+
+  return [
+    Math.floor(Math.min(...vals)) - 1,
+    Math.ceil(Math.max(...vals)) + 1
+  ]
+}, [bodyCompositionOverviewData])
 const trainingForecast = useMemo(() => {
   return buildTrainingForecast(trainingSummary, injuryPenalties, weeklyTrainingBuckets)
 }, [trainingSummary, injuryPenalties, weeklyTrainingBuckets])
+
+const enduranceForecast = useMemo(() => {
+  return buildEnduranceForecast({
+    workouts: operationalWorkouts,
+    trainingSummary,
+    penalties: injuryPenalties
+  })
+}, [operationalWorkouts, trainingSummary, injuryPenalties])
+
+const racePrediction = useMemo(() => {
+  return buildRacePrediction(enduranceForecast)
+}, [enduranceForecast])
+const readinessProjectionData = useMemo(() => {
+  if (!enduranceForecast) return []
+
+  const anchors = [
+    { month: 0, readiness: Number(enduranceForecast.readinessNow ?? 0) },
+    { month: 1, readiness: Number(enduranceForecast.readiness1m ?? 0) },
+    { month: 3, readiness: Number(enduranceForecast.readiness3m ?? 0) },
+    { month: 6, readiness: Number(enduranceForecast.readiness6m ?? 0) },
+    { month: 12, readiness: Number(enduranceForecast.readiness12m ?? 0) }
+  ].filter(d => Number.isFinite(d.readiness))
+
+  if (!anchors.length) return []
+
+  const interpolateBaseReadiness = month => {
+    if (month <= anchors[0].month) return anchors[0].readiness
+
+    for (let i = 1; i < anchors.length; i += 1) {
+      const prev = anchors[i - 1]
+      const curr = anchors[i]
+
+      if (month <= curr.month) {
+        const frac = (month - prev.month) / (curr.month - prev.month || 1)
+        return prev.readiness + frac * (curr.readiness - prev.readiness)
+      }
+    }
+
+    const last = anchors[anchors.length - 1]
+    const prev = anchors.length > 1 ? anchors[anchors.length - 2] : last
+    const slope = (last.readiness - prev.readiness) / (last.month - prev.month || 1)
+
+    return Math.max(0, Math.min(100, last.readiness + slope * (month - last.month)))
+  }
+
+const eventThresholds = {
+  fiveK: 8,
+  tenK: 16,
+  half: 28,
+  tri: 38
+}
+
+  const logisticPct = (baseReadiness, threshold, steepness = 0.18) => {
+    const x = baseReadiness - threshold
+    return Math.max(0, Math.min(100, 100 / (1 + Math.exp(-steepness * x))))
+  }
+
+  const maxMonth = 24
+  const series = []
+
+  for (let month = 0; month <= maxMonth; month += 1) {
+    const base = interpolateBaseReadiness(month)
+
+    series.push({
+      month,
+      label: month === 0 ? "Now" : `${month}M`,
+      baseReadiness: Number(base.toFixed(1)),
+      fiveK: Number(logisticPct(base, eventThresholds.fiveK, 0.30).toFixed(1)),
+tenK: Number(logisticPct(base, eventThresholds.tenK, 0.24).toFixed(1)),
+half: Number(logisticPct(base, eventThresholds.half, 0.20).toFixed(1)),
+tri: Number(logisticPct(base, eventThresholds.tri, 0.18).toFixed(1))
+    })
+  }
+
+  return series
+}, [enduranceForecast])
+const eventReadinessMarkers = useMemo(() => {
+  if (!readinessProjectionData?.length) return []
+
+  const defs = [
+    { key: "fiveK", label: "5K", color: "#ef4444" },
+    { key: "tenK", label: "10K", color: "#22c55e" },
+    { key: "half", label: "Half", color: "#facc15" },
+    { key: "tri", label: "Tri", color: "#a78bfa" }
+  ]
+
+  const targetPct = 80
+
+  const findReadyMonth = key => {
+    const hit = readinessProjectionData.find(d => Number(d[key] || 0) >= targetPct)
+    return hit ? hit.month : null
+  }
+
+  return defs.map(d => ({
+    ...d,
+    month: findReadyMonth(d.key),
+    targetPct
+  }))
+}, [readinessProjectionData])
+const readinessProjectionMaxMonth = useMemo(() => {
+  const dataMax = readinessProjectionData.length
+    ? Math.max(...readinessProjectionData.map(d => Number(d.month || 0)))
+    : 12
+
+  const markerVals = eventReadinessMarkers
+    .map(m => (m.month == null ? null : Number(m.month)))
+    .filter(Number.isFinite)
+
+  const markerMax = markerVals.length ? Math.max(...markerVals) : 12
+
+  return Math.max(12, Math.ceil(markerMax), Math.ceil(dataMax))
+}, [readinessProjectionData, eventReadinessMarkers])
 const cardioMinutesForecastChart = useMemo(() => {
   if (!weeklyTrainingBuckets || !weeklyTrainingBuckets.length) return []
 
@@ -2441,9 +3470,65 @@ const cardioMinutesForecastChart = useMemo(() => {
     }
   })
 
-  return [...actual, ...projected]
+return [...actual, ...projected]
 }, [weeklyTrainingBuckets, trainingForecast])
 
+const recentNutrition = useMemo(() => {
+  const rows = dailyNutritionSummary.slice(-7)
+
+  if (!rows.length) {
+    return {
+      avgCalories: 0,
+      avgProtein: 0
+    }
+  }
+
+  const totals = rows.reduce(
+    (acc, r) => {
+      acc.calories += Number(r.calories || 0)
+      acc.protein += Number(r.protein_g || 0)
+      return acc
+    },
+    { calories: 0, protein: 0 }
+  )
+
+  return {
+    avgCalories: totals.calories / rows.length,
+    avgProtein: totals.protein / rows.length
+  }
+}, [dailyNutritionSummary])
+
+const calorieTarget = useMemo(() => {
+  const currentWeight = Number(bodyForecast?.currentWeight || 0)
+  const recentCardioMinutes = Number(trainingSummary?.cardioMinutesWeekly || 0)
+
+  const estimatedMaintenance = estimateMaintenanceCalories({
+    currentWeight,
+    recentCardioMinutes,
+    bmr: null
+  })
+
+  return estimateDynamicCalorieTarget({
+    currentWeight,
+    estimatedMaintenance,
+    primaryGoal: 150,
+    lowerGoal: 145,
+    minimumCalories: 1200
+  })
+}, [bodyForecast, trainingSummary])
+const calorieDelta = useMemo(() => {
+  const avg = Number(nutritionSummary?.avgCalories || 0)
+  const target = Number(calorieTarget?.targetCalories || 0)
+  if (!avg || !target) return null
+  return Math.round(avg - target)
+}, [nutritionSummary, calorieTarget])
+
+const calorieChartData = useMemo(() => {
+  return filteredNutrition.map(row => ({
+    ...row,
+    target: calorieTarget.targetCalories
+  }))
+}, [filteredNutrition, calorieTarget])
 return (
   <div
     style={{
@@ -2520,59 +3605,555 @@ return (
         </div>
       )}
 
-      {tab === "Overview" && (
-        <div>
-          <h3>Overview</h3>
+{tab === "Overview" && (
+  <div>
+    <h3>Overview</h3>
 
-          <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", marginBottom: "20px" }}>
-            <div style={cardStyle()}>
-              <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "8px" }}>Current Weight</div>
-              <div style={{ fontSize: "30px", fontWeight: "bold" }}>{latestWeight?.weight_lb ?? "NA"} lb</div>
-              <div style={{ fontSize: "12px", opacity: 0.7, marginTop: "8px" }}>{latestWeight?.date ?? "No date"}</div>
-            </div>
-
-            <div style={cardStyle()}>
-              <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "8px" }}>Weight Records</div>
-              <div style={{ fontSize: "30px", fontWeight: "bold" }}>{daily.length}</div>
-            </div>
-
-            <div style={cardStyle()}>
-              <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "8px" }}>Nutrition Days</div>
-              <div style={{ fontSize: "30px", fontWeight: "bold" }}>{nutritionSeries.length}</div>
-              <div style={{ fontSize: "12px", opacity: 0.7, marginTop: "8px" }}>Latest: {latestNutrition?.date ?? "NA"}</div>
-            </div>
-
-            <div style={cardStyle()}>
-              <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "8px" }}>Cloud Meal Entries</div>
-              <div style={{ fontSize: "30px", fontWeight: "bold" }}>{mealEntries.length}</div>
-              <div style={{ fontSize: "12px", opacity: 0.7, marginTop: "8px" }}>Sync-backed phone logging</div>
-            </div>
-          </div>
-
-          <div style={{ display: "flex", gap: "8px", marginBottom: "14px", flexWrap: "wrap" }}>
-            {rangeOptions.map(opt => (
-              <button key={opt.key} onClick={() => setRangeKey(opt.key)} style={buttonStyle(rangeKey === opt.key)}>
-                {opt.label}
-              </button>
-            ))}
-          </div>
-
-          <div style={{ ...cardStyle(), marginBottom: "20px", maxWidth: "1000px" }}>
-            <div style={{ fontWeight: "bold", marginBottom: "12px" }}>Weight Trend ({rangeKey})</div>
-            <ResponsiveContainer width="100%" height={320}>
-              <LineChart data={weightSmoothed}>
-                <CartesianGrid stroke="#1a1b2e" />
-                <XAxis dataKey="label" />
-                <YAxis domain={[120, "dataMax + 2"]} tickCount={6} />
-                <Tooltip />
-                <Line type="monotone" dataKey="weight" stroke="#4a9ee8" strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="avg" stroke="#ffd166" strokeWidth={3} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(180px, 1fr))", gap: "16px", marginBottom: "20px" }}>
+      <div style={{ ...cardStyle(), minWidth: 0 }}>
+        <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "8px" }}>Current Weight</div>
+        <div style={{ fontSize: "30px", fontWeight: "bold" }}>
+          {bodyForecast?.currentWeight != null ? `${f1(bodyForecast.currentWeight)} lb` : "NA"}
         </div>
-      )}
+        <div style={{ fontSize: "12px", opacity: 0.7, marginTop: "8px" }}>
+          latest body-weight state
+        </div>
+      </div>
 
+      <div style={{ ...cardStyle(), minWidth: 0 }}>
+        <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "8px" }}>Calories vs Target</div>
+        <div style={{ fontSize: "30px", fontWeight: "bold" }}>
+          {nutritionSummary?.avgCalories != null && calorieTarget?.targetCalories != null
+            ? `${Math.round(nutritionSummary.avgCalories)} / ${Math.round(calorieTarget.targetCalories)}`
+            : "NA"}
+        </div>
+        <div style={{ fontSize: "12px", opacity: 0.7, marginTop: "8px" }}>
+          delta: {nutritionSummary?.avgCalories != null && calorieTarget?.targetCalories != null
+            ? `${Math.round(nutritionSummary.avgCalories - calorieTarget.targetCalories) > 0 ? "+" : ""}${Math.round(nutritionSummary.avgCalories - calorieTarget.targetCalories)} kcal`
+            : "NA"}
+        </div>
+      </div>
+
+      <div style={{ ...cardStyle(), minWidth: 0 }}>
+        <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "8px" }}>Training Load</div>
+        <div style={{ fontSize: "30px", fontWeight: "bold" }}>
+          {weeklyTrainingBuckets?.length
+            ? `${Math.round(Number(weeklyTrainingBuckets[weeklyTrainingBuckets.length - 1]?.trainingLoad || 0) * 100)}%`
+            : "NA"}
+        </div>
+        <div style={{ fontSize: "12px", opacity: 0.7, marginTop: "8px" }}>
+          latest weekly normalized load
+        </div>
+      </div>
+
+      <div
+        style={{
+          ...cardStyle(),
+          minWidth: 0,
+          background:
+            (() => {
+              const vals = [
+                injuryPenalties?.running ?? 1,
+                injuryPenalties?.swimming ?? 1,
+                injuryPenalties?.cycling ?? 1,
+                injuryPenalties?.lifting ?? 1
+              ]
+                .map(Number)
+                .filter(Number.isFinite)
+
+              const pct = vals.length
+                ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 100)
+                : 100
+
+              return pct >= 85
+                ? "rgba(34,197,94,0.16)"
+                : pct >= 60
+                ? "rgba(250,204,21,0.16)"
+                : "rgba(239,68,68,0.16)"
+            })()
+        }}
+      >
+        <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "8px" }}>Operational</div>
+        <div style={{ fontSize: "30px", fontWeight: "bold" }}>
+          {(() => {
+            const vals = [
+              injuryPenalties?.running ?? 1,
+              injuryPenalties?.swimming ?? 1,
+              injuryPenalties?.cycling ?? 1,
+              injuryPenalties?.lifting ?? 1
+            ]
+              .map(Number)
+              .filter(Number.isFinite)
+
+            return vals.length
+              ? `${Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 100)}%`
+              : "100%"
+          })()}
+        </div>
+        <div style={{ fontSize: "12px", opacity: 0.7, marginTop: "8px" }}>
+          average training capacity across modalities
+        </div>
+      </div>
+    </div>
+
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "16px", marginBottom: "20px", alignItems: "start" }}>
+      <div style={{ ...cardStyle(), minWidth: "0" }}>
+        <div style={{ fontWeight: "bold", marginBottom: "12px" }}>Calories Trend ({rangeKey})</div>
+        <ResponsiveContainer width="100%" height={320}>
+          <LineChart
+  data={calorieChartData}
+  margin={{ top: 20, right: 20, left: 20, bottom: 35 }}
+>
+            <CartesianGrid stroke="#1a1b2e" />
+            <XAxis
+  dataKey="label"
+  label={{
+    value: "Date",
+    position: "bottom",
+    offset: 10,
+    fill: "#ced2f0"
+  }}
+/>
+            <YAxis
+  domain={[0, chartMaxCalories]}
+  label={{
+    value: "Calories (kcal/day)",
+    angle: -90,
+    position: "left",
+    offset: 0,
+    fill: "#ced2f0"
+  }}
+/>
+            <Tooltip />
+            <Legend verticalAlign="top" height={36} />
+            <Line
+              type="monotone"
+              dataKey="calories"
+              stroke="#4acfe8"
+              strokeWidth={2}
+              dot={false}
+              name="Calories"
+            />
+            <Line
+              type="monotone"
+              dataKey="target"
+              stroke="#ffd166"
+              strokeDasharray="6 6"
+              dot={false}
+              name="Target"
+            />
+            <Line
+              type="monotone"
+              dataKey="calories7"
+              stroke="#ffffff"
+              strokeWidth={2}
+              dot={false}
+              name="7 day avg"
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+
+      <div style={{ ...cardStyle(), minWidth: "0" }}>
+        <div style={{ fontWeight: "bold", marginBottom: "12px" }}>Weight Trend, actual and 7 day average ({rangeKey})</div>
+        <ResponsiveContainer width="100%" height={320}>
+          <LineChart
+  data={weightSmoothed}
+  margin={{ top: 20, right: 20, left: 20, bottom: 35 }}
+>
+            <CartesianGrid stroke="#1a1b2e" />
+            <XAxis
+  dataKey="label"
+  label={{
+    value: "Date",
+    position: "bottom",
+    offset: 10,
+    fill: "#ced2f0"
+  }}
+/>
+            <YAxis
+              domain={overviewWeightDomain}
+              label={{
+  value: "Body weight (lb)",
+  angle: -90,
+  position: "left",
+  offset: 0,
+  fill: "#ced2f0"
+}}
+            />
+            <Tooltip
+              formatter={(value, name) => {
+                if (name === "weight") return [`${Number(value).toFixed(1)} lb`, "Weight"]
+                if (name === "avg") return [`${Number(value).toFixed(1)} lb`, "7 day avg"]
+                return [value, name]
+              }}
+            />
+            <Legend verticalAlign="top" height={36} />
+            <Line
+              type="monotone"
+              dataKey="weight"
+              stroke="#4a9ee8"
+              strokeWidth={2}
+              dot={false}
+              name="Weight"
+            />
+            <Line
+              type="monotone"
+              dataKey="avg"
+              stroke="#ffd166"
+              strokeWidth={3}
+              dot={false}
+              name="7 day avg"
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "16px", marginBottom: "20px", alignItems: "start" }}>
+      <div style={{ ...cardStyle(), minWidth: "0" }}>
+        <div style={{ fontWeight: "bold", marginBottom: "12px" }}>
+          Training Load
+        </div>
+
+        <ResponsiveContainer width="100%" height={320}>
+          <ComposedChart
+  data={trainingLoadChartData}
+  margin={{ top: 20, right: 20, left: 20, bottom: 35 }}
+>
+            <CartesianGrid stroke="#1a1b2e" />
+            <XAxis
+  dataKey="label"
+  label={{
+    value: "Date",
+    position: "bottom",
+    offset: 10,
+    fill: "#ced2f0"
+  }}
+/>
+            <YAxis
+              yAxisId="distance"
+              orientation="left"
+              label={{
+  value: "Miles per week",
+  angle: -90,
+  position: "left",
+  offset: 0,
+  fill: "#ced2f0"
+}}
+            />
+            <YAxis
+              yAxisId="strength"
+              orientation="right"
+              label={{
+  value: "Strength sessions",
+  angle: 90,
+  position: "right",
+  offset: 0,
+  fill: "#a78bfa"
+}}
+              allowDecimals={false}
+            />
+            <Tooltip />
+            <Legend verticalAlign="top" height={36} />
+
+            <Area
+              yAxisId="distance"
+              type="monotone"
+              dataKey="trainingLoad"
+              stroke="none"
+              fill="#6b7280"
+              fillOpacity={0.22}
+              name="Normalized training load"
+            />
+
+            <Line
+              yAxisId="distance"
+              type="monotone"
+              dataKey="running"
+              stroke="#ef4444"
+              strokeWidth={2}
+              dot={false}
+              name="Run miles"
+            />
+
+            <Line
+              yAxisId="distance"
+              type="monotone"
+              dataKey="swimming"
+              stroke="#22c55e"
+              strokeWidth={2}
+              dot={false}
+              name="Swim miles"
+            />
+
+            <Line
+              yAxisId="distance"
+              type="monotone"
+              dataKey="cycling"
+              stroke="#facc15"
+              strokeWidth={2}
+              dot={false}
+              name="Cycle miles"
+            />
+
+            <Line
+              yAxisId="strength"
+              type="monotone"
+              dataKey="strength"
+              stroke="#a78bfa"
+              strokeWidth={3}
+              strokeDasharray="6 4"
+              dot={false}
+              name="Strength sessions"
+            />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+
+      <div style={{ ...cardStyle(), minWidth: "0" }}>
+  <div style={{ fontWeight: "bold", marginBottom: "12px", minHeight: "20px" }}>
+    Performance Readiness
+  </div>
+
+  <div style={{ marginBottom: "14px" }}>
+
+<ResponsiveContainer width="100%" height={300}>
+      <LineChart
+  data={readinessProjectionData}
+  margin={{ top: 20, right: 20, left: 20, bottom: 35 }}
+>
+        <CartesianGrid stroke="#1a1b2e" />
+        <XAxis
+          type="number"
+          dataKey="month"
+          domain={[0, readinessProjectionMaxMonth]}
+          allowDecimals={false}
+          tickCount={Math.min(readinessProjectionMaxMonth + 1, 8)}
+          label={{
+  value: "Months from now",
+  position: "bottom",
+  offset: 10,
+  fill: "#ced2f0"
+}}
+        />
+        <YAxis
+          domain={[0, 100]}
+          label={{
+  value: "Completion readiness (%)",
+  angle: -90,
+  position: "left",
+  offset: 0,
+  fill: "#ced2f0"
+}}
+        />
+        <Tooltip
+          formatter={(value, name) => [`${Number(value).toFixed(1)}%`, name]}
+          labelFormatter={value => `${value} months`}
+        />
+        <Legend verticalAlign="top" height={36} />
+
+        <Line
+          type="monotone"
+          dataKey="fiveK"
+          stroke="#ef4444"
+          strokeWidth={2}
+          dot={false}
+          name="5K"
+        />
+
+        <Line
+          type="monotone"
+          dataKey="tenK"
+          stroke="#22c55e"
+          strokeWidth={2}
+          dot={false}
+          name="10K"
+        />
+
+        <Line
+          type="monotone"
+          dataKey="half"
+          stroke="#facc15"
+          strokeWidth={2}
+          dot={false}
+          name="Half marathon"
+        />
+
+        <Line
+          type="monotone"
+          dataKey="tri"
+          stroke="#a78bfa"
+          strokeWidth={3}
+          dot={false}
+          name="Olympic triathlon"
+        />
+
+        {eventReadinessMarkers
+          .filter(marker => marker.month != null)
+          .map(marker => (
+            <ReferenceLine
+              key={marker.key}
+              x={marker.month}
+              stroke={marker.color}
+              strokeDasharray="6 4"
+              label={{
+  value: marker.label,
+  angle: -90,
+  position: "top",
+  fill: marker.color
+}}
+            />
+          ))}
+      </LineChart>
+    </ResponsiveContainer>
+  </div>
+</div>
+</div>
+
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "16px", marginBottom: "20px", alignItems: "start" }}>
+<div style={{ ...cardStyle(), minWidth: "0" }}>
+  <div style={{ fontWeight: "bold", marginBottom: "12px", minHeight: "20px" }}>
+    Body Composition
+  </div>
+
+  <ResponsiveContainer width="100%" height={300}>
+    <LineChart
+      data={bodyCompositionOverviewData}
+      margin={{ top: 20, right: 20, left: 20, bottom: 35 }}
+    >
+      <CartesianGrid stroke="#1a1b2e" />
+      <XAxis
+        dataKey="label"
+        label={{
+          value: "Date",
+          position: "bottom",
+          offset: 10,
+          fill: "#ced2f0"
+        }}
+      />
+      <YAxis
+        domain={bodyCompositionOverviewDomain}
+        label={{
+          value: "Body fat (%)",
+          angle: -90,
+          position: "left",
+          offset: 0,
+          fill: "#ced2f0"
+        }}
+      />
+      <Tooltip
+        formatter={(value, name) => {
+          if (name === "dexaBF") return [`${Number(value).toFixed(1)}%`, "DEXA BF"]
+          if (name === "estimatedBF") return [`${Number(value).toFixed(1)}%`, "Estimated BF"]
+          return [value, name]
+        }}
+      />
+      <Legend verticalAlign="top" height={36} />
+
+      <Line
+        type="monotone"
+        dataKey="dexaBF"
+        stroke="#ffd166"
+        strokeWidth={3}
+        dot
+        name="DEXA BF"
+      />
+
+      <Line
+        type="monotone"
+        dataKey="estimatedBF"
+        stroke="#4a9ee8"
+        strokeWidth={2}
+        dot
+        name="Estimated current BF"
+      />
+    </LineChart>
+  </ResponsiveContainer>
+</div>
+
+<div style={{ ...cardStyle(), minWidth: "0" }}>
+  <div style={{ fontWeight: "bold", marginBottom: "12px", minHeight: "20px" }}>
+    Operational Capacity
+  </div>
+
+  <ResponsiveContainer width="100%" height={300}>
+    <LineChart
+      data={operationalCapacityData}
+      margin={{ top: 20, right: 20, left: 20, bottom: 35 }}
+    >
+      <CartesianGrid stroke="#1a1b2e" />
+      <XAxis
+        dataKey="label"
+        label={{
+          value: "Date",
+          position: "bottom",
+          offset: 10,
+          fill: "#ced2f0"
+        }}
+      />
+      <YAxis
+        domain={operationalCapacityDomain}
+        label={{
+          value: "Operational capacity (%)",
+          angle: -90,
+          position: "left",
+          offset: 0,
+          fill: "#ced2f0"
+        }}
+      />
+      <Tooltip
+        formatter={(value, name) => {
+          if (name === "operationalPct") return [`${Number(value).toFixed(1)}%`, "Operational"]
+          if (name === "acuteLossPct") return [`${Number(value).toFixed(1)}%`, "Acute burden"]
+          if (name === "diseaseLossPct") return [`${Number(value).toFixed(1)}%`, "Disease burden"]
+          if (name === "fatigueLossPct") return [`${Number(value).toFixed(1)}%`, "Fatigue burden"]
+          return [value, name]
+        }}
+      />
+      <Legend verticalAlign="top" height={36} />
+
+      <Line
+        type="monotone"
+        dataKey="operationalPct"
+        stroke="#e5e7eb"
+        strokeWidth={3}
+        dot={false}
+        name="Operational"
+      />
+
+      <Line
+        type="monotone"
+        dataKey="acuteLossPct"
+        stroke="#ef4444"
+        strokeWidth={2}
+        dot={false}
+        name="Acute"
+      />
+
+      <Line
+        type="monotone"
+        dataKey="diseaseLossPct"
+        stroke="#f59e0b"
+        strokeWidth={2}
+        dot={false}
+        name="Disease"
+      />
+
+      <Line
+        type="monotone"
+        dataKey="fatigueLossPct"
+        stroke="#a78bfa"
+        strokeWidth={2}
+        dot={false}
+        name="Fatigue"
+      />
+    </LineChart>
+  </ResponsiveContainer>
+</div>
+    </div>
+  </div>
+)}
       {tab === "Body Comp" && (
         <div>
           <h3>Body Composition</h3>
@@ -2611,7 +4192,7 @@ return (
                   <XAxis dataKey="label" />
                   <YAxis domain={[100, "dataMax + 5"]} />
                   <Tooltip />
-                  <Legend />
+                  <Legend verticalAlign="top" height={36} />
                   <Bar dataKey="lean_lb" name="Lean (lb)" stackId="a" fill="#4a9ee8" />
                   <Bar dataKey="fat_lb" name="Fat (lb)" stackId="a" fill="#e8704a" />
                 </BarChart>
@@ -2676,19 +4257,38 @@ return (
                 {nutritionSummary ? `${Math.round(nutritionSummary.avgCarbs)} g / ${Math.round(nutritionSummary.avgFat)} g` : "NA"}
               </div>
             </div>
+            <div style={cardStyle()}>
+  <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "8px" }}>Target Calories</div>
+  <div style={{ fontSize: "30px", fontWeight: "bold" }}>
+    {Math.round(calorieTarget.targetCalories)}
+  </div>
+  <div style={{ fontSize: "12px", opacity: 0.7, marginTop: "8px" }}>
+    Maintenance est: {Math.round(calorieTarget.estimatedMaintenance)}
+  </div>
+  <div style={{ fontSize: "12px", opacity: 0.7, marginTop: "4px" }}>
+    Deficit: {Math.round(calorieTarget.deficit)} kcal, phase: {calorieTarget.phase}
+  </div>
+  <div style={{ fontSize: "12px", opacity: 0.7, marginTop: "4px" }}>
+    To 150: {calorieTarget.distanceTo150 ?? "NA"} lb, to 145: {calorieTarget.distanceTo145 ?? "NA"} lb
+  </div>
+</div>
           </div>
 
           <div style={{ ...cardStyle(), marginBottom: "20px", maxWidth: "1000px" }}>
             <div style={{ fontWeight: "bold", marginBottom: "12px" }}>Calories Trend ({rangeKey})</div>
-            <ResponsiveContainer width="100%" height={320}>
-              <LineChart data={filteredNutrition}>
+           <ResponsiveContainer width="100%" height={260}>
+  <LineChart
+  data={calorieChartData}
+  margin={{ top: 20, right: 20, left: 20, bottom: 35 }}
+>
                 <CartesianGrid stroke="#1a1b2e" />
                 <XAxis dataKey="label" />
                 <YAxis domain={[0, chartMaxCalories]} />
                 <Tooltip />
-                <Legend />
-                <Line type="monotone" dataKey="calories" stroke="#4a9ee8" strokeWidth={2} dot={false} name="Calories" />
-                <Line type="monotone" dataKey="calories_7d" stroke="#ffd166" strokeWidth={3} dot={false} name="7 day avg" />
+                <Legend verticalAlign="top" height={36} />
+                <Line type="monotone" dataKey="calories" stroke="#4acfe8" strokeWidth={2} dot={false} />
+<Line type="monotone" dataKey="target" stroke="#ffd166" strokeDasharray="6 6" dot={false} name="Target" />
+<Line type="monotone" dataKey="calories7" stroke="#ffffff" strokeWidth={2} dot={false} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -2702,7 +4302,7 @@ return (
                   <XAxis dataKey="label" />
                   <YAxis />
                   <Tooltip />
-                  <Legend />
+                  <Legend verticalAlign="top" height={36} />
                   <Bar dataKey="protein_g" name="Protein (g)" stackId="a" fill="#4ae890" />
                   <Bar dataKey="carbs_g" name="Carbs (g)" stackId="a" fill="#4a9ee8" />
                   <Bar dataKey="fat_g" name="Fat (g)" stackId="a" fill="#e8c94a" />
@@ -2713,17 +4313,29 @@ return (
             <div style={{ ...cardStyle(), minWidth: "0" }}>
               <div style={{ fontWeight: "bold", marginBottom: "12px" }}>Protein vs Target</div>
               <ResponsiveContainer width="100%" height={300}>
-                <ComposedChart data={filteredNutrition}>
-                  <CartesianGrid stroke="#1a1b2e" />
-                  <XAxis dataKey="label" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="protein_g" name="Protein (g)" fill="#4ae890" />
-                  <Line type="monotone" dataKey="protein_7d" stroke="#ffd166" strokeWidth={3} dot={false} name="7 day avg" />
-                  <ReferenceLine y={140} stroke="#ff6b9d" strokeDasharray="4 4" label="140g" />
-                </ComposedChart>
-              </ResponsiveContainer>
+  <ComposedChart data={filteredNutrition}>
+    <CartesianGrid stroke="#1a1b2e" />
+    <XAxis dataKey="label" />
+    <YAxis />
+    <Tooltip />
+    <Legend verticalAlign="top" height={36} />
+    <Bar dataKey="protein_g" name="Protein (g)" fill="#4ae890" />
+    <Line
+      type="monotone"
+      dataKey="protein_7d"
+      stroke="#ffd166"
+      strokeWidth={3}
+      dot={false}
+      name="7 day avg"
+    />
+    <ReferenceLine
+      y={140}
+      stroke="#ff6b9d"
+      strokeDasharray="4 4"
+      label="140g"
+    />
+  </ComposedChart>
+</ResponsiveContainer>
             </div>
           </div>
 
@@ -2735,7 +4347,7 @@ return (
                 <XAxis dataKey="label" />
                 <YAxis domain={[0, 100]} />
                 <Tooltip />
-                <Legend />
+                <Legend verticalAlign="top" height={36} />
                 <Area type="monotone" dataKey="protein_pct" stackId="1" stroke="#4ae890" fill="#4ae890" name="Protein %" />
                 <Area type="monotone" dataKey="carbs_pct" stackId="1" stroke="#4a9ee8" fill="#4a9ee8" name="Carbs %" />
                 <Area type="monotone" dataKey="fat_pct" stackId="1" stroke="#e8c94a" fill="#e8c94a" name="Fat %" />
@@ -2850,13 +4462,7 @@ return (
 
 
 
-      {tab === "Injury" && (
-        <div>
-          <h3>Injury Log</h3>
-          <div>Injury entries loaded: {injury.length}</div>
-          <div style={{ marginTop: "10px" }}>Latest injury date: {latestInjury?.date ?? "NA"}</div>
-        </div>
-      )}
+      
 {tab === "Schedule" && (
   <TabSchedule
     storedWorkouts={storedWorkouts}
@@ -2866,7 +4472,10 @@ return (
 )}
 
 {tab === "Training" && (
-<TrainingDashboard workouts={operationalWorkouts} />
+  <TrainingDashboard
+    workouts={operationalWorkouts}
+    recentNutrition={recentNutrition}
+  />
 )}
 {tab === "Injury" && (
   <div style={{ padding: "16px" }}>
@@ -3034,6 +4643,9 @@ return (
         <h4>Body Weight</h4>
 
 <div><strong>Current:</strong> {bodyForecast.currentWeight.toFixed(1)} lb</div>
+<div style={{ fontSize: "11px", opacity: 0.7, marginBottom: "6px" }}>
+  Intake model: {bodyForecast.avgLoggedCalories || "NA"} kcal/day, maintenance {Math.round(bodyForecast.estimatedMaintenance || 0)} kcal/day, logging coverage {Math.round((bodyForecast.loggingCoverage || 0) * 100)}%
+</div>
 <div>
 <strong>1 month:</strong>{" "}
 <span style={{
@@ -3113,19 +4725,7 @@ return (
     <XAxis dataKey="label" />
     <YAxis tickFormatter={(v) => fmt0(v)} />
 
-    <ReferenceLine
-      y={150}
-      stroke="#ffd166"
-      strokeDasharray="6 4"
-      label={{ value: "Phase 1 target (150 lb)", fill: "#ffd166", position: "right" }}
-    />
-
-    <ReferenceLine
-      y={145}
-      stroke="#4ade80"
-      strokeDasharray="6 4"
-      label={{ value: "Final target (145 lb)", fill: "#4ade80", position: "right" }}
-    />
+    
 
     <Tooltip
       formatter={(value, name) => [
@@ -3133,7 +4733,7 @@ return (
         name === "actual" ? "Actual min/week" : "Forecast min/week"
       ]}
     />
-      <Legend />
+      <Legend verticalAlign="top" height={36} />
       <Line
         type="monotone"
         dataKey="actual"
@@ -3157,6 +4757,91 @@ return (
   </ResponsiveContainer>
 </div>
         <div>
+          <div style={{ ...cardStyle(), marginBottom: "20px", maxWidth: "1000px" }}>
+  <div style={{ fontWeight: "bold", marginBottom: "12px" }}>Endurance Readiness</div>
+
+  <div style={{ fontSize: "28px", fontWeight: "bold", marginBottom: "10px" }}>
+    {enduranceForecast.readinessNow}
+  </div>
+
+  <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "10px" }}>
+    Composite score from pace, running volume, and cardio minutes
+  </div>
+
+  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px", maxWidth: "600px" }}>
+    <div>
+      <div style={{ fontSize: "12px", opacity: 0.7 }}>1 month</div>
+      <div>{enduranceForecast.readiness1m}</div>
+    </div>
+
+    <div>
+      <div style={{ fontSize: "12px", opacity: 0.7 }}>3 months</div>
+      <div>{enduranceForecast.readiness3m}</div>
+    </div>
+
+    <div>
+      <div style={{ fontSize: "12px", opacity: 0.7 }}>6 months</div>
+      <div>{enduranceForecast.readiness6m}</div>
+    </div>
+
+    <div>
+      <div style={{ fontSize: "12px", opacity: 0.7 }}>12 months</div>
+      <div>{enduranceForecast.readiness12m}</div>
+    </div>
+  </div>
+
+  <div style={{ fontSize: "12px", opacity: 0.7, marginTop: "12px" }}>
+    Recent running: {enduranceForecast.weeklyRunMiles28} mi/week ·
+    pace {enduranceForecast.avgPace28 || "NA"} min/mi ·
+    cardio {enduranceForecast.cardioMinutesWeekly} min/week
+  </div>
+</div>
+<div style={{ ...cardStyle(), marginBottom: "20px", maxWidth: "1000px" }}>
+  <div style={{ fontWeight: "bold", marginBottom: "12px" }}>Predicted Race Performance</div>
+
+  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(140px, 1fr))", gap: "12px", marginBottom: "14px" }}>
+    <div>
+      <div style={{ fontSize: "12px", opacity: 0.7 }}>5K</div>
+      <div style={{ fontSize: "24px", fontWeight: "bold" }}>{racePrediction?.fiveK || "NA"}</div>
+    </div>
+
+    <div>
+      <div style={{ fontSize: "12px", opacity: 0.7 }}>10K</div>
+      <div style={{ fontSize: "24px", fontWeight: "bold" }}>{racePrediction?.tenK || "NA"}</div>
+    </div>
+
+    <div>
+      <div style={{ fontSize: "12px", opacity: 0.7 }}>Half marathon</div>
+      <div style={{ fontSize: "24px", fontWeight: "bold" }}>{racePrediction?.halfMarathon || "NA"}</div>
+    </div>
+  </div>
+
+  <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "10px" }}>
+    Equivalent race pace: {racePrediction?.predictedPaceNow ? `${racePrediction.predictedPaceNow} min/mi` : "NA"}
+  </div>
+
+  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px", maxWidth: "700px" }}>
+    <div>
+      <div style={{ fontSize: "12px", opacity: 0.7 }}>Half, 1 month</div>
+      <div>{racePrediction?.half1m || "NA"}</div>
+    </div>
+
+    <div>
+      <div style={{ fontSize: "12px", opacity: 0.7 }}>Half, 3 months</div>
+      <div>{racePrediction?.half3m || "NA"}</div>
+    </div>
+
+    <div>
+      <div style={{ fontSize: "12px", opacity: 0.7 }}>Half, 6 months</div>
+      <div>{racePrediction?.half6m || "NA"}</div>
+    </div>
+
+    <div>
+      <div style={{ fontSize: "12px", opacity: 0.7 }}>Half, 12 months</div>
+      <div>{racePrediction?.half12m || "NA"}</div>
+    </div>
+  </div>
+</div>
           <h4>Running Volume</h4>
           <div>Current weekly: {trainingSummary.runningDistanceWeekly.toFixed(1)} mi</div>
           <div>Injury modifier: {injuryPenalties.running.toFixed(2)}</div>
