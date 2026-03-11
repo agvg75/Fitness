@@ -2246,6 +2246,7 @@ function normalizeWorkoutType(type) {
 
   return "Other"
 }
+
 function formatBucketLabel(dateStr, mode) {
   const d = new Date(dateStr)
   if (!Number.isFinite(d.getTime())) return String(dateStr || "")
@@ -3021,7 +3022,12 @@ const trainingSummary = useMemo(() => {
 const weeklyTrainingBuckets = useMemo(() => {
   return buildWeeklyTrainingBuckets(operationalWorkouts)
 }, [operationalWorkouts])
-
+useEffect(() => {
+  console.log("LIFT ingestion check")
+  console.log("operationalWorkouts count:", operationalWorkouts?.length ?? 0)
+  console.log("trainingSummary:", trainingSummary)
+  console.log("weeklyTrainingBuckets last 6:", weeklyTrainingBuckets?.slice?.(-6) ?? [])
+}, [operationalWorkouts, trainingSummary, weeklyTrainingBuckets])
 const trainingLoadChartData = useMemo(() => {
   if (!weeklyTrainingBuckets?.length) return []
 
@@ -3074,6 +3080,136 @@ const trainingLoadChartData = useMemo(() => {
     )
   }))
 }, [weeklyTrainingBuckets, rangeKey])
+const vo2ProxyData = useMemo(() => {
+  const runs = (operationalWorkouts || [])
+    .map(w => {
+      const type = String(
+        w?.type ||
+        w?.canonical_type ||
+        w?.activityType ||
+        w?.sport ||
+        w?.category ||
+        ""
+      ).toLowerCase()
+
+      const isRun =
+        type.includes("run") ||
+        type.includes("jog") ||
+        type === "running"
+
+      if (!isRun) return null
+
+      const date =
+        w?.date ||
+        (w?.dateTime ? String(w.dateTime).slice(0, 10) : null) ||
+        (w?.start_date ? String(w.start_date).slice(0, 10) : null)
+
+      const distanceMiles =
+        Number(w?.distance) ||
+        Number(w?.distanceMiles) ||
+        Number(w?.miles) ||
+        Number(w?.distance_miles) ||
+        0
+
+      const durationMin =
+        Number(w?.dur) ||
+        Number(w?.durationMin) ||
+        Number(w?.duration_min) ||
+        Number(w?.minutes) ||
+        Number(w?.duration) ||
+        0
+
+      if (!date || distanceMiles <= 0 || durationMin <= 0) return null
+
+      const paceMinPerMile = durationMin / distanceMiles
+      if (!Number.isFinite(paceMinPerMile) || paceMinPerMile <= 0) return null
+
+      const metersPerMin = 1609.34 / paceMinPerMile
+      const vo2 =
+        -4.6 +
+        (0.182258 * metersPerMin) +
+        (0.000104 * metersPerMin * metersPerMin)
+
+      return {
+        date,
+        label: fmtShortDate(date),
+        vo2: Number(vo2.toFixed(1)),
+        paceMinPerMile: Number(paceMinPerMile.toFixed(2)),
+        distanceMiles: Number(distanceMiles.toFixed(2)),
+        durationMin: Number(durationMin.toFixed(1))
+      }
+    })
+    .filter(Boolean)
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)))
+
+  return runs
+}, [operationalWorkouts])
+
+const vo2ProxySmoothed = useMemo(() => {
+  if (!vo2ProxyData.length) return []
+
+  return vo2ProxyData.map((row, i) => {
+    const start = Math.max(0, i - 4)
+    const subset = vo2ProxyData
+      .slice(start, i + 1)
+      .map(x => Number(x.vo2))
+      .filter(Number.isFinite)
+
+    const avg = subset.length
+      ? subset.reduce((a, b) => a + b, 0) / subset.length
+      : null
+
+    return {
+      ...row,
+      vo2_5pt: avg == null ? null : Number(avg.toFixed(1))
+    }
+  })
+}, [vo2ProxyData])
+useEffect(() => {
+  console.log("VO2 proxy check")
+  console.log("vo2ProxyData count:", vo2ProxyData?.length ?? 0)
+  console.log("vo2ProxyData sample:", vo2ProxyData?.slice?.(0, 5) ?? [])
+  console.log("vo2ProxySmoothed last 5:", vo2ProxySmoothed?.slice?.(-5) ?? [])
+}, [vo2ProxyData, vo2ProxySmoothed])
+useEffect(() => {
+  const runLike = (operationalWorkouts || [])
+    .map(w => {
+      const type = String(
+        w?.type ||
+        w?.canonical_type ||
+        w?.activityType ||
+        w?.sport ||
+        w?.category ||
+        ""
+      ).toLowerCase()
+
+      return {
+        type,
+        date: w?.date || w?.dateTime || w?.start_date || null,
+        distance: w?.distance ?? w?.distanceMiles ?? w?.miles ?? w?.distance_miles ?? null,
+        dur: w?.dur ?? w?.durationMin ?? w?.duration_min ?? w?.minutes ?? w?.duration ?? null
+      }
+    })
+    .filter(w =>
+      w.type.includes("run") ||
+      w.type.includes("jog") ||
+      w.type.includes("walk")
+    )
+
+  console.log("VO2 run-like sample:", runLike.slice(0, 30))
+}, [operationalWorkouts])
+const vo2OverviewDomain = useMemo(() => {
+  const vals = vo2ProxySmoothed
+    .flatMap(row => [Number(row.vo2), Number(row.vo2_5pt)])
+    .filter(v => Number.isFinite(v) && v > 0)
+
+  if (!vals.length) return [20, 50]
+
+  return [
+    Math.floor(Math.min(...vals)) - 2,
+    Math.ceil(Math.max(...vals)) + 2
+  ]
+}, [vo2ProxySmoothed])
 const trainingLoadDistanceMax = useMemo(() => {
   if (!trainingLoadChartData?.length) return 12
 
@@ -3635,16 +3771,16 @@ return (
       </div>
 
       <div style={{ ...cardStyle(), minWidth: 0 }}>
-        <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "8px" }}>Training Load</div>
-        <div style={{ fontSize: "30px", fontWeight: "bold" }}>
-          {weeklyTrainingBuckets?.length
-            ? `${Math.round(Number(weeklyTrainingBuckets[weeklyTrainingBuckets.length - 1]?.trainingLoad || 0) * 100)}%`
-            : "NA"}
-        </div>
-        <div style={{ fontSize: "12px", opacity: 0.7, marginTop: "8px" }}>
-          latest weekly normalized load
-        </div>
-      </div>
+  <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "8px" }}>VO₂ Proxy</div>
+  <div style={{ fontSize: "30px", fontWeight: "bold" }}>
+    {vo2ProxySmoothed?.length
+      ? `${vo2ProxySmoothed[vo2ProxySmoothed.length - 1]?.vo2_5pt ?? "NA"}`
+      : "NA"}
+  </div>
+  <div style={{ fontSize: "12px", opacity: 0.7, marginTop: "8px" }}>
+    rolling run-based aerobic estimate
+  </div>
+</div>
 
       <div
         style={{
