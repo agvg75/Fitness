@@ -6,9 +6,10 @@
     "start_date": "2021-07-23 18:16:29 -0600",
     "end_date": "2021-07-23 18:41:43 -0600",
     "duration_min": 25.23856154878934,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.57611,
+    "distance_unit": "mi",
+    "calories": 81.5128,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -18,9 +19,10 @@
     "start_date": "2021-07-23 18:42:08 -0600",
     "end_date": "2021-07-23 18:53:22 -0600",
     "duration_min": 11.22613891561826,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.138095,
+    "distance_unit": "mi",
+    "calories": 27.1609,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -30,9 +32,10 @@
     "start_date": "2021-08-06 19:33:39 -0600",
     "end_date": "2021-08-06 19:42:11 -0600",
     "duration_min": 8.524196716149648,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.0299821,
+    "distance_unit": "mi",
+    "calories": 10.7324,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -42,9 +45,10 @@
     "start_date": "2021-09-02 18:23:12 -0600",
     "end_date": "2021-09-02 18:44:11 -0600",
     "duration_min": 18.55032054781914,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.515417,
+    "distance_unit": "mi",
+    "calories": 65.151,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -54,9 +58,10 @@
     "start_date": "2021-09-02 18:44:11 -0600",
     "end_date": "2021-09-02 18:54:54 -0600",
     "duration_min": 10.65962581833204,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.233384,
+    "distance_unit": "mi",
+    "calories": 38.0884,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -66,9 +71,10 @@
     "start_date": "2021-11-10 00:34:16 -0600",
     "end_date": "2021-11-10 08:05:26 -0600",
     "duration_min": 3.318930053710937,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 3.93587,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -78,9 +84,10 @@
     "start_date": "2022-03-02 12:01:09 -0600",
     "end_date": "2022-03-02 12:36:38 -0600",
     "duration_min": 35.46927399436633,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.750297,
+    "distance_unit": "mi",
+    "calories": 109.191,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -90,9 +97,10 @@
     "start_date": "2022-06-02 18:19:57 -0600",
     "end_date": "2022-06-03 07:53:39 -0600",
     "duration_min": 18.34596369862556,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.112801,
+    "distance_unit": "mi",
+    "calories": 28.235,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -102,9 +110,10 @@
     "start_date": "2022-06-28 12:59:04 -0600",
     "end_date": "2022-06-28 13:07:06 -0600",
     "duration_min": 8.027868457635243,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.280338,
+    "distance_unit": "mi",
+    "calories": 8.0375,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -114,9 +123,10 @@
     "start_date": "2022-08-19 18:27:01 -0600",
     "end_date": "2022-08-19 18:37:57 -0600",
     "duration_min": 10.93829260071119,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 43.593,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -126,9 +136,10 @@
     "start_date": "2022-08-22 07:34:15 -0600",
     "end_date": "2022-08-22 08:07:58 -0600",
     "duration_min": 33.7211492796739,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 1.18724,
+    "distance_unit": "mi",
+    "calories": 133.715,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -138,9 +149,10 @@
     "start_date": "2022-08-24 07:55:08 -0600",
     "end_date": "2022-08-24 07:59:37 -0600",
     "duration_min": 4.480466099580129,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.547186,
+    "distance_unit": "mi",
+    "calories": 17.1938,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -150,9 +162,10 @@
     "start_date": "2022-08-26 07:42:08 -0600",
     "end_date": "2022-08-26 07:55:58 -0600",
     "duration_min": 13.84534622033437,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 1.05909,
+    "distance_unit": "mi",
+    "calories": 21.5924,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -162,9 +175,10 @@
     "start_date": "2022-08-29 07:57:43 -0600",
     "end_date": "2022-08-29 08:01:00 -0600",
     "duration_min": 3.291823307673136,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.501031,
+    "distance_unit": "mi",
+    "calories": 13.5007,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -174,9 +188,10 @@
     "start_date": "2022-09-04 09:31:45 -0600",
     "end_date": "2022-09-04 09:34:55 -0600",
     "duration_min": 3.161398698886236,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.0136094,
+    "distance_unit": "mi",
+    "calories": 4.88848,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -186,9 +201,10 @@
     "start_date": "2022-09-09 07:43:45 -0600",
     "end_date": "2022-09-09 07:56:22 -0600",
     "duration_min": 12.61305965383847,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.966885,
+    "distance_unit": "mi",
+    "calories": 18.141,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -198,9 +214,10 @@
     "start_date": "2022-09-12 07:42:33 -0600",
     "end_date": "2022-09-12 07:57:56 -0600",
     "duration_min": 15.39068247675896,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 1.05693,
+    "distance_unit": "mi",
+    "calories": 17.0475,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -210,9 +227,10 @@
     "start_date": "2022-09-13 07:48:44 -0600",
     "end_date": "2022-09-13 08:24:31 -0600",
     "duration_min": 35.77155603369077,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 2.92864,
+    "distance_unit": "mi",
+    "calories": 47.6815,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -222,9 +240,10 @@
     "start_date": "2022-09-14 07:47:19 -0600",
     "end_date": "2022-09-14 08:02:49 -0600",
     "duration_min": 15.50773781736692,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.998844,
+    "distance_unit": "mi",
+    "calories": 21.1748,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -234,9 +253,10 @@
     "start_date": "2022-09-15 07:43:39 -0600",
     "end_date": "2022-09-15 08:00:53 -0600",
     "duration_min": 17.24018688996633,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 1.12946,
+    "distance_unit": "mi",
+    "calories": 16.8531,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -246,9 +266,10 @@
     "start_date": "2022-09-15 17:42:44 -0600",
     "end_date": "2022-09-15 18:01:43 -0600",
     "duration_min": 18.98317971229553,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.661553,
+    "distance_unit": "mi",
+    "calories": 64.4555,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -258,9 +279,10 @@
     "start_date": "2022-09-16 07:47:04 -0600",
     "end_date": "2022-09-16 07:58:44 -0600",
     "duration_min": 11.66153704325358,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.962055,
+    "distance_unit": "mi",
+    "calories": 22.4392,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -270,9 +292,10 @@
     "start_date": "2022-09-16 13:56:49 -0600",
     "end_date": "2022-09-16 18:00:27 -0600",
     "duration_min": 11.06408618489901,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.506612,
+    "distance_unit": "mi",
+    "calories": 15.4925,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -282,9 +305,10 @@
     "start_date": "2022-09-20 07:37:36 -0600",
     "end_date": "2022-09-20 07:51:51 -0600",
     "duration_min": 14.24800644318263,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 1.09827,
+    "distance_unit": "mi",
+    "calories": 21.3349,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -294,9 +318,10 @@
     "start_date": "2022-09-21 07:45:42 -0600",
     "end_date": "2022-09-21 08:02:34 -0600",
     "duration_min": 16.86792714595795,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 1.17519,
+    "distance_unit": "mi",
+    "calories": 28.782,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -306,9 +331,10 @@
     "start_date": "2022-09-22 07:47:43 -0600",
     "end_date": "2022-09-22 07:58:55 -0600",
     "duration_min": 11.20634209712346,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 1.06033,
+    "distance_unit": "mi",
+    "calories": 29.3748,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -318,9 +344,10 @@
     "start_date": "2022-09-25 17:18:23 -0600",
     "end_date": "2022-09-25 17:43:48 -0600",
     "duration_min": 25.42343631784121,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.834199,
+    "distance_unit": "mi",
+    "calories": 117.325,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -330,9 +357,10 @@
     "start_date": "2022-09-26 09:11:10 -0600",
     "end_date": "2022-09-26 09:37:21 -0600",
     "duration_min": 13.21440346638362,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.959368,
+    "distance_unit": "mi",
+    "calories": 12.6973,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -342,9 +370,10 @@
     "start_date": "2022-09-26 09:54:00 -0600",
     "end_date": "2022-09-26 10:02:54 -0600",
     "duration_min": 8.900026166439057,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.598888,
+    "distance_unit": "mi",
+    "calories": 9.563,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -354,9 +383,10 @@
     "start_date": "2022-09-27 08:05:35 -0600",
     "end_date": "2022-09-27 08:15:19 -0600",
     "duration_min": 9.717945780356725,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.574967,
+    "distance_unit": "mi",
+    "calories": 21.6841,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -366,9 +396,10 @@
     "start_date": "2022-09-28 07:43:34 -0600",
     "end_date": "2022-09-28 08:03:32 -0600",
     "duration_min": 19.89667010307312,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 1.09713,
+    "distance_unit": "mi",
+    "calories": 33.5353,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -378,9 +409,10 @@
     "start_date": "2022-09-30 07:53:37 -0600",
     "end_date": "2022-09-30 08:03:17 -0600",
     "duration_min": 9.662165419260662,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.565446,
+    "distance_unit": "mi",
+    "calories": 36.5137,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -390,9 +422,10 @@
     "start_date": "2022-10-02 15:20:21 -0600",
     "end_date": "2022-10-03 05:22:06 -0600",
     "duration_min": 5.39745711684227,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.00843035,
+    "distance_unit": "mi",
+    "calories": 7.26008,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -402,9 +435,10 @@
     "start_date": "2022-10-03 07:47:48 -0600",
     "end_date": "2022-10-03 07:59:46 -0600",
     "duration_min": 11.96259452700615,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 1.05534,
+    "distance_unit": "mi",
+    "calories": 21.5356,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -414,9 +448,10 @@
     "start_date": "2022-10-11 07:40:59 -0600",
     "end_date": "2022-10-11 08:07:36 -0600",
     "duration_min": 26.62397300203641,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 1.20757,
+    "distance_unit": "mi",
+    "calories": 18.049,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -426,9 +461,10 @@
     "start_date": "2022-10-13 07:54:21 -0600",
     "end_date": "2022-10-13 08:00:28 -0600",
     "duration_min": 6.121970717112223,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.591746,
+    "distance_unit": "mi",
+    "calories": 11.491,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -438,9 +474,10 @@
     "start_date": "2022-10-14 07:45:35 -0600",
     "end_date": "2022-10-14 08:00:42 -0600",
     "duration_min": 15.11229242682457,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 1.13392,
+    "distance_unit": "mi",
+    "calories": 33.5609,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -450,9 +487,10 @@
     "start_date": "2022-10-21 07:48:31 -0600",
     "end_date": "2022-10-21 08:01:25 -0600",
     "duration_min": 12.91026526888212,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 1.00463,
+    "distance_unit": "mi",
+    "calories": 25.7888,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -462,9 +500,10 @@
     "start_date": "2022-10-26 07:55:47 -0600",
     "end_date": "2022-10-26 08:24:14 -0600",
     "duration_min": 28.37657020886739,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.993337,
+    "distance_unit": "mi",
+    "calories": 101.997,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -474,9 +513,10 @@
     "start_date": "2022-10-28 07:41:31 -0600",
     "end_date": "2022-10-28 07:55:19 -0600",
     "duration_min": 13.80953841805458,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 1.03802,
+    "distance_unit": "mi",
+    "calories": 15.0779,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -486,9 +526,10 @@
     "start_date": "2022-10-29 16:29:22 -0600",
     "end_date": "2022-10-29 16:31:58 -0600",
     "duration_min": 2.59190266529719,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 3.0673,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -498,9 +539,10 @@
     "start_date": "2022-11-03 07:52:52 -0600",
     "end_date": "2022-11-03 08:02:59 -0600",
     "duration_min": 10.11412162979444,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.51471,
+    "distance_unit": "mi",
+    "calories": 50.6373,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -510,9 +552,10 @@
     "start_date": "2022-11-16 07:52:29 -0600",
     "end_date": "2022-11-16 08:04:01 -0600",
     "duration_min": 11.52861834963163,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.121998,
+    "distance_unit": "mi",
+    "calories": 24.8878,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -522,9 +565,10 @@
     "start_date": "2022-11-25 16:52:41 -0600",
     "end_date": "2022-11-25 17:48:51 -0600",
     "duration_min": 56.06416323383649,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 2.15192,
+    "distance_unit": "mi",
+    "calories": 241.529,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -534,9 +578,10 @@
     "start_date": "2022-11-26 10:09:00 -0600",
     "end_date": "2022-11-26 10:10:00 -0600",
     "duration_min": 1,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 43.7727,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -546,9 +591,10 @@
     "start_date": "2022-11-26 10:27:43 -0600",
     "end_date": "2022-11-26 10:32:35 -0600",
     "duration_min": 4.783333333333333,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 54.7159,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -558,9 +604,10 @@
     "start_date": "2022-11-26 10:00:11 -0600",
     "end_date": "2022-11-26 13:13:22 -0600",
     "duration_min": 26.14985979795456,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 1.60919,
+    "distance_unit": "mi",
+    "calories": 197.455,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -570,9 +617,10 @@
     "start_date": "2022-12-03 19:16:34 -0600",
     "end_date": "2022-12-03 19:51:56 -0600",
     "duration_min": 31.32808918356896,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 1.70263,
+    "distance_unit": "mi",
+    "calories": 182.814,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -582,9 +630,10 @@
     "start_date": "2022-12-06 07:15:02 -0600",
     "end_date": "2022-12-06 07:33:47 -0600",
     "duration_min": 18.76406963467598,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.829834,
+    "distance_unit": "mi",
+    "calories": 78.5401,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -594,9 +643,10 @@
     "start_date": "2022-12-24 15:54:21 -0600",
     "end_date": "2022-12-24 16:00:18 -0600",
     "duration_min": 5.959159165620804,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 7.91277,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -606,9 +656,10 @@
     "start_date": "2023-03-16 15:55:55 -0600",
     "end_date": "2023-03-16 16:33:14 -0600",
     "duration_min": 37.30604311227798,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 1.26643,
+    "distance_unit": "mi",
+    "calories": 145.429,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -618,9 +669,10 @@
     "start_date": "2023-04-20 07:50:38 -0600",
     "end_date": "2023-04-20 08:01:07 -0600",
     "duration_min": 10.4799297273159,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.945561,
+    "distance_unit": "mi",
+    "calories": 25.6645,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -630,9 +682,10 @@
     "start_date": "2023-06-20 07:46:21 -0600",
     "end_date": "2023-06-20 07:55:41 -0600",
     "duration_min": 9.323432266712189,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.0192965,
+    "distance_unit": "mi",
+    "calories": 12.8075,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -642,9 +695,10 @@
     "start_date": "2023-07-24 13:23:32 -0600",
     "end_date": "2023-07-24 13:33:15 -0600",
     "duration_min": 9.721062032381694,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.00391667,
+    "distance_unit": "mi",
+    "calories": 12.467,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -654,9 +708,10 @@
     "start_date": "2023-07-28 17:45:01 -0600",
     "end_date": "2023-07-28 17:46:45 -0600",
     "duration_min": 1.734930300712585,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.000322908,
+    "distance_unit": "mi",
+    "calories": 2.058,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -666,9 +721,10 @@
     "start_date": "2023-07-30 09:19:52 -0600",
     "end_date": "2023-07-30 09:26:04 -0600",
     "duration_min": 6.213584132989248,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.0260895,
+    "distance_unit": "mi",
+    "calories": 9.2427,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -678,9 +734,10 @@
     "start_date": "2023-08-03 07:57:00 -0600",
     "end_date": "2023-08-03 08:14:02 -0600",
     "duration_min": 17.02631201346715,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.611902,
+    "distance_unit": "mi",
+    "calories": 71.4119,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -690,9 +747,10 @@
     "start_date": "2023-08-04 15:37:06 -0600",
     "end_date": "2023-08-04 16:18:08 -0600",
     "duration_min": 41.04083467721939,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 1.47981,
+    "distance_unit": "mi",
+    "calories": 238.406,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -702,9 +760,10 @@
     "start_date": "2023-08-04 17:05:30 -0600",
     "end_date": "2023-08-04 17:43:33 -0600",
     "duration_min": 38.05091169873874,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 1.63295,
+    "distance_unit": "mi",
+    "calories": 258.388,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -714,9 +773,10 @@
     "start_date": "2023-08-06 09:40:08 -0600",
     "end_date": "2023-08-06 09:44:12 -0600",
     "duration_min": 4.06886328458786,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.0260992,
+    "distance_unit": "mi",
+    "calories": 9.048,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -726,9 +786,10 @@
     "start_date": "2023-08-14 13:19:14 -0600",
     "end_date": "2023-08-14 13:36:26 -0600",
     "duration_min": 17.19107324083646,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.591801,
+    "distance_unit": "mi",
+    "calories": 66.8439,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -738,9 +799,10 @@
     "start_date": "2023-08-19 08:55:22 -0600",
     "end_date": "2023-08-19 09:00:36 -0600",
     "duration_min": 5.222220398982366,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.0337516,
+    "distance_unit": "mi",
+    "calories": 9.0739,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -750,9 +812,10 @@
     "start_date": "2023-08-20 08:05:09 -0600",
     "end_date": "2023-08-20 08:15:21 -0600",
     "duration_min": 10.206156818072,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.0421271,
+    "distance_unit": "mi",
+    "calories": 21.1511,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -762,9 +825,10 @@
     "start_date": "2023-08-22 10:37:43 -0600",
     "end_date": "2023-08-22 10:54:05 -0600",
     "duration_min": 16.36147812406222,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.522989,
+    "distance_unit": "mi",
+    "calories": 59.5686,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -774,9 +838,10 @@
     "start_date": "2023-10-09 17:43:31 -0600",
     "end_date": "2023-10-09 17:50:13 -0600",
     "duration_min": 6.688210449616114,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.0466311,
+    "distance_unit": "mi",
+    "calories": 10.868,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -786,9 +851,10 @@
     "start_date": "2023-10-19 08:58:06 -0600",
     "end_date": "2023-10-19 09:19:20 -0600",
     "duration_min": 21.23239098191261,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.766772,
+    "distance_unit": "mi",
+    "calories": 89.2259,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -798,9 +864,10 @@
     "start_date": "2023-10-29 10:15:28 -0600",
     "end_date": "2023-10-29 10:21:26 -0600",
     "duration_min": 5.979411349693934,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.0138175,
+    "distance_unit": "mi",
+    "calories": 8.43162,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -810,9 +877,10 @@
     "start_date": "2023-11-12 20:05:03 -0600",
     "end_date": "2023-11-12 20:18:33 -0600",
     "duration_min": 13.4918696363767,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.542373,
+    "distance_unit": "mi",
+    "calories": 58.2102,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -822,9 +890,10 @@
     "start_date": "2023-11-13 09:51:03 -0600",
     "end_date": "2023-11-13 10:32:35 -0600",
     "duration_min": 41.52876885533333,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.714979,
+    "distance_unit": "mi",
+    "calories": 118.724,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -834,9 +903,10 @@
     "start_date": "2023-11-21 15:02:22 -0600",
     "end_date": "2023-11-21 15:07:41 -0600",
     "duration_min": 5.327086132764816,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 6.629,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -846,9 +916,10 @@
     "start_date": "2023-11-29 18:09:24 -0600",
     "end_date": "2023-11-29 18:20:51 -0600",
     "duration_min": 11.44230466683706,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.488892,
+    "distance_unit": "mi",
+    "calories": 60.4379,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -858,9 +929,10 @@
     "start_date": "2023-12-01 08:04:22 -0600",
     "end_date": "2023-12-01 08:06:09 -0600",
     "duration_min": 1.789062215884527,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.00704412,
+    "distance_unit": "mi",
+    "calories": 2.532,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -870,9 +942,10 @@
     "start_date": "2024-01-06 10:44:38 -0600",
     "end_date": "2024-01-06 11:05:00 -0600",
     "duration_min": 20.36201510032018,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 33.8935,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -882,9 +955,10 @@
     "start_date": "2024-01-14 13:04:36 -0600",
     "end_date": "2024-01-14 13:18:06 -0600",
     "duration_min": 13.51339913407961,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 28.6551,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -894,9 +968,10 @@
     "start_date": "2024-02-07 10:31:08 -0600",
     "end_date": "2024-02-07 10:49:00 -0600",
     "duration_min": 17.86158759991328,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 24.5862,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -906,9 +981,10 @@
     "start_date": "2024-05-07 16:34:59 -0600",
     "end_date": "2024-05-07 16:52:33 -0600",
     "duration_min": 17.57763151129087,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.506538,
+    "distance_unit": "mi",
+    "calories": 50.4224,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -918,9 +994,10 @@
     "start_date": "2024-05-09 11:07:17 -0600",
     "end_date": "2024-05-09 11:29:56 -0600",
     "duration_min": 22.66101165612539,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.731609,
+    "distance_unit": "mi",
+    "calories": 78.0358,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -930,9 +1007,10 @@
     "start_date": "2024-06-23 22:51:48 -0600",
     "end_date": "2024-06-23 23:10:34 -0600",
     "duration_min": 18.76522363424301,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.889668,
+    "distance_unit": "mi",
+    "calories": 99.9018,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -942,9 +1020,10 @@
     "start_date": "2024-06-24 07:08:04 -0600",
     "end_date": "2024-06-24 07:35:29 -0600",
     "duration_min": 27.43023101886114,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 1.00264,
+    "distance_unit": "mi",
+    "calories": 102.834,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -954,9 +1033,10 @@
     "start_date": "2024-06-24 20:43:54 -0600",
     "end_date": "2024-06-24 21:21:28 -0600",
     "duration_min": 37.57344162662824,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 1.18202,
+    "distance_unit": "mi",
+    "calories": 125.907,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -966,9 +1046,10 @@
     "start_date": "2024-06-25 07:11:35 -0600",
     "end_date": "2024-06-25 07:38:29 -0600",
     "duration_min": 26.88900859355926,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 1.07677,
+    "distance_unit": "mi",
+    "calories": 110.525,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -978,9 +1059,10 @@
     "start_date": "2024-06-26 07:24:43 -0600",
     "end_date": "2024-06-26 07:44:43 -0600",
     "duration_min": 20.00140843788783,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.934015,
+    "distance_unit": "mi",
+    "calories": 117.455,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -990,9 +1072,10 @@
     "start_date": "2024-06-27 10:55:25 -0600",
     "end_date": "2024-06-27 11:09:36 -0600",
     "duration_min": 14.18213674227397,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.584836,
+    "distance_unit": "mi",
+    "calories": 64.3403,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1002,9 +1085,10 @@
     "start_date": "2024-07-06 08:13:30 -0600",
     "end_date": "2024-07-06 08:50:25 -0600",
     "duration_min": 36.92060101230939,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 2.05322,
+    "distance_unit": "mi",
+    "calories": 141.855,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1014,9 +1098,10 @@
     "start_date": "2024-07-16 13:07:25 -0600",
     "end_date": "2024-07-16 13:22:22 -0600",
     "duration_min": 14.94932090640068,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.550774,
+    "distance_unit": "mi",
+    "calories": 59.3155,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1026,9 +1111,10 @@
     "start_date": "2024-07-16 14:20:28 -0600",
     "end_date": "2024-07-16 14:39:38 -0600",
     "duration_min": 19.16869654456774,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.632566,
+    "distance_unit": "mi",
+    "calories": 78.3093,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1038,9 +1124,10 @@
     "start_date": "2024-07-17 13:59:20 -0600",
     "end_date": "2024-07-17 14:10:07 -0600",
     "duration_min": 10.78016483783722,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.330019,
+    "distance_unit": "mi",
+    "calories": 44.9834,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1050,9 +1137,10 @@
     "start_date": "2024-09-26 17:23:44 -0600",
     "end_date": "2024-09-26 17:38:12 -0600",
     "duration_min": 14.46826341350873,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.586309,
+    "distance_unit": "mi",
+    "calories": 79.6566,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1062,9 +1150,10 @@
     "start_date": "2024-12-14 11:42:31 -0600",
     "end_date": "2024-12-14 11:59:17 -0600",
     "duration_min": 16.77351725101471,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.857914,
+    "distance_unit": "mi",
+    "calories": 81.7982,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1074,9 +1163,10 @@
     "start_date": "2024-12-14 12:02:23 -0600",
     "end_date": "2024-12-14 12:13:04 -0600",
     "duration_min": 10.68619526624679,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 72.5692,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1086,9 +1176,10 @@
     "start_date": "2024-12-14 12:26:49 -0600",
     "end_date": "2024-12-14 12:49:19 -0600",
     "duration_min": 22.50585786700249,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.0781324,
+    "distance_unit": "mi",
+    "calories": 36.9182,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1098,9 +1189,10 @@
     "start_date": "2024-12-15 17:02:03 -0600",
     "end_date": "2024-12-15 17:11:22 -0600",
     "duration_min": 9.322496382395427,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 73.523,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1110,9 +1202,10 @@
     "start_date": "2024-12-15 17:11:28 -0600",
     "end_date": "2024-12-15 17:20:45 -0600",
     "duration_min": 9.284249033530553,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.47519,
+    "distance_unit": "mi",
+    "calories": 52.9443,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1122,9 +1215,10 @@
     "start_date": "2025-01-17 19:43:21 -0600",
     "end_date": "2025-01-17 19:48:31 -0600",
     "duration_min": 5.163201049963633,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.00371054,
+    "distance_unit": "mi",
+    "calories": 6.9344,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1134,9 +1228,10 @@
     "start_date": "2025-02-16 17:52:59 -0600",
     "end_date": "2025-02-16 17:58:40 -0600",
     "duration_min": 5.675149734814962,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.184576,
+    "distance_unit": "mi",
+    "calories": 27.3665,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1146,9 +1241,10 @@
     "start_date": "2025-03-18 13:10:59 -0600",
     "end_date": "2025-03-18 16:49:04 -0600",
     "duration_min": 57.42951233585676,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 1.46657,
+    "distance_unit": "mi",
+    "calories": 160.584,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1158,9 +1254,10 @@
     "start_date": "2025-03-20 05:54:23 -0600",
     "end_date": "2025-03-20 06:32:29 -0600",
     "duration_min": 38.1041302939256,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.965349,
+    "distance_unit": "mi",
+    "calories": 119.608,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1170,9 +1267,10 @@
     "start_date": "2025-03-21 13:31:53 -0600",
     "end_date": "2025-03-21 13:51:14 -0600",
     "duration_min": 19.35659921169281,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.72942,
+    "distance_unit": "mi",
+    "calories": 78.9541,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1182,9 +1280,10 @@
     "start_date": "2025-05-09 18:16:47 -0600",
     "end_date": "2025-05-09 18:53:32 -0600",
     "duration_min": 36.75732543269793,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.826679,
+    "distance_unit": "mi",
+    "calories": 113.579,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1194,9 +1293,10 @@
     "start_date": "2025-06-10 14:13:03 -0600",
     "end_date": "2025-06-10 14:34:22 -0600",
     "duration_min": 21.31842204729716,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.777557,
+    "distance_unit": "mi",
+    "calories": 101.148,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1206,9 +1306,10 @@
     "start_date": "2025-06-29 09:08:17 -0600",
     "end_date": "2025-06-29 09:29:48 -0600",
     "duration_min": 21.51252114574114,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.889162,
+    "distance_unit": "mi",
+    "calories": 85.501,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1218,9 +1319,10 @@
     "start_date": "2025-06-29 20:02:13 -0600",
     "end_date": "2025-06-30 00:04:27 -0600",
     "duration_min": 50.94549011786778,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 1.27874,
+    "distance_unit": "mi",
+    "calories": 145.342,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1230,9 +1332,10 @@
     "start_date": "2025-07-01 09:05:24 -0600",
     "end_date": "2025-07-01 09:24:06 -0600",
     "duration_min": 18.70291248758634,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.808895,
+    "distance_unit": "mi",
+    "calories": 76.6343,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1242,9 +1345,10 @@
     "start_date": "2025-07-01 14:06:47 -0600",
     "end_date": "2025-07-01 14:28:07 -0600",
     "duration_min": 21.32885517477989,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.657488,
+    "distance_unit": "mi",
+    "calories": 63.085,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1254,9 +1358,10 @@
     "start_date": "2025-07-01 15:54:31 -0600",
     "end_date": "2025-07-01 16:29:33 -0600",
     "duration_min": 35.03660730719567,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.928134,
+    "distance_unit": "mi",
+    "calories": 106.633,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1266,9 +1371,10 @@
     "start_date": "2025-07-17 19:06:07 -0600",
     "end_date": "2025-07-17 19:27:22 -0600",
     "duration_min": 21.2451191008091,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.635662,
+    "distance_unit": "mi",
+    "calories": 55.1005,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1278,9 +1384,10 @@
     "start_date": "2025-07-18 18:19:14 -0600",
     "end_date": "2025-07-18 19:43:07 -0600",
     "duration_min": 83.87540926734606,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 2.09618,
+    "distance_unit": "mi",
+    "calories": 325.758,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1290,9 +1397,10 @@
     "start_date": "2025-07-19 15:38:01 -0600",
     "end_date": "2025-07-19 17:58:09 -0600",
     "duration_min": 57.23417153358459,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 1.01867,
+    "distance_unit": "mi",
+    "calories": 175.999,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1302,9 +1410,10 @@
     "start_date": "2025-08-01 12:05:38 -0600",
     "end_date": "2025-08-01 12:27:22 -0600",
     "duration_min": 21.73454209168752,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.864805,
+    "distance_unit": "mi",
+    "calories": 67.6577,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1314,9 +1423,10 @@
     "start_date": "2025-09-11 08:41:07 -0600",
     "end_date": "2025-09-11 09:36:30 -0600",
     "duration_min": 44.353189432621,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 176.785,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1326,9 +1436,10 @@
     "start_date": "2025-09-16 08:26:05 -0600",
     "end_date": "2025-09-16 09:55:02 -0600",
     "duration_min": 72.5570756693681,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 1.71353,
+    "distance_unit": "mi",
+    "calories": 211.326,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1338,9 +1449,10 @@
     "start_date": "2025-09-18 08:33:18 -0600",
     "end_date": "2025-09-18 08:50:57 -0600",
     "duration_min": 17.6436158935229,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.53636,
+    "distance_unit": "mi",
+    "calories": 64.1052,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1350,9 +1462,10 @@
     "start_date": "2025-09-21 14:05:41 -0600",
     "end_date": "2025-09-21 14:27:37 -0600",
     "duration_min": 21.94703433314959,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 1.55184,
+    "distance_unit": "mi",
+    "calories": 163.174,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1362,9 +1475,10 @@
     "start_date": "2025-09-23 08:34:55 -0600",
     "end_date": "2025-09-23 08:45:35 -0600",
     "duration_min": 10.6766261835893,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.715628,
+    "distance_unit": "mi",
+    "calories": 78.8156,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1374,9 +1488,10 @@
     "start_date": "2025-09-23 09:18:22 -0600",
     "end_date": "2025-09-23 09:32:52 -0600",
     "duration_min": 14.50889536738396,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 93.9545,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1386,9 +1501,10 @@
     "start_date": "2025-09-24 05:27:15 -0600",
     "end_date": "2025-09-24 05:56:20 -0600",
     "duration_min": 29.09662468234698,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 1.82566,
+    "distance_unit": "mi",
+    "calories": 218.877,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1398,9 +1514,10 @@
     "start_date": "2025-09-26 18:31:35 -0600",
     "end_date": "2025-09-26 18:37:41 -0600",
     "duration_min": 6.103785099585851,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 14.472,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1410,9 +1527,10 @@
     "start_date": "2025-09-28 16:24:34 -0600",
     "end_date": "2025-09-28 16:58:11 -0600",
     "duration_min": 33.61512488325437,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 1.63161,
+    "distance_unit": "mi",
+    "calories": 190.366,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1422,9 +1540,10 @@
     "start_date": "2025-09-29 05:42:33 -0600",
     "end_date": "2025-09-29 06:09:31 -0600",
     "duration_min": 26.95786970059077,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 1.44012,
+    "distance_unit": "mi",
+    "calories": 191.855,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1434,9 +1553,10 @@
     "start_date": "2025-09-30 08:38:20 -0600",
     "end_date": "2025-09-30 08:55:11 -0600",
     "duration_min": 16.8597743332386,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.164759,
+    "distance_unit": "mi",
+    "calories": 45.507,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1446,9 +1566,10 @@
     "start_date": "2025-10-01 05:23:13 -0600",
     "end_date": "2025-10-01 05:53:50 -0600",
     "duration_min": 30.6230150838693,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 2.00938,
+    "distance_unit": "mi",
+    "calories": 242.926,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1458,9 +1579,10 @@
     "start_date": "2025-10-02 08:34:40 -0600",
     "end_date": "2025-10-02 08:49:06 -0600",
     "duration_min": 14.41998325188955,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.449906,
+    "distance_unit": "mi",
+    "calories": 56.1732,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1470,9 +1592,10 @@
     "start_date": "2025-10-02 09:25:14 -0600",
     "end_date": "2025-10-02 09:35:46 -0600",
     "duration_min": 10.54241536855698,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 58.3356,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1482,9 +1605,10 @@
     "start_date": "2025-10-03 05:24:13 -0600",
     "end_date": "2025-10-03 05:55:25 -0600",
     "duration_min": 31.20209571520487,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 2.03957,
+    "distance_unit": "mi",
+    "calories": 252.519,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1494,9 +1618,10 @@
     "start_date": "2025-10-06 05:26:09 -0600",
     "end_date": "2025-10-06 05:49:50 -0600",
     "duration_min": 23.69215600291888,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 1.64567,
+    "distance_unit": "mi",
+    "calories": 200.559,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1506,9 +1631,10 @@
     "start_date": "2025-10-07 08:33:14 -0600",
     "end_date": "2025-10-07 08:56:27 -0600",
     "duration_min": 23.22306630015373,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.68963,
+    "distance_unit": "mi",
+    "calories": 97.3864,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1518,9 +1644,10 @@
     "start_date": "2025-10-08 05:24:24 -0600",
     "end_date": "2025-10-08 05:43:36 -0600",
     "duration_min": 19.20369649926822,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 1.37282,
+    "distance_unit": "mi",
+    "calories": 175.118,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1530,9 +1657,10 @@
     "start_date": "2025-10-09 08:16:47 -0600",
     "end_date": "2025-10-09 08:58:11 -0600",
     "duration_min": 41.39370818336805,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 1.13041,
+    "distance_unit": "mi",
+    "calories": 107.684,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1542,9 +1670,10 @@
     "start_date": "2025-10-12 05:15:05 -0600",
     "end_date": "2025-10-12 05:44:43 -0600",
     "duration_min": 29.62118873596192,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 2.20345,
+    "distance_unit": "mi",
+    "calories": 273.14,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1554,9 +1683,10 @@
     "start_date": "2025-10-14 08:30:17 -0600",
     "end_date": "2025-10-14 08:51:03 -0600",
     "duration_min": 20.75635473132133,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.703118,
+    "distance_unit": "mi",
+    "calories": 93.1467,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1566,9 +1696,10 @@
     "start_date": "2025-10-15 04:44:21 -0600",
     "end_date": "2025-10-15 05:17:39 -0600",
     "duration_min": 33.30509605010351,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 2.54905,
+    "distance_unit": "mi",
+    "calories": 305.775,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1578,9 +1709,10 @@
     "start_date": "2025-10-16 08:32:19 -0600",
     "end_date": "2025-10-16 08:39:25 -0600",
     "duration_min": 7.090044716993968,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.124701,
+    "distance_unit": "mi",
+    "calories": 15.0349,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1590,9 +1722,10 @@
     "start_date": "2025-10-17 05:22:52 -0600",
     "end_date": "2025-10-17 05:55:32 -0600",
     "duration_min": 32.66629160046578,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 2.52428,
+    "distance_unit": "mi",
+    "calories": 296.637,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1602,9 +1735,10 @@
     "start_date": "2025-10-18 15:28:47 -0600",
     "end_date": "2025-10-18 15:30:10 -0600",
     "duration_min": 1.377482916911443,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 3.33333,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1614,9 +1748,10 @@
     "start_date": "2025-10-20 05:21:11 -0600",
     "end_date": "2025-10-20 05:54:16 -0600",
     "duration_min": 33.07106177806854,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 2.26866,
+    "distance_unit": "mi",
+    "calories": 278.004,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1626,9 +1761,10 @@
     "start_date": "2025-10-22 05:21:40 -0600",
     "end_date": "2025-10-22 05:54:49 -0600",
     "duration_min": 33.15613891681036,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 2.64243,
+    "distance_unit": "mi",
+    "calories": 299.158,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1638,9 +1774,10 @@
     "start_date": "2025-10-23 08:35:50 -0600",
     "end_date": "2025-10-23 08:40:30 -0600",
     "duration_min": 4.658978778123855,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.358251,
+    "distance_unit": "mi",
+    "calories": 21.9316,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1650,9 +1787,10 @@
     "start_date": "2025-10-23 19:24:00 -0600",
     "end_date": "2025-10-23 19:25:00 -0600",
     "duration_min": 1,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "mi",
+    "calories": 500,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1662,9 +1800,10 @@
     "start_date": "2025-10-23 20:10:54 -0600",
     "end_date": "2025-10-23 20:12:31 -0600",
     "duration_min": 1.620894799629847,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 4.258,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1674,9 +1813,10 @@
     "start_date": "2025-10-23 20:13:09 -0600",
     "end_date": "2025-10-23 20:18:06 -0600",
     "duration_min": 4.936309532324473,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 11.401,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1686,9 +1826,10 @@
     "start_date": "2025-10-24 05:17:09 -0600",
     "end_date": "2025-10-24 05:51:19 -0600",
     "duration_min": 34.1767055173715,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 2.84905,
+    "distance_unit": "mi",
+    "calories": 323.61,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1698,9 +1839,10 @@
     "start_date": "2025-10-27 05:00:23 -0600",
     "end_date": "2025-10-27 05:45:14 -0600",
     "duration_min": 44.84789535005887,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 2.88488,
+    "distance_unit": "mi",
+    "calories": 335.675,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1710,9 +1852,10 @@
     "start_date": "2025-10-30 08:32:37 -0600",
     "end_date": "2025-10-30 08:54:46 -0600",
     "duration_min": 22.15202107628187,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.830725,
+    "distance_unit": "mi",
+    "calories": 78.438,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1722,9 +1865,10 @@
     "start_date": "2025-10-30 08:54:58 -0600",
     "end_date": "2025-10-30 09:41:22 -0600",
     "duration_min": 46.39749034841855,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 189.423,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1734,9 +1878,10 @@
     "start_date": "2025-10-31 05:10:54 -0600",
     "end_date": "2025-10-31 05:54:13 -0600",
     "duration_min": 43.31953306794166,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 2.94697,
+    "distance_unit": "mi",
+    "calories": 343.83,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1746,9 +1891,10 @@
     "start_date": "2025-11-02 06:13:45 -0600",
     "end_date": "2025-11-02 06:54:14 -0600",
     "duration_min": 40.48770050009092,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 3.04359,
+    "distance_unit": "mi",
+    "calories": 360.907,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1758,9 +1904,10 @@
     "start_date": "2025-11-04 05:29:45 -0600",
     "end_date": "2025-11-04 06:07:50 -0600",
     "duration_min": 38.08977976640065,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 3.21022,
+    "distance_unit": "mi",
+    "calories": 363.446,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1770,9 +1917,10 @@
     "start_date": "2025-11-04 09:37:57 -0600",
     "end_date": "2025-11-04 09:41:20 -0600",
     "duration_min": 3.393660666545232,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.349911,
+    "distance_unit": "mi",
+    "calories": 38.003,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1782,9 +1930,10 @@
     "start_date": "2025-11-04 09:46:09 -0600",
     "end_date": "2025-11-04 11:06:00 -0600",
     "duration_min": 79.84476898511251,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 405.976,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1794,9 +1943,10 @@
     "start_date": "2025-11-05 16:44:59 -0600",
     "end_date": "2025-11-05 17:24:10 -0600",
     "duration_min": 39.19558903376262,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 3.24237,
+    "distance_unit": "mi",
+    "calories": 370.706,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1806,9 +1956,10 @@
     "start_date": "2025-11-06 09:41:43 -0600",
     "end_date": "2025-11-06 09:50:29 -0600",
     "duration_min": 8.778105249007544,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.18834,
+    "distance_unit": "mi",
+    "calories": 21.1574,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1818,9 +1969,10 @@
     "start_date": "2025-11-07 05:15:57 -0600",
     "end_date": "2025-11-07 06:00:32 -0600",
     "duration_min": 44.58052826523781,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 3.71696,
+    "distance_unit": "mi",
+    "calories": 423.273,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1830,9 +1982,10 @@
     "start_date": "2025-11-09 14:27:38 -0600",
     "end_date": "2025-11-09 15:05:59 -0600",
     "duration_min": 38.35528249740601,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 3.09392,
+    "distance_unit": "mi",
+    "calories": 335.869,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1842,9 +1995,10 @@
     "start_date": "2025-11-11 05:33:00 -0600",
     "end_date": "2025-11-11 06:16:43 -0600",
     "duration_min": 43.71485536694527,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 3.41831,
+    "distance_unit": "mi",
+    "calories": 375.582,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1854,9 +2008,10 @@
     "start_date": "2025-11-11 09:37:43 -0600",
     "end_date": "2025-11-11 09:43:59 -0600",
     "duration_min": 6.26889844139417,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.480709,
+    "distance_unit": "mi",
+    "calories": 50.8811,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1866,9 +2021,10 @@
     "start_date": "2025-11-12 05:51:20 -0600",
     "end_date": "2025-11-12 06:03:53 -0600",
     "duration_min": 12.5634052336216,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 52.4441,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1878,9 +2034,10 @@
     "start_date": "2025-11-12 06:04:03 -0600",
     "end_date": "2025-11-12 06:21:56 -0600",
     "duration_min": 17.88444079955419,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.704791,
+    "distance_unit": "mi",
+    "calories": 69.2792,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1890,9 +2047,10 @@
     "start_date": "2025-11-12 19:20:08 -0600",
     "end_date": "2025-11-12 20:05:24 -0600",
     "duration_min": 45.26172183354696,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 131.717,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1902,9 +2060,10 @@
     "start_date": "2025-11-13 05:38:48 -0600",
     "end_date": "2025-11-13 06:25:08 -0600",
     "duration_min": 46.33152079979579,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 3.31382,
+    "distance_unit": "mi",
+    "calories": 373.941,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1914,9 +2073,10 @@
     "start_date": "2025-11-13 09:36:41 -0600",
     "end_date": "2025-11-13 09:46:03 -0600",
     "duration_min": 9.379263617595036,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.344174,
+    "distance_unit": "mi",
+    "calories": 32.48,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1926,9 +2086,10 @@
     "start_date": "2025-11-13 09:46:15 -0600",
     "end_date": "2025-11-13 10:27:36 -0600",
     "duration_min": 41.34607621630033,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 169.838,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1938,9 +2099,10 @@
     "start_date": "2025-11-13 20:53:53 -0600",
     "end_date": "2025-11-13 20:54:18 -0600",
     "duration_min": 0.4118322471777598,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 1.313,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1950,9 +2112,10 @@
     "start_date": "2025-11-14 05:17:38 -0600",
     "end_date": "2025-11-14 06:03:36 -0600",
     "duration_min": 45.95391221642494,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 2.14073,
+    "distance_unit": "mi",
+    "calories": 235.859,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1962,9 +2125,10 @@
     "start_date": "2025-11-14 06:03:48 -0600",
     "end_date": "2025-11-14 06:17:30 -0600",
     "duration_min": 13.70236071745555,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 69.452,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1974,9 +2138,10 @@
     "start_date": "2025-11-14 20:15:07 -0600",
     "end_date": "2025-11-14 20:36:52 -0600",
     "duration_min": 21.75233635107676,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 48.6166,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1986,9 +2151,10 @@
     "start_date": "2025-11-15 06:14:36 -0600",
     "end_date": "2025-11-15 07:07:53 -0600",
     "duration_min": 53.26912391781807,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 3.89669,
+    "distance_unit": "mi",
+    "calories": 441.11,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -1998,9 +2164,10 @@
     "start_date": "2025-11-15 19:03:41 -0600",
     "end_date": "2025-11-15 19:06:48 -0600",
     "duration_min": 3.117341750860214,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 8.0708,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2010,9 +2177,10 @@
     "start_date": "2025-11-16 06:23:21 -0600",
     "end_date": "2025-11-16 07:36:05 -0600",
     "duration_min": 72.73934341669083,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 3.91807,
+    "distance_unit": "mi",
+    "calories": 373.293,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2022,9 +2190,10 @@
     "start_date": "2025-11-17 05:21:46 -0600",
     "end_date": "2025-11-17 06:13:02 -0600",
     "duration_min": 51.26935154994329,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 4.1358,
+    "distance_unit": "mi",
+    "calories": 460.216,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2034,9 +2203,10 @@
     "start_date": "2025-11-17 14:58:15 -0600",
     "end_date": "2025-11-17 14:59:29 -0600",
     "duration_min": 1.23220809896787,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.132083,
+    "distance_unit": "mi",
+    "calories": 15.4294,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2046,9 +2216,10 @@
     "start_date": "2025-11-17 18:48:02 -0600",
     "end_date": "2025-11-17 18:52:52 -0600",
     "duration_min": 4.845459834734599,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.315751,
+    "distance_unit": "mi",
+    "calories": 24.7015,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2058,9 +2229,10 @@
     "start_date": "2025-11-18 05:11:35 -0600",
     "end_date": "2025-11-18 06:22:27 -0600",
     "duration_min": 70.86334083278975,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 3.82121,
+    "distance_unit": "mi",
+    "calories": 368.255,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2070,9 +2242,10 @@
     "start_date": "2025-11-18 09:43:30 -0600",
     "end_date": "2025-11-18 09:51:15 -0600",
     "duration_min": 7.756220799684525,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.319015,
+    "distance_unit": "mi",
+    "calories": 31.5789,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2082,9 +2255,10 @@
     "start_date": "2025-11-18 09:51:34 -0600",
     "end_date": "2025-11-18 10:35:42 -0600",
     "duration_min": 44.12050783236821,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 183.159,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2094,9 +2268,10 @@
     "start_date": "2025-11-19 05:19:57 -0600",
     "end_date": "2025-11-19 06:02:59 -0600",
     "duration_min": 43.01797255078952,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 3.43099,
+    "distance_unit": "mi",
+    "calories": 387.743,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2106,9 +2281,10 @@
     "start_date": "2025-11-19 06:04:20 -0600",
     "end_date": "2025-11-19 06:10:08 -0600",
     "duration_min": 5.789934066931407,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 7.64131,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2118,9 +2294,10 @@
     "start_date": "2025-11-19 06:20:43 -0600",
     "end_date": "2025-11-19 06:53:23 -0600",
     "duration_min": 32.66172158320745,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 154.25,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2130,9 +2307,10 @@
     "start_date": "2025-11-19 06:53:27 -0600",
     "end_date": "2025-11-19 06:54:40 -0600",
     "duration_min": 1.227575318018595,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 0,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2142,9 +2320,10 @@
     "start_date": "2025-11-20 05:16:13 -0600",
     "end_date": "2025-11-20 05:50:03 -0600",
     "duration_min": 33.83195645014445,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 1.75152,
+    "distance_unit": "mi",
+    "calories": 145.559,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2154,9 +2333,10 @@
     "start_date": "2025-11-20 05:50:24 -0600",
     "end_date": "2025-11-20 06:23:27 -0600",
     "duration_min": 33.05353068312009,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 135.76,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2166,9 +2346,10 @@
     "start_date": "2025-11-20 06:23:36 -0600",
     "end_date": "2025-11-20 06:38:32 -0600",
     "duration_min": 14.94585904876391,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.812119,
+    "distance_unit": "mi",
+    "calories": 73.1744,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2178,9 +2359,10 @@
     "start_date": "2025-11-20 10:13:59 -0600",
     "end_date": "2025-11-20 10:43:05 -0600",
     "duration_min": 25.94487778345744,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 89.5243,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2190,9 +2372,10 @@
     "start_date": "2025-11-21 05:09:48 -0600",
     "end_date": "2025-11-21 06:01:15 -0600",
     "duration_min": 51.45559311707814,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 4.40773,
+    "distance_unit": "mi",
+    "calories": 488.255,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2202,9 +2385,10 @@
     "start_date": "2025-11-21 06:13:00 -0600",
     "end_date": "2025-11-21 06:34:42 -0600",
     "duration_min": 21.70889609853426,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 118.438,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2214,9 +2398,10 @@
     "start_date": "2025-11-22 06:07:43 -0600",
     "end_date": "2025-11-22 07:01:40 -0600",
     "duration_min": 53.95316021641096,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 3.01105,
+    "distance_unit": "mi",
+    "calories": 364.252,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2226,9 +2411,10 @@
     "start_date": "2025-11-22 21:09:28 -0600",
     "end_date": "2025-11-22 21:17:41 -0600",
     "duration_min": 8.225818715492885,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 16.6518,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2238,9 +2424,10 @@
     "start_date": "2025-11-23 06:10:41 -0600",
     "end_date": "2025-11-23 06:32:12 -0600",
     "duration_min": 21.51710866491,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 1.08152,
+    "distance_unit": "mi",
+    "calories": 119.518,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2250,9 +2437,10 @@
     "start_date": "2025-11-23 06:33:30 -0600",
     "end_date": "2025-11-23 06:51:44 -0600",
     "duration_min": 18.24035908381144,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 84.2678,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2262,9 +2450,10 @@
     "start_date": "2025-11-23 06:51:57 -0600",
     "end_date": "2025-11-23 07:00:33 -0600",
     "duration_min": 8.608322316408158,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 35.926,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2274,9 +2463,10 @@
     "start_date": "2025-11-23 07:00:36 -0600",
     "end_date": "2025-11-23 07:04:24 -0600",
     "duration_min": 3.799854381879171,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 15.063,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2286,9 +2476,10 @@
     "start_date": "2025-11-25 05:16:51 -0600",
     "end_date": "2025-11-25 06:06:31 -0600",
     "duration_min": 49.66487480004628,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 4.06278,
+    "distance_unit": "mi",
+    "calories": 448.029,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2298,9 +2489,10 @@
     "start_date": "2025-11-25 06:09:23 -0600",
     "end_date": "2025-11-25 06:32:16 -0600",
     "duration_min": 22.88436516523361,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 108.393,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2310,9 +2502,10 @@
     "start_date": "2025-11-25 06:28:07 -0600",
     "end_date": "2025-11-25 06:32:21 -0600",
     "duration_min": 4.23278915087382,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 22.3121,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2322,9 +2515,10 @@
     "start_date": "2025-11-25 06:05:00 -0600",
     "end_date": "2025-11-25 06:45:00 -0600",
     "duration_min": 40,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 218,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2334,9 +2528,10 @@
     "start_date": "2025-11-25 06:41:31 -0600",
     "end_date": "2025-11-25 06:51:29 -0600",
     "duration_min": 9.96258478363355,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 43.965,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2346,9 +2541,10 @@
     "start_date": "2025-11-26 05:22:33 -0600",
     "end_date": "2025-11-26 06:08:10 -0600",
     "duration_min": 45.61067196726799,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 3.4708,
+    "distance_unit": "mi",
+    "calories": 383.07,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2358,9 +2554,10 @@
     "start_date": "2025-11-26 06:15:21 -0600",
     "end_date": "2025-11-26 06:32:58 -0600",
     "duration_min": 17.62339116732279,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 78.1055,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2370,9 +2567,10 @@
     "start_date": "2025-11-27 06:11:44 -0600",
     "end_date": "2025-11-27 06:19:27 -0600",
     "duration_min": 7.724885851144791,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.333831,
+    "distance_unit": "mi",
+    "calories": 39.346,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2382,9 +2580,10 @@
     "start_date": "2025-11-28 15:01:46 -0600",
     "end_date": "2025-11-28 15:39:25 -0600",
     "duration_min": 37.64228548407554,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 3.41009,
+    "distance_unit": "mi",
+    "calories": 367.016,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2394,9 +2593,10 @@
     "start_date": "2025-12-01 05:30:53 -0600",
     "end_date": "2025-12-01 06:26:20 -0600",
     "duration_min": 55.44327565034231,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 4.79744,
+    "distance_unit": "mi",
+    "calories": 521.791,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2406,9 +2606,10 @@
     "start_date": "2025-12-02 05:50:06 -0600",
     "end_date": "2025-12-02 06:10:48 -0600",
     "duration_min": 20.6972943842411,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 1.83332,
+    "distance_unit": "mi",
+    "calories": 213.815,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2418,9 +2619,10 @@
     "start_date": "2025-12-03 05:13:18 -0600",
     "end_date": "2025-12-03 06:18:49 -0600",
     "duration_min": 65.52281471689543,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 5.58143,
+    "distance_unit": "mi",
+    "calories": 599.222,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2430,9 +2632,10 @@
     "start_date": "2025-12-03 06:22:51 -0600",
     "end_date": "2025-12-03 06:36:43 -0600",
     "duration_min": 13.86606058279673,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 57.7489,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2442,9 +2645,10 @@
     "start_date": "2025-12-04 05:29:59 -0600",
     "end_date": "2025-12-04 06:16:37 -0600",
     "duration_min": 46.64345464905103,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 307.041,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2454,9 +2658,10 @@
     "start_date": "2025-12-04 06:23:54 -0600",
     "end_date": "2025-12-04 06:25:55 -0600",
     "duration_min": 2.01499896645546,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 9.96741,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2466,9 +2671,10 @@
     "start_date": "2025-12-04 06:16:40 -0600",
     "end_date": "2025-12-04 06:25:56 -0600",
     "duration_min": 9.263629104693731,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 41.23,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2478,9 +2684,10 @@
     "start_date": "2025-12-04 06:25:58 -0600",
     "end_date": "2025-12-04 06:48:35 -0600",
     "duration_min": 22.61911268234253,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 94.8509,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2490,9 +2697,10 @@
     "start_date": "2025-12-05 05:30:50 -0600",
     "end_date": "2025-12-05 06:27:10 -0600",
     "duration_min": 56.34527300000191,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 4.73789,
+    "distance_unit": "mi",
+    "calories": 520.187,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2502,9 +2710,10 @@
     "start_date": "2025-12-05 06:35:54 -0600",
     "end_date": "2025-12-05 06:46:50 -0600",
     "duration_min": 10.93111773530642,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 62.6962,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2514,9 +2723,10 @@
     "start_date": "2025-12-05 06:48:49 -0600",
     "end_date": "2025-12-05 06:58:01 -0600",
     "duration_min": 9.21038904984792,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 41.1731,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2526,9 +2736,10 @@
     "start_date": "2025-12-06 15:33:32 -0600",
     "end_date": "2025-12-06 16:20:27 -0600",
     "duration_min": 46.91943150162697,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 3.12404,
+    "distance_unit": "mi",
+    "calories": 332.112,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2538,9 +2749,10 @@
     "start_date": "2025-12-05 06:46:59 -0600",
     "end_date": "2025-12-06 16:23:45 -0600",
     "duration_min": 2016.766206308206,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 1019.51,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2550,9 +2762,10 @@
     "start_date": "2025-12-15 06:01:57 -0600",
     "end_date": "2025-12-15 06:49:09 -0600",
     "duration_min": 47.20649229884148,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 2.4365,
+    "distance_unit": "mi",
+    "calories": 193.24,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2562,9 +2775,10 @@
     "start_date": "2025-12-16 05:22:41 -0600",
     "end_date": "2025-12-16 06:08:14 -0600",
     "duration_min": 45.55601614912351,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 2.23508,
+    "distance_unit": "mi",
+    "calories": 203.86,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2574,9 +2788,10 @@
     "start_date": "2025-12-16 06:08:16 -0600",
     "end_date": "2025-12-16 06:50:32 -0600",
     "duration_min": 42.27229305704434,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 1.77652,
+    "distance_unit": "mi",
+    "calories": 123.681,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2586,9 +2801,10 @@
     "start_date": "2025-12-17 05:23:37 -0600",
     "end_date": "2025-12-17 05:52:46 -0600",
     "duration_min": 29.14090226689974,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 1.45973,
+    "distance_unit": "mi",
+    "calories": 102.916,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2598,9 +2814,10 @@
     "start_date": "2025-12-17 05:52:52 -0600",
     "end_date": "2025-12-17 06:11:16 -0600",
     "duration_min": 18.40350289940834,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 1.11067,
+    "distance_unit": "mi",
+    "calories": 121.616,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2610,9 +2827,10 @@
     "start_date": "2025-12-17 06:11:23 -0600",
     "end_date": "2025-12-17 06:28:09 -0600",
     "duration_min": 16.76126329898834,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 67.309,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2622,9 +2840,10 @@
     "start_date": "2025-12-17 06:28:11 -0600",
     "end_date": "2025-12-17 06:37:59 -0600",
     "duration_min": 4.518776299556096,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 0,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2634,9 +2853,10 @@
     "start_date": "2025-12-18 05:37:55 -0600",
     "end_date": "2025-12-18 06:32:08 -0600",
     "duration_min": 54.22233414848645,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 3.21305,
+    "distance_unit": "mi",
+    "calories": 321.619,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2646,9 +2866,10 @@
     "start_date": "2025-12-20 14:28:45 -0600",
     "end_date": "2025-12-20 15:19:03 -0600",
     "duration_min": 50.29432016611099,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 4.28866,
+    "distance_unit": "mi",
+    "calories": 456.838,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2658,9 +2879,10 @@
     "start_date": "2025-12-20 15:19:14 -0600",
     "end_date": "2025-12-20 15:28:10 -0600",
     "duration_min": 8.946978133916854,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 49.275,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2670,9 +2892,10 @@
     "start_date": "2025-12-21 16:09:33 -0600",
     "end_date": "2025-12-21 16:38:53 -0600",
     "duration_min": 29.33051518201828,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 2.40652,
+    "distance_unit": "mi",
+    "calories": 253.034,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2682,9 +2905,10 @@
     "start_date": "2025-12-21 16:39:05 -0600",
     "end_date": "2025-12-21 16:45:26 -0600",
     "duration_min": 6.342349501450856,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 27.7379,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2694,9 +2918,10 @@
     "start_date": "2025-12-23 05:17:30 -0600",
     "end_date": "2025-12-23 06:19:25 -0600",
     "duration_min": 61.91729291677475,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 4.65255,
+    "distance_unit": "mi",
+    "calories": 474.388,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2706,9 +2931,10 @@
     "start_date": "2025-12-23 06:22:00 -0600",
     "end_date": "2025-12-23 06:27:05 -0600",
     "duration_min": 5.079857983191808,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 15.7104,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2718,9 +2944,10 @@
     "start_date": "2025-12-24 14:06:08 -0600",
     "end_date": "2025-12-24 14:23:16 -0600",
     "duration_min": 17.1383142332236,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 1.0204,
+    "distance_unit": "mi",
+    "calories": 92.561,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2730,9 +2957,10 @@
     "start_date": "2025-12-25 14:27:45 -0600",
     "end_date": "2025-12-25 15:22:54 -0600",
     "duration_min": 55.1534038345019,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 5.04161,
+    "distance_unit": "mi",
+    "calories": 514.362,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2742,9 +2970,10 @@
     "start_date": "2025-12-26 15:38:43 -0600",
     "end_date": "2025-12-26 15:50:56 -0600",
     "duration_min": 12.22930649916331,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 49.8624,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2754,9 +2983,10 @@
     "start_date": "2025-12-26 15:51:08 -0600",
     "end_date": "2025-12-26 16:04:02 -0600",
     "duration_min": 12.90892674922943,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 1.20138,
+    "distance_unit": "mi",
+    "calories": 122.731,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2766,9 +2996,10 @@
     "start_date": "2025-12-27 15:41:52 -0600",
     "end_date": "2025-12-27 16:34:20 -0600",
     "duration_min": 52.4683949013551,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 4.31061,
+    "distance_unit": "mi",
+    "calories": 443.651,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2778,9 +3009,10 @@
     "start_date": "2025-12-27 16:34:31 -0600",
     "end_date": "2025-12-27 16:43:35 -0600",
     "duration_min": 9.069296900431315,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 46.8252,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2790,9 +3022,10 @@
     "start_date": "2025-12-29 16:08:35 -0600",
     "end_date": "2025-12-29 17:25:52 -0600",
     "duration_min": 77.28984131614367,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 6.44384,
+    "distance_unit": "mi",
+    "calories": 690.233,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2802,9 +3035,10 @@
     "start_date": "2025-12-30 05:50:14 -0600",
     "end_date": "2025-12-30 06:11:56 -0600",
     "duration_min": 21.70806921720505,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 1.04507,
+    "distance_unit": "mi",
+    "calories": 69.5859,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2814,9 +3048,10 @@
     "start_date": "2025-12-30 06:12:54 -0600",
     "end_date": "2025-12-30 06:17:06 -0600",
     "duration_min": 4.205577331781387,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 16.12,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2826,9 +3061,10 @@
     "start_date": "2025-12-30 06:19:57 -0600",
     "end_date": "2025-12-30 06:47:14 -0600",
     "duration_min": 27.28217771649361,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 109.175,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2838,9 +3074,10 @@
     "start_date": "2025-12-31 05:44:17 -0600",
     "end_date": "2025-12-31 06:04:09 -0600",
     "duration_min": 19.87068433364232,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.99372,
+    "distance_unit": "mi",
+    "calories": 78.1952,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2850,9 +3087,10 @@
     "start_date": "2025-12-31 06:04:16 -0600",
     "end_date": "2025-12-31 06:09:14 -0600",
     "duration_min": 4.969296248753865,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 19.333,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2862,9 +3100,10 @@
     "start_date": "2025-12-31 06:12:31 -0600",
     "end_date": "2025-12-31 06:41:05 -0600",
     "duration_min": 28.56664086778959,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 114.876,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2874,9 +3113,10 @@
     "start_date": "2026-01-01 15:46:19 -0600",
     "end_date": "2026-01-01 16:10:31 -0600",
     "duration_min": 24.19744511842728,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0.683484,
+    "distance_unit": "mi",
+    "calories": 61.3448,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2886,9 +3126,10 @@
     "start_date": "2026-01-02 05:39:50 -0600",
     "end_date": "2026-01-02 06:10:57 -0600",
     "duration_min": 31.11725901563962,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 2.08859,
+    "distance_unit": "mi",
+    "calories": 192.046,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2898,9 +3139,10 @@
     "start_date": "2026-01-02 06:11:02 -0600",
     "end_date": "2026-01-02 06:11:19 -0600",
     "duration_min": 0.2876403351624807,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 0,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2910,9 +3152,10 @@
     "start_date": "2026-01-02 06:11:44 -0600",
     "end_date": "2026-01-02 06:25:12 -0600",
     "duration_min": 13.48142644961675,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 57.2884,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2922,9 +3165,10 @@
     "start_date": "2026-01-02 06:25:22 -0600",
     "end_date": "2026-01-02 06:55:17 -0600",
     "duration_min": 29.91494798262914,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 120.76,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2934,9 +3178,10 @@
     "start_date": "2026-01-02 07:10:21 -0600",
     "end_date": "2026-01-02 07:11:07 -0600",
     "duration_min": 0.38883030017217,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 0,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2946,9 +3191,10 @@
     "start_date": "2026-01-02 20:25:22 -0600",
     "end_date": "2026-01-02 20:39:49 -0600",
     "duration_min": 14.45748009880384,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 50.8423,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2958,9 +3204,10 @@
     "start_date": "2026-01-03 06:42:12 -0600",
     "end_date": "2026-01-03 07:14:00 -0600",
     "duration_min": 31.79020923376083,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 2.19558,
+    "distance_unit": "mi",
+    "calories": 209.279,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2970,9 +3217,10 @@
     "start_date": "2026-01-03 07:14:06 -0600",
     "end_date": "2026-01-03 07:30:55 -0600",
     "duration_min": 16.81436028281848,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 100.124,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2982,9 +3230,10 @@
     "start_date": "2026-01-03 08:00:31 -0600",
     "end_date": "2026-01-03 08:09:58 -0600",
     "duration_min": 9.457623966534932,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 38.565,
+    "hr": 0,
     "notes": ""
   },
   {
@@ -2994,9 +3243,10 @@
     "start_date": "2026-01-03 08:10:11 -0600",
     "end_date": "2026-01-03 08:19:21 -0600",
     "duration_min": 9.181165150801341,
-    "distance": null,
-    "calories": null,
-    "hr": null,
+    "distance": 0,
+    "distance_unit": "km",
+    "calories": 26.307,
+    "hr": 0,
     "notes": ""
   }
 ]
