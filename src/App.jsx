@@ -184,7 +184,7 @@ function fmtShortDate(dateStr) {
   if (!dateStr) return "NA"
   const d = new Date(dateStr)
   if (Number.isNaN(d.getTime())) return dateStr
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" })
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "2-digit" })
 }
 
 function todayISO() {
@@ -3959,7 +3959,10 @@ return (
       color: "#ced2f0",
       minHeight: "100vh",
       fontFamily: "Arial",
-      padding: "25px"
+      padding: "16px",
+      boxSizing: "border-box",
+      width: "100%",
+      overflowX: "hidden"
     }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", gap: "16px", flexWrap: "wrap", marginBottom: "16px" }}>
@@ -3973,7 +3976,7 @@ return (
   {!hydrated && <div style={{ fontSize: "12px", opacity: 0.7 }}>Loading synced data...</div>}
 </div>
 
-        <div style={{ ...cardStyle(), minWidth: "320px", maxWidth: "420px" }}>
+        <div style={{ ...cardStyle(), minWidth: "0", flex: "1 1 280px", maxWidth: "420px" }}>
           <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "8px" }}>Sync</div>
           {session ? (
             <>
@@ -4003,18 +4006,23 @@ return (
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: "8px", marginBottom: "20px", flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: "6px", marginBottom: "20px", flexWrap: "wrap" }}>
         {tabs.map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
             style={{
-              padding: "8px 12px",
+              flex: "1 1 auto",
+              minWidth: "70px",
+              padding: "10px 8px",
               background: tab === t ? "#252640" : "#0d0e1c",
-              border: "1px solid #1a1b2e",
+              border: tab === t ? "1px solid #4a9ee8" : "1px solid #1a1b2e",
               borderRadius: "8px",
-              color: "#ced2f0",
-              cursor: "pointer"
+              color: tab === t ? "#ffffff" : "#ced2f0",
+              cursor: "pointer",
+              textAlign: "center",
+              fontSize: "13px",
+              fontWeight: tab === t ? "600" : "400"
             }}
           >
             {t}
@@ -4126,7 +4134,7 @@ return (
         <ResponsiveContainer width="100%" height={320}>
           <LineChart
   data={calorieChartData}
-  margin={{ top: 20, right: 20, left: 20, bottom: 35 }}
+  margin={{ top: 20, right: 20, left: 55, bottom: 35 }}
 >
             <CartesianGrid stroke="#1a1b2e" />
             <XAxis
@@ -4143,9 +4151,10 @@ return (
   label={{
     value: "Calories (kcal/day)",
     angle: -90,
-    position: "left",
-    offset: 0,
-    fill: "#ced2f0"
+    position: "insideLeft",
+    offset: 15,
+    fill: "#ced2f0",
+    style: { textAnchor: "middle" }
   }}
 />
             <Tooltip />
@@ -4183,7 +4192,7 @@ return (
         <ResponsiveContainer width="100%" height={320}>
           <LineChart
   data={weightSmoothed}
-  margin={{ top: 20, right: 20, left: 20, bottom: 35 }}
+  margin={{ top: 20, right: 20, left: 55, bottom: 35 }}
 >
             <CartesianGrid stroke="#1a1b2e" />
             <XAxis
@@ -4200,9 +4209,10 @@ return (
               label={{
   value: "Body weight (lb)",
   angle: -90,
-  position: "left",
-  offset: 0,
-  fill: "#ced2f0"
+  position: "insideLeft",
+  offset: 15,
+  fill: "#ced2f0",
+  style: { textAnchor: "middle" }
 }}
             />
             <Tooltip
@@ -4243,7 +4253,7 @@ return (
         <ResponsiveContainer width="100%" height={320}>
           <ComposedChart
   data={trainingLoadChartData}
-  margin={{ top: 20, right: 20, left: 20, bottom: 35 }}
+  margin={{ top: 20, right: 20, left: 55, bottom: 35 }}
 >
             <CartesianGrid stroke="#1a1b2e" />
             <XAxis
@@ -4261,9 +4271,10 @@ return (
               label={{
   value: "Miles per week",
   angle: -90,
-  position: "left",
-  offset: 0,
-  fill: "#ced2f0"
+  position: "insideLeft",
+  offset: 15,
+  fill: "#ced2f0",
+  style: { textAnchor: "middle" }
 }}
             />
             <YAxis
@@ -4272,9 +4283,10 @@ return (
               label={{
   value: "Strength sessions",
   angle: 90,
-  position: "right",
-  offset: 0,
-  fill: "#a78bfa"
+  position: "insideRight",
+  offset: -15,
+  fill: "#a78bfa",
+  style: { textAnchor: "middle" }
 }}
               allowDecimals={false}
             />
@@ -4345,7 +4357,7 @@ return (
 <ResponsiveContainer width="100%" height={300}>
       <LineChart
   data={readinessProjectionData}
-  margin={{ top: 20, right: 20, left: 20, bottom: 35 }}
+  margin={{ top: 20, right: 20, left: 55, bottom: 35 }}
 >
         <CartesianGrid stroke="#1a1b2e" />
         <XAxis
@@ -4366,9 +4378,10 @@ return (
           label={{
   value: "Completion readiness (%)",
   angle: -90,
-  position: "left",
-  offset: 0,
-  fill: "#ced2f0"
+  position: "insideLeft",
+  offset: 15,
+  fill: "#ced2f0",
+  style: { textAnchor: "middle" }
 }}
         />
         <Tooltip
@@ -4444,7 +4457,7 @@ return (
   <ResponsiveContainer width="100%" height={300}>
     <LineChart
       data={bodyCompositionOverviewData}
-      margin={{ top: 20, right: 20, left: 20, bottom: 35 }}
+      margin={{ top: 20, right: 20, left: 55, bottom: 35 }}
     >
       <CartesianGrid stroke="#1a1b2e" />
       <XAxis
@@ -4461,9 +4474,10 @@ return (
         label={{
           value: "Body fat (%)",
           angle: -90,
-          position: "left",
-          offset: 0,
-          fill: "#ced2f0"
+          position: "insideLeft",
+          offset: 15,
+          fill: "#ced2f0",
+          style: { textAnchor: "middle" }
         }}
       />
       <Tooltip
@@ -4504,7 +4518,7 @@ return (
   <ResponsiveContainer width="100%" height={300}>
     <LineChart
       data={operationalCapacityData}
-      margin={{ top: 20, right: 20, left: 20, bottom: 35 }}
+      margin={{ top: 20, right: 20, left: 55, bottom: 35 }}
     >
       <CartesianGrid stroke="#1a1b2e" />
       <XAxis
@@ -4521,9 +4535,10 @@ return (
         label={{
           value: "Operational capacity (%)",
           angle: -90,
-          position: "left",
-          offset: 0,
-          fill: "#ced2f0"
+          position: "insideLeft",
+          offset: 15,
+          fill: "#ced2f0",
+          style: { textAnchor: "middle" }
         }}
       />
       <Tooltip
@@ -4703,7 +4718,7 @@ return (
            <ResponsiveContainer width="100%" height={260}>
   <LineChart
   data={calorieChartData}
-  margin={{ top: 20, right: 20, left: 20, bottom: 35 }}
+  margin={{ top: 20, right: 20, left: 55, bottom: 35 }}
 >
                 <CartesianGrid stroke="#1a1b2e" />
                 <XAxis dataKey="label" />
