@@ -53,6 +53,7 @@ fs.createReadStream(inputFile)
           .trim()
     })
   )
+  // AFTER
   .on("data", (row) => {
     if (workouts.length === 0) {
       console.log("ROW KEYS:", Object.keys(row));
@@ -62,6 +63,48 @@ fs.createReadStream(inputFile)
     const rawType = getRawType(row);
     const type = typeMap[rawType] || "Other";
 
+    // Distance: read value and unit separately so the canonical builder
+    // can apply the correct conversion. Apple Health stores distance in km
+    // for metric-locale devices; some export tools normalize to miles.
+    const distanceRaw = toNumber(
+      row.totalDistance ??
+      row.total_distance ??
+      row["Total Distance (km)"] ??
+      row["Total Distance (mi)"] ??
+      row.distance ??
+      row.Distance ??
+      null
+    );
+
+    const distanceUnit = (
+      row.totalDistanceUnit ||
+      row.total_distance_unit ||
+      row.distanceUnit ||
+      row.distance_unit ||
+      ""
+    ).trim().toLowerCase() || (distanceRaw != null ? "km" : null);
+    // Default unit assumption: Apple Health exports km unless unit field says otherwise.
+
+    const calories = toNumber(
+      row.totalEnergyBurned ??
+      row.total_energy_burned ??
+      row.activeEnergyBurned ??
+      row["Active Energy (kcal)"] ??
+      row["Total Energy (kcal)"] ??
+      row.calories ??
+      row.Calories ??
+      null
+    );
+
+    const hr = toNumber(
+      row.averageHeartRate ??
+      row.average_heart_rate ??
+      row["Heart Rate (bpm)"] ??
+      row.heartRate ??
+      row.hr ??
+      null
+    );
+
     workouts.push({
       source: "AppleHealth",
       raw_type: rawType,
@@ -69,9 +112,10 @@ fs.createReadStream(inputFile)
       start_date: row.startDate || null,
       end_date: row.endDate || null,
       duration_min: toNumber(row.duration),
-      distance: null,
-      calories: null,
-      hr: null,
+      distance: distanceRaw,
+      distance_unit: distanceUnit,
+      calories,
+      hr,
       notes: ""
     });
   })
