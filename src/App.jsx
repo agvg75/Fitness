@@ -2571,7 +2571,8 @@ function extractDistanceInfo(workout) {
   const candidates = [
     {
       value: pmDist?.value,
-      unit: pmDist?.unit || (pmDist?.source === "Technogym" ? "m" : "")
+      unit: pmDist?.unit || workout?.sources?.apple?.distance_unit || workout?.sources?.technogym?.distance_unit || (pmDist?.source === "Technogym" ? "m" : "")
+
     },
     {
       value: pmDist?.raw,
@@ -4384,9 +4385,7 @@ return (
   <div style={{ fontSize: "64px", fontWeight: "800", lineHeight: 1, marginTop: 0, marginBottom: "6px" }}>
     L.I.F.T.
   </div>
-  <div style={{ fontSize: 11, opacity: 0.6 }}>
-  Deploy check: Mar 12 2026 A
-</div>
+  
   <div style={{ fontSize: "13px", opacity: 0.85, marginBottom: "4px" }}>
     Longitudinal Integrated Fitness Tracker
   </div>
