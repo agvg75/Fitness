@@ -3568,6 +3568,7 @@ const trainingLoadChartData = useMemo(() => {
     label: fmtShortDate(w.weekStart),
     running: w.running ?? 0,
     swimming: w.swimming ?? 0,
+    swimmingYds: Math.round((w.swimming ?? 0) * 1760),
     cycling: w.cycling ?? 0,
     strength: w.strength ?? 0,
     trainingLoad: (Number(w.trainingLoad || 0) / maxVisibleLoad) * Math.max(
@@ -4736,6 +4737,18 @@ return (
 }}
             />
             <YAxis
+              yAxisId="swim"
+              orientation="right"
+              label={{
+  value: "Swim yards/week",
+  angle: 90,
+  position: "insideRight",
+  offset: 15,
+  fill: "#22c55e",
+  style: { textAnchor: "middle" }
+}}
+            />
+            <YAxis
               yAxisId="strength"
               orientation="right"
               label={{
@@ -4772,13 +4785,13 @@ return (
             />
 
             <Line
-              yAxisId="distance"
+              yAxisId="swim"
               type="monotone"
-              dataKey="swimming"
+              dataKey="swimmingYds"
               stroke="#22c55e"
               strokeWidth={2}
               dot={false}
-              name="Swim miles"
+              name="Swim yards"
             />
 
             <Line
