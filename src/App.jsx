@@ -601,7 +601,7 @@ function ScheduleLogView({ log, expanded, setExpanded, onDelete, onEdit }) {
       </div>
     )}
 
-    {allEx.length === 0 && <div style={{ fontSize: "12px", color: "#333" }}>No exercise data recorded.</div>}
+    {allEx.length === 0 && (!entry.customExercises || entry.customExercises.length === 0) && <div style={{ fontSize: "12px", color: "#333" }}>No exercise data recorded.</div>}
     {allEx.map(({ ex, sets }) => (
                   <div key={ex.id} style={{ display: "flex", alignItems: "baseline", gap: "12px", padding: "3px 0", borderBottom: "1px solid #121212" }}>
                     <span style={{ fontSize: "13px", fontWeight: "600", color: "#a0a0a0", minWidth: "190px" }}>{ex.name}</span>
@@ -617,6 +617,21 @@ function ScheduleLogView({ log, expanded, setExpanded, onDelete, onEdit }) {
                     </span>
                   </div>
                 ))}
+    {(entry.customExercises || []).map(ex => (
+      <div key={ex.id} style={{ display: "flex", alignItems: "baseline", gap: "12px", padding: "3px 0", borderBottom: "1px solid #121212" }}>
+        <span style={{ fontSize: "13px", fontWeight: "600", color: "#7a7aaa", minWidth: "190px" }}>{ex.name} {ex.note && <span style={{ fontSize: "10px", color: "#3a3a5a", fontStyle: "italic" }}>{ex.note}</span>}</span>
+        <span style={{ fontSize: "11px", color: "#444" }}>
+          {(ex.sets || []).map((s, i) => (
+            <span key={i}>
+              {i > 0 && <span style={{ color: "#2a2a2a" }}> · </span>}
+              <span style={{ color: "#9090c0" }}>{s.r}</span>
+              <span style={{ color: "#333" }}>@</span>
+              <span style={{ color: "#6060a0" }}>{s.w}</span>
+            </span>
+          ))}
+        </span>
+      </div>
+    ))}
               </div>
             )}
           </div>
@@ -647,6 +662,74 @@ const [cardioDistance, setCardioDistance] = useState("")
 const [cardioCalories, setCardioCalories] = useState("")
 const [cardioAvgHr, setCardioAvgHr] = useState("")
 const [cardioNotes, setCardioNotes] = useState("")
+
+// Custom (free-text) exercises per day
+const [customExsByDay, setCustomExsByDay] = useState({})
+
+// Form state for adding a new custom exercise
+const [newExName, setNewExName] = useState("")
+const [newExSets, setNewExSets] = useState("3")
+const [newExReps, setNewExReps] = useState("10")
+const [newExWeight, setNewExWeight] = useState("")
+const [newExNote, setNewExNote] = useState("")
+
+const customExs = customExsByDay[activeDay] || []
+
+const addCustomEx = () => {
+  const name = newExName.trim()
+  if (!name) return
+  const sets = Math.max(1, Math.min(10, parseInt(newExSets) || 3))
+  const setData = Array.from({ length: sets }, () => ({
+    r: newExReps.trim() || "10",
+    w: newExWeight.trim() || "—"
+  }))
+  const entry = { id: `cx-${Date.now()}`, name, note: newExNote.trim(), sets: setData }
+  setCustomExsByDay(prev => ({
+    ...prev,
+    [activeDay]: [...(prev[activeDay] || []), entry]
+  }))
+  setNewExName(""); setNewExSets("3"); setNewExReps("10"); setNewExWeight(""); setNewExNote("")
+}
+
+const updateCustomSet = (exId, si, field, val) => {
+  setCustomExsByDay(prev => {
+    const arr = (prev[activeDay] || []).map(ex => {
+      if (ex.id !== exId) return ex
+      const sets = ex.sets.map((s, i) => i === si ? { ...s, [field]: val } : s)
+      return { ...ex, sets }
+    })
+    return { ...prev, [activeDay]: arr }
+  })
+}
+
+const addCustomSet = exId => {
+  setCustomExsByDay(prev => {
+    const arr = (prev[activeDay] || []).map(ex => {
+      if (ex.id !== exId) return ex
+      const last = ex.sets[ex.sets.length - 1] || { r: "10", w: "—" }
+      return { ...ex, sets: [...ex.sets, { ...last }] }
+    })
+    return { ...prev, [activeDay]: arr }
+  })
+}
+
+const removeCustomSet = (exId, si) => {
+  setCustomExsByDay(prev => {
+    const arr = (prev[activeDay] || []).map(ex => {
+      if (ex.id !== exId) return ex
+      if (ex.sets.length <= 1) return ex
+      return { ...ex, sets: ex.sets.filter((_, i) => i !== si) }
+    })
+    return { ...prev, [activeDay]: arr }
+  })
+}
+
+const removeCustomEx = exId => {
+  setCustomExsByDay(prev => ({
+    ...prev,
+    [activeDay]: (prev[activeDay] || []).filter(ex => ex.id !== exId)
+  }))
+}
  const saveScheduleKey = async (key, value) => {
   await store.set(key, value)
 
@@ -749,6 +832,7 @@ const entry = {
   theme: SMETA[activeDay].theme,
   venue: SMETA[activeDay].venue,
   data: JSON.parse(JSON.stringify(sessions[activeDay])),
+  customExercises: JSON.parse(JSON.stringify(customExs)),
   cardio: cardioType
     ? {
         type: cardioType,
@@ -802,6 +886,7 @@ setCardioDistance("")
 setCardioCalories("")
 setCardioAvgHr("")
 setCardioNotes("")
+setCustomExsByDay(prev => ({ ...prev, [activeDay]: [] }))
 showToast("Session saved")
   }
 
@@ -950,6 +1035,85 @@ showToast("Entry deleted")
               })}
             </div>
           ))}
+
+          {/* Custom (free-text) exercises for this day */}
+          {(customExs.length > 0 || !isRest) && (
+            <div style={{ marginBottom: "6px" }}>
+              <div style={{ fontSize: "9px", fontWeight: "700", letterSpacing: "0.22em", textTransform: "uppercase", color: "#333", padding: "8px 2px 6px", borderBottom: "1px solid #161616", marginBottom: "8px" }}>
+                Additional Exercises
+              </div>
+
+              {customExs.map(ex => (
+                <div key={ex.id} style={{ background: "#111", border: "1px solid #1a1a1a", borderLeft: "3px solid #2a2a3a", borderRadius: "8px", marginBottom: "7px", overflow: "hidden" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px" }}>
+                    <div>
+                      <div style={{ fontSize: "14px", fontWeight: "700", color: "#e0e0e0" }}>{ex.name}</div>
+                      {ex.note && <div style={{ fontSize: "11px", color: "#3a3a3a", fontStyle: "italic" }}>{ex.note}</div>}
+                    </div>
+                    <button onClick={() => removeCustomEx(ex.id)} style={{ background: "none", border: "none", color: "#444", cursor: "pointer", fontSize: "16px", padding: "0 4px" }}>×</button>
+                  </div>
+                  <div style={{ padding: "0 12px 10px", borderTop: "1px solid #161616" }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "26px 1fr 14px 1fr 22px", gap: "4px", padding: "8px 0 4px" }}>
+                      {["SET", "REPS", "", "LOAD", ""].map((h, i) => (
+                        <div key={i} style={{ fontSize: "9px", letterSpacing: "0.14em", color: "#333", textAlign: "center" }}>{h}</div>
+                      ))}
+                    </div>
+                    {ex.sets.map((s, si) => (
+                      <div key={si} style={{ display: "grid", gridTemplateColumns: "26px 1fr 14px 1fr 22px", gap: "4px", alignItems: "center", marginBottom: "4px" }}>
+                        <div style={{ fontSize: "10px", color: "#3a3a3a", textAlign: "center" }}>S{si + 1}</div>
+                        <input type="text" value={s.r} onChange={e => updateCustomSet(ex.id, si, "r", e.target.value)}
+                          style={{ background: "#161616", border: "1px solid #242424", borderRadius: "4px", color: "#e0e0e0", fontSize: "12px", padding: "4px 6px", textAlign: "center", width: "100%" }} />
+                        <div style={{ textAlign: "center", fontSize: "10px", color: "#333" }}>@</div>
+                        <input type="text" value={s.w} onChange={e => updateCustomSet(ex.id, si, "w", e.target.value)}
+                          style={{ background: "#161616", border: "1px solid #242424", borderRadius: "4px", color: "#e0e0e0", fontSize: "12px", padding: "4px 6px", textAlign: "center", width: "100%" }} />
+                        <button onClick={() => removeCustomSet(ex.id, si)}
+                          style={{ background: "none", border: "none", color: "#444", cursor: "pointer", fontSize: "13px", padding: 0, visibility: ex.sets.length > 1 ? "visible" : "hidden" }}>×</button>
+                      </div>
+                    ))}
+                    <button onClick={() => addCustomSet(ex.id)}
+                      style={{ marginTop: "4px", width: "100%", background: "none", border: "1px dashed #1e1e1e", borderRadius: "4px", color: "#333", fontSize: "10px", padding: "4px 0", cursor: "pointer" }}>
+                      + add set
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              {/* Add exercise form */}
+              <div style={{ background: "#0d0d0d", border: "1px dashed #252540", borderRadius: "8px", padding: "12px", marginTop: "6px" }}>
+                <div style={{ fontSize: "9px", letterSpacing: "0.16em", color: "#3a3a5a", textTransform: "uppercase", marginBottom: "10px" }}>Add Exercise</div>
+                <input
+                  type="text"
+                  placeholder="Exercise name"
+                  value={newExName}
+                  onChange={e => setNewExName(e.target.value)}
+                  style={{ width: "100%", background: "#111", border: "1px solid #1a1b2e", borderRadius: "6px", color: "#ced2f0", fontSize: "12px", padding: "7px 10px", boxSizing: "border-box", marginBottom: "8px" }}
+                />
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px", marginBottom: "8px" }}>
+                  <div>
+                    <div style={{ fontSize: "9px", color: "#3a3a5a", marginBottom: "3px", letterSpacing: "0.1em" }}>SETS</div>
+                    <input type="number" min="1" max="10" value={newExSets} onChange={e => setNewExSets(e.target.value)}
+                      style={{ width: "100%", background: "#111", border: "1px solid #1a1b2e", borderRadius: "6px", color: "#ced2f0", fontSize: "12px", padding: "6px 8px", boxSizing: "border-box", textAlign: "center" }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: "9px", color: "#3a3a5a", marginBottom: "3px", letterSpacing: "0.1em" }}>REPS</div>
+                    <input type="text" placeholder="10" value={newExReps} onChange={e => setNewExReps(e.target.value)}
+                      style={{ width: "100%", background: "#111", border: "1px solid #1a1b2e", borderRadius: "6px", color: "#ced2f0", fontSize: "12px", padding: "6px 8px", boxSizing: "border-box", textAlign: "center" }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: "9px", color: "#3a3a5a", marginBottom: "3px", letterSpacing: "0.1em" }}>LOAD</div>
+                    <input type="text" placeholder="lb / BW / —" value={newExWeight} onChange={e => setNewExWeight(e.target.value)}
+                      style={{ width: "100%", background: "#111", border: "1px solid #1a1b2e", borderRadius: "6px", color: "#ced2f0", fontSize: "12px", padding: "6px 8px", boxSizing: "border-box", textAlign: "center" }} />
+                  </div>
+                </div>
+                <input type="text" placeholder="Note (optional)" value={newExNote} onChange={e => setNewExNote(e.target.value)}
+                  style={{ width: "100%", background: "#111", border: "1px solid #1a1b2e", borderRadius: "6px", color: "#ced2f0", fontSize: "12px", padding: "6px 10px", boxSizing: "border-box", marginBottom: "8px" }} />
+                <button onClick={addCustomEx}
+                  style={{ width: "100%", padding: "8px 0", background: newExName.trim() ? "#1a1b3a" : "#0d0e1c", border: `1px solid ${newExName.trim() ? "#4a4d6a" : "#1a1b2e"}`, borderRadius: "6px", color: newExName.trim() ? "#ced2f0" : "#2a2a4a", cursor: newExName.trim() ? "pointer" : "default", fontSize: "12px", fontWeight: "600" }}>
+                  Add to session
+                </button>
+              </div>
+            </div>
+          )}
 
           {!isRest && (
             <div style={{ marginTop: "16px", paddingTop: "12px", borderTop: "1px solid #1a1a1a" }}>
