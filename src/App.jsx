@@ -3559,10 +3559,10 @@ const trainingLoadChartData = useMemo(() => {
 
   if (!visibleBuckets.length) return []
 
-  const maxVisibleLoad = Math.max(
-    ...visibleBuckets.map(w => Number(w.trainingLoad || 0)),
-    1
-  )
+const maxDistVisible = Math.max(
+  ...visibleBuckets.map(x => Math.max(Number(x.running || 0), Number(x.cycling || 0))),
+  1
+)
 
   return visibleBuckets.map((w, i) => ({
     label: fmtShortDate(w.weekStart),
@@ -3570,16 +3570,8 @@ const trainingLoadChartData = useMemo(() => {
     swimming: w.swimming ?? 0,
     cycling: w.cycling ?? 0,
     strength: w.strength ?? 0,
-    trainingLoad: (Number(w.trainingLoad || 0) / maxVisibleLoad) * Math.max(
-      ...visibleBuckets.map(x =>
-        Math.max(
-          Number(x.running || 0),
-          Number(x.swimming || 0),
-          Number(x.cycling || 0)
-        )
-      ),
-      1
-    )
+trainingLoad: Number(w.trainingLoad || 0) * maxDistVisible,
+
   }))
 }, [weeklyTrainingBuckets, rangeKey])
 const vo2ProxyData = useMemo(() => {
