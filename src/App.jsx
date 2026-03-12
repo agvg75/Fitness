@@ -2395,14 +2395,15 @@ function buildWeeklyTrainingBuckets(workouts) {
     a.weekStart.localeCompare(b.weekStart)
   )
 
-const trimmed = ordered.slice(-16)
+const trimmed = ordered.slice(-52)
 
 const maxLoad = Math.max(
   ...trimmed.map(w =>
     (w.running || 0) +
     (w.swimming || 0) * 2 +
     (w.cycling || 0) * 0.4 +
-    (w.strength || 0) * 2
+    (w.strength || 0) * 2 +
+    (w.cardioMinutes || 0) * 0.08
   ),
   1
 )
@@ -2412,7 +2413,8 @@ return trimmed.map(w => {
       (w.running || 0) +
       (w.swimming || 0) * 2 +
       (w.cycling || 0) * 0.4 +
-      (w.strength || 0) * 2
+      (w.strength || 0) * 2 +
+      (w.cardioMinutes || 0) * 0.08
 
   return {
     ...w,
@@ -2492,7 +2494,7 @@ export default function App() {
 const fmt0 = n => Number.isFinite(Number(n)) ? Math.round(Number(n)).toLocaleString() : "0"
 const fmt1 = n => Number.isFinite(Number(n)) ? Number(n).toFixed(1) : "0.0"
 
-function normalizeWorkoutType(type) {
+function normalizeWorkoutType(type, workout) {
   const t = String(type || "").toLowerCase()
 
   if (t.includes("traditional strength")) return "Strength"
@@ -2506,7 +2508,26 @@ function normalizeWorkoutType(type) {
   if (t.includes("elliptical")) return "Elliptical"
   if (t.includes("rowing")) return "Rowing"
   if (t.includes("stair")) return "Stairs"
-  if (t.includes("machine cardio")) return "Machine Cardio"
+
+  // For Machine Cardio, check the Technogym sub-type before giving up
+  if (t.includes("machine cardio") || t === "other") {
+    const tgType = String(
+      workout?.sources?.technogym?.type ||
+      workout?.sources?.technogym?.raw_type ||
+      workout?.sources?.technogym?.activity_type ||
+      ""
+    ).toLowerCase()
+
+    if (tgType.includes("cycl") || tgType.includes("bike") || tgType.includes("spin")) return "Cycling"
+    if (tgType.includes("run") || tgType.includes("tread")) return "Running"
+    if (tgType.includes("row")) return "Rowing"
+    if (tgType.includes("swim")) return "Swimming"
+    if (tgType.includes("ellip")) return "Elliptical"
+    if (tgType.includes("stair") || tgType.includes("climb")) return "Stairs"
+    if (tgType.includes("strength") || tgType.includes("weight") || tgType.includes("train")) return "Strength"
+    // Default Machine Cardio stays as-is so it still gets cardioMinutes credit
+    if (t.includes("machine cardio")) return "Machine Cardio"
+  }
 
   return "Other"
 }
@@ -2625,12 +2646,22 @@ function extractDurationMin(workout) {
     workout?.minutes,
     workout?.duration,
     workout?.preferred_metrics?.duration?.value,
-    workout?.total_duration_min
+    workout?.total_duration_min,
+    // Canonical session nested sources
+    workout?.sources?.apple?.duration_min,
+    workout?.sources?.apple?.duration,
+    workout?.sources?.technogym?.duration_min,
+    workout?.sources?.technogym?.duration,
+    workout?.overlap_summary?.duration_min
   ]
 
   for (const c of candidates) {
     const v = Number(c)
-    if (Number.isFinite(v) && v > 0) return v
+    if (Number.isFinite(v) && v > 0) {
+      // Guard against seconds being returned as minutes (>600 min = implausible)
+      if (v > 600) return v / 60
+      return v
+    }
   }
 
   return 0
@@ -2784,18 +2815,34 @@ function estimateDynamicCalorieTarget({
 const normalizedActiveWorkouts = useMemo(() => {
   return activeWorkouts.map(w => {
     const rawType = w.canonical_type || w.type || "Other"
-    const category = normalizeWorkoutType(rawType)
+    const category = normalizeWorkoutType(rawType, w)
+
+    // Normalize date: canonical sessions use "2026-01-01 15:46:19 -0600" or ISO format
+    let dateStr = w.date || null
+    if (!dateStr && w.start_date) {
+      // Replace space-separated offset format to make it parseable
+      const cleaned = String(w.start_date).replace(" -", "T").replace(" +", "T").slice(0, 10)
+      dateStr = cleaned
+    }
+
+    // For indoor sessions with no GPS distance, derive a duration-based proxy
+    // so they contribute to modality charts (45 min cycling ≈ ~10 miles equivalent)
+    let distance = normalizeDistanceToMiles(w)
+    if (distance === 0 && (category === "Cycling" || category === "Machine Cardio")) {
+      const dur = extractDurationMin(w)
+      if (dur > 0) distance = dur / 4.5  // proxy: 4.5 min per equivalent mile
+    }
 
     return {
       ...w,
-      date: w.date || (w.start_date ? String(w.start_date).slice(0, 10) : null),
+      date: dateStr,
+      dateTime: dateStr,
       type: rawType,
       category,
-            distance: normalizeDistanceToMiles(w),
+      distance,
       calories: w.preferred_metrics?.calories?.value ?? w.calories ?? 0,
       hr: w.preferred_metrics?.hr?.value ?? w.hr ?? null,
       dur: extractDurationMin(w)
-
     }
   })
 }, [activeWorkouts])
@@ -2808,7 +2855,7 @@ function closeEnough(a, b, tol = 10) {
 const normalizedStoredWorkouts = useMemo(() => {
   return (Array.isArray(storedWorkouts) ? storedWorkouts : []).map(w => {
     const rawType = w.type || "Other"
-    const category = normalizeWorkoutType(rawType)
+    const category = normalizeWorkoutType(rawType, w)
 
     return {
       ...w,
@@ -2818,11 +2865,10 @@ const normalizedStoredWorkouts = useMemo(() => {
       dateTime: w.dateTime || (w.date && w.time ? `${w.date}T${w.time}` : w.date || null),
       type: rawType,
       category,
-            distance: normalizeDistanceToMiles(w),
+      distance: normalizeDistanceToMiles(w),
       calories: Number(w.calories || 0),
       hr: w.hr != null ? Number(w.hr) : null,
       dur: extractDurationMin(w)
-
     }
   })
 }, [storedWorkouts])
