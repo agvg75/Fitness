@@ -4149,10 +4149,10 @@ const readinessProjectionData = useMemo(() => {
   }
 
 const eventThresholds = {
-  fiveK: 60,
-  tenK: 70,
-  half: 82,
-  tri: 92
+  fiveK: 1,
+  tenK: 16,
+  half: 28,
+  tri: 38
 }
 
   const logisticPct = (baseReadiness, threshold, steepness = 0.18) => {
