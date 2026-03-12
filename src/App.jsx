@@ -2509,8 +2509,28 @@ function normalizeWorkoutType(type, workout) {
   if (t.includes("rowing")) return "Rowing"
   if (t.includes("stair")) return "Stairs"
 
-  // For Machine Cardio, check the Technogym sub-type before giving up
+  // For Machine Cardio, check rpm_avg as the definitive bike signal,
+  // then fall back to sub-type string matching
   if (t.includes("machine cardio") || t === "other") {
+    const rpmAvg =
+      workout?.preferred_metrics?.rpm_avg?.value ??
+      workout?.sources?.technogym?.rpm_avg ??
+      workout?.rpm_avg ??
+      null
+
+    // rpm_avg being non-null (even zero) means it was a bike session
+    if (rpmAvg !== null && Number.isFinite(Number(rpmAvg))) return "Cycling"
+
+    const powerAvg =
+      workout?.preferred_metrics?.power_avg?.value ??
+      workout?.sources?.technogym?.power_avg ??
+      null
+
+    // power_avg without rpm could be a bike too (some sessions only log power)
+    // only use this if the raw_type gives no further info
+    const tgRaw = String(workout?.sources?.technogym?.raw_type || "").toLowerCase()
+    if (powerAvg !== null && Number.isFinite(Number(powerAvg)) && tgRaw.includes("machine")) return "Cycling"
+
     const tgType = String(
       workout?.sources?.technogym?.type ||
       workout?.sources?.technogym?.raw_type ||
@@ -2826,11 +2846,14 @@ const normalizedActiveWorkouts = useMemo(() => {
     }
 
     // For indoor sessions with no GPS distance, derive a duration-based proxy
-    // so they contribute to modality charts (45 min cycling ≈ ~10 miles equivalent)
     let distance = normalizeDistanceToMiles(w)
-    if (distance === 0 && (category === "Machine Cardio")) {
+    if (distance === 0) {
       const dur = extractDurationMin(w)
-      if (dur > 0) distance = dur / 4.5  // fallback proxy only if no real distance found
+      if (dur > 0) {
+        if (category === "Cycling") distance = dur / 3.0       // ~20 mph indoor equivalent
+        else if (category === "Machine Cardio") distance = dur / 4.5  // conservative fallback
+        else if (category === "Rowing") distance = dur / 5.0
+      }
     }
 
     return {
