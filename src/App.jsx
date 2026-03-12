@@ -4367,10 +4367,13 @@ return (
   <div style={{ fontSize: "64px", fontWeight: "800", lineHeight: 1, marginTop: 0, marginBottom: "6px" }}>
     L.I.F.T.
   </div>
+  <div style={{ fontSize: 11, opacity: 0.6 }}>
+  Deploy check: Mar 12 2026 A
+</div>
   <div style={{ fontSize: "13px", opacity: 0.85, marginBottom: "4px" }}>
     Longitudinal Integrated Fitness Tracker
   </div>
-  {!hydrated && <div style={{ fontSize: "12px", opacity: 0.7 }}>Loading synced data...</div>}
+  {!hydrated && <div style={{ fontSize: "12px", opacity: 0.8 }}>Loading synced data...</div>}
 </div>
 
         <div style={{ ...cardStyle(), minWidth: "0", flex: "1 1 280px", maxWidth: "420px" }}>
