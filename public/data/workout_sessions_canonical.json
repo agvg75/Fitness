@@ -21793,8 +21793,8 @@
           "start_date": "2026-02-07 17:26:23 -0500",
           "end_date": "2026-02-07 17:40:27 -0500",
           "duration_min": 14.06892129977544,
-          "distance": 0,
-          "distance_unit": "",
+          "distance": 300,
+          "distance_unit": "yd",
           "calories": 0,
           "hr": 0,
           "notes": "",
@@ -21812,7 +21812,7 @@
           "source": "AppleHealth"
         },
         "distance": {
-          "value": 0,
+          "value": 300,
           "source": "AppleHealth",
           "rationale": "Apple-only session"
         },
@@ -21970,8 +21970,8 @@
           "start_date": "2026-02-08 16:57:57 -0500",
           "end_date": "2026-02-08 18:17:13 -0500",
           "duration_min": 79.26210701664289,
-          "distance": 0,
-          "distance_unit": "",
+          "distance": 1020,
+          "distance_unit": "yd",
           "calories": 0,
           "hr": 0,
           "notes": "",
@@ -21989,7 +21989,7 @@
           "source": "AppleHealth"
         },
         "distance": {
-          "value": 0,
+          "value": 1020,
           "source": "AppleHealth",
           "rationale": "Apple-only session"
         },
@@ -22442,8 +22442,8 @@
           "start_date": "2026-02-12 07:37:41 -0500",
           "end_date": "2026-02-12 08:02:08 -0500",
           "duration_min": 24.44000604947408,
-          "distance": 0,
-          "distance_unit": "",
+          "distance": 500,
+          "distance_unit": "yd",
           "calories": 0,
           "hr": 0,
           "notes": "",
@@ -22461,7 +22461,7 @@
           "source": "AppleHealth"
         },
         "distance": {
-          "value": 0,
+          "value": 500,
           "source": "AppleHealth",
           "rationale": "Apple-only session"
         },
@@ -22914,8 +22914,8 @@
           "start_date": "2026-02-18 07:35:16 -0500",
           "end_date": "2026-02-18 08:05:19 -0500",
           "duration_min": 30.05794753432274,
-          "distance": 0,
-          "distance_unit": "",
+          "distance": 600,
+          "distance_unit": "yd",
           "calories": 0,
           "hr": 0,
           "notes": "",
@@ -22933,7 +22933,7 @@
           "source": "AppleHealth"
         },
         "distance": {
-          "value": 0,
+          "value": 600,
           "source": "AppleHealth",
           "rationale": "Apple-only session"
         },
@@ -23150,8 +23150,8 @@
           "start_date": "2026-02-20 07:45:17 -0500",
           "end_date": "2026-02-20 07:59:46 -0500",
           "duration_min": 14.48451575040817,
-          "distance": 0,
-          "distance_unit": "",
+          "distance": 300,
+          "distance_unit": "yd",
           "calories": 0,
           "hr": 0,
           "notes": "",
@@ -23169,7 +23169,7 @@
           "source": "AppleHealth"
         },
         "distance": {
-          "value": 0,
+          "value": 300,
           "source": "AppleHealth",
           "rationale": "Apple-only session"
         },
@@ -23268,8 +23268,8 @@
           "start_date": "2026-02-22 07:22:21 -0500",
           "end_date": "2026-02-22 08:16:53 -0500",
           "duration_min": 54.53602496782938,
-          "distance": 0,
-          "distance_unit": "",
+          "distance": 1075,
+          "distance_unit": "yd",
           "calories": 0,
           "hr": 0,
           "notes": "",
@@ -23287,7 +23287,7 @@
           "source": "AppleHealth"
         },
         "distance": {
-          "value": 0,
+          "value": 1075,
           "source": "AppleHealth",
           "rationale": "Apple-only session"
         },
@@ -23563,8 +23563,8 @@
           "start_date": "2026-02-24 07:15:33 -0500",
           "end_date": "2026-02-24 08:04:37 -0500",
           "duration_min": 49.0679900487264,
-          "distance": 0,
-          "distance_unit": "",
+          "distance": 1000,
+          "distance_unit": "yd",
           "calories": 0,
           "hr": 0,
           "notes": "",
@@ -23582,7 +23582,7 @@
           "source": "AppleHealth"
         },
         "distance": {
-          "value": 0,
+          "value": 1000,
           "source": "AppleHealth",
           "rationale": "Apple-only session"
         },
@@ -23917,8 +23917,8 @@
           "start_date": "2026-02-26 07:15:18 -0500",
           "end_date": "2026-02-26 07:32:36 -0500",
           "duration_min": 17.30056558450063,
-          "distance": 0,
-          "distance_unit": "",
+          "distance": 350,
+          "distance_unit": "yd",
           "calories": 0,
           "hr": 0,
           "notes": "",
@@ -23936,7 +23936,7 @@
           "source": "AppleHealth"
         },
         "distance": {
-          "value": 0,
+          "value": 350,
           "source": "AppleHealth",
           "rationale": "Apple-only session"
         },
@@ -24153,8 +24153,8 @@
           "start_date": "2026-02-28 07:28:43 -0500",
           "end_date": "2026-02-28 08:08:21 -0500",
           "duration_min": 39.64008921583493,
-          "distance": 0,
-          "distance_unit": "",
+          "distance": 1000,
+          "distance_unit": "yd",
           "calories": 0,
           "hr": 0,
           "notes": "",
@@ -24172,7 +24172,7 @@
           "source": "AppleHealth"
         },
         "distance": {
-          "value": 0,
+          "value": 1000,
           "source": "AppleHealth",
           "rationale": "Apple-only session"
         },
@@ -24330,8 +24330,8 @@
           "start_date": "2026-03-02 07:34:40 -0500",
           "end_date": "2026-03-02 07:59:59 -0500",
           "duration_min": 25.30426149964332,
-          "distance": 0,
-          "distance_unit": "",
+          "distance": 600,
+          "distance_unit": "yd",
           "calories": 0,
           "hr": 0,
           "notes": "",
@@ -24349,7 +24349,7 @@
           "source": "AppleHealth"
         },
         "distance": {
-          "value": 0,
+          "value": 600,
           "source": "AppleHealth",
           "rationale": "Apple-only session"
         },
@@ -69478,8 +69478,8 @@
           "start_date": "2026-02-07 17:26:23 -0500",
           "end_date": "2026-02-07 17:40:27 -0500",
           "duration_min": 14.06892129977544,
-          "distance": 0,
-          "distance_unit": "",
+          "distance": 300,
+          "distance_unit": "yd",
           "calories": 0,
           "hr": 0,
           "notes": "",
@@ -69497,7 +69497,7 @@
           "source": "AppleHealth"
         },
         "distance": {
-          "value": 0,
+          "value": 300,
           "source": "AppleHealth",
           "rationale": "Apple-only session"
         },
@@ -69655,8 +69655,8 @@
           "start_date": "2026-02-08 16:57:57 -0500",
           "end_date": "2026-02-08 18:17:13 -0500",
           "duration_min": 79.26210701664289,
-          "distance": 0,
-          "distance_unit": "",
+          "distance": 1020,
+          "distance_unit": "yd",
           "calories": 0,
           "hr": 0,
           "notes": "",
@@ -69674,7 +69674,7 @@
           "source": "AppleHealth"
         },
         "distance": {
-          "value": 0,
+          "value": 1020,
           "source": "AppleHealth",
           "rationale": "Apple-only session"
         },
@@ -72581,8 +72581,8 @@
           "start_date": "2026-02-12 07:37:41 -0500",
           "end_date": "2026-02-12 08:02:08 -0500",
           "duration_min": 24.44000604947408,
-          "distance": 0,
-          "distance_unit": "",
+          "distance": 500,
+          "distance_unit": "yd",
           "calories": 0,
           "hr": 0,
           "notes": "",
@@ -72600,7 +72600,7 @@
           "source": "AppleHealth"
         },
         "distance": {
-          "value": 0,
+          "value": 500,
           "source": "AppleHealth",
           "rationale": "Apple-only session"
         },
@@ -73053,8 +73053,8 @@
           "start_date": "2026-02-18 07:35:16 -0500",
           "end_date": "2026-02-18 08:05:19 -0500",
           "duration_min": 30.05794753432274,
-          "distance": 0,
-          "distance_unit": "",
+          "distance": 600,
+          "distance_unit": "yd",
           "calories": 0,
           "hr": 0,
           "notes": "",
@@ -73072,7 +73072,7 @@
           "source": "AppleHealth"
         },
         "distance": {
-          "value": 0,
+          "value": 600,
           "source": "AppleHealth",
           "rationale": "Apple-only session"
         },
@@ -73457,8 +73457,8 @@
           "start_date": "2026-02-20 07:45:17 -0500",
           "end_date": "2026-02-20 07:59:46 -0500",
           "duration_min": 14.48451575040817,
-          "distance": 0,
-          "distance_unit": "",
+          "distance": 300,
+          "distance_unit": "yd",
           "calories": 0,
           "hr": 0,
           "notes": "",
@@ -73476,7 +73476,7 @@
           "source": "AppleHealth"
         },
         "distance": {
-          "value": 0,
+          "value": 300,
           "source": "AppleHealth",
           "rationale": "Apple-only session"
         },
@@ -73640,8 +73640,8 @@
           "start_date": "2026-02-22 07:22:21 -0500",
           "end_date": "2026-02-22 08:16:53 -0500",
           "duration_min": 54.53602496782938,
-          "distance": 0,
-          "distance_unit": "",
+          "distance": 1075,
+          "distance_unit": "yd",
           "calories": 0,
           "hr": 0,
           "notes": "",
@@ -73659,7 +73659,7 @@
           "source": "AppleHealth"
         },
         "distance": {
-          "value": 0,
+          "value": 1075,
           "source": "AppleHealth",
           "rationale": "Apple-only session"
         },
@@ -74623,8 +74623,8 @@
           "start_date": "2026-02-24 07:15:33 -0500",
           "end_date": "2026-02-24 08:04:37 -0500",
           "duration_min": 49.0679900487264,
-          "distance": 0,
-          "distance_unit": "",
+          "distance": 1000,
+          "distance_unit": "yd",
           "calories": 0,
           "hr": 0,
           "notes": "",
@@ -74642,7 +74642,7 @@
           "source": "AppleHealth"
         },
         "distance": {
-          "value": 0,
+          "value": 1000,
           "source": "AppleHealth",
           "rationale": "Apple-only session"
         },
@@ -75145,8 +75145,8 @@
           "start_date": "2026-02-26 07:15:18 -0500",
           "end_date": "2026-02-26 07:32:36 -0500",
           "duration_min": 17.30056558450063,
-          "distance": 0,
-          "distance_unit": "",
+          "distance": 350,
+          "distance_unit": "yd",
           "calories": 0,
           "hr": 0,
           "notes": "",
@@ -75164,7 +75164,7 @@
           "source": "AppleHealth"
         },
         "distance": {
-          "value": 0,
+          "value": 350,
           "source": "AppleHealth",
           "rationale": "Apple-only session"
         },
@@ -75381,8 +75381,8 @@
           "start_date": "2026-02-28 07:28:43 -0500",
           "end_date": "2026-02-28 08:08:21 -0500",
           "duration_min": 39.64008921583493,
-          "distance": 0,
-          "distance_unit": "",
+          "distance": 1000,
+          "distance_unit": "yd",
           "calories": 0,
           "hr": 0,
           "notes": "",
@@ -75400,7 +75400,7 @@
           "source": "AppleHealth"
         },
         "distance": {
-          "value": 0,
+          "value": 1000,
           "source": "AppleHealth",
           "rationale": "Apple-only session"
         },
@@ -75688,8 +75688,8 @@
           "start_date": "2026-03-02 07:34:40 -0500",
           "end_date": "2026-03-02 07:59:59 -0500",
           "duration_min": 25.30426149964332,
-          "distance": 0,
-          "distance_unit": "",
+          "distance": 600,
+          "distance_unit": "yd",
           "calories": 0,
           "hr": 0,
           "notes": "",
@@ -75707,7 +75707,7 @@
           "source": "AppleHealth"
         },
         "distance": {
-          "value": 0,
+          "value": 600,
           "source": "AppleHealth",
           "rationale": "Apple-only session"
         },
