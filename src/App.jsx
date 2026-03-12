@@ -2490,10 +2490,6 @@ export default function App() {
 const [error, setError] = useState("")
 const [storedWorkouts, setStoredWorkouts] = useState([])
 const [canonicalSessions, setCanonicalSessions] = useState([])
-  const handler = () => setIsMobile(window.innerWidth < 768)
-  window.addEventListener('resize', handler)
-  return () => window.removeEventListener('resize', handler)
-}, [])
   const activeWorkouts =
     canonicalSessions && canonicalSessions.length > 0
       ? canonicalSessions
