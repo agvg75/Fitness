@@ -1164,27 +1164,12 @@ function projectWeightTrend(weights, nutritionSeries, weeks = 12) {
   return out
 }
 
-function TrainingDashboard({ workouts, recentNutrition }) {
-  const fmt0 = n => Number.isFinite(Number(n)) ? Math.round(Number(n)).toLocaleString() : "0"
+function TrainingDashboard({ workouts, recentNutrition }) {  const fmt0 = n => Number.isFinite(Number(n)) ? Math.round(Number(n)).toLocaleString() : "0"
   const fmt1 = n => Number.isFinite(Number(n)) ? Number(n).toFixed(1) : "0.0"
 
   const [rangeMode, setRangeMode] = useState("weekly")
-  const [timeWindow, setTimeWindow] = useState("180D")
 
-  const timeWindowDays = { "30D": 30, "90D": 90, "180D": 180, "1Y": 365, "ALL": null }
-  const timeWindowLabel = { "30D": "30 days", "90D": "90 days", "180D": "6 months", "1Y": "1 year", "ALL": "All time" }
-
-  const filteredWorkouts = useMemo(() => {
-    const cutoff = timeWindowDays[timeWindow]
-    if (cutoff == null) return workouts
-    const cutoffDate = new Date()
-    cutoffDate.setDate(cutoffDate.getDate() - cutoff)
-    cutoffDate.setHours(0, 0, 0, 0)
-    return workouts.filter(w => {
-      const d = new Date(w.dateTime || w.date)
-      return !Number.isNaN(d.getTime()) && d >= cutoffDate
-    })
-  }, [workouts, timeWindow])
+  // rest of component...const [rangeMode, setRangeMode] = useState("weekly")
 
   const startOfWeek = d => {
     const x = new Date(d)
@@ -1220,7 +1205,7 @@ function TrainingDashboard({ workouts, recentNutrition }) {
   const chartData = useMemo(() => {
     const grouped = {}
 
-    filteredWorkouts.forEach(w => {
+    workouts.forEach(w => {
       const rawDate = new Date(w.dateTime || w.date)
       let bucketDate
 
@@ -1263,7 +1248,7 @@ if (w.category === "Strength") {
     })
 
     return Object.values(grouped).sort((a, b) => a.bucket.localeCompare(b.bucket))
-  }, [filteredWorkouts, rangeMode])
+  }, [workouts, rangeMode])
 
   const totals = useMemo(() => {
     return chartData.reduce(
@@ -1318,34 +1303,16 @@ if (w.category === "Strength") {
 
   return (
     <div style={{ padding: "16px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", flexWrap: "wrap", marginBottom: "14px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", flexWrap: "wrap", marginBottom: "14px" }}>
         <div style={{ fontSize: "18px", fontWeight: "700", color: "#ced2f0" }}>
           Training Dashboard
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "6px", alignItems: "flex-end" }}>
-          <div style={{ display: "flex", gap: "5px", flexWrap: "wrap" }}>
-            {["30D", "90D", "180D", "1Y", "ALL"].map(k => (
-              <button key={k} onClick={() => setTimeWindow(k)} style={{
-                padding: "5px 10px", fontSize: "12px",
-                background: timeWindow === k ? "#252640" : "#0d0e1c",
-                border: timeWindow === k ? "1px solid #4a9ee8" : "1px solid #1a1b2e",
-                borderRadius: "6px", color: timeWindow === k ? "#ffffff" : "#ced2f0",
-                cursor: "pointer", fontWeight: timeWindow === k ? "600" : "400"
-              }}>{timeWindowLabel[k]}</button>
-            ))}
-          </div>
-          <div style={{ display: "flex", gap: "5px", flexWrap: "wrap" }}>
-            {["weekly", "monthly", "yearly"].map(m => (
-              <button key={m} onClick={() => setRangeMode(m)} style={{
-                padding: "4px 8px", fontSize: "11px",
-                background: rangeMode === m ? "#1a1b2e" : "transparent",
-                border: rangeMode === m ? "1px solid #4a9ee8" : "1px solid #1a1b2e",
-                borderRadius: "5px", color: rangeMode === m ? "#a0b0e0" : "#607090",
-                cursor: "pointer", textTransform: "capitalize"
-              }}>{m}</button>
-            ))}
-          </div>
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          <button onClick={() => setRangeMode("weekly")} style={rangeButton("weekly")}>Weekly</button>
+          <button onClick={() => setRangeMode("monthly")} style={rangeButton("monthly")}>Monthly</button>
+          <button onClick={() => setRangeMode("yearly")} style={rangeButton("yearly")}>Yearly</button>
+          <button onClick={() => setRangeMode("all")} style={rangeButton("all")}>All</button>
         </div>
       </div>
 
@@ -3972,93 +3939,6 @@ const cardioMinutesForecastChart = useMemo(() => {
 return [...actual, ...projected]
 }, [weeklyTrainingBuckets, trainingForecast])
 
-// Body weight forecast chart: last 90 days of actuals + projected points
-const bodyWeightForecastChart = useMemo(() => {
-  if (!bodyForecast || !weightSmoothed.length) return []
-
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const cutoff = new Date(today)
-  cutoff.setDate(cutoff.getDate() - 90)
-
-  const actuals = weightSmoothed
-    .filter(d => new Date(d.date) >= cutoff)
-    .map(d => ({
-      label: fmtShortDate(d.date),
-      actual: d.avg != null ? Number(d.avg.toFixed(1)) : null,
-      forecast: null,
-      phase1: null,
-      target: null
-    }))
-
-  const addFuture = (days, value) => {
-    const d = new Date(today)
-    d.setDate(d.getDate() + days)
-    return {
-      label: fmtShortDate(d.toISOString().slice(0, 10)),
-      actual: null,
-      forecast: Number(value.toFixed(1)),
-      phase1: bodyForecast.phase1TargetWeight,
-      target: bodyForecast.finalTargetWeight
-    }
-  }
-
-  const projected = [
-    addFuture(30,  bodyForecast.weight1m),
-    addFuture(90,  bodyForecast.weight3m),
-    addFuture(180, bodyForecast.weight6m),
-    addFuture(365, bodyForecast.weight12m)
-  ]
-
-  return [...actuals, ...projected]
-}, [weightSmoothed, bodyForecast])
-
-// Per-modality volume forecast charts (actuals from weeklyBuckets + projected points)
-const makeVolumeForecastChart = (field, forecastKeys) => {
-  if (!weeklyTrainingBuckets?.length || !trainingForecast) return []
-  const lastBucket = weeklyTrainingBuckets[weeklyTrainingBuckets.length - 1]
-  const baseDate = new Date(lastBucket.weekStart)
-
-  const actual = weeklyTrainingBuckets.slice(-24).map(w => ({
-    label: formatBucketLabel(new Date(w.weekStart), "monthly"),
-    actual: Number(w[field] || 0),
-    forecast: null
-  }))
-
-  const projected = [
-    { weeks: 4,  value: trainingForecast[forecastKeys[0]] },
-    { weeks: 13, value: trainingForecast[forecastKeys[1]] },
-    { weeks: 26, value: trainingForecast[forecastKeys[2]] },
-    { weeks: 52, value: trainingForecast[forecastKeys[3]] }
-  ].map(({ weeks, value }) => {
-    const d = new Date(baseDate)
-    d.setDate(d.getDate() + weeks * 7)
-    return {
-      label: formatBucketLabel(d, "monthly"),
-      actual: null,
-      forecast: Number((value || 0).toFixed(2))
-    }
-  })
-
-  return [...actual, ...projected]
-}
-
-const runningForecastChart  = useMemo(() =>
-  makeVolumeForecastChart("running",  ["running1m",  "running3m",  "running6m",  "running12m"]),
-  [weeklyTrainingBuckets, trainingForecast])
-
-const swimmingForecastChart = useMemo(() =>
-  makeVolumeForecastChart("swimming", ["swimming1m", "swimming3m", "swimming6m", "swimming12m"]),
-  [weeklyTrainingBuckets, trainingForecast])
-
-const cyclingForecastChart  = useMemo(() =>
-  makeVolumeForecastChart("cycling",  ["cycling1m",  "cycling3m",  "cycling6m",  "cycling12m"]),
-  [weeklyTrainingBuckets, trainingForecast])
-
-const strengthForecastChart = useMemo(() =>
-  makeVolumeForecastChart("strength", ["strength1m", "strength3m", "strength6m", "strength12m"]),
-  [weeklyTrainingBuckets, trainingForecast])
-
 const recentNutrition = useMemo(() => {
   const rows = dailyNutritionSummary.slice(-7)
 
@@ -5265,129 +5145,276 @@ return (
 )}
 {tab === "Forecast" && (
   <div>
+
     <h3>Forecast</h3>
 
-    {/* ── Body Weight ─────────────────────────────────────────── */}
-    <div style={{ ...cardStyle(), marginBottom: "20px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px", marginBottom: "12px" }}>
-        <div style={{ fontWeight: "bold" }}>Body Weight Forecast</div>
-        {bodyForecast && (
-          <div style={{ display: "flex", gap: "16px", fontSize: "12px", opacity: 0.75 }}>
-            <span>Current: <strong style={{ color: "#4a9ee8" }}>{bodyForecast.currentWeight.toFixed(1)} lb</strong></span>
-            <span>Phase 1 target: <strong style={{ color: "#ffd166" }}>{bodyForecast.phase1TargetWeight} lb</strong></span>
-            <span>Final target: <strong style={{ color: "#4ade80" }}>{bodyForecast.finalTargetWeight} lb</strong></span>
-          </div>
-        )}
-      </div>
-      <ResponsiveContainer width="100%" height={280}>
-        <ComposedChart data={bodyWeightForecastChart} margin={{ top: 10, right: 20, left: 55, bottom: 20 }}>
-          <CartesianGrid stroke="#1a1b2e" />
-          <XAxis dataKey="label" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
-          <YAxis domain={["auto", "auto"]} label={{ value: "Weight (lb)", angle: -90, position: "insideLeft", offset: 15, fill: "#ced2f0", style: { textAnchor: "middle" } }} />
-          <Tooltip formatter={(v, n) => [v != null ? `${v} lb` : "—", n === "actual" ? "Actual (7d avg)" : "Projected"]} />
-          <Legend verticalAlign="top" height={28} />
-          <Line type="monotone" dataKey="actual"   name="Actual (7d avg)" stroke="#4a9ee8" strokeWidth={2} dot={false} connectNulls={false} />
-          <Line type="monotone" dataKey="forecast" name="Projected"       stroke="#ffd166" strokeWidth={2} strokeDasharray="6 4" dot={{ r: 4 }} connectNulls={false} />
-          {bodyForecast && <ReferenceLine y={bodyForecast.phase1TargetWeight} stroke="#ffd166" strokeDasharray="3 3" label={{ value: "Phase 1", fill: "#ffd166", fontSize: 11 }} />}
-          {bodyForecast && <ReferenceLine y={bodyForecast.finalTargetWeight}  stroke="#4ade80" strokeDasharray="3 3" label={{ value: "Target",  fill: "#4ade80",  fontSize: 11 }} />}
-        </ComposedChart>
-      </ResponsiveContainer>
-      {bodyForecast && (
-        <div style={{ display: "flex", gap: "20px", fontSize: "12px", opacity: 0.7, marginTop: "8px", flexWrap: "wrap" }}>
-          <span>1 month: {bodyForecast.weight1m.toFixed(1)} lb</span>
-          <span>3 months: {bodyForecast.weight3m.toFixed(1)} lb</span>
-          <span>6 months: {bodyForecast.weight6m.toFixed(1)} lb</span>
-          <span>12 months: {bodyForecast.weight12m.toFixed(1)} lb</span>
-          <span>ETA 150 lb: {bodyForecast.eta150 || "not on trend"}</span>
-          <span>ETA 145 lb: {bodyForecast.eta145 || "not on trend"}</span>
+    {bodyForecast && (
+      <div style={{ marginBottom: "30px" }}>
+        <h4>Body Weight</h4>
+
+<div><strong>Current:</strong> {bodyForecast.currentWeight.toFixed(1)} lb</div>
+<div style={{ fontSize: "11px", opacity: 0.7, marginBottom: "6px" }}>
+  Intake model: {bodyForecast.avgLoggedCalories || "NA"} kcal/day, maintenance {Math.round(bodyForecast.estimatedMaintenance || 0)} kcal/day, logging coverage {Math.round((bodyForecast.loggingCoverage || 0) * 100)}%
+</div>
+<div>
+<strong>1 month:</strong>{" "}
+<span style={{
+  color:
+    bodyForecast.weight1m <= bodyForecast.finalTargetWeight
+      ? "#4ade80"
+      : bodyForecast.weight1m <= bodyForecast.phase1TargetWeight
+      ? "#ffd166"
+      : "#ced2f0"
+}}>
+{bodyForecast.weight1m.toFixed(1)} lb
+</span>
+</div>
+
+<div>
+<strong>3 months:</strong>{" "}
+<span style={{
+  color:
+    bodyForecast.weight3m <= bodyForecast.finalTargetWeight
+      ? "#4ade80"
+      : bodyForecast.weight3m <= bodyForecast.phase1TargetWeight
+      ? "#ffd166"
+      : "#ced2f0"
+}}>
+{bodyForecast.weight3m.toFixed(1)} lb
+</span>
+</div>
+
+<div>
+<strong>6 months:</strong>{" "}
+<span style={{
+  color:
+    bodyForecast.weight6m <= bodyForecast.finalTargetWeight
+      ? "#4ade80"
+      : bodyForecast.weight6m <= bodyForecast.phase1TargetWeight
+      ? "#ffd166"
+      : "#ced2f0"
+}}>
+{bodyForecast.weight6m.toFixed(1)} lb
+</span>
+</div>
+
+<div>
+<strong>12 months:</strong>{" "}
+<span style={{
+  color:
+    bodyForecast.weight12m <= bodyForecast.finalTargetWeight
+      ? "#4ade80"
+      : bodyForecast.weight12m <= bodyForecast.phase1TargetWeight
+      ? "#ffd166"
+      : "#ced2f0"
+}}>
+{bodyForecast.weight12m.toFixed(1)} lb
+</span>
+</div>
+
+        <div style={{ marginTop: "10px" }}>
+          ETA 150 lb: {bodyForecast.eta150 || "not on trend"}
         </div>
-      )}
-    </div>
 
-    {/* ── Endurance Readiness ─────────────────────────────────── */}
-    <div style={{ ...cardStyle(), marginBottom: "20px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px", marginBottom: "12px" }}>
-        <div style={{ fontWeight: "bold" }}>Endurance Readiness</div>
-        <div style={{ fontSize: "12px", opacity: 0.7 }}>
-          Composite: aerobic volume (multi-modal) · running pace · cardio consistency
+        <div>
+          ETA 145 lb: {bodyForecast.eta145 || "not on trend"}
         </div>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: "10px", marginBottom: "14px" }}>
-        {[
-          { label: "Now",      value: enduranceForecast.readinessNow  },
-          { label: "1 month",  value: enduranceForecast.readiness1m   },
-          { label: "3 months", value: enduranceForecast.readiness3m   },
-          { label: "6 months", value: enduranceForecast.readiness6m   },
-          { label: "12 months",value: enduranceForecast.readiness12m  }
-        ].map(({ label, value }) => (
-          <div key={label} style={{ background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: "8px", padding: "10px", textAlign: "center" }}>
-            <div style={{ fontSize: "11px", opacity: 0.6, marginBottom: "4px" }}>{label}</div>
-            <div style={{ fontSize: "22px", fontWeight: "700",
-              color: value >= 60 ? "#4ade80" : value >= 35 ? "#ffd166" : "#ff8a8a" }}>
-              {value}
-            </div>
-          </div>
-        ))}
-      </div>
-      <ResponsiveContainer width="100%" height={240}>
-        <LineChart data={readinessProjectionData} margin={{ top: 10, right: 20, left: 55, bottom: 20 }}>
-          <CartesianGrid stroke="#1a1b2e" />
-          <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-          <YAxis domain={[0, 100]} label={{ value: "Readiness score", angle: -90, position: "insideLeft", offset: 15, fill: "#ced2f0", style: { textAnchor: "middle" } }} />
-          <Tooltip />
-          <Legend verticalAlign="top" height={28} />
-          <Line type="monotone" dataKey="baseReadiness" name="Readiness"      stroke="#4a9ee8" strokeWidth={2} dot={{ r: 3 }} />
-          <Line type="monotone" dataKey="fiveK"         name="5K readiness"   stroke="#ef4444" strokeWidth={1} strokeDasharray="4 3" dot={false} />
-          <Line type="monotone" dataKey="tenK"          name="10K readiness"  stroke="#22c55e" strokeWidth={1} strokeDasharray="4 3" dot={false} />
-          <Line type="monotone" dataKey="half"          name="Half readiness" stroke="#facc15" strokeWidth={1} strokeDasharray="4 3" dot={false} />
-        </LineChart>
-      </ResponsiveContainer>
-      <div style={{ fontSize: "12px", opacity: 0.7, marginTop: "8px" }}>
-        Running: {enduranceForecast.weeklyRunMiles28} mi/week · pace {enduranceForecast.avgPace28 || "NA"} min/mi · cardio {Math.round(enduranceForecast.cardioMinutesWeekly)} min/week · run modifier {((enduranceForecast.runPenalty ?? 1) * 100).toFixed(0)}%
-      </div>
-    </div>
+    )}
 
-    {/* ── Cardio Minutes ──────────────────────────────────────── */}
-    <div style={{ ...cardStyle(), marginBottom: "20px" }}>
-      <div style={{ fontWeight: "bold", marginBottom: "12px" }}>Cardio Minutes, Actual vs Forecast</div>
-      <ResponsiveContainer width="100%" height={240}>
-        <LineChart data={cardioMinutesForecastChart} margin={{ top: 10, right: 20, left: 55, bottom: 20 }}>
-          <CartesianGrid stroke="#1a1b2e" />
-          <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-          <YAxis label={{ value: "Min / week", angle: -90, position: "insideLeft", offset: 15, fill: "#ced2f0", style: { textAnchor: "middle" } }} tickFormatter={v => fmt0(v)} />
-          <Tooltip formatter={(v, n) => [v == null ? "—" : fmt0(v), n === "actual" ? "Actual min/week" : "Forecast min/week"]} />
-          <Legend verticalAlign="top" height={28} />
-          <Line type="monotone" dataKey="actual"   name="Actual min/week"   stroke="#4a9ee8" strokeWidth={2} dot={{ r: 3 }} connectNulls={false} />
-          <Line type="monotone" dataKey="forecast" name="Forecast min/week" stroke="#ffd166" strokeWidth={2} strokeDasharray="6 4" dot={{ r: 4 }} connectNulls={false} />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
-
-    {/* ── Per-modality volume charts ───────────────────────────── */}
     {trainingForecast && (
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "16px" }}>
-        {[
-          { title: "Running Volume (mi/week)",   data: runningForecastChart,  color: "#ef4444", eta: `ETA 20 mi/wk: ${trainingForecast.eta20Run || "not on trend"} · ETA 30 mi/wk: ${trainingForecast.eta30Run || "not on trend"}` },
-          { title: "Cycling Volume (mi/week)",   data: cyclingForecastChart,  color: "#4acfe8", eta: `ETA 25 mi/wk: ${trainingForecast.eta25Bike || "not on trend"} · ETA 50 mi/wk: ${trainingForecast.eta50Bike || "not on trend"}` },
-          { title: "Swimming Volume (mi/week)",  data: swimmingForecastChart, color: "#a78bfa", eta: `ETA 2 mi/wk: ${trainingForecast.eta2Swim || "not on trend"} · ETA 5 mi/wk: ${trainingForecast.eta5Swim || "not on trend"}` },
-          { title: "Strength Sessions (per week)", data: strengthForecastChart, color: "#ffd166", eta: `ETA 3/wk: ${trainingForecast.eta3Strength || "not on trend"} · ETA 4/wk: ${trainingForecast.eta4Strength || "not on trend"}` }
-        ].map(({ title, data, color, eta }) => (
-          <div key={title} style={{ ...cardStyle() }}>
-            <div style={{ fontWeight: "bold", marginBottom: "10px", fontSize: "13px" }}>{title}</div>
-            <ResponsiveContainer width="100%" height={220}>
-              <ComposedChart data={data} margin={{ top: 5, right: 10, left: 40, bottom: 15 }}>
-                <CartesianGrid stroke="#1a1b2e" />
-                <XAxis dataKey="label" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
-                <YAxis tick={{ fontSize: 10 }} />
-                <Tooltip formatter={(v, n) => [v != null ? Number(v).toFixed(2) : "—", n === "actual" ? "Actual" : "Projected"]} />
-                <Legend verticalAlign="top" height={24} wrapperStyle={{ fontSize: "11px" }} />
-                <Bar  dataKey="actual"   name="Actual"    fill={color} opacity={0.7} />
-                <Line dataKey="forecast" name="Projected" stroke={color} strokeWidth={2} strokeDasharray="5 3" dot={{ r: 4 }} connectNulls={false} />
-              </ComposedChart>
-            </ResponsiveContainer>
-            <div style={{ fontSize: "11px", opacity: 0.6, marginTop: "6px" }}>{eta}</div>
+      <div style={{ display: "grid", gap: "20px" }}>
+
+<div style={{ background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: "12px", padding: "16px" }}>
+  <div style={{ fontSize: "14px", fontWeight: "700", color: "#ced2f0", marginBottom: "12px" }}>
+    Cardio Minutes, Actual vs Forecast
+  </div>
+<ResponsiveContainer width="100%" height={260}> 
+  <LineChart data={cardioMinutesForecastChart}>
+    <CartesianGrid stroke="#1a1b2e" />
+    <XAxis dataKey="label" />
+    <YAxis tickFormatter={(v) => fmt0(v)} />
+
+    
+
+    <Tooltip
+      formatter={(value, name) => [
+        value == null ? "—" : fmt0(value),
+        name === "actual" ? "Actual min/week" : "Forecast min/week"
+      ]}
+    />
+      <Legend verticalAlign="top" height={36} />
+      <Line
+        type="monotone"
+        dataKey="actual"
+        name="Actual min/week"
+        stroke="#4a9ee8"
+        strokeWidth={2}
+        dot={{ r: 3 }}
+        connectNulls={false}
+      />
+      <Line
+        type="monotone"
+        dataKey="forecast"
+        name="Forecast min/week"
+        stroke="#ffd166"
+        strokeWidth={2}
+        strokeDasharray="6 4"
+        dot={{ r: 4 }}
+        connectNulls={false}
+      />
+    </LineChart>
+  </ResponsiveContainer>
+</div>
+        <div>
+          <div style={{ ...cardStyle(), marginBottom: "20px", maxWidth: "1000px" }}>
+  <div style={{ fontWeight: "bold", marginBottom: "12px" }}>Endurance Readiness</div>
+
+  <div style={{ fontSize: "28px", fontWeight: "bold", marginBottom: "10px" }}>
+    {enduranceForecast.readinessNow}
+  </div>
+
+  <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "10px" }}>
+    Composite score from pace, running volume, and cardio minutes
+  </div>
+
+  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px", maxWidth: "600px" }}>
+    <div>
+      <div style={{ fontSize: "12px", opacity: 0.7 }}>1 month</div>
+      <div>{enduranceForecast.readiness1m}</div>
+    </div>
+
+    <div>
+      <div style={{ fontSize: "12px", opacity: 0.7 }}>3 months</div>
+      <div>{enduranceForecast.readiness3m}</div>
+    </div>
+
+    <div>
+      <div style={{ fontSize: "12px", opacity: 0.7 }}>6 months</div>
+      <div>{enduranceForecast.readiness6m}</div>
+    </div>
+
+    <div>
+      <div style={{ fontSize: "12px", opacity: 0.7 }}>12 months</div>
+      <div>{enduranceForecast.readiness12m}</div>
+    </div>
+  </div>
+
+  <div style={{ fontSize: "12px", opacity: 0.7, marginTop: "12px" }}>
+    Recent running: {enduranceForecast.weeklyRunMiles28} mi/week ·
+    pace {enduranceForecast.avgPace28 || "NA"} min/mi ·
+    cardio {enduranceForecast.cardioMinutesWeekly} min/week
+  </div>
+</div>
+<div style={{ ...cardStyle(), marginBottom: "20px", maxWidth: "1000px" }}>
+  <div style={{ fontWeight: "bold", marginBottom: "12px" }}>Predicted Race Performance</div>
+
+  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(140px, 1fr))", gap: "12px", marginBottom: "14px" }}>
+    <div>
+      <div style={{ fontSize: "12px", opacity: 0.7 }}>5K</div>
+      <div style={{ fontSize: "24px", fontWeight: "bold" }}>{racePrediction?.fiveK || "NA"}</div>
+    </div>
+
+    <div>
+      <div style={{ fontSize: "12px", opacity: 0.7 }}>10K</div>
+      <div style={{ fontSize: "24px", fontWeight: "bold" }}>{racePrediction?.tenK || "NA"}</div>
+    </div>
+
+    <div>
+      <div style={{ fontSize: "12px", opacity: 0.7 }}>Half marathon</div>
+      <div style={{ fontSize: "24px", fontWeight: "bold" }}>{racePrediction?.halfMarathon || "NA"}</div>
+    </div>
+  </div>
+
+  <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "10px" }}>
+    Equivalent race pace: {racePrediction?.predictedPaceNow ? `${racePrediction.predictedPaceNow} min/mi` : "NA"}
+  </div>
+
+  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px", maxWidth: "700px" }}>
+    <div>
+      <div style={{ fontSize: "12px", opacity: 0.7 }}>Half, 1 month</div>
+      <div>{racePrediction?.half1m || "NA"}</div>
+    </div>
+
+    <div>
+      <div style={{ fontSize: "12px", opacity: 0.7 }}>Half, 3 months</div>
+      <div>{racePrediction?.half3m || "NA"}</div>
+    </div>
+
+    <div>
+      <div style={{ fontSize: "12px", opacity: 0.7 }}>Half, 6 months</div>
+      <div>{racePrediction?.half6m || "NA"}</div>
+    </div>
+
+    <div>
+      <div style={{ fontSize: "12px", opacity: 0.7 }}>Half, 12 months</div>
+      <div>{racePrediction?.half12m || "NA"}</div>
+    </div>
+  </div>
+</div>
+          <h4>Running Volume</h4>
+          <div>Current weekly: {trainingSummary.runningDistanceWeekly.toFixed(1)} mi</div>
+          <div>Injury modifier: {injuryPenalties.running.toFixed(2)}</div>
+          <div>1 month: {trainingForecast.running1m.toFixed(1)}</div>
+          <div>3 months: {trainingForecast.running3m.toFixed(1)}</div>
+          <div>6 months: {trainingForecast.running6m.toFixed(1)}</div>
+          <div>12 months: {trainingForecast.running12m.toFixed(1)}</div>
+          <div style={{ marginTop: "10px" }}>
+            ETA 20 mi/week: {trainingForecast.eta20Run || "not on trend"}
           </div>
-        ))}
+          <div>
+            ETA 30 mi/week: {trainingForecast.eta30Run || "not on trend"}
+          </div>
+        </div>
+
+        <div>
+          <h4>Swimming Volume</h4>
+          <div>Current weekly: {trainingSummary.swimmingDistanceWeekly.toFixed(1)} mi</div>
+          <div>Injury modifier: {injuryPenalties.swimming.toFixed(2)}</div>
+          <div>1 month: {trainingForecast.swimming1m.toFixed(1)}</div>
+          <div>3 months: {trainingForecast.swimming3m.toFixed(1)}</div>
+          <div>6 months: {trainingForecast.swimming6m.toFixed(1)}</div>
+          <div>12 months: {trainingForecast.swimming12m.toFixed(1)}</div>
+          <div style={{ marginTop: "10px" }}>
+            ETA 2 mi/week: {trainingForecast.eta2Swim || "not on trend"}
+          </div>
+          <div>
+            ETA 5 mi/week: {trainingForecast.eta5Swim || "not on trend"}
+          </div>
+        </div>
+
+        <div>
+          <h4>Cycling Volume</h4>
+          <div>Current weekly: {trainingSummary.cyclingDistanceWeekly.toFixed(1)} mi</div>
+          <div>Injury modifier: {injuryPenalties.cycling.toFixed(2)}</div>
+          <div>1 month: {trainingForecast.cycling1m.toFixed(1)}</div>
+          <div>3 months: {trainingForecast.cycling3m.toFixed(1)}</div>
+          <div>6 months: {trainingForecast.cycling6m.toFixed(1)}</div>
+          <div>12 months: {trainingForecast.cycling12m.toFixed(1)}</div>
+          <div style={{ marginTop: "10px" }}>
+            ETA 25 mi/week: {trainingForecast.eta25Bike || "not on trend"}
+          </div>
+          <div>
+            ETA 50 mi/week: {trainingForecast.eta50Bike || "not on trend"}
+          </div>
+        </div>
+
+        <div>
+          <h4>Strength Sessions</h4>
+          <div>Current weekly: {trainingSummary.strengthSessionsWeekly.toFixed(1)}</div>
+          <div>Injury modifier: {injuryPenalties.lifting.toFixed(2)}</div>
+          <div>1 month: {trainingForecast.strength1m.toFixed(1)}</div>
+          <div>3 months: {trainingForecast.strength3m.toFixed(1)}</div>
+          <div>6 months: {trainingForecast.strength6m.toFixed(1)}</div>
+          <div>12 months: {trainingForecast.strength12m.toFixed(1)}</div>
+          <div style={{ marginTop: "10px" }}>
+            ETA 3 sessions/week: {trainingForecast.eta3Strength || "not on trend"}
+          </div>
+          <div>
+            ETA 4 sessions/week: {trainingForecast.eta4Strength || "not on trend"}
+          </div>
+        </div>
+
       </div>
     )}
 
