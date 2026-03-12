@@ -4594,7 +4594,17 @@ return (
       </div>
     </div>
 
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "16px", marginBottom: "20px", alignItems: "start" }}>
+    <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))"
+
+
+
+
+
+
+
+
+
+, gap: "16px", marginBottom: "20px", alignItems: "start" }}>
       <div style={{ ...cardStyle(), minWidth: "0" }}>
         <div style={{ fontWeight: "bold", marginBottom: "12px" }}>Calories Trend ({rangeOptions.find(r => r.key === rangeKey)?.label ?? rangeKey})</div>
         <ResponsiveContainer width="100%" height={320}>
@@ -4710,7 +4720,16 @@ return (
       </div>
     </div>
 
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "16px", marginBottom: "20px", alignItems: "start" }}>
+    <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))"
+
+
+
+
+
+
+
+
+, gap: "16px", marginBottom: "20px", alignItems: "start" }}>
       <div style={{ ...cardStyle(), minWidth: "0" }}>
         <div style={{ fontWeight: "bold", marginBottom: "12px" }}>
           Training Load
@@ -4914,7 +4933,17 @@ return (
 </div>
 </div>
 
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "16px", marginBottom: "20px", alignItems: "start" }}>
+    <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))"
+
+
+
+
+
+
+
+
+
+, gap: "16px", marginBottom: "20px", alignItems: "start" }}>
 <div style={{ ...cardStyle(), minWidth: "0" }}>
   <div style={{ fontWeight: "bold", marginBottom: "12px", minHeight: "20px" }}>
     Body Composition
@@ -5640,7 +5669,18 @@ return (
 
     {/* ── Per-modality volume charts ───────────────────────────── */}
     {trainingForecast && (
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "16px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))"
+
+
+
+
+
+
+
+
+
+
+, gap: "16px" }}>
         {[
           { title: "Running Volume (mi/week)",   data: runningForecastChart,  color: "#ef4444", eta: `ETA 20 mi/wk: ${trainingForecast.eta20Run || "not on trend"} · ETA 30 mi/wk: ${trainingForecast.eta30Run || "not on trend"}` },
           { title: "Cycling Volume (mi/week)",   data: cyclingForecastChart,  color: "#4acfe8", eta: `ETA 25 mi/wk: ${trainingForecast.eta25Bike || "not on trend"} · ETA 50 mi/wk: ${trainingForecast.eta50Bike || "not on trend"}` },
