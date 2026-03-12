@@ -2035,12 +2035,12 @@ function computeEnduranceInputs(workouts, asOfDate = new Date()) {
 
   ;(workouts || []).forEach(workout => {
     const dt = parseWorkoutDate(
-      workout?.start_date ||
-        workout?.dateTime ||
-        workout?.date ||
-        workout?.startDate ||
-        workout?.start
-    )
+  workout?.dateTime ||
+    workout?.date ||
+    workout?.start_date ||
+    workout?.startDate ||
+    workout?.start
+)
     if (!dt) return
 
     const ageDays = daysBetween(asOfDate, dt)
@@ -2860,8 +2860,10 @@ const normalizedActiveWorkouts = useMemo(() => {
     let dateStr = w.date || null
     if (!dateStr && w.start_date) {
       // Replace space-separated offset format to make it parseable
-      const cleaned = String(w.start_date).replace(" -", "T").replace(" +", "T").slice(0, 10)
-      dateStr = cleaned
+      const raw = String(w.start_date)
+const cleaned = raw.replace(/ ([+-])/, 'T$1')
+const d = new Date(cleaned)
+dateStr = Number.isFinite(d.getTime()) ? d.toISOString().slice(0, 10) + 'T12:00:00' : null
     }
 
     // For indoor sessions with no GPS distance, derive a duration-based proxy
@@ -2971,6 +2973,7 @@ useEffect(() => {
           return r.json()
         })
 
+        const bw = await fetch(`${base}data/body_weight.json`).then(r => r.ok ? r.json() : []).catch(() => [])
         const dx = await fetch(`${base}data/dexa_summary.json`).then(r => {
           if (!r.ok) throw new Error("dexa_summary.json failed")
           return r.json()
@@ -2983,7 +2986,15 @@ useEffect(() => {
   if (!r.ok) throw new Error("workout_sessions_canonical.json failed")
   return r.json()
 })
-        setDaily(Array.isArray(d) ? d : [])
+        const bwRows = Array.isArray(bw) ? bw : []
+        const dailyMap = {}
+        ;(Array.isArray(d) ? d : []).forEach(row => { if (row.date) dailyMap[row.date] = row })
+        bwRows.forEach(row => {
+          if (dailyMap[row.date] == null) dailyMap[row.date] = row
+          else dailyMap[row.date] = { ...dailyMap[row.date], weight_lb: row.weight_lb }
+        })
+        const mergedDaily = Object.values(dailyMap).sort((a, b) => a.date.localeCompare(b.date))
+        setDaily(mergedDaily)
         setNutrition(Array.isArray(n) ? n : [])
         setInjury(Array.isArray(i) ? i : [])
         setDexa(Array.isArray(dx) ? dx : [])
@@ -3239,12 +3250,9 @@ const filteredNutrition = useMemo(() => {
   if (!nutritionSeries.length) return []
   if (selectedRangePoints == null) return nutritionSeries
 
-  const latestDateStr = nutritionSeries[nutritionSeries.length - 1]?.date
-  if (!latestDateStr) return nutritionSeries
-
-  const latestDate = new Date(`${latestDateStr}T00:00:00`)
-  const cutoff = new Date(latestDate)
-  cutoff.setDate(cutoff.getDate() - (selectedRangePoints - 1))
+const latestDate = new Date()
+const cutoff = new Date(latestDate)
+cutoff.setDate(cutoff.getDate() - selectedRangePoints)
 
   return nutritionSeries.filter(row => {
     if (!row.date) return false
@@ -4058,7 +4066,7 @@ const bodyCompositionOverviewData = useMemo(() => {
   const currentPt =
     estimatedCurrentBF != null
       ? [{
-          date: daily?.length ? daily[daily.length - 1]?.date : "current",
+          date: new Date().toISOString().slice(0, 10),
           label: daily?.length ? fmtShortDate(daily[daily.length - 1]?.date) : "Current",
           dexaBF: null,
           estimatedBF: Number(estimatedCurrentBF)
