@@ -4385,7 +4385,7 @@ return (
   <div style={{ fontSize: "64px", fontWeight: "800", lineHeight: 1, marginTop: 0, marginBottom: "6px" }}>
     L.I.F.T.
   </div>
-  
+  <div style={{ fontSize: 12, opacity: 0.6 }}>Build check: Mar 12</div>
   <div style={{ fontSize: "13px", opacity: 0.85, marginBottom: "4px" }}>
     Longitudinal Integrated Fitness Tracker
   </div>
