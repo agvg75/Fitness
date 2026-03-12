@@ -2854,7 +2854,6 @@ const normalizedActiveWorkouts = useMemo(() => {
         else if (category === "Machine Cardio") distance = dur / 4.5  // conservative fallback
         else if (category === "Rowing") distance = dur / 5.0
         else if (category === "Swimming") distance = dur / 3.5
-        else if (category === "Swimming") distance = dur / 3.5
       }
     }
 
