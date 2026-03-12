@@ -3084,10 +3084,16 @@ useEffect(() => {
   }, [rangeKey])
 
   const filteredDaily = useMemo(() => {
-    if (!daily.length) return []
-    if (selectedRangePoints == null) return daily
-    return daily.slice(-selectedRangePoints)
-  }, [daily, selectedRangePoints])
+  if (!daily.length) return []
+  if (selectedRangePoints == null) return daily
+  const cutoff = new Date()
+  cutoff.setDate(cutoff.getDate() - selectedRangePoints)
+  cutoff.setHours(0, 0, 0, 0)
+  return daily.filter(row => {
+    const d = new Date(String(row.date || "").slice(0, 10) + "T12:00:00")
+    return Number.isFinite(d.getTime()) && d >= cutoff
+  })
+}, [daily, selectedRangePoints])
 
   const mergedDailyWeights = useMemo(() => {
     return [...daily].sort((a, b) => String(a.date).localeCompare(String(b.date)))
