@@ -4731,7 +4731,7 @@ return (
               yAxisId="distance"
               orientation="left"
               label={{
-  value: "Miles per week",
+  value: "Training load (%)",
   angle: -90,
   position: "insideLeft",
   offset: 15,
@@ -4743,7 +4743,7 @@ return (
               yAxisId="strength"
               orientation="right"
               label={{
-  value: "Strength sessions",
+  value: "Miles per week",
   angle: 90,
   position: "insideRight",
   offset: -15,
@@ -4756,9 +4756,9 @@ return (
             <Legend verticalAlign="top" height={36} />
 
             <Area
-              yAxisId="distance"
+              yAxisId="strength"
               type="monotone"
-              dataKey="trainingLoad"
+              dataKey="trainingLoadPct"
               stroke="none"
               fill="#6b7280"
               fillOpacity={0.22}
@@ -4766,7 +4766,7 @@ return (
             />
 
             <Line
-              yAxisId="distance"
+              yAxisId="strength"
               type="monotone"
               dataKey="running"
               stroke="#ef4444"
@@ -4776,7 +4776,7 @@ return (
             />
 
             <Line
-              yAxisId="distance"
+              yAxisId="strength"
               type="monotone"
               dataKey="swimming"
               stroke="#22c55e"
