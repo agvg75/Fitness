@@ -1,7 +1,6 @@
 // import_apple_xml.mjs
-// Streams export.xml using Node.js built-in readline — no external dependencies.
-// Collects WorkoutStatistics distance child elements and swimming lap records,
-// attaches real distance values to workouts where totalDistance is absent.
+// Two-phase approach: collect all WorkoutStatistics and swim laps during parse,
+// then patch distances onto workouts in the close handler after full file is read.
 // Usage: node scripts/import_apple_xml.mjs
 // Reads:  data_source/export.xml
 // Writes: public/data/apple_workouts.json
@@ -33,7 +32,6 @@ const typeMap = {
   HKWorkoutActivityTypeOther:                      "Other",
 };
 
-// WorkoutStatistics distance types and their units
 const STAT_DISTANCE_TYPES = new Set([
   "HKQuantityTypeIdentifierDistanceWalkingRunning",
   "HKQuantityTypeIdentifierDistanceCycling",
@@ -54,15 +52,12 @@ function toNumber(v) {
 const workouts = [];
 const seen = new Set();
 
-// WorkoutStatistics distance: keyed by exact startDate string
-// value: { sum, unit }
+// WorkoutStatistics: keyed by exact startDate string -> { sum, unit }
 const statDistance = {};
-
-// Swimming lap records: keyed by YYYY-MM-DD day
+// Swimming lap records: keyed by YYYY-MM-DD -> total yards
 const swimLaps = {};
 
 let lineCount = 0;
-let workoutCount = 0;
 let statCount = 0;
 let lapCount = 0;
 let buffer = "";
@@ -76,7 +71,7 @@ rl.on("line", (line) => {
   lineCount++;
   if (lineCount % 500000 === 0) {
     process.stderr.write(
-      `  ... ${lineCount.toLocaleString()} lines, ${workoutCount} workouts, ${statCount} stats, ${lapCount} swim laps\n`
+      `  ... ${lineCount.toLocaleString()} lines, ${workouts.length} workouts, ${statCount} stats, ${lapCount} swim laps\n`
     );
   }
 
@@ -90,13 +85,18 @@ rl.on("line", (line) => {
       const sum = attr(trimmed, "sum");
       const unit = attr(trimmed, "unit");
       if (startDate && sum) {
-        statDistance[startDate] = { sum: toNumber(sum), unit: unit || "mi" };
+        // Keep highest value in case of duplicates
+        const existing = statDistance[startDate];
+        const newVal = toNumber(sum);
+        if (!existing || newVal > existing.sum) {
+          statDistance[startDate] = { sum: newVal, unit: unit || "mi" };
+        }
         statCount++;
       }
     }
   }
 
-  // Collect standalone swimming lap records (separate <Record> tags)
+  // Collect standalone swimming lap records
   if (trimmed.includes("HKQuantityTypeIdentifierDistanceSwimming") && trimmed.includes("<Record")) {
     const startDate = attr(trimmed, "startDate");
     const value = attr(trimmed, "value");
@@ -107,7 +107,7 @@ rl.on("line", (line) => {
     }
   }
 
-  // Accumulate buffer for Workout opening tags
+  // Collect Workout opening tags (distance patched later in close handler)
   buffer += " " + trimmed;
 
   let start;
@@ -132,22 +132,9 @@ rl.on("line", (line) => {
       const endDate    = attr(tagStr, "endDate")   || "";
       const duration   = toNumber(attr(tagStr, "duration"));
       const sourceName = attr(tagStr, "sourceName") || "";
-      let distance     = toNumber(attr(tagStr, "totalDistance"));
-      let distUnit     = attr(tagStr, "totalDistanceUnit") || "";
+      const distance   = toNumber(attr(tagStr, "totalDistance"));
+      const distUnit   = attr(tagStr, "totalDistanceUnit") || "";
       const calories   = toNumber(attr(tagStr, "totalEnergyBurned"));
-
-      // If totalDistance missing, check WorkoutStatistics (exact startDate match)
-      if (distance === 0 && statDistance[startDate]) {
-        distance = statDistance[startDate].sum;
-        distUnit = statDistance[startDate].unit;
-      }
-
-      // Swimming: use summed lap yards (day-level match) if still zero
-      if (type === "Swimming" && distance === 0) {
-        const day = startDate.slice(0, 10);
-        const yards = swimLaps[day] || 0;
-        if (yards > 0) { distance = yards; distUnit = "yd"; }
-      }
 
       const key = `${startDate}|${rawType}`;
       if (!seen.has(key)) {
@@ -159,14 +146,13 @@ rl.on("line", (line) => {
           start_date:    startDate,
           end_date:      endDate,
           duration_min:  duration,
-          distance,
+          distance,              // may be 0 — patched in close handler
           distance_unit: distUnit,
           calories,
           hr:            0,
           notes:         "",
           source_name:   sourceName,
         });
-        workoutCount++;
       }
     }
 
@@ -179,6 +165,32 @@ rl.on("line", (line) => {
 });
 
 rl.on("close", () => {
+  // Phase 2: patch distances now that all WorkoutStatistics and swim laps are collected
+  let patched = 0;
+  for (const w of workouts) {
+    if (w.distance > 0) continue; // totalDistance was already present
+
+    // Try exact startDate match in WorkoutStatistics
+    const stat = statDistance[w.start_date];
+    if (stat && stat.sum > 0) {
+      w.distance = stat.sum;
+      w.distance_unit = stat.unit;
+      patched++;
+      continue;
+    }
+
+    // Swimming fallback: sum of lap records by day
+    if (w.type === "Swimming") {
+      const day = w.start_date.slice(0, 10);
+      const yards = swimLaps[day] || 0;
+      if (yards > 0) {
+        w.distance = yards;
+        w.distance_unit = "yd";
+        patched++;
+      }
+    }
+  }
+
   workouts.sort((a, b) => String(a.start_date).localeCompare(String(b.start_date)));
   fs.writeFileSync(outputFile, JSON.stringify(workouts, null, 2));
 
@@ -189,18 +201,17 @@ rl.on("close", () => {
   console.log(`Workouts written: ${workouts.length}`);
   console.log(`WorkoutStatistics distance records: ${statCount}`);
   console.log(`Swim lap records: ${lapCount}`);
+  console.log(`Distances patched in phase 2: ${patched}`);
   console.log("Type counts:");
   Object.entries(typeCounts).sort((a, b) => b[1] - a[1])
     .forEach(([t, n]) => console.log(`  ${n}  ${t}`));
 
-  // Spot-check recent running
   const runs = workouts.filter(w => w.type === "Running").slice(-5);
   console.log("\nRecent runs:");
   runs.forEach(w => console.log(
     ` ${w.start_date.slice(0,10)}  ${w.distance.toFixed(3)} ${w.distance_unit}  ${w.duration_min.toFixed(1)} min`
   ));
 
-  // Spot-check swimming
   const swims = workouts.filter(w => w.type === "Swimming");
   if (swims.length > 0) {
     console.log("\nSwim sessions:");
