@@ -96,14 +96,16 @@ function pickDistance(apple, techno) {
     return {
       value: techno.distance,
       source: "Technogym",
-      rationale: "Preferred machine distance for machine-linked session"
+      rationale: "Preferred machine distance for machine-linked session",
+      unit: techno.distance_unit || "m"
     };
   }
   if (apple?.distance != null) {
     return {
       value: apple.distance,
       source: "AppleHealth",
-      rationale: "Fallback to Apple distance"
+      rationale: "Fallback to Apple distance",
+      unit: apple.distance_unit || "mi"
     };
   }
   return { value: null, source: null, rationale: null };
@@ -215,7 +217,8 @@ const unmatchedApple = apple
       distance: {
         value: x.workout.distance ?? null,
         source: x.workout.distance != null ? "AppleHealth" : null,
-        rationale: x.workout.distance != null ? "Apple-only session" : null
+        rationale: x.workout.distance != null ? "Apple-only session" : null,
+        unit: x.workout.distance_unit || null
       },
       power_avg: { value: null, source: null },
       level: { value: null, source: null },
@@ -256,7 +259,8 @@ const unmatchedTechnogym = technogym
       distance: {
         value: x.workout.distance ?? null,
         source: x.workout.distance != null ? "Technogym" : null,
-        rationale: x.workout.distance != null ? "Technogym-only machine session" : null
+        rationale: x.workout.distance != null ? "Technogym-only machine session" : null,
+        unit: x.workout.distance_unit || "m"
       },
       power_avg: {
         value: x.workout.power_avg ?? null,
