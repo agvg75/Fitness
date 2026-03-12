@@ -2714,7 +2714,25 @@ function normalizeDistanceToMiles(workout) {
   ) {
     return value / 1609.34
   }
+  if (
+    unit === "m" ||
+    unit === "meter" ||
+    unit === "meters"
+  ) {
+    return value / 1609.34
+  }
 
+  if (
+    unit === "yd" ||
+    unit === "yard" ||
+    unit === "yards"
+  ) {
+    return value / 1760
+  }
+
+  if (workout?.source === "ManualSchedule") {
+    return value
+  }
   if (workout?.source === "ManualSchedule") {
     return value
   }
@@ -2853,7 +2871,6 @@ const normalizedActiveWorkouts = useMemo(() => {
         if (category === "Cycling") distance = dur / 3.0       // ~20 mph indoor equivalent
         else if (category === "Machine Cardio") distance = dur / 4.5  // conservative fallback
         else if (category === "Rowing") distance = dur / 5.0
-        else if (category === "Swimming") distance = dur / 3.5
       }
     }
 

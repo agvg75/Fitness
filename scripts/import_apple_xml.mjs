@@ -1,7 +1,7 @@
 // import_apple_xml.mjs
-// Replaces import_apple_workouts.mjs (CSV-based).
-// Streams export.xml using Node's built-in readline + simple tag parsing.
-// No external dependencies beyond Node.js core.
+// Streams export.xml using Node.js built-in readline — no external dependencies.
+// Collects HKQuantityTypeIdentifierDistanceSwimming lap records and attaches
+// summed yard totals to matching swim workout sessions.
 // Usage: node scripts/import_apple_xml.mjs
 // Reads:  data_source/export.xml
 // Writes: public/data/apple_workouts.json
@@ -33,8 +33,6 @@ const typeMap = {
   HKWorkoutActivityTypeOther:                      "Other",
 };
 
-// Extract a named attribute value from a tag string.
-// Handles both single and double quoted values.
 function attr(tag, name) {
   const re = new RegExp(`${name}=["']([^"']*)["']`);
   const m = tag.match(re);
@@ -48,115 +46,102 @@ function toNumber(v) {
 
 const workouts = [];
 const seen = new Set();
+const swimLaps = {};
 let lineCount = 0;
 let workoutCount = 0;
+let lapCount = 0;
+let buffer = "";
 
 const rl = readline.createInterface({
   input: fs.createReadStream(inputFile, { encoding: "utf8" }),
   crlfDelay: Infinity,
 });
 
-// Buffer for tags that span multiple lines (rare in Apple Health but possible)
-let buffer = "";
-
 rl.on("line", (line) => {
   lineCount++;
   if (lineCount % 500000 === 0) {
-    process.stderr.write(`  ... ${lineCount.toLocaleString()} lines read, ${workoutCount} workouts found\n`);
+    process.stderr.write(`  ... ${lineCount.toLocaleString()} lines read, ${workoutCount} workouts, ${lapCount} swim laps\n`);
   }
 
-  // Accumulate buffer for multi-line tags
-  buffer += " " + line.trim();
+  const trimmed = line.trim();
 
-  // Process any complete <Workout .../> or <Workout ...> tags in buffer
+  if (trimmed.includes("HKQuantityTypeIdentifierDistanceSwimming")) {
+    const startDate = attr(trimmed, "startDate");
+    const value = attr(trimmed, "value");
+    if (startDate && value) {
+      const day = startDate.slice(0, 10);
+      swimLaps[day] = (swimLaps[day] || 0) + toNumber(value);
+      lapCount++;
+    }
+  }
+
+  buffer += " " + trimmed;
+
   let start;
   while ((start = buffer.indexOf("<Workout ")) !== -1) {
-    // Find end of this tag
     const selfClose = buffer.indexOf("/>", start);
     const openClose = buffer.indexOf(">", start);
-
-    // If neither found yet, wait for more lines
     if (selfClose === -1 && openClose === -1) break;
-
-    let tagEnd;
-    let tagStr;
+    let tagEnd, tagStr;
     if (selfClose !== -1 && (openClose === -1 || selfClose < openClose)) {
-      tagEnd = selfClose + 2;
-      tagStr = buffer.slice(start, tagEnd);
+      tagEnd = selfClose + 2; tagStr = buffer.slice(start, tagEnd);
     } else {
-      tagEnd = openClose + 1;
-      tagStr = buffer.slice(start, tagEnd);
+      tagEnd = openClose + 1; tagStr = buffer.slice(start, tagEnd);
     }
-
-    // Only process if we have the full tag (contains workoutActivityType)
     if (tagStr.includes("workoutActivityType")) {
       const rawType   = attr(tagStr, "workoutActivityType") || "";
       const type      = typeMap[rawType] || "Other";
       const startDate = attr(tagStr, "startDate") || "";
       const endDate   = attr(tagStr, "endDate")   || "";
       const duration  = toNumber(attr(tagStr, "duration"));
-      const distance  = toNumber(attr(tagStr, "totalDistance"));
-      const distUnit  = attr(tagStr, "totalDistanceUnit") || "";
-      const calories  = toNumber(attr(tagStr, "totalEnergyBurned"));
       const sourceName = attr(tagStr, "sourceName") || "";
+      let distance    = toNumber(attr(tagStr, "totalDistance"));
+      let distUnit    = attr(tagStr, "totalDistanceUnit") || "";
+      const calories  = toNumber(attr(tagStr, "totalEnergyBurned"));
 
-      // Dedup key: startDate + type
+      if (type === "Swimming") {
+        const day = startDate.slice(0, 10);
+        const yards = swimLaps[day] || 0;
+        if (yards > 0) { distance = yards; distUnit = "yd"; }
+      }
+
       const key = `${startDate}|${rawType}`;
       if (!seen.has(key)) {
         seen.add(key);
-        workouts.push({
-          source:        "AppleHealth",
-          raw_type:      rawType,
-          type,
-          start_date:    startDate,
-          end_date:      endDate,
-          duration_min:  duration,
-          distance:      distance,
-          distance_unit: distUnit,
-          calories,
-          hr:            0,   // HR comes from WorkoutStatistics; omitted for now
-          notes:         "",
-          source_name:   sourceName,
-        });
+        workouts.push({ source:"AppleHealth", raw_type:rawType, type, start_date:startDate,
+          end_date:endDate, duration_min:duration, distance, distance_unit:distUnit,
+          calories, hr:0, notes:"", source_name:sourceName });
         workoutCount++;
       }
     }
-
     buffer = buffer.slice(tagEnd);
   }
 
-  // Keep buffer trim — drop anything before the last potential tag start
   const lastAngle = buffer.lastIndexOf("<Workout ");
-  if (lastAngle > 0) {
-    buffer = buffer.slice(lastAngle);
-  } else if (buffer.length > 2000) {
-    buffer = buffer.slice(-500);
-  }
+  if (lastAngle > 0) { buffer = buffer.slice(lastAngle); }
+  else if (buffer.length > 2000) { buffer = buffer.slice(-500); }
 });
 
 rl.on("close", () => {
-  // Sort by start_date ascending
   workouts.sort((a, b) => String(a.start_date).localeCompare(String(b.start_date)));
-
   fs.writeFileSync(outputFile, JSON.stringify(workouts, null, 2));
-
   const typeCounts = {};
   workouts.forEach(w => { typeCounts[w.type] = (typeCounts[w.type] || 0) + 1; });
-
   console.log(`\nDone. Lines read: ${lineCount.toLocaleString()}`);
   console.log(`Workouts written: ${workouts.length}`);
+  console.log(`Swim lap records collected: ${lapCount}`);
   console.log("Type counts:");
-  Object.entries(typeCounts)
-    .sort((a, b) => b[1] - a[1])
-    .forEach(([t, n]) => console.log(`  ${n}  ${t}`));
-
-  // Date range
+  Object.entries(typeCounts).sort((a,b)=>b[1]-a[1]).forEach(([t,n])=>console.log(`  ${n}  ${t}`));
+  const swims = workouts.filter(w => w.type === "Swimming");
+  if (swims.length > 0) {
+    console.log("\nSwim sessions:");
+    swims.forEach(w => {
+      const miles = w.distance_unit === "yd" ? (w.distance/1760).toFixed(3) : w.distance.toFixed(3);
+      console.log(`  ${w.start_date.slice(0,10)}  ${Math.round(w.distance)} ${w.distance_unit||"?"}  (${miles} mi)  ${w.duration_min.toFixed(1)} min`);
+    });
+  }
   if (workouts.length > 0) {
-    console.log(`Date range: ${workouts[0].start_date} → ${workouts[workouts.length - 1].start_date}`);
+    console.log(`\nDate range: ${workouts[0].start_date} to ${workouts[workouts.length-1].start_date}`);
   }
 });
-
-rl.on("error", (err) => {
-  console.error("Stream error:", err);
-  process.exit(1);
-});
+rl.on("error", (err) => { console.error("Stream error:", err); process.exit(1); });
