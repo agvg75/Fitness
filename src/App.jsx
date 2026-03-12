@@ -2551,7 +2551,7 @@ function extractDistanceInfo(workout) {
   const candidates = [
     {
       value: pmDist?.value,
-      unit: pmDist?.unit
+      unit: pmDist?.unit || (pmDist?.source === "Technogym" ? "m" : "")
     },
     {
       value: pmDist?.raw,
@@ -2828,9 +2828,9 @@ const normalizedActiveWorkouts = useMemo(() => {
     // For indoor sessions with no GPS distance, derive a duration-based proxy
     // so they contribute to modality charts (45 min cycling ≈ ~10 miles equivalent)
     let distance = normalizeDistanceToMiles(w)
-    if (distance === 0 && (category === "Cycling" || category === "Machine Cardio")) {
+    if (distance === 0 && (category === "Machine Cardio")) {
       const dur = extractDurationMin(w)
-      if (dur > 0) distance = dur / 4.5  // proxy: 4.5 min per equivalent mile
+      if (dur > 0) distance = dur / 4.5  // fallback proxy only if no real distance found
     }
 
     return {
