@@ -2157,11 +2157,15 @@ function buildEnduranceForecast({
   // Running pace                  25%
   // Running volume                20%
   // Cardio minutes consistency    15%
-  const baseReadinessRaw =
-    aerobicVolumeScore * 0.40 +
-    runPaceScore       * 0.25 +
-    runVolumeScore     * 0.20 +
-    cardioScore        * 0.15
+  const swimmingMilesWeekly = safeNum(trainingSummary?.swimmingDistanceWeekly)
+const swimScore = Math.min(100, Math.round((swimmingMilesWeekly / 2) * 100))
+const baseReadinessRaw =
+    aerobicVolumeScore * 0.30 +
+    runPaceScore       * 0.20 +
+    runVolumeScore     * 0.15 +
+    cardioScore        * 0.15 +
+    swimScore          * 0.10 +
+    Math.min(100, Math.round((cyclingMilesWeekly / 40) * 100)) * 0.10
 
   const readinessNow = Math.max(
     0,
@@ -4145,10 +4149,10 @@ const readinessProjectionData = useMemo(() => {
   }
 
 const eventThresholds = {
-  fiveK: 8,
-  tenK: 16,
-  half: 28,
-  tri: 38
+  fiveK: 60,
+  tenK: 70,
+  half: 82,
+  tri: 92
 }
 
   const logisticPct = (baseReadiness, threshold, steepness = 0.18) => {
