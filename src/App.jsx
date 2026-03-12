@@ -3559,8 +3559,14 @@ const trainingLoadChartData = useMemo(() => {
 
   if (!visibleBuckets.length) return []
 
-const maxDistVisible = Math.max(
-  ...visibleBuckets.map(x => Math.max(Number(x.running || 0), Number(x.cycling || 0))),
+const maxLoadVisible = Math.max(
+  ...visibleBuckets.map(w =>
+    (w.running || 0) +
+    (w.swimming || 0) +
+    (w.cycling || 0) * 0.4 +
+    (w.strength || 0) * 2 +
+    (w.cardioMinutes || 0) * 0.08
+  ),
   1
 )
 
@@ -3570,7 +3576,13 @@ const maxDistVisible = Math.max(
     swimming: w.swimming ?? 0,
     cycling: w.cycling ?? 0,
     strength: w.strength ?? 0,
-trainingLoad: Number(w.trainingLoad || 0) * maxDistVisible,
+trainingLoadPct: Math.round(((
+  (w.running || 0) +
+  (w.swimming || 0) +
+  (w.cycling || 0) * 0.4 +
+  (w.strength || 0) * 2 +
+  (w.cardioMinutes || 0) * 0.08
+) / maxLoadVisible) * 100),
 
   }))
 }, [weeklyTrainingBuckets, rangeKey])
