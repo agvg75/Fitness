@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react"
+import { PROG, CARDIO } from "./scheduleData.js"
 import {
   LineChart,
   Line,
@@ -644,593 +645,436 @@ function ScheduleLogView({ log, expanded, setExpanded, onDelete, onEdit }) {
 function TabSchedule({ storedWorkouts, setStoredWorkouts, session }) {
   const [activeDay, setActiveDay] = useState(todayDayKey())
   const [schedView, setSchedView] = useState("schedule")
-  const [sessions, setSessions] = useState(() => {
-    const o = {}
-    SDAYS.forEach(d => { o[d] = defaultForDay(d) })
-    return o
-  })
   const [schedLog, setSchedLog] = useState([])
   const [undo, setUndo] = useState(null)
   const [expandedLog, setExpandedLog] = useState({})
-const [sessionDate, setSessionDate] = useState(todayISO())
-const [sessionTime, setSessionTime] = useState("")
-const [sessionDur, setSessionDur] = useState("")
-const [toast, setToast] = useState(null)
+  const [toast, setToast] = useState(null)
+  const [openSections, setOpenSections] = useState({ stretch: true, warmup: true, main: true, core: true, cardio: true })
+  const [variants, setVariants] = useState({})
+  const [fields, setFields] = useState({})
+  const [cardioFields, setCardioFields] = useState({})
+  const [savedEntry, setSavedEntry] = useState(null)
+  const [justUndone, setJustUndone] = useState(false)
 
-const [cardioType, setCardioType] = useState("")
-const [cardioDistance, setCardioDistance] = useState("")
-const [cardioCalories, setCardioCalories] = useState("")
-const [cardioAvgHr, setCardioAvgHr] = useState("")
-const [cardioNotes, setCardioNotes] = useState("")
-
-// Custom (free-text) exercises per day
-const [customExsByDay, setCustomExsByDay] = useState({})
-
-// Form state for adding a new custom exercise
-const [newExName, setNewExName] = useState("")
-const [newExSets, setNewExSets] = useState("3")
-const [newExReps, setNewExReps] = useState("10")
-const [newExWeight, setNewExWeight] = useState("")
-const [newExNote, setNewExNote] = useState("")
-
-const customExs = customExsByDay[activeDay] || []
-
-const addCustomEx = () => {
-  const name = newExName.trim()
-  if (!name) return
-  const sets = Math.max(1, Math.min(10, parseInt(newExSets) || 3))
-  const setData = Array.from({ length: sets }, () => ({
-    r: newExReps.trim() || "10",
-    w: newExWeight.trim() || "—"
-  }))
-  const entry = { id: `cx-${Date.now()}`, name, note: newExNote.trim(), sets: setData }
-  setCustomExsByDay(prev => ({
-    ...prev,
-    [activeDay]: [...(prev[activeDay] || []), entry]
-  }))
-  setNewExName(""); setNewExSets("3"); setNewExReps("10"); setNewExWeight(""); setNewExNote("")
-}
-
-const updateCustomSet = (exId, si, field, val) => {
-  setCustomExsByDay(prev => {
-    const arr = (prev[activeDay] || []).map(ex => {
-      if (ex.id !== exId) return ex
-      const sets = ex.sets.map((s, i) => i === si ? { ...s, [field]: val } : s)
-      return { ...ex, sets }
-    })
-    return { ...prev, [activeDay]: arr }
-  })
-}
-
-const addCustomSet = exId => {
-  setCustomExsByDay(prev => {
-    const arr = (prev[activeDay] || []).map(ex => {
-      if (ex.id !== exId) return ex
-      const last = ex.sets[ex.sets.length - 1] || { r: "10", w: "—" }
-      return { ...ex, sets: [...ex.sets, { ...last }] }
-    })
-    return { ...prev, [activeDay]: arr }
-  })
-}
-
-const removeCustomSet = (exId, si) => {
-  setCustomExsByDay(prev => {
-    const arr = (prev[activeDay] || []).map(ex => {
-      if (ex.id !== exId) return ex
-      if (ex.sets.length <= 1) return ex
-      return { ...ex, sets: ex.sets.filter((_, i) => i !== si) }
-    })
-    return { ...prev, [activeDay]: arr }
-  })
-}
-
-const removeCustomEx = exId => {
-  setCustomExsByDay(prev => ({
-    ...prev,
-    [activeDay]: (prev[activeDay] || []).filter(ex => ex.id !== exId)
-  }))
-}
- const saveScheduleKey = async (key, value) => {
-  await store.set(key, value)
-
-  
-
-  if (!supabase || !session?.user?.id) return
-
-
-
-  const { error } = await supabase
-    .from("user_kv")
-    .upsert(
-      {
-        user_id: session.user.id,
-        key,
-        value,
-        updated_at: new Date().toISOString()
-      },
-      { onConflict: "user_id,key" }
-    )
-
-  if (error) {
-    console.error(`Failed to sync ${key}:`, error)
+  const saveScheduleKey = async (key, value) => {
+    await store.set(key, value)
+    if (!supabase || !session?.user?.id) return
+    const { error } = await supabase
+      .from("user_kv")
+      .upsert({ user_id: session.user.id, key, value, updated_at: new Date().toISOString() }, { onConflict: "user_id,key" })
+    if (error) console.error(`Failed to sync ${key}:`, error)
   }
-}
 
   useEffect(() => {
-  ;(async () => {
-    const lg = await store.get("wt-log")
-    const ss = await store.get("wt-sessions")
-
-    if (Array.isArray(lg)) setSchedLog(lg)
-
-    if (ss && typeof ss === "object") {
-      setSessions(prev => {
-        const next = { ...prev }
+    ;(async () => {
+      const lg = await store.get("wt-log")
+      const ss = await store.get("wt-sessions")
+      if (Array.isArray(lg)) setSchedLog(lg)
+      if (ss && typeof ss === "object") {
+        const newFields = {}
+        const newVariants = {}
         SDAYS.forEach(d => {
-          if (ss[d]) next[d] = { ...prev[d], ...ss[d] }
+          if (!ss[d]) return
+          Object.keys(ss[d]).forEach(exId => {
+            const v = ss[d][exId]
+            if (v && typeof v === "object" && !Array.isArray(v) && v.sets) {
+              newFields[`${d}_${exId}`] = { sets: v.sets, reps: v.reps, load: v.load, notes: v.notes || "" }
+              if (v.variant) newVariants[exId] = v.variant
+            }
+          })
         })
-        return next
-      })
-    }
-  })()
-}, [session?.user?.id])
+        if (Object.keys(newFields).length > 0) setFields(prev => ({ ...prev, ...newFields }))
+        if (Object.keys(newVariants).length > 0) setVariants(prev => ({ ...prev, ...newVariants }))
+      }
+    })()
+  }, [session?.user?.id])
 
   const showToast = useCallback((msg) => {
     setToast(msg)
     setTimeout(() => setToast(null), 2500)
   }, [])
 
-  const updateSet = (day, exId, si, field, val) => {
-    setSessions(prev => {
-      const d = { ...prev[day] }
-      const sets = [...(d[exId] || [])]
-      sets[si] = { ...sets[si], [field]: val }
-      d[exId] = sets
-      return { ...prev, [day]: d }
+  const getProgDay = (day) => PROG[day] || { stretch: [], warmup: [], exercises: [], core: [] }
+  const getVariant = (exId) => variants[exId] || "machine"
+
+  const getF = (day, exId) => {
+    const k = `${day}_${exId}`
+    const prog = getProgDay(day)
+    const ex = prog.exercises?.find(e => e.id === exId)
+    if (!ex) return {}
+    const vk = getVariant(exId)
+    const rx = ex.variants[vk]
+    return fields[k] || { sets: rx.sets, reps: rx.reps, load: rx.load, notes: "" }
+  }
+
+  const setF = (day, exId, fKey, val) => {
+    setFields(prev => {
+      const k = `${day}_${exId}`
+      return { ...prev, [k]: { ...(prev[k] || {}), [fKey]: val } }
     })
   }
 
-  const addSet = (day, exId) => {
-    setSessions(prev => {
-      const d = { ...prev[day] }
-      const sets = [...(d[exId] || [])]
-      const last = sets[sets.length - 1] || { r: "—", w: "—" }
-      sets.push({ ...last })
-      d[exId] = sets
-      return { ...prev, [day]: d }
+  const setVariant = (day, exId, vk) => {
+    setVariants(prev => ({ ...prev, [exId]: vk }))
+    const ex = getProgDay(day).exercises?.find(e => e.id === exId)
+    if (ex) {
+      const v = ex.variants[vk]
+      const k = `${day}_${exId}`
+      setFields(prev => ({ ...prev, [k]: { sets: v.sets, reps: v.reps, load: v.load, notes: prev[k]?.notes || "" } }))
+    }
+  }
+
+  const isChanged = (day, exId) => {
+    const ex = getProgDay(day).exercises?.find(e => e.id === exId)
+    if (!ex) return false
+    const rx = ex.variants[getVariant(exId)]
+    const f = getF(day, exId)
+    return f.sets !== rx.sets || f.reps !== rx.reps || f.load !== rx.load
+  }
+
+  const buildSessionsStore = () => {
+    const out = {}
+    SDAYS.forEach(d => {
+      out[d] = {}
+      ;(getProgDay(d).exercises || []).forEach(ex => {
+        const k = `${d}_${ex.id}`
+        const f = fields[k]
+        if (f) out[d][ex.id] = { ...f, variant: getVariant(ex.id) }
+      })
     })
+    return out
   }
 
-  const removeSet = (day, exId, si) => {
-    setSessions(prev => {
-      const d = { ...prev[day] }
-      const sets = [...(d[exId] || [])]
-      if (sets.length <= 1) return prev
-      sets.splice(si, 1)
-      d[exId] = sets
-      return { ...prev, [day]: d }
-    })
-  }
+  const logSession = async () => {
+    const day = activeDay
+    const prog = getProgDay(day)
+    const cd = CARDIO[day]
+    const cf = cardioFields[day] || {}
+    const ts = new Date().toISOString()
+    const dateStr = ts.slice(0, 10)
 
-  const resetDay = day => {
-    setSessions(prev => ({ ...prev, [day]: defaultForDay(day) }))
-    showToast("Reset to defaults")
-  }
-
-  const saveSession = async () => {
-    const dateStr = sessionDate || todayISO()
-    const isoNow = dateStr + "T12:00:00.000Z"
-
-const entry = {
-  id: Date.now(),
-  date: isoNow,
-  sessionDate: dateStr,
-  sessionTime: sessionTime || "",
-  dateTime: sessionTime ? `${dateStr}T${sessionTime}` : dateStr,
-  day: activeDay,
-  dayLabel: SMETA[activeDay].label,
-  theme: SMETA[activeDay].theme,
-  venue: SMETA[activeDay].venue,
-  data: JSON.parse(JSON.stringify(sessions[activeDay])),
-  customExercises: JSON.parse(JSON.stringify(customExs)),
-  cardio: cardioType
-    ? {
-        type: cardioType,
-        distance: cardioDistance ? Number(cardioDistance) : null,
-        duration: sessionDur ? Number(sessionDur) : null,
-        calories: cardioCalories ? Number(cardioCalories) : null,
-        avg_hr: cardioAvgHr ? Number(cardioAvgHr) : null,
-        notes: cardioNotes || ""
+    const exercises = (prog.exercises || []).map(ex => {
+      const vk = getVariant(ex.id)
+      const rx = ex.variants[vk]
+      const f = getF(day, ex.id)
+      return {
+        exercise_id: ex.id, exercise_name: ex.n, variant: vk, variant_name: rx.n,
+        prescribed: { sets: rx.sets, reps: rx.reps, load: rx.load },
+        actual: { sets: f.sets || rx.sets, reps: f.reps || rx.reps, load: f.load || rx.load },
+        notes: f.notes || "", changed: isChanged(day, ex.id),
       }
-    : null
-}
+    })
+
+    const entry = {
+      id: Date.now(),
+      session_id: ts.replace(/\D/g, "").slice(0, 17),
+      logged_at: ts, date: dateStr,
+      day, dayLabel: SMETA[day]?.label || day,
+      theme: SMETA[day]?.theme || "", venue: SMETA[day]?.venue || "",
+      program: "Kinesiology (primary)",
+      exercises,
+      cardio: {
+        modality: cd.mod, type: cd.type,
+        prescribed_duration_min: `${cd.dMin}-${cd.dMax}`,
+        actual_duration: cf.duration || "", notes: cf.notes || "",
+      },
+      source: "LIFT Schedule Tab", apple_watch_sync_pending: true,
+      data: Object.fromEntries(exercises.map(ex => [ex.exercise_id, [{ r: ex.actual.reps, w: ex.actual.load }]])),
+    }
 
     const newLog = [entry, ...schedLog]
     setSchedLog(newLog)
+    setSavedEntry(entry)
+    setJustUndone(false)
 
-    const types = SDAY_TYPES[activeDay] || []
-    const summaryIds = types.map((_, i) => entry.id + i)
+    await saveScheduleKey("wt-log", newLog)
+    await saveScheduleKey("wt-sessions", buildSessionsStore())
 
-const summaryEntries = types.map((type, i) => ({
-  id: summaryIds[i],
-  date: dateStr,
-  time: sessionTime || "",
-  dateTime: sessionTime ? `${dateStr}T${sessionTime}` : dateStr,
-  type,
-  dur: sessionDur ? parseInt(sessionDur) : 0,
-  hr: cardioAvgHr ? Number(cardioAvgHr) : null,
-  distance: cardioDistance ? Number(cardioDistance) : null,
-  calories: cardioCalories ? Number(cardioCalories) : null,
-  notes: cardioNotes
-    ? `from Schedule , ${SMETA[activeDay].theme} , ${cardioNotes}`
-    : `from Schedule , ${SMETA[activeDay].theme}`,
-  _scheduleId: entry.id
-}))
+    const types = SDAY_TYPES[day] || []
+    if (types.length > 0 && cf.duration) {
+      const summaryEntries = types.map((type, i) => ({
+        id: entry.id + i, date: dateStr, time: "", dateTime: dateStr, type,
+        dur: parseInt(cf.duration) || 0, hr: null, distance: null, calories: null,
+        notes: `from Schedule , ${SMETA[day]?.theme || day}${cf.notes ? " , " + cf.notes : ""}`,
+        _scheduleId: entry.id,
+      }))
+      const existing = await store.get("ufd-workouts") || storedWorkouts
+      const merged = [...(Array.isArray(existing) ? existing : []), ...summaryEntries]
+        .sort((a, b) => String(a.dateTime || a.date || "").localeCompare(String(b.dateTime || b.date || "")))
+      setStoredWorkouts(merged)
+      await saveScheduleKey("ufd-workouts", merged)
+    }
 
-if (summaryEntries.length > 0) {
-  const existing = await store.get("ufd-workouts") || storedWorkouts
-const merged = [...(Array.isArray(existing) ? existing : []), ...summaryEntries]
-  .sort((a, b) =>
-    String(a.dateTime || a.date || "").localeCompare(String(b.dateTime || b.date || ""))
-  )
-
-  setStoredWorkouts(merged)
-  await saveScheduleKey("ufd-workouts", merged)
-}
-
-setUndo(entry)
-await saveScheduleKey("wt-log", newLog)
-await saveScheduleKey("wt-sessions", sessions)
-setCardioType("")
-setCardioDistance("")
-setCardioCalories("")
-setCardioAvgHr("")
-setCardioNotes("")
-setCustomExsByDay(prev => ({ ...prev, [activeDay]: [] }))
-showToast("Session saved")
+    showToast("Session logged")
   }
 
   const undoSave = async () => {
-    if (!undo) return
-
-    const newLog = schedLog.filter(e => e.id !== undo.id)
+    if (!savedEntry) return
+    const newLog = schedLog.filter(e => e.id !== savedEntry.id)
     setSchedLog(newLog)
-
-    const newWorkouts = storedWorkouts.filter(w => w._scheduleId !== undo.id)
+    const newWorkouts = storedWorkouts.filter(w => w._scheduleId !== savedEntry.id)
     setStoredWorkouts(newWorkouts)
-
-setUndo(null)
-await saveScheduleKey("wt-log", newLog)
-await saveScheduleKey("ufd-workouts", newWorkouts)
-showToast("Entry removed")
+    setSavedEntry(null)
+    setJustUndone(true)
+    await saveScheduleKey("wt-log", newLog)
+    await saveScheduleKey("ufd-workouts", newWorkouts)
+    setTimeout(() => setJustUndone(false), 4000)
+    showToast("Session removed")
   }
 
   const deleteEntry = async id => {
-  const newLog = schedLog.filter(e => e.id !== id)
-setSchedLog(newLog)
-await saveScheduleKey("wt-log", newLog)
-showToast("Entry deleted")
+    const newLog = schedLog.filter(e => e.id !== id)
+    setSchedLog(newLog)
+    await saveScheduleKey("wt-log", newLog)
+    showToast("Entry deleted")
   }
 
   const editEntry = id => {
     const entry = schedLog.find(e => e.id === id)
     if (!entry) return
-
-    setSessions(prev => ({ ...prev, [entry.day]: JSON.parse(JSON.stringify(entry.data)) }))
-    const newLog = schedLog.filter(e => e.id !== id)
-    setSchedLog(newLog)
-   saveScheduleKey("wt-log", newLog)
     setActiveDay(entry.day)
     setSchedView("schedule")
     showToast(`Loaded ${entry.dayLabel} for editing`)
   }
 
-  const plan = PLAN[activeDay]
-  const meta = SMETA[activeDay]
-  const dayData = sessions[activeDay] || {}
-  const isRest = plan.sections.length === 0
+  const toggleSection = k => setOpenSections(prev => ({ ...prev, [k]: !prev[k] }))
+
+  const sectionHeader = (key, label, dot, meta) => (
+    <div onClick={() => toggleSection(key)}
+      style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", cursor: "pointer", borderBottom: openSections[key] ? "1px solid #1a1a1a" : "none" }}>
+      <div style={{ width: 8, height: 8, borderRadius: "50%", background: dot, flexShrink: 0 }} />
+      <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: dot }}>{label}</span>
+      {meta && <span style={{ fontSize: 10, color: "#555", marginLeft: "auto" }}>{meta}</span>}
+      <span style={{ fontSize: 10, color: "#444", marginLeft: meta ? 0 : "auto", display: "inline-block", transform: openSections[key] ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▼</span>
+    </div>
+  )
+
+  const simpleList = items => (
+    <div style={{ padding: "6px 14px 12px" }}>
+      {items.map((item, i) => (
+        <div key={i} style={{ padding: "5px 0", borderBottom: i < items.length - 1 ? "1px solid #111" : "none" }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "#d8d8d8" }}>{item.n}</div>
+          <div style={{ fontSize: 11, color: "#555", marginTop: 1 }}>{item.d}</div>
+        </div>
+      ))}
+    </div>
+  )
+
+  const exCard = (ex, day) => {
+    const vk = getVariant(ex.id)
+    const v = ex.variants[vk]
+    const f = getF(day, ex.id)
+    const chg = isChanged(day, ex.id)
+    const fl = ex.fi === "toe" ? "Toe-safe" : "Shoulder-safe"
+    const vColors = { machine: "#3b82f6", db: "#22c55e", friendly: "#f97316" }
+    const vBgs    = { machine: "rgba(59,130,246,0.12)", db: "rgba(34,197,94,0.12)", friendly: "rgba(249,115,22,0.12)" }
+
+    const fieldInput = (lbl, fKey, rxVal) => (
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 3 }}>
+        <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em" }}>{lbl}</div>
+        <input type="text" value={f[fKey] || ""}
+          onChange={e => setF(day, ex.id, fKey, e.target.value)}
+          style={{ width: "100%", padding: "5px 7px", border: `0.5px solid ${(f[fKey] || "") !== rxVal ? "#d97706" : "#252525"}`, borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: (f[fKey] || "") !== rxVal ? "rgba(217,119,6,0.1)" : "#111", fontFamily: "inherit", outline: "none" }} />
+        <div style={{ fontSize: 9, color: "#444" }}>Rx: {rxVal}</div>
+      </div>
+    )
+
+    return (
+      <div key={ex.id} style={{ marginTop: 10, border: `0.5px solid ${chg ? "#d97706" : "#1e1e1e"}`, borderRadius: 7, overflow: "hidden" }}>
+        <div style={{ padding: "8px 12px 7px", display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, flexWrap: "wrap", background: "#0d0d0d" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "#d8d8d8" }}>{ex.n}</span>
+            {chg && <span style={{ fontSize: 9, fontWeight: 700, color: "#d97706", background: "rgba(217,119,6,0.15)", borderRadius: 3, padding: "1px 5px" }}>modified</span>}
+          </div>
+          <div style={{ display: "flex", gap: 3 }}>
+            {["machine", "db", "friendly"].map(k => {
+              const lbl = k === "machine" ? "Machine" : k === "db" ? "Dumbbell" : fl
+              const active = vk === k
+              return (
+                <button key={k} onClick={() => setVariant(day, ex.id, k)}
+                  style={{ padding: "3px 8px", borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: "pointer", border: `0.5px solid ${active ? vColors[k] : "#222"}`, background: active ? vBgs[k] : "transparent", color: active ? vColors[k] : "#444", transition: "all 0.12s" }}>
+                  {lbl}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+        <div style={{ padding: "4px 12px 10px", background: "#0a0a0a" }}>
+          <div style={{ fontSize: 11, color: "#555", padding: "4px 0 6px" }}>{v.n}</div>
+          <div style={{ display: "flex", gap: 8, marginBottom: 6 }}>
+            {fieldInput("Sets", "sets", v.sets)}
+            {fieldInput("Reps", "reps", v.reps)}
+            {fieldInput("Load", "load", v.load)}
+          </div>
+          {v.note && <div style={{ fontSize: 11, color: "#555", lineHeight: 1.4, paddingTop: 5, borderTop: "1px solid #1a1a1a", marginBottom: 4 }}>{v.note}</div>}
+          <textarea value={f.notes || ""} onChange={e => setF(day, ex.id, "notes", e.target.value)}
+            placeholder="Session note (optional)" rows={1}
+            style={{ width: "100%", marginTop: 4, padding: "4px 7px", border: "0.5px solid #1e1e1e", borderRadius: 5, fontSize: 11, color: "#666", background: "#111", fontFamily: "inherit", resize: "none", outline: "none" }} />
+        </div>
+      </div>
+    )
+  }
+
+  const cardioBlock = (day) => {
+    const cd = CARDIO[day]
+    const cf = cardioFields[day] || { duration: `${cd.dMin}-${cd.dMax}`, notes: "" }
+    const modColor = { run: "#ef4444", bike: "#d97706", swim: "#0ea5e9" }[cd.mod] || "#888"
+    const modLabel = { run: "Run", bike: "Bike", swim: "Swim" }[cd.mod] || cd.mod
+    const setCarFld = (fKey, val) => setCardioFields(prev => ({ ...prev, [day]: { ...(prev[day] || {}), [fKey]: val } }))
+
+    return (
+      <div style={{ padding: "12px 14px" }}>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 10 }}>
+          <div style={{ padding: "3px 10px", borderRadius: 20, fontSize: 11, fontWeight: 700, background: `${modColor}22`, color: modColor, whiteSpace: "nowrap" }}>{modLabel}</div>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "#d8d8d8" }}>{cd.type}</div>
+            <div style={{ fontSize: 11, color: "#666", marginTop: 1 }}>{cd.intensity}</div>
+          </div>
+        </div>
+        <div style={{ fontSize: 11, color: "#666", lineHeight: 1.5, padding: 8, background: "#111", borderRadius: 5, marginBottom: 8 }}>{cd.rationale}</div>
+        <div style={{ fontSize: 10, fontWeight: 700, color: "#7F77DD", background: "rgba(127,119,221,0.12)", borderRadius: 4, padding: "2px 8px", display: "inline-block", marginBottom: 8 }}>{cd.goal}</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 6 }}>
+          <div>
+            <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Actual duration (min)</div>
+            <input type="text" value={cf.duration} onChange={e => setCarFld("duration", e.target.value)}
+              placeholder={`${cd.dMin}–${cd.dMax} min`}
+              style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
+            <div style={{ fontSize: 9, color: "#444", marginTop: 2 }}>Target: {cd.dMin}–{cd.dMax} min | Weekly: {cd.wt} min</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Distance / notes</div>
+            <input type="text" value={cf.notes} onChange={e => setCarFld("notes", e.target.value)}
+              placeholder={cd.dist}
+              style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
+            <div style={{ fontSize: 9, color: "#444", marginTop: 2 }}>Guide: {cd.dist}</div>
+          </div>
+        </div>
+        {cd.cnote && <div style={{ fontSize: 10, color: "#555", lineHeight: 1.4 }}>{cd.cnote}</div>}
+      </div>
+    )
+  }
+
+  const logBar = () => {
+    if (justUndone) return (
+      <div>
+        <div style={{ padding: "10px 14px", background: "rgba(153,60,29,0.15)", border: "0.5px solid #993C1D", borderRadius: 8, marginBottom: 8 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "#ef4444" }}>Session removed</div>
+          <div style={{ fontSize: 11, color: "#777", marginTop: 2 }}>Fields reset to prescription values.</div>
+        </div>
+        <button onClick={logSession} style={{ width: "100%", padding: 12, background: "#185FA5", color: "#fff", border: "none", borderRadius: 7, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Log this session</button>
+      </div>
+    )
+    if (savedEntry) {
+      const changed = savedEntry.exercises.filter(x => x.changed)
+      return (
+        <div>
+          <div style={{ padding: "10px 14px", background: "rgba(15,110,86,0.15)", border: "0.5px solid #0F6E56", borderRadius: 8, marginBottom: 8 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "#10b981" }}>Session logged</div>
+            <div style={{ fontSize: 10, color: "#555", fontFamily: "monospace", marginTop: 2 }}>{new Date(savedEntry.logged_at).toLocaleString()} · {savedEntry.session_id}</div>
+            <div style={{ marginTop: 6, fontSize: 11, color: "#777", lineHeight: 1.6 }}>
+              {savedEntry.exercises.map(ex => (
+                <div key={ex.exercise_id} style={{ borderBottom: "1px solid #1a1a1a", padding: "2px 0" }}>
+                  {ex.exercise_name}: {ex.actual.sets}×{ex.actual.reps} @ {ex.actual.load}{ex.changed && <span style={{ color: "#d97706", fontWeight: 600 }}> (modified)</span>}
+                </div>
+              ))}
+              {savedEntry.cardio?.actual_duration && <div style={{ paddingTop: 3 }}>Cardio ({savedEntry.cardio.modality}): {savedEntry.cardio.actual_duration} min</div>}
+            </div>
+            {changed.length > 0 && <div style={{ fontSize: 10, color: "#d97706", marginTop: 4 }}>{changed.length} exercise(s) modified from prescription.</div>}
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={undoSave} style={{ flex: 1, padding: 11, background: "transparent", color: "#888", border: "0.5px solid #333", borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Undo save</button>
+            <button onClick={logSession} style={{ flex: 1, padding: 11, background: "#185FA5", color: "#fff", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Re-log / update</button>
+          </div>
+        </div>
+      )
+    }
+    return (
+      <button onClick={logSession} style={{ width: "100%", padding: 13, background: "#185FA5", color: "#fff", border: "none", borderRadius: 7, fontSize: 15, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Log this session</button>
+    )
+  }
+
+  const prog = getProgDay(activeDay)
+  const meta = SMETA[activeDay] || {}
 
   return (
     <div style={{ color: "#d8d8d8", position: "relative" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", flexWrap: "wrap", gap: "8px" }}>
-        <div style={{ display: "flex", gap: "3px", background: "#0a0a0a", borderRadius: "8px", padding: "4px", border: "1px solid #1a1a1a", flexWrap: "wrap" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
+        <div style={{ display: "flex", gap: 3, background: "#0a0a0a", borderRadius: 8, padding: 4, border: "1px solid #1a1a1a", flexWrap: "wrap" }}>
           {SDAYS.map(d => {
-            const m = SMETA[d]
+            const m = SMETA[d] || {}
             const active = d === activeDay && schedView === "schedule"
-
             return (
-              <button
-                key={d}
-                onClick={() => { setActiveDay(d); setSchedView("schedule") }}
-                style={{
-                  padding: "6px 12px",
-                  border: "none",
-                  cursor: "pointer",
-                  background: active ? m.color + "22" : "transparent",
-                  fontSize: "12px",
-                  fontWeight: active ? "700" : "500",
-                  letterSpacing: "0.06em",
-                  textTransform: "uppercase",
-                  color: active ? m.color : "#3a3a3a",
-                  borderRadius: "6px"
-                }}
-              >
+              <button key={d} onClick={() => { setActiveDay(d); setSchedView("schedule"); setSavedEntry(null) }}
+                style={{ padding: "6px 12px", border: "none", cursor: "pointer", background: active ? (m.color || "#185FA5") + "22" : "transparent", fontSize: 12, fontWeight: active ? 700 : 500, letterSpacing: "0.06em", textTransform: "uppercase", color: active ? (m.color || "#185FA5") : "#3a3a3a", borderRadius: 6 }}>
                 {d}
-                <div style={{ fontSize: "8px", opacity: 0.7, marginTop: "1px", color: m.venue === "KNR" ? "#3b82f6" : m.venue === "—" ? "#333" : "#d97706" }}>{m.venue}</div>
+                <div style={{ fontSize: 8, opacity: 0.7, marginTop: 1, color: m.venue === "KNR" ? "#3b82f6" : m.venue === "—" ? "#333" : "#d97706" }}>{m.venue}</div>
               </button>
             )
           })}
         </div>
-
-        <div style={{ display: "flex", gap: "6px" }}>
-          <button onClick={() => setSchedView(v => v === "log" ? "schedule" : "log")} style={buttonStyle(false)}>
-            {schedView === "log" ? "◀ Schedule" : `Log (${schedLog.length})`}
-          </button>
-          {schedView === "schedule" && <button onClick={() => resetDay(activeDay)} style={buttonStyle(false)}>Reset</button>}
-        </div>
+        <button onClick={() => setSchedView(v => v === "log" ? "schedule" : "log")} style={buttonStyle(false)}>
+          {schedView === "log" ? "◀ Schedule" : `Log (${schedLog.length})`}
+        </button>
       </div>
 
       {schedView === "log" && (
-        <ScheduleLogView
-          log={schedLog}
-          expanded={expandedLog}
-          setExpanded={setExpandedLog}
-          onDelete={deleteEntry}
-          onEdit={editEntry}
-        />
+        <ScheduleLogView log={schedLog} expanded={expandedLog} setExpanded={setExpandedLog} onDelete={deleteEntry} onEdit={editEntry} />
       )}
 
       {schedView === "schedule" && (
         <>
-          <div style={{ marginBottom: "14px", paddingBottom: "10px", borderBottom: "1px solid #1a1a1a" }}>
-            <div style={{ fontSize: "20px", fontWeight: "700", color: "#e8e8e8", lineHeight: 1 }}>
-              {meta.label}
-              <span style={{ fontSize: "14px", fontWeight: "600", color: meta.color, marginLeft: "8px" }}>{meta.theme}</span>
-              <span style={{ fontSize: "9px", fontWeight: "700", letterSpacing: "0.12em", background: meta.venue === "KNR" ? "#0d1f38" : meta.venue === "—" ? "#151515" : "#1e1200", color: meta.venue === "KNR" ? "#3b82f6" : meta.venue === "—" ? "#444" : "#d97706", padding: "2px 7px", borderRadius: "3px", marginLeft: "8px" }}>{meta.venue}</span>
+          <div style={{ marginBottom: 14, paddingBottom: 10, borderBottom: "1px solid #1a1a1a" }}>
+            <div style={{ fontSize: 20, fontWeight: 700, color: "#e8e8e8", lineHeight: 1 }}>
+              {meta.label || activeDay}
+              <span style={{ fontSize: 13, fontWeight: 600, color: meta.color || "#185FA5", marginLeft: 8 }}>{meta.theme}</span>
+              <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.12em", background: meta.venue === "KNR" ? "#0d1f38" : "#151515", color: meta.venue === "KNR" ? "#3b82f6" : "#444", padding: "2px 7px", borderRadius: 3, marginLeft: 8 }}>{meta.venue}</span>
+              <span style={{ fontSize: 9, fontWeight: 600, color: "#7F77DD", background: "rgba(127,119,221,0.15)", padding: "2px 7px", borderRadius: 3, marginLeft: 6 }}>Kinesiology</span>
             </div>
           </div>
 
-          {plan.cardio && (
-            <div style={{ background: "#111", border: "1px solid #1a1a1a", borderLeft: `3px solid ${meta.color}`, borderRadius: "8px", padding: "11px 14px", marginBottom: "12px" }}>
-              <div style={{ fontSize: "9px", letterSpacing: "0.18em", color: "#444", textTransform: "uppercase", marginBottom: "7px" }}>Cardio</div>
-              <div style={{ fontSize: "12px", color: "#aaa", lineHeight: 1.6 }}>{plan.cardio}</div>
+          {prog.stretch?.length > 0 && (
+            <div style={{ border: "0.5px solid #1a1a1a", borderRadius: 8, marginBottom: 10, overflow: "hidden" }}>
+              {sectionHeader("stretch", "Stretch", "#7F77DD", "~5 min")}
+              {openSections.stretch && simpleList(prog.stretch)}
             </div>
           )}
 
-          {plan.warmup.length > 0 && (
-            <div style={{ background: "#111", border: "1px solid #1a1a1a", borderLeft: "3px solid #444", borderRadius: "8px", padding: "11px 14px", marginBottom: "12px" }}>
-              <div style={{ fontSize: "9px", letterSpacing: "0.18em", color: "#444", textTransform: "uppercase", marginBottom: "7px" }}>Warm-Up</div>
-              {plan.warmup.map((w, i) => <WarmupRow key={i} text={w} />)}
+          {prog.warmup?.length > 0 && (
+            <div style={{ border: "0.5px solid #1a1a1a", borderRadius: 8, marginBottom: 10, overflow: "hidden" }}>
+              {sectionHeader("warmup", "Warm-up", "#BA7517")}
+              {openSections.warmup && simpleList(prog.warmup)}
             </div>
           )}
 
-          {plan.topNote && (
-            <div style={{ background: "#1a1200", border: "1px solid #3a2800", borderRadius: "8px", padding: "10px 14px", marginBottom: "14px", fontSize: "12px", color: "#c08a30", lineHeight: 1.5 }}>
-              {plan.topNote}
-            </div>
-          )}
-
-          {isRest && (
-            <div style={{ textAlign: "center", padding: "60px 20px", color: "#2e2e2e" }}>
-              <div style={{ fontSize: "36px", fontWeight: "800", letterSpacing: "0.1em" }}>REST</div>
-              <div style={{ fontSize: "13px", color: "#333", marginTop: "10px" }}>Recovery is adaptation. Sleep well. Walk. Stretch.</div>
-            </div>
-          )}
-
-          {plan.sections.map((sec, si) => (
-            <div key={si} style={{ marginBottom: "6px" }}>
-              <div style={{ fontSize: "9px", fontWeight: "700", letterSpacing: "0.22em", textTransform: "uppercase", color: "#333", padding: "8px 2px 6px", borderBottom: "1px solid #161616", marginBottom: "8px" }}>{sec.h}</div>
-              {sec.ex.map(ex => {
-                const setData = dayData[ex.id] || ex.def
-                return (
-                  <ExCard
-                    key={ex.id}
-                    ex={ex}
-                    setData={setData}
-                    onUpdate={(si, f, v) => updateSet(activeDay, ex.id, si, f, v)}
-                    onAdd={() => addSet(activeDay, ex.id)}
-                    onRemove={si => removeSet(activeDay, ex.id, si)}
-                  />
-                )
-              })}
-            </div>
-          ))}
-
-          {/* Custom (free-text) exercises for this day */}
-          {(customExs.length > 0 || !isRest) && (
-            <div style={{ marginBottom: "6px" }}>
-              <div style={{ fontSize: "9px", fontWeight: "700", letterSpacing: "0.22em", textTransform: "uppercase", color: "#333", padding: "8px 2px 6px", borderBottom: "1px solid #161616", marginBottom: "8px" }}>
-                Additional Exercises
+          <div style={{ border: "0.5px solid #1a1a1a", borderRadius: 8, marginBottom: 10, overflow: "hidden" }}>
+            {sectionHeader("main", "Main program", "#185FA5")}
+            {openSections.main && (
+              <div style={{ padding: "4px 14px 12px" }}>
+                {prog.exercises?.length > 0
+                  ? prog.exercises.map(ex => exCard(ex, activeDay))
+                  : <div style={{ textAlign: "center", padding: 16, color: "#444", fontSize: 13 }}>Active recovery — no resistance training today.</div>}
               </div>
+            )}
+          </div>
 
-              {customExs.map(ex => (
-                <div key={ex.id} style={{ background: "#111", border: "1px solid #1a1a1a", borderLeft: "3px solid #2a2a3a", borderRadius: "8px", marginBottom: "7px", overflow: "hidden" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px" }}>
-                    <div>
-                      <div style={{ fontSize: "14px", fontWeight: "700", color: "#e0e0e0" }}>{ex.name}</div>
-                      {ex.note && <div style={{ fontSize: "11px", color: "#3a3a3a", fontStyle: "italic" }}>{ex.note}</div>}
-                    </div>
-                    <button onClick={() => removeCustomEx(ex.id)} style={{ background: "none", border: "none", color: "#444", cursor: "pointer", fontSize: "16px", padding: "0 4px" }}>×</button>
-                  </div>
-                  <div style={{ padding: "0 12px 10px", borderTop: "1px solid #161616" }}>
-                    <div style={{ display: "grid", gridTemplateColumns: "26px 1fr 14px 1fr 22px", gap: "4px", padding: "8px 0 4px" }}>
-                      {["SET", "REPS", "", "LOAD", ""].map((h, i) => (
-                        <div key={i} style={{ fontSize: "9px", letterSpacing: "0.14em", color: "#333", textAlign: "center" }}>{h}</div>
-                      ))}
-                    </div>
-                    {ex.sets.map((s, si) => (
-                      <div key={si} style={{ display: "grid", gridTemplateColumns: "26px 1fr 14px 1fr 22px", gap: "4px", alignItems: "center", marginBottom: "4px" }}>
-                        <div style={{ fontSize: "10px", color: "#3a3a3a", textAlign: "center" }}>S{si + 1}</div>
-                        <input type="text" value={s.r} onChange={e => updateCustomSet(ex.id, si, "r", e.target.value)}
-                          style={{ background: "#161616", border: "1px solid #242424", borderRadius: "4px", color: "#e0e0e0", fontSize: "12px", padding: "4px 6px", textAlign: "center", width: "100%" }} />
-                        <div style={{ textAlign: "center", fontSize: "10px", color: "#333" }}>@</div>
-                        <input type="text" value={s.w} onChange={e => updateCustomSet(ex.id, si, "w", e.target.value)}
-                          style={{ background: "#161616", border: "1px solid #242424", borderRadius: "4px", color: "#e0e0e0", fontSize: "12px", padding: "4px 6px", textAlign: "center", width: "100%" }} />
-                        <button onClick={() => removeCustomSet(ex.id, si)}
-                          style={{ background: "none", border: "none", color: "#444", cursor: "pointer", fontSize: "13px", padding: 0, visibility: ex.sets.length > 1 ? "visible" : "hidden" }}>×</button>
-                      </div>
-                    ))}
-                    <button onClick={() => addCustomSet(ex.id)}
-                      style={{ marginTop: "4px", width: "100%", background: "none", border: "1px dashed #1e1e1e", borderRadius: "4px", color: "#333", fontSize: "10px", padding: "4px 0", cursor: "pointer" }}>
-                      + add set
-                    </button>
-                  </div>
-                </div>
-              ))}
-
-              {/* Add exercise form */}
-              <div style={{ background: "#0d0d0d", border: "1px dashed #252540", borderRadius: "8px", padding: "12px", marginTop: "6px" }}>
-                <div style={{ fontSize: "9px", letterSpacing: "0.16em", color: "#3a3a5a", textTransform: "uppercase", marginBottom: "10px" }}>Add Exercise</div>
-                <input
-                  type="text"
-                  placeholder="Exercise name"
-                  value={newExName}
-                  onChange={e => setNewExName(e.target.value)}
-                  style={{ width: "100%", background: "#111", border: "1px solid #1a1b2e", borderRadius: "6px", color: "#ced2f0", fontSize: "12px", padding: "7px 10px", boxSizing: "border-box", marginBottom: "8px" }}
-                />
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px", marginBottom: "8px" }}>
-                  <div>
-                    <div style={{ fontSize: "9px", color: "#3a3a5a", marginBottom: "3px", letterSpacing: "0.1em" }}>SETS</div>
-                    <input type="number" min="1" max="10" value={newExSets} onChange={e => setNewExSets(e.target.value)}
-                      style={{ width: "100%", background: "#111", border: "1px solid #1a1b2e", borderRadius: "6px", color: "#ced2f0", fontSize: "12px", padding: "6px 8px", boxSizing: "border-box", textAlign: "center" }} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: "9px", color: "#3a3a5a", marginBottom: "3px", letterSpacing: "0.1em" }}>REPS</div>
-                    <input type="text" placeholder="10" value={newExReps} onChange={e => setNewExReps(e.target.value)}
-                      style={{ width: "100%", background: "#111", border: "1px solid #1a1b2e", borderRadius: "6px", color: "#ced2f0", fontSize: "12px", padding: "6px 8px", boxSizing: "border-box", textAlign: "center" }} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: "9px", color: "#3a3a5a", marginBottom: "3px", letterSpacing: "0.1em" }}>LOAD</div>
-                    <input type="text" placeholder="lb / BW / —" value={newExWeight} onChange={e => setNewExWeight(e.target.value)}
-                      style={{ width: "100%", background: "#111", border: "1px solid #1a1b2e", borderRadius: "6px", color: "#ced2f0", fontSize: "12px", padding: "6px 8px", boxSizing: "border-box", textAlign: "center" }} />
-                  </div>
-                </div>
-                <input type="text" placeholder="Note (optional)" value={newExNote} onChange={e => setNewExNote(e.target.value)}
-                  style={{ width: "100%", background: "#111", border: "1px solid #1a1b2e", borderRadius: "6px", color: "#ced2f0", fontSize: "12px", padding: "6px 10px", boxSizing: "border-box", marginBottom: "8px" }} />
-                <button onClick={addCustomEx}
-                  style={{ width: "100%", padding: "8px 0", background: newExName.trim() ? "#1a1b3a" : "#0d0e1c", border: `1px solid ${newExName.trim() ? "#4a4d6a" : "#1a1b2e"}`, borderRadius: "6px", color: newExName.trim() ? "#ced2f0" : "#2a2a4a", cursor: newExName.trim() ? "pointer" : "default", fontSize: "12px", fontWeight: "600" }}>
-                  Add to session
-                </button>
-              </div>
+          {prog.core?.length > 0 && (
+            <div style={{ border: "0.5px solid #1a1a1a", borderRadius: 8, marginBottom: 10, overflow: "hidden" }}>
+              {sectionHeader("core", "Core", "#3B6D11", "~5 min")}
+              {openSections.core && simpleList(prog.core)}
             </div>
           )}
 
-          {!isRest && (
-            <div style={{ marginTop: "16px", paddingTop: "12px", borderTop: "1px solid #1a1a1a" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px", flexWrap: "wrap" }}>
-                <div style={{ fontSize: "10px", color: "#4a4d6a", whiteSpace: "nowrap" }}>Session date</div>
-<input
-  type="date"
-  value={sessionDate}
-  max={todayISO()}
-  onChange={e => setSessionDate(e.target.value)}
-  style={{ background: "#111", border: "1px solid #1a1b2e", borderRadius: "6px", color: "#ced2f0", fontSize: "11px", padding: "5px 8px" }}
-/>
+          <div style={{ border: "0.5px solid #1a1a1a", borderRadius: 8, marginBottom: 16, overflow: "hidden" }}>
+            {sectionHeader("cardio", "Cardio prescription", "#993C1D")}
+            {openSections.cardio && cardioBlock(activeDay)}
+          </div>
 
-<input
-  type="time"
-  value={sessionTime}
-  onChange={e => setSessionTime(e.target.value)}
-  style={{ background: "#111", border: "1px solid #1a1b2e", borderRadius: "6px", color: "#ced2f0", fontSize: "11px", padding: "5px 8px", marginLeft: "8px" }}
-/>
-                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                  <div style={{ fontSize: "10px", color: "#4a4d6a", whiteSpace: "nowrap" }}>Duration</div>
-                  <input
-                    type="number"
-                    min="0"
-                    max="240"
-                    placeholder="min"
-                    value={sessionDur}
-                    onChange={e => setSessionDur(e.target.value)}
-                    style={{ background: "#111", border: "1px solid #1a1b2e", borderRadius: "6px", color: "#ced2f0", fontSize: "11px", padding: "5px 8px", width: "64px", textAlign: "center" }}
-                  />
-                </div>
-                <button onClick={() => setSessionDate(todayISO())} style={buttonStyle(false)}>Today</button>
-              </div>
-<div style={{ background: "#111", border: "1px solid #1a1a1a", borderRadius: "8px", padding: "12px", marginBottom: "10px" }}>
-  <div style={{ fontSize: "10px", color: "#4a4d6a", textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: "10px" }}>
-    Cardio details
-  </div>
-
-  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "8px", marginBottom: "8px" }}>
-    <select
-      value={cardioType}
-      onChange={e => setCardioType(e.target.value)}
-      style={{ background: "#111", border: "1px solid #1a1b2e", borderRadius: "6px", color: "#ced2f0", fontSize: "11px", padding: "8px" }}
-    >
-      <option value="">No cardio</option>
-      <option value="Running">Running</option>
-      <option value="Cycling">Cycling</option>
-      <option value="Swimming">Swimming</option>
-      <option value="Rowing">Rowing</option>
-      <option value="Walking">Walking</option>
-      <option value="Other">Other</option>
-    </select>
-
-    <input
-      type="number"
-      step="0.1"
-      placeholder="Distance"
-      value={cardioDistance}
-      onChange={e => setCardioDistance(e.target.value)}
-      style={{ background: "#111", border: "1px solid #1a1b2e", borderRadius: "6px", color: "#ced2f0", fontSize: "11px", padding: "8px" }}
-    />
-
-    <input
-      type="number"
-      placeholder="Active calories"
-      value={cardioCalories}
-      onChange={e => setCardioCalories(e.target.value)}
-      style={{ background: "#111", border: "1px solid #1a1b2e", borderRadius: "6px", color: "#ced2f0", fontSize: "11px", padding: "8px" }}
-    />
-
-    <input
-      type="number"
-      placeholder="Avg HR"
-      value={cardioAvgHr}
-      onChange={e => setCardioAvgHr(e.target.value)}
-      style={{ background: "#111", border: "1px solid #1a1b2e", borderRadius: "6px", color: "#ced2f0", fontSize: "11px", padding: "8px" }}
-    />
-  </div>
-
-  <textarea
-    value={cardioNotes}
-    onChange={e => setCardioNotes(e.target.value)}
-    placeholder="Cardio notes, pace, splits, pool length, route, etc."
-    style={{ width: "100%", minHeight: "60px", resize: "vertical", background: "#111", border: "1px solid #1a1b2e", borderRadius: "6px", color: "#ced2f0", fontSize: "11px", padding: "8px", boxSizing: "border-box" }}
-  />
-</div>
-              <div style={{ display: "flex", gap: "8px" }}>
-                <button
-                  onClick={saveSession}
-                  style={{
-                    flex: 1,
-                    padding: "13px 0",
-                    background: meta.color,
-                    border: "none",
-                    borderRadius: "8px",
-                    fontSize: "14px",
-                    fontWeight: "800",
-                    letterSpacing: "0.1em",
-                    textTransform: "uppercase",
-                    color: meta.venue === "KNR" ? "#fff" : "#0a0a0a",
-                    cursor: "pointer"
-                  }}
-                >
-                  Log {meta.label}
-                </button>
-
-                {undo && (
-                  <button onClick={undoSave} style={buttonStyle(false)}>Undo</button>
-                )}
-              </div>
-            </div>
-          )}
+          {logBar()}
         </>
       )}
 
       {toast && (
-        <div style={{ position: "fixed", top: "16px", right: "16px", background: "#1a1a1a", border: "1px solid #2a2a2a", borderRadius: "8px", padding: "9px 16px", fontSize: "12px", color: "#c0c0c0", zIndex: 200, pointerEvents: "none" }}>
+        <div style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", background: "#1a1a1a", border: "1px solid #333", color: "#e8e8e8", padding: "8px 20px", borderRadius: 8, fontSize: 13, zIndex: 999, pointerEvents: "none" }}>
           {toast}
         </div>
       )}
