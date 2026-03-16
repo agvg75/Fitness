@@ -3422,6 +3422,7 @@ async function persistMealEntries(nextEntries, currentUserId) {
   await store.set("ufd-meal-entries", nextEntries)
 
   // currentUserId passed as parameter
+  console.log("persistMealEntries called, userId:", currentUserId)
   if (!currentUserId) {
     console.log("No active session, meals saved locally only.")
     return
