@@ -97,7 +97,7 @@ const tabs = [
   "Training",
   "Forecast",
   "Schedule",
-  "Log",
+  "Import",
   "Calories",
   "Injury"
 ]
@@ -2339,6 +2339,1546 @@ function clampTrainingSlope(key, slope) {
   const [minVal, maxVal] = limits[key] || [-10, 10]
   return Math.max(minVal, Math.min(maxVal, slope))
 }
+function safeStringify(value) {
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return null
+  }
+}
+
+function stableHash(input) {
+  const str = String(input || "")
+  let hash = 2166136261
+  for (let i = 0; i < str.length; i += 1) {
+    hash ^= str.charCodeAt(i)
+    hash = Math.imul(hash, 16777619)
+  }
+  return Math.abs(hash >>> 0).toString(36)
+}
+
+function makeSessionId(prefix, payload) {
+  return `${prefix}_${stableHash(safeStringify(payload) || String(Date.now()))}`
+}
+
+function createInlineImportWorker() {
+  const workerSource = `
+self.onmessage = async function(event) {
+  const data = event && event.data ? event.data : {};
+  if (data.type !== 'process') return;
+
+  const appleFile = data.appleFile || null;
+  const technogymFile = data.technogymFile || null;
+
+  try {
+    self.postMessage({ type: 'progress', stage: 'starting', message: 'Initializing import worker' });
+    const apple = appleFile ? parseAppleHealthFile(appleFile) : { workouts: [], rejected: [], diagnostics: { parsed_lines: 0 } };
+    self.postMessage({ type: 'progress', stage: 'apple_done', message: 'Apple file parsed', apple_count: apple.workouts.length });
+    const technogym = technogymFile ? parseTechnogymFile(technogymFile) : { workouts: [], rejected: [], diagnostics: { candidate_records: 0 } };
+    self.postMessage({ type: 'progress', stage: 'technogym_done', message: 'Technogym file parsed', technogym_count: technogym.workouts.length });
+
+    const overlapBundle = findOverlapCandidates(apple.workouts, technogym.workouts);
+    self.postMessage({ type: 'progress', stage: 'overlaps_done', message: 'Overlap candidates created', overlap_count: overlapBundle.candidates.length });
+
+    const built = buildImportResult(apple.workouts, technogym.workouts, overlapBundle.candidates, apple.rejected.concat(technogym.rejected));
+    built.diagnostics = {
+      apple: apple.diagnostics,
+      technogym: technogym.diagnostics,
+      overlaps: overlapBundle.summary
+    };
+
+    self.postMessage({ type: 'done', result: built });
+  } catch (error) {
+    self.postMessage({ type: 'error', error: error && error.message ? error.message : String(error) });
+  }
+};
+
+function normalizeOffset(offset) {
+  if (!offset) return '';
+  if (/^[+-]\d{2}:\d{2}$/.test(offset)) return offset;
+  if (/^[+-]\d{4}$/.test(offset)) return offset.slice(0, 3) + ':' + offset.slice(3);
+  return offset;
+}
+
+function normalizeDateString(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  if (/^\d{4}-\d{2}-\d{2}T/.test(raw)) return raw.replace(/([+-]\d{2})(\d{2})$/, '$1:$2');
+  const m = raw.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})(?:\s*([+-]\d{2}:?\d{2}|Z))?$/);
+  if (m) {
+    const tz = m[3] === 'Z' ? 'Z' : normalizeOffset(m[3] || '');
+    return m[1] + 'T' + m[2] + tz;
+  }
+  const t = Date.parse(raw);
+  return Number.isFinite(t) ? new Date(t).toISOString() : null;
+}
+
+function toMs(value) {
+  const normalized = normalizeDateString(value);
+  if (!normalized) return null;
+  const ms = Date.parse(normalized);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function minutesBetween(start, end) {
+  const s = toMs(start);
+  const e = toMs(end);
+  if (!Number.isFinite(s) || !Number.isFinite(e) || e <= s) return null;
+  return (e - s) / 60000;
+}
+
+function num(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function getAttr(line, key) {
+  const escaped = key.replace(/[.*+?^\${}()|[\]\\]/g, '\\export default function App()');
+  const m = line.match(new RegExp(escaped + '="([^"]*)"'));
+  return m ? m[1] : null;
+}
+
+function mapAppleWorkoutType(rawType) {
+  const typeMap = {
+    HKWorkoutActivityTypeRunning: 'Running',
+    HKWorkoutActivityTypeCycling: 'Cycling',
+    HKWorkoutActivityTypeWalking: 'Walking',
+    HKWorkoutActivityTypeTraditionalStrengthTraining: 'Traditional Strength Training',
+    HKWorkoutActivityTypeFunctionalStrengthTraining: 'Functional Strength Training',
+    HKWorkoutActivityTypeCoreTraining: 'Core Training',
+    HKWorkoutActivityTypeElliptical: 'Elliptical',
+    HKWorkoutActivityTypeRowing: 'Rowing',
+    HKWorkoutActivityTypeStairClimbing: 'Stair Climbing',
+    HKWorkoutActivityTypeCooldown: 'Cooldown',
+    HKWorkoutActivityTypeSwimming: 'Swimming',
+    HKWorkoutActivityTypeHiking: 'Hiking',
+    HKWorkoutActivityTypeOther: 'Other'
+  };
+  return typeMap[rawType] || 'Other';
+}
+
+function parseAppleHealthFile(file) {
+  const reader = new FileReaderSync();
+  const chunkSize = 2 * 1024 * 1024;
+  let offset = 0;
+  let buffer = '';
+  let lineCount = 0;
+
+  const workouts = [];
+  const rejected = [];
+  const dedupe = new Set();
+  const statDistance = new Map();
+  const swimLaps = new Map();
+  const statTypes = new Set([
+    'HKQuantityTypeIdentifierDistanceWalkingRunning',
+    'HKQuantityTypeIdentifierDistanceCycling',
+    'HKQuantityTypeIdentifierDistanceSwimming'
+  ]);
+
+  function processLine(line) {
+    lineCount += 1;
+
+    if (line.includes('<WorkoutStatistics')) {
+      const type = getAttr(line, 'type');
+      const startDate = getAttr(line, 'startDate');
+      const sum = num(getAttr(line, 'sum'));
+      const unit = getAttr(line, 'unit');
+      if (type && startDate && statTypes.has(type) && Number.isFinite(sum)) {
+        statDistance.set(startDate, { sum, unit: unit || null });
+      }
+      return;
+    }
+
+    if (line.includes('<Record ') && line.includes('HKQuantityTypeIdentifierDistanceSwimming')) {
+      const startDate = getAttr(line, 'startDate');
+      const value = num(getAttr(line, 'value'));
+      if (startDate && Number.isFinite(value)) {
+        const day = String(startDate).slice(0, 10);
+        swimLaps.set(day, (swimLaps.get(day) || 0) + value);
+      }
+      return;
+    }
+
+    if (line.includes('<Workout ')) {
+      const rawType = getAttr(line, 'workoutActivityType');
+      const startDate = getAttr(line, 'startDate');
+      const endDate = getAttr(line, 'endDate');
+      if (!rawType || !startDate || !endDate) {
+        rejected.push({ source: 'AppleHealth', reason: 'Missing required workout dates or type', raw_line: line.slice(0, 400) });
+        return;
+      }
+      const key = startDate + '|' + rawType;
+      if (dedupe.has(key)) return;
+      dedupe.add(key);
+
+      const durationMin = num(getAttr(line, 'duration')) || minutesBetween(startDate, endDate) || 0;
+      const distance = num(getAttr(line, 'totalDistance')) || 0;
+      const workout = {
+        source: 'AppleHealth',
+        raw_type: rawType,
+        type: mapAppleWorkoutType(rawType),
+        start_date: normalizeDateString(startDate),
+        end_date: normalizeDateString(endDate),
+        duration_min: durationMin,
+        distance: distance,
+        distance_unit: getAttr(line, 'totalDistanceUnit') || null,
+        calories: num(getAttr(line, 'totalEnergyBurned')) || 0,
+        hr: 0,
+        notes: '',
+        source_name: getAttr(line, 'sourceName') || '',
+        raw_start_date: startDate
+      };
+      workouts.push(workout);
+    }
+  }
+
+  while (offset < file.size) {
+    const chunk = reader.readAsText(file.slice(offset, offset + chunkSize));
+    offset += chunkSize;
+    buffer += chunk;
+    const lines = buffer.split(/\r?\n/);
+    buffer = lines.pop() || '';
+    for (let i = 0; i < lines.length; i += 1) processLine(lines[i]);
+    self.postMessage({ type: 'progress', stage: 'apple_parse', message: 'Parsing Apple XML', processed_bytes: Math.min(offset, file.size), total_bytes: file.size, parsed_lines: lineCount });
+  }
+  if (buffer) processLine(buffer);
+
+  for (let i = 0; i < workouts.length; i += 1) {
+    const workout = workouts[i];
+    if (!workout.distance) {
+      const stat = statDistance.get(workout.raw_start_date);
+      if (stat && Number.isFinite(Number(stat.sum))) {
+        workout.distance = Number(stat.sum);
+        workout.distance_unit = stat.unit || workout.distance_unit;
+      }
+    }
+    if ((!workout.distance || workout.distance === 0) && workout.type === 'Swimming') {
+      const day = String(workout.raw_start_date || '').slice(0, 10);
+      const yards = swimLaps.get(day);
+      if (Number.isFinite(Number(yards)) && yards > 0) {
+        workout.distance = Number(yards);
+        workout.distance_unit = 'yd';
+      }
+    }
+  }
+
+  workouts.sort(function(a, b) {
+    return (toMs(a.start_date) || 0) - (toMs(b.start_date) || 0);
+  });
+
+  return {
+    workouts: workouts.map(function(w) {
+      const copy = Object.assign({}, w);
+      delete copy.raw_start_date;
+      return copy;
+    }),
+    rejected,
+    diagnostics: {
+      parsed_lines: lineCount,
+      deduplicated_workouts: dedupe.size,
+      distance_stats_found: statDistance.size,
+      swim_days_found: swimLaps.size
+    }
+  };
+}
+
+function classifyTechnogym(workout) {
+  if (workout.TotalIsoWeight != null || workout.Rm1 != null) return 'Traditional Strength Training';
+  if (workout.AvgSpeedRpm != null || workout.AvgRpm != null) return 'Cycling';
+  if (workout.AvgRunningCadence != null || workout.RunType != null) return 'Running';
+  if (workout.HDistance != null) return 'Cycling';
+  const raw = String(workout.activity_type || workout.type || workout.raw_type || '').toLowerCase();
+  if (raw.includes('run') || raw.includes('tread')) return 'Running';
+  if (raw.includes('bike') || raw.includes('cycl') || raw.includes('spin')) return 'Cycling';
+  if (raw.includes('row')) return 'Rowing';
+  if (raw.includes('ellip')) return 'Elliptical';
+  if (raw.includes('stair')) return 'Stair Climbing';
+  if (raw.includes('strength') || raw.includes('weight')) return 'Traditional Strength Training';
+  return 'Machine Cardio';
+}
+
+function looksLikeTechnogymSession(obj) {
+  if (!obj || Array.isArray(obj) || typeof obj !== 'object') return false;
+  const keys = Object.keys(obj);
+  if (!keys.length) return false;
+  const lower = keys.map(function(k) { return String(k).toLowerCase(); });
+  const hasDate = lower.some(function(k) { return k.includes('date') || k.includes('start'); });
+  const hasDuration = lower.some(function(k) { return k.includes('duration') || k.includes('time') || k.includes('elapsed'); });
+  const hasMetrics = lower.some(function(k) {
+    return k.includes('cal') || k.includes('distance') || k.includes('rpm') || k.includes('power') || k.includes('weight') || k.includes('hr');
+  });
+  return (hasDate && hasDuration) || (hasDate && hasMetrics);
+}
+
+function collectTechnogymCandidates(node, acc, depth) {
+  if (!node || depth > 8) return;
+  if (Array.isArray(node)) {
+    for (let i = 0; i < node.length; i += 1) collectTechnogymCandidates(node[i], acc, depth + 1);
+    return;
+  }
+  if (typeof node !== 'object') return;
+
+  if (looksLikeTechnogymSession(node)) acc.push(node);
+
+  const values = Object.values(node);
+  for (let i = 0; i < values.length; i += 1) {
+    const value = values[i];
+    if (value && typeof value === 'object') collectTechnogymCandidates(value, acc, depth + 1);
+  }
+}
+
+function firstValue(obj, keys) {
+  for (let i = 0; i < keys.length; i += 1) {
+    const key = keys[i];
+    if (obj[key] != null && obj[key] !== '') return obj[key];
+  }
+  return null;
+}
+
+function normalizeTechnogymFile(file) {
+  const reader = new FileReaderSync();
+  const text = reader.readAsText(file);
+  const parsed = JSON.parse(text);
+  const candidates = [];
+  collectTechnogymCandidates(parsed, candidates, 0);
+
+  const workouts = [];
+  const rejected = [];
+  const seen = new Set();
+
+  for (let i = 0; i < candidates.length; i += 1) {
+    const raw = candidates[i];
+    const startRaw = firstValue(raw, ['start_date', 'startDate', 'StartDate', 'Date', 'date', 'TrainingStartDate', 'WorkoutStartDate']);
+    const startDate = normalizeDateString(startRaw);
+
+    let durationSec = num(firstValue(raw, ['duration_sec', 'DurationSeconds', 'durationSeconds', 'ElapsedSeconds', 'MovingTimeSeconds']));
+    if (!Number.isFinite(durationSec)) {
+      const durationMin = num(firstValue(raw, ['duration_min', 'DurationMinutes', 'duration', 'Duration', 'ElapsedMinutes', 'MovingTimeMinutes']));
+      if (Number.isFinite(durationMin)) durationSec = durationMin > 240 ? durationMin : durationMin * 60;
+    }
+    if (!Number.isFinite(durationSec)) durationSec = null;
+
+    const endRaw = firstValue(raw, ['end_date', 'endDate', 'EndDate', 'WorkoutEndDate']);
+    let endDate = normalizeDateString(endRaw);
+    if (!endDate && startDate && Number.isFinite(durationSec) && durationSec > 0) {
+      endDate = new Date(toMs(startDate) + durationSec * 1000).toISOString();
+    }
+
+    const signature = (startDate || 'na') + '|' + (endDate || 'na') + '|' + JSON.stringify(Object.keys(raw).sort());
+    if (seen.has(signature)) continue;
+    seen.add(signature);
+
+    if (!startDate || !endDate) {
+      rejected.push({ source: 'Technogym', reason: 'Missing usable start or end date', raw: raw });
+      continue;
+    }
+
+    const distanceRaw = firstValue(raw, ['distance', 'Distance', 'HDistance', 'TotalDistance', 'DistanceMeters']);
+    const distance = num(distanceRaw);
+    const type = classifyTechnogym(raw);
+
+    workouts.push({
+      source: 'Technogym',
+      raw_type: firstValue(raw, ['activity_type', 'ActivityType', 'type', 'Type', 'discipline']) || type,
+      type,
+      start_date: startDate,
+      end_date: endDate,
+      duration_min: minutesBetween(startDate, endDate),
+      distance: Number.isFinite(distance) ? distance : null,
+      distance_unit: firstValue(raw, ['distance_unit', 'DistanceUnit', 'Unit']) || (Number.isFinite(distance) ? 'm' : null),
+      calories: num(firstValue(raw, ['calories', 'Calories', 'Energy', 'TotalCalories'])) || 0,
+      hr: num(firstValue(raw, ['hr', 'AvgHeartRate', 'AverageHeartRate'])) || null,
+      notes: '',
+      power_avg: num(firstValue(raw, ['power_avg', 'AvgPower', 'AveragePower'])),
+      level: num(firstValue(raw, ['level', 'Level'])),
+      rpm_avg: num(firstValue(raw, ['rpm_avg', 'AvgRpm', 'AvgSpeedRpm'])),
+      vo2: num(firstValue(raw, ['vo2', 'VO2', 'EstimatedVO2'])),
+      raw: raw
+    });
+  }
+
+  workouts.sort(function(a, b) {
+    return (toMs(a.start_date) || 0) - (toMs(b.start_date) || 0);
+  });
+
+  return {
+    workouts,
+    rejected,
+    diagnostics: {
+      candidate_records: candidates.length,
+      unique_sessions: workouts.length
+    }
+  };
+}
+
+function parseTechnogymFile(file) {
+  return normalizeTechnogymFile(file);
+}
+
+function isUsefulWorkout(workout) {
+  if (!workout || !workout.start_date || !workout.end_date) return false;
+  const start = toMs(workout.start_date);
+  const end = toMs(workout.end_date);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return false;
+  const durMin = (end - start) / 60000;
+  if (durMin < 2) return false;
+  if (durMin > 240) return false;
+  return true;
+}
+
+function overlapMinutes(aStart, aEnd, bStart, bEnd) {
+  const start = Math.max(aStart, bStart);
+  const end = Math.min(aEnd, bEnd);
+  return Math.max(0, (end - start) / 60000);
+}
+
+function typeFamily(type) {
+  const t = String(type || '').toLowerCase();
+  if (t.includes('run')) return 'running';
+  if (t.includes('walk')) return 'walking';
+  if (t.includes('cycl') || t.includes('bike') || t.includes('spin')) return 'cycling';
+  if (t.includes('swim')) return 'swimming';
+  if (t.includes('strength') || t.includes('core')) return 'strength';
+  if (t.includes('row')) return 'rowing';
+  if (t.includes('ellip')) return 'elliptical';
+  if (t.includes('stair')) return 'stairs';
+  return 'other';
+}
+
+function findOverlapCandidates(appleWorkouts, technoWorkouts) {
+  const apple = appleWorkouts.filter(isUsefulWorkout);
+  const technogym = technoWorkouts.filter(isUsefulWorkout);
+  const candidates = [];
+
+  for (let ai = 0; ai < apple.length; ai += 1) {
+    const a = apple[ai];
+    const aStart = toMs(a.start_date);
+    const aEnd = toMs(a.end_date);
+    const aDur = minutesBetween(a.start_date, a.end_date);
+    for (let ti = 0; ti < technogym.length; ti += 1) {
+      const t = technogym[ti];
+      const tStart = toMs(t.start_date);
+      const tEnd = toMs(t.end_date);
+      const tDur = minutesBetween(t.start_date, t.end_date);
+      if (!Number.isFinite(aStart) || !Number.isFinite(aEnd) || !Number.isFinite(tStart) || !Number.isFinite(tEnd)) continue;
+      const overlapMin = overlapMinutes(aStart, aEnd, tStart, tEnd);
+      if (overlapMin <= 0) continue;
+      const appleOverlapFraction = aDur > 0 ? overlapMin / aDur : 0;
+      const technoOverlapFraction = tDur > 0 ? overlapMin / tDur : 0;
+      const strong = overlapMin >= 5 && (appleOverlapFraction >= 0.4 || technoOverlapFraction >= 0.4);
+      const weak = overlapMin >= 2 && (appleOverlapFraction >= 0.15 || technoOverlapFraction >= 0.15);
+      if (!strong && !weak) continue;
+      let classification = 'partial_overlap';
+      if (appleOverlapFraction >= 0.9 && technoOverlapFraction >= 0.9) classification = 'near_exact';
+      else if (technoOverlapFraction >= 0.9) classification = 'technogym_inside_apple';
+      else if (appleOverlapFraction >= 0.9) classification = 'apple_inside_technogym';
+      candidates.push({
+        apple_idx: ai,
+        techno_idx: ti,
+        confidence: strong ? 'strong' : 'weak',
+        classification,
+        overlap_min: overlapMin,
+        apple_overlap_fraction: appleOverlapFraction,
+        techno_overlap_fraction: technoOverlapFraction,
+        start_diff_min: Math.abs(aStart - tStart) / 60000,
+        end_diff_min: Math.abs(aEnd - tEnd) / 60000
+      });
+    }
+  }
+
+  candidates.sort(function(a, b) {
+    if (b.overlap_min !== a.overlap_min) return b.overlap_min - a.overlap_min;
+    return a.start_diff_min - b.start_diff_min;
+  });
+
+  return {
+    candidates,
+    summary: {
+      candidates: candidates.length,
+      strong_candidates: candidates.filter(function(c) { return c.confidence === 'strong'; }).length,
+      weak_candidates: candidates.filter(function(c) { return c.confidence === 'weak'; }).length
+    }
+  };
+}
+
+function safeClone(value) {
+  return value == null ? null : JSON.parse(JSON.stringify(value));
+}
+
+function preferredType(apple, techno) {
+  const appleType = String(apple && apple.type || '').trim();
+  const technoType = String(techno && techno.type || '').trim();
+  const appleFamily = typeFamily(appleType);
+  const technoFamily = typeFamily(technoType);
+  if (appleFamily && appleFamily !== 'other' && technoFamily && technoFamily !== 'other' && appleFamily !== technoFamily) return appleType || technoType || 'Other';
+  if (technoType && technoType !== 'Other' && technoType !== 'Machine Cardio') return technoType;
+  if (appleType && appleType !== 'Other') return appleType;
+  return technoType || appleType || 'Other';
+}
+
+function sessionStart(apple, techno) {
+  const vals = [toMs(apple && apple.start_date), toMs(techno && techno.start_date)].filter(Number.isFinite);
+  if (!vals.length) return null;
+  return new Date(Math.min.apply(null, vals)).toISOString();
+}
+
+function sessionEnd(apple, techno) {
+  const vals = [toMs(apple && apple.end_date), toMs(techno && techno.end_date)].filter(Number.isFinite);
+  if (!vals.length) return null;
+  return new Date(Math.max.apply(null, vals)).toISOString();
+}
+
+function pickCalories(apple, techno) {
+  if (apple && apple.calories != null) return { value: apple.calories, source: 'AppleHealth' };
+  if (techno && techno.calories != null) return { value: techno.calories, source: 'Technogym' };
+  return { value: null, source: null };
+}
+
+function pickHr(apple, techno) {
+  if (apple && apple.hr != null) return { value: apple.hr, source: 'AppleHealth' };
+  if (techno && techno.hr != null) return { value: techno.hr, source: 'Technogym' };
+  return { value: null, source: null };
+}
+
+function pickDistance(apple, techno) {
+  if (techno && techno.distance != null) return { value: techno.distance, source: 'Technogym', rationale: 'Preferred machine distance', unit: techno.distance_unit || 'm' };
+  if (apple && apple.distance != null) return { value: apple.distance, source: 'AppleHealth', rationale: 'Fallback to Apple distance', unit: apple.distance_unit || 'mi' };
+  return { value: null, source: null, rationale: null, unit: null };
+}
+
+function makeCanonicalSession(prefix, apple, techno, match) {
+  const startDate = sessionStart(apple, techno);
+  const endDate = sessionEnd(apple, techno);
+  return {
+    session_id: prefix + '_' + stableHash(JSON.stringify({ prefix: prefix, a: apple && apple.start_date, t: techno && techno.start_date, rel: match && match.classification })),
+    match_confidence: match ? match.confidence : 'unmatched',
+    relationship: match ? match.classification : null,
+    canonical_type: preferredType(apple, techno),
+    start_date: startDate,
+    end_date: endDate,
+    duration_min: minutesBetween(startDate, endDate),
+    overlap_summary: match ? {
+      overlap_min: match.overlap_min,
+      apple_overlap_fraction: match.apple_overlap_fraction,
+      techno_overlap_fraction: match.techno_overlap_fraction,
+      start_diff_min: match.start_diff_min,
+      end_diff_min: match.end_diff_min
+    } : null,
+    sources: {
+      apple: safeClone(apple),
+      technogym: safeClone(techno)
+    },
+    preferred_metrics: {
+      hr: pickHr(apple, techno),
+      calories: pickCalories(apple, techno),
+      distance: pickDistance(apple, techno),
+      power_avg: { value: techno && techno.power_avg != null ? techno.power_avg : null, source: techno && techno.power_avg != null ? 'Technogym' : null },
+      level: { value: techno && techno.level != null ? techno.level : null, source: techno && techno.level != null ? 'Technogym' : null },
+      rpm_avg: { value: techno && techno.rpm_avg != null ? techno.rpm_avg : null, source: techno && techno.rpm_avg != null ? 'Technogym' : null },
+      vo2: { value: techno && techno.vo2 != null ? techno.vo2 : null, source: techno && techno.vo2 != null ? 'Technogym' : null, note: techno && techno.vo2 != null ? 'Technogym workout-level VO2 estimate' : null }
+    }
+  };
+}
+
+function distanceDiffPct(apple, techno) {
+  const a = Number(apple && apple.distance);
+  const t = Number(techno && techno.distance);
+  if (!Number.isFinite(a) || !Number.isFinite(t) || a <= 0 || t <= 0) return null;
+  return Math.abs(a - t) / Math.max(a, t) * 100;
+}
+
+function confidenceScore(match, apple, techno) {
+  let score = match.confidence === 'strong' ? 0.75 : 0.45;
+  if (match.classification === 'near_exact') score += 0.15;
+  if (typeFamily(apple && apple.type) === typeFamily(techno && techno.type)) score += 0.08;
+  const diff = distanceDiffPct(apple, techno);
+  if (diff == null) score += 0.03;
+  else if (diff <= 5) score += 0.08;
+  else if (diff >= 15) score -= 0.1;
+  if (match.start_diff_min <= 3) score += 0.06;
+  return Math.max(0, Math.min(0.99, score));
+}
+
+function buildImportResult(appleWorkouts, technoWorkouts, overlapCandidates, rejectedSeed) {
+  const apple = appleWorkouts.filter(isUsefulWorkout);
+  const technogym = technoWorkouts.filter(isUsefulWorkout);
+  const accepted = [];
+  const review = [];
+  const rejected = Array.isArray(rejectedSeed) ? rejectedSeed.slice() : [];
+  const usedApple = new Set();
+  const usedTechno = new Set();
+
+  for (let i = 0; i < overlapCandidates.length; i += 1) {
+    const match = overlapCandidates[i];
+    const appleWorkout = apple[match.apple_idx];
+    const technoWorkout = technogym[match.techno_idx];
+    if (!appleWorkout || !technoWorkout) continue;
+    if (usedApple.has(match.apple_idx) || usedTechno.has(match.techno_idx)) continue;
+
+    const diffPct = distanceDiffPct(appleWorkout, technoWorkout);
+    const sameFamily = typeFamily(appleWorkout.type) === typeFamily(technoWorkout.type);
+    const safeAuto = match.confidence === 'strong' && match.start_diff_min <= 3 && sameFamily && (diffPct == null || diffPct <= 5);
+
+    if (safeAuto) {
+      accepted.push(makeCanonicalSession('linked', appleWorkout, technoWorkout, match));
+      usedApple.add(match.apple_idx);
+      usedTechno.add(match.techno_idx);
+      continue;
+    }
+
+    review.push({
+      review_id: 'rev_' + stableHash(JSON.stringify(match) + '|' + (appleWorkout.start_date || '') + '|' + (technoWorkout.start_date || '')),
+      review_kind: 'candidate_pair',
+      suggested_action: sameFamily ? 'same_session' : 'different_sessions',
+      confidence: confidenceScore(match, appleWorkout, technoWorkout),
+      reasons: buildReasons(match, appleWorkout, technoWorkout),
+      comparators: {
+        start_diff_min: match.start_diff_min,
+        end_diff_min: match.end_diff_min,
+        overlap_min: match.overlap_min,
+        apple_overlap_fraction: match.apple_overlap_fraction,
+        techno_overlap_fraction: match.techno_overlap_fraction,
+        distance_diff_pct: diffPct,
+        type_equal: sameFamily
+      },
+      source_a: { source: 'AppleHealth', record: safeClone(appleWorkout), idx: match.apple_idx },
+      source_b: { source: 'Technogym', record: safeClone(technoWorkout), idx: match.techno_idx },
+      merge_preview: makeCanonicalSession('preview', appleWorkout, technoWorkout, match)
+    });
+    usedApple.add(match.apple_idx);
+    usedTechno.add(match.techno_idx);
+  }
+
+  for (let i = 0; i < apple.length; i += 1) {
+    if (usedApple.has(i)) continue;
+    accepted.push(makeCanonicalSession('apple', apple[i], null, null));
+  }
+
+  for (let i = 0; i < technogym.length; i += 1) {
+    if (usedTechno.has(i)) continue;
+    accepted.push(makeCanonicalSession('techno', null, technogym[i], null));
+  }
+
+  accepted.sort(function(a, b) {
+    return (toMs(a.start_date) || 0) - (toMs(b.start_date) || 0);
+  });
+
+  return {
+    accepted: accepted,
+    review: review,
+    rejected: rejected,
+    all_sessions: accepted.slice(),
+    generated_at: new Date().toISOString(),
+    summary: {
+      total: accepted.length,
+      accepted: accepted.length,
+      review: review.length,
+      rejected: rejected.length,
+      linked: accepted.filter(function(s) { return s.sources.apple && s.sources.technogym; }).length,
+      unmatched_apple: accepted.filter(function(s) { return s.sources.apple && !s.sources.technogym; }).length,
+      unmatched_technogym: accepted.filter(function(s) { return !s.sources.apple && s.sources.technogym; }).length
+    }
+  };
+}
+
+function buildReasons(match, apple, techno) {
+  const reasons = [];
+  if (match.start_diff_min > 3) reasons.push('start times differ by ' + match.start_diff_min.toFixed(1) + ' min');
+  if (match.end_diff_min > 3) reasons.push('end times differ by ' + match.end_diff_min.toFixed(1) + ' min');
+  const diff = distanceDiffPct(apple, techno);
+  if (diff != null && diff > 5) reasons.push('distance differs by ' + diff.toFixed(1) + '%');
+  if (typeFamily(apple && apple.type) !== typeFamily(techno && techno.type)) reasons.push('activity type family mismatch');
+  if (!reasons.length) reasons.push('manual confirmation requested');
+  return reasons;
+}
+
+function stableHash(input) {
+  var str = String(input || '');
+  var hash = 2166136261;
+  for (var i = 0; i < str.length; i += 1) {
+    hash ^= str.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return Math.abs(hash >>> 0).toString(36);
+}
+`
+
+  const blob = new Blob([workerSource], { type: "text/javascript" })
+  return new Worker(URL.createObjectURL(blob))
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SOURCE AUTO-DETECTION
+// Inspects file content to determine source. Never guesses silently —
+// returns "unknown" if confidence is low, which routes to review queue.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function detectSourceType(filename, firstChunk) {
+  const name = String(filename || "").toLowerCase()
+  const chunk = String(firstChunk || "").slice(0, 4000)
+
+  // Apple Health XML — very distinctive opening tag
+  if (chunk.includes("<HealthData") || chunk.includes("<Workout ") || chunk.includes("HKWorkoutActivity"))
+    return { source: "apple_health", format: "xml", confidence: "high" }
+
+  // Technogym JSON — look for characteristic fields
+  if (name.endsWith(".json") || chunk.trimStart().startsWith("{") || chunk.trimStart().startsWith("[")) {
+    const lower = chunk.toLowerCase()
+    if (lower.includes("avgrpm") || lower.includes("avgsrpeedRpm") || lower.includes("hdistance") ||
+        lower.includes("totalIsoWeight") || lower.includes("technogym") || lower.includes("rm1") ||
+        lower.includes("avgrunningcadence") || lower.includes("trainingStartDate"))
+      return { source: "technogym", format: "json", confidence: "high" }
+    // Generic JSON — still might be Technogym with unusual export
+    if (lower.includes("workout") || lower.includes("duration") || lower.includes("calories"))
+      return { source: "technogym", format: "json", confidence: "medium" }
+    return { source: "unknown_json", format: "json", confidence: "low" }
+  }
+
+  // CSV sources — inspect header row
+  if (chunk.includes(",") || name.endsWith(".csv")) {
+    const firstLine = chunk.split(/\r?\n/)[0].toLowerCase()
+
+    // FitnessView CSV — characteristic columns
+    if (firstLine.includes("workout type") || firstLine.includes("activity_type") ||
+        (firstLine.includes("distance") && firstLine.includes("heart rate") && firstLine.includes("pace")))
+      return { source: "fitnessview", format: "csv", confidence: "high" }
+
+    // Cronometer — nutrition export
+    if (firstLine.includes("energy (kcal)") || firstLine.includes("protein (g)") ||
+        firstLine.includes("food name") || firstLine.includes("cronometer"))
+      return { source: "cronometer", format: "csv", confidence: "high" }
+
+    // Sleep Cycle
+    if (firstLine.includes("sleep quality") || firstLine.includes("time in bed") ||
+        firstLine.includes("wake up") || firstLine.includes("sleep notes") ||
+        firstLine.includes("heart rate (bpm)") && firstLine.includes("steps"))
+      return { source: "sleep_cycle", format: "csv", confidence: "high" }
+
+    // A&D Heart Track — BP measurements
+    if (firstLine.includes("systolic") || firstLine.includes("diastolic") ||
+        firstLine.includes("blood pressure") || firstLine.includes("pulse"))
+      return { source: "ad_heart_track", format: "csv", confidence: "high" }
+
+    // iHealth — weight or BP
+    if (firstLine.includes("ihealth") || (firstLine.includes("weight") && firstLine.includes("bmi")) ||
+        (firstLine.includes("weight") && firstLine.includes("body fat")))
+      return { source: "ihealth", format: "csv", confidence: "high" }
+
+    // Apple Health CSV (via Health Auto Export app)
+    if (firstLine.includes("active energy") || firstLine.includes("heart rate variability") ||
+        firstLine.includes("vo2 max") || firstLine.includes("apple watch"))
+      return { source: "apple_health_csv", format: "csv", confidence: "high" }
+
+    // LIFT Schedule export (internal)
+    if (firstLine.includes("exercise_id") || firstLine.includes("day_of_week") ||
+        firstLine.includes("session_id") && firstLine.includes("variant"))
+      return { source: "lift_schedule", format: "csv", confidence: "high" }
+
+    // Generic workout CSV — medium confidence, goes to review
+    if (firstLine.includes("duration") || firstLine.includes("calories") || firstLine.includes("date"))
+      return { source: "generic_workout_csv", format: "csv", confidence: "medium" }
+
+    return { source: "unknown_csv", format: "csv", confidence: "low" }
+  }
+
+  return { source: "unknown", format: "unknown", confidence: "low" }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FITNESSVIEW CSV PARSER
+// ─────────────────────────────────────────────────────────────────────────────
+
+function parseFitnessViewCSV(text) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim())
+  if (!lines.length) return { workouts: [], rejected: [], nutrition: [] }
+
+  const headers = lines[0].split(",").map(h => h.trim().replace(/^"|"$/g, "").toLowerCase())
+  const workouts = []
+  const rejected = []
+
+  const col = name => headers.findIndex(h => h.includes(name))
+  const iDate     = col("date")
+  const iType     = Math.max(col("workout type"), col("activity_type"), col("type"))
+  const iDur      = Math.max(col("time"), col("duration"))
+  const iDist     = col("distance")
+  const iCal      = col("calories")
+  const iHR       = Math.max(col("heart rate"), col("avg hr"), col("hr"))
+  const iPace     = col("pace")
+
+  for (let i = 1; i < lines.length; i++) {
+    const raw = lines[i]
+    const cells = raw.split(",").map(c => c.trim().replace(/^"|"$/g, ""))
+    if (cells.length < 3) continue
+
+    const dateRaw = iDate >= 0 ? cells[iDate] : null
+    if (!dateRaw) { rejected.push({ source: "FitnessView", reason: "Missing date", raw: raw.slice(0, 200) }); continue }
+
+    const typeRaw = iType >= 0 ? cells[iType] : "Other"
+    const durRaw  = iDur >= 0 ? cells[iDur] : null
+    const distRaw = iDist >= 0 ? cells[iDist] : null
+    const calRaw  = iCal >= 0 ? cells[iCal] : null
+    const hrRaw   = iHR >= 0 ? cells[iHR] : null
+    const paceRaw = iPace >= 0 ? cells[iPace] : null
+
+    // Parse duration — handles "47min", "1hr 2min", "02:30:00", plain minutes
+    let durationMin = null
+    if (durRaw) {
+      const hrMin = durRaw.match(/(\d+)\s*hr[^\d]*(\d+)\s*min/i)
+      const minOnly = durRaw.match(/^(\d+(?:\.\d+)?)\s*min/i)
+      const colonFmt = durRaw.match(/^(\d+):(\d+)(?::(\d+))?$/)
+      const plainNum = durRaw.match(/^(\d+(?:\.\d+)?)$/)
+      if (hrMin) durationMin = parseInt(hrMin[1]) * 60 + parseInt(hrMin[2])
+      else if (minOnly) durationMin = parseFloat(minOnly[1])
+      else if (colonFmt) durationMin = parseInt(colonFmt[1]) * 60 + parseInt(colonFmt[2]) + (colonFmt[3] ? parseInt(colonFmt[3]) / 60 : 0)
+      else if (plainNum) durationMin = parseFloat(plainNum[1])
+    }
+
+    // Parse distance — strip units
+    let distance = null, distanceUnit = null
+    if (distRaw && distRaw !== "0" && distRaw !== "") {
+      const dm = distRaw.match(/([\d.]+)\s*(mi|km|m|yd)?/i)
+      if (dm) { distance = parseFloat(dm[1]); distanceUnit = (dm[2] || "mi").toLowerCase() }
+    }
+
+    // Parse pace — "19m 22s" or "9:30" per mile
+    let paceMinPerMi = null
+    if (paceRaw) {
+      const ps = paceRaw.match(/(\d+)m\s*(\d+)s/)
+      const pc = paceRaw.match(/^(\d+):(\d+)$/)
+      if (ps) paceMinPerMi = parseInt(ps[1]) + parseInt(ps[2]) / 60
+      else if (pc) paceMinPerMi = parseInt(pc[1]) + parseInt(pc[2]) / 60
+    }
+
+    const calories = calRaw ? parseFloat(calRaw.replace(/[^\d.]/g, "")) || null : null
+    const hr = hrRaw ? parseFloat(hrRaw.replace(/[^\d.]/g, "")) || null : null
+
+    // Normalize date to ISO
+    let startDate = null
+    try {
+      const d = new Date(dateRaw)
+      if (!isNaN(d.getTime())) startDate = d.toISOString().slice(0, 10) + "T00:00:00"
+    } catch {}
+    if (!startDate) { rejected.push({ source: "FitnessView", reason: "Unparseable date: " + dateRaw, raw: raw.slice(0, 200) }); continue }
+
+    workouts.push({
+      source: "FitnessView",
+      type: typeRaw,
+      start_date: startDate,
+      end_date: null,
+      duration_min: durationMin,
+      distance,
+      distance_unit: distanceUnit,
+      calories,
+      hr,
+      pace_min_per_mi: paceMinPerMi,
+      notes: "",
+    })
+  }
+
+  return { workouts, rejected, nutrition: [] }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CRONOMETER CSV PARSER  (nutrition records — separate from workouts)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function parseCronometerCSV(text) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim())
+  if (!lines.length) return { workouts: [], nutrition: [], rejected: [] }
+
+  const headers = lines[0].split(",").map(h => h.trim().replace(/^"|"$/g, "").toLowerCase())
+  const nutrition = []
+  const rejected = []
+
+  const col = name => headers.findIndex(h => h.includes(name))
+  const iDate    = col("date")
+  const iFood    = Math.max(col("food name"), col("food"), col("item"))
+  const iCal     = Math.max(col("energy (kcal)"), col("calories"), col("energy"))
+  const iProtein = Math.max(col("protein (g)"), col("protein"))
+  const iCarbs   = Math.max(col("carbs (g)"), col("carbohydrates"), col("carbs"))
+  const iFat     = Math.max(col("fat (g)"), col("fat"))
+  const iFiber   = Math.max(col("fiber (g)"), col("fiber"))
+  const iGroup   = Math.max(col("group"), col("meal"), col("category"))
+
+  for (let i = 1; i < lines.length; i++) {
+    const raw = lines[i]
+    // Handle quoted fields with commas inside
+    const cells = []
+    let inQ = false, cur = ""
+    for (let c of raw) {
+      if (c === '"') { inQ = !inQ }
+      else if (c === "," && !inQ) { cells.push(cur.trim()); cur = "" }
+      else cur += c
+    }
+    cells.push(cur.trim())
+
+    if (cells.length < 3) continue
+    const dateRaw = iDate >= 0 ? cells[iDate] : null
+    if (!dateRaw) { rejected.push({ source: "Cronometer", reason: "Missing date", raw: raw.slice(0, 200) }); continue }
+
+    let date = null
+    try { const d = new Date(dateRaw); if (!isNaN(d.getTime())) date = d.toISOString().slice(0, 10) } catch {}
+    if (!date) { rejected.push({ source: "Cronometer", reason: "Bad date: " + dateRaw, raw: raw.slice(0, 200) }); continue }
+
+    const n = v => { const p = parseFloat(v); return isFinite(p) ? p : null }
+
+    nutrition.push({
+      source: "Cronometer",
+      date,
+      food_name: iFood >= 0 ? cells[iFood] : "Unknown",
+      meal_group: iGroup >= 0 ? cells[iGroup] : null,
+      calories_kcal: n(iCal >= 0 ? cells[iCal] : null),
+      protein_g:  n(iProtein >= 0 ? cells[iProtein] : null),
+      carbs_g:    n(iCarbs >= 0 ? cells[iCarbs] : null),
+      fat_g:      n(iFat >= 0 ? cells[iFat] : null),
+      fiber_g:    n(iFiber >= 0 ? cells[iFiber] : null),
+    })
+  }
+
+  return { workouts: [], nutrition, rejected }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SLEEP CYCLE CSV PARSER
+// ─────────────────────────────────────────────────────────────────────────────
+
+function parseSleepCycleCSV(text) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim())
+  if (!lines.length) return { workouts: [], sleep: [], rejected: [] }
+
+  const headers = lines[0].split(",").map(h => h.trim().replace(/^"|"$/g, "").toLowerCase())
+  const sleep = []
+  const rejected = []
+
+  const col = name => headers.findIndex(h => h.includes(name))
+  const iDate    = Math.max(col("date"), col("start"))
+  const iQual    = Math.max(col("sleep quality"), col("quality"), col("score"))
+  const iDur     = Math.max(col("time in bed"), col("duration"), col("sleep time"))
+  const iStart   = Math.max(col("bedtime"), col("sleep start"), col("start time"))
+  const iEnd     = Math.max(col("wake up time"), col("wake up"), col("end time"))
+  const iHR      = Math.max(col("heart rate"), col("avg hr"))
+  const iSteps   = col("steps")
+  const iNotes   = Math.max(col("sleep notes"), col("note"))
+
+  for (let i = 1; i < lines.length; i++) {
+    const raw = lines[i]
+    const cells = raw.split(",").map(c => c.trim().replace(/^"|"$/g, ""))
+    if (cells.length < 2) continue
+
+    const dateRaw = iDate >= 0 ? cells[iDate] : null
+    if (!dateRaw) { rejected.push({ source: "SleepCycle", reason: "Missing date", raw: raw.slice(0, 200) }); continue }
+
+    let date = null
+    try { const d = new Date(dateRaw); if (!isNaN(d.getTime())) date = d.toISOString().slice(0, 10) } catch {}
+    if (!date) { rejected.push({ source: "SleepCycle", reason: "Bad date: " + dateRaw, raw: raw.slice(0, 200) }); continue }
+
+    const n = v => { const p = parseFloat(String(v || "").replace(/[^\d.]/g, "")); return isFinite(p) ? p : null }
+
+    // Parse duration — "7:32" or "7h 32m" or plain minutes
+    let durationMin = null
+    const durRaw = iDur >= 0 ? cells[iDur] : null
+    if (durRaw) {
+      const hm = durRaw.match(/(\d+):(\d+)/)
+      const hms = durRaw.match(/(\d+)h[^\d]*(\d+)m/i)
+      if (hm) durationMin = parseInt(hm[1]) * 60 + parseInt(hm[2])
+      else if (hms) durationMin = parseInt(hms[1]) * 60 + parseInt(hms[2])
+      else durationMin = n(durRaw)
+    }
+
+    // Parse quality — "85%" or "0.85" or "85"
+    let quality = null
+    const qualRaw = iQual >= 0 ? cells[iQual] : null
+    if (qualRaw) {
+      const qm = qualRaw.match(/([\d.]+)/)
+      if (qm) {
+        quality = parseFloat(qm[1])
+        if (quality > 1 && quality <= 100) quality = quality / 100
+      }
+    }
+
+    sleep.push({
+      source: "SleepCycle",
+      date,
+      start_time: iStart >= 0 ? cells[iStart] : null,
+      end_time: iEnd >= 0 ? cells[iEnd] : null,
+      duration_min: durationMin,
+      sleep_quality: quality,
+      avg_hr_bpm: n(iHR >= 0 ? cells[iHR] : null),
+      steps: n(iSteps >= 0 ? cells[iSteps] : null),
+      notes: iNotes >= 0 ? cells[iNotes] : null,
+    })
+  }
+
+  return { workouts: [], sleep, rejected }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// A&D HEART TRACK PARSER (blood pressure)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function parseADHeartTrackCSV(text) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim())
+  if (!lines.length) return { workouts: [], biometrics: [], rejected: [] }
+  const headers = lines[0].split(",").map(h => h.trim().replace(/^"|"$/g, "").toLowerCase())
+  const biometrics = []
+  const rejected = []
+  const col = name => headers.findIndex(h => h.includes(name))
+  const iDate = Math.max(col("date"), col("time"), col("measured"))
+  const iSys  = Math.max(col("systolic"), col("sys"), col("upper"))
+  const iDia  = Math.max(col("diastolic"), col("dia"), col("lower"))
+  const iPulse= Math.max(col("pulse"), col("heart rate"), col("hr"))
+
+  for (let i = 1; i < lines.length; i++) {
+    const cells = lines[i].split(",").map(c => c.trim().replace(/^"|"$/g, ""))
+    if (cells.length < 2) continue
+    const dateRaw = iDate >= 0 ? cells[iDate] : null
+    if (!dateRaw) { rejected.push({ source: "A&D", reason: "Missing date", raw: lines[i].slice(0, 200) }); continue }
+    let ts = null
+    try { const d = new Date(dateRaw); if (!isNaN(d.getTime())) ts = d.toISOString() } catch {}
+    if (!ts) { rejected.push({ source: "A&D", reason: "Bad date", raw: lines[i].slice(0, 200) }); continue }
+    const n = v => { const p = parseFloat(v); return isFinite(p) ? p : null }
+    const sys = n(iSys >= 0 ? cells[iSys] : null)
+    const dia = n(iDia >= 0 ? cells[iDia] : null)
+    if (!sys && !dia) { rejected.push({ source: "A&D", reason: "No BP values", raw: lines[i].slice(0, 200) }); continue }
+    biometrics.push({ source: "A&D_HeartTrack", timestamp: ts, date: ts.slice(0, 10),
+      bp_systolic: sys, bp_diastolic: dia, pulse_bpm: n(iPulse >= 0 ? cells[iPulse] : null) })
+  }
+  return { workouts: [], biometrics, rejected }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// iHEALTH PARSER (weight + body fat + BP)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function parseIHealthCSV(text) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim())
+  if (!lines.length) return { workouts: [], biometrics: [], rejected: [] }
+  const headers = lines[0].split(",").map(h => h.trim().replace(/^"|"$/g, "").toLowerCase())
+  const biometrics = []
+  const rejected = []
+  const col = name => headers.findIndex(h => h.includes(name))
+  const iDate = Math.max(col("date"), col("time"), col("measurement"))
+  const iWeight = Math.max(col("weight"), col("body weight"))
+  const iBF = Math.max(col("body fat"), col("fat %"), col("fat percent"))
+  const iBMI = col("bmi")
+  const iSys = Math.max(col("systolic"), col("sys"))
+  const iDia = Math.max(col("diastolic"), col("dia"))
+  const iPulse = Math.max(col("pulse"), col("heart rate"))
+
+  for (let i = 1; i < lines.length; i++) {
+    const cells = lines[i].split(",").map(c => c.trim().replace(/^"|"$/g, ""))
+    if (cells.length < 2) continue
+    const dateRaw = iDate >= 0 ? cells[iDate] : null
+    if (!dateRaw) { rejected.push({ source: "iHealth", reason: "Missing date", raw: lines[i].slice(0, 200) }); continue }
+    let ts = null
+    try { const d = new Date(dateRaw); if (!isNaN(d.getTime())) ts = d.toISOString() } catch {}
+    if (!ts) { rejected.push({ source: "iHealth", reason: "Bad date", raw: lines[i].slice(0, 200) }); continue }
+    const n = v => { const p = parseFloat(String(v || "").replace(/[^\d.]/g, "")); return isFinite(p) ? p : null }
+    const weight = n(iWeight >= 0 ? cells[iWeight] : null)
+    const bodyFat = n(iBF >= 0 ? cells[iBF] : null)
+    const sys = n(iSys >= 0 ? cells[iSys] : null)
+    const dia = n(iDia >= 0 ? cells[iDia] : null)
+    if (!weight && !sys && !bodyFat) { rejected.push({ source: "iHealth", reason: "No usable values", raw: lines[i].slice(0, 200) }); continue }
+    biometrics.push({ source: "iHealth", timestamp: ts, date: ts.slice(0, 10),
+      weight_lb: weight, body_fat_pct: bodyFat, bmi: n(iBMI >= 0 ? cells[iBMI] : null),
+      bp_systolic: sys, bp_diastolic: dia, pulse_bpm: n(iPulse >= 0 ? cells[iPulse] : null) })
+  }
+  return { workouts: [], biometrics, rejected }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UPDATED ImportTab — single multi-file drop zone with auto-detection
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SOURCE_LABELS = {
+  apple_health:       { label: "Apple Health XML",      color: "#ef4444" },
+  apple_health_csv:   { label: "Apple Health CSV",      color: "#ef4444" },
+  technogym:          { label: "Technogym",             color: "#3b82f6" },
+  fitnessview:        { label: "FitnessView",           color: "#8b5cf6" },
+  cronometer:         { label: "Cronometer",            color: "#22c55e" },
+  sleep_cycle:        { label: "Sleep Cycle",           color: "#0ea5e9" },
+  ad_heart_track:     { label: "A&D Heart Track",       color: "#f97316" },
+  ihealth:            { label: "iHealth",               color: "#14b8a6" },
+  lift_schedule:      { label: "LIFT Schedule",         color: "#7F77DD" },
+  generic_workout_csv:{ label: "CSV (review needed)",   color: "#d97706" },
+  unknown_json:       { label: "JSON (review needed)",  color: "#d97706" },
+  unknown_csv:        { label: "Unknown CSV",           color: "#d97706" },
+  unknown:            { label: "Unknown",               color: "#888" },
+}
+
+function ImportTab({ canonicalSessions, setCanonicalSessions }) {
+  const [queuedFiles, setQueuedFiles] = useState([])  // [{file, detected, firstChunk}]
+  const [status, setStatus] = useState("Drop files to import")
+  const [progress, setProgress] = useState(null)
+  const [result, setResult] = useState(null)
+  const [reviewRows, setReviewRows] = useState([])
+  const [selectedReviewIds, setSelectedReviewIds] = useState([])
+  const [importing, setImporting] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
+  const [nutritionResult, setNutritionResult] = useState([])
+  const [sleepResult, setSleepResult] = useState([])
+  const [biometricResult, setBiometricResult] = useState([])
+
+  const worker = useMemo(() => createInlineImportWorker(), [])
+  useEffect(() => () => worker.terminate(), [worker])
+
+  // Read first chunk of a file to detect source
+  const detectFile = file => new Promise(resolve => {
+    const reader = new FileReader()
+    reader.onload = e => {
+      const chunk = e.target?.result || ""
+      const detected = detectSourceType(file.name, chunk)
+      resolve({ file, detected, firstChunk: chunk.slice(0, 2000) })
+    }
+    reader.onerror = () => resolve({ file, detected: { source: "unknown", format: "unknown", confidence: "low" }, firstChunk: "" })
+    reader.readAsText(file.slice(0, 8000))
+  })
+
+  const addFiles = useCallback(async newFiles => {
+    const arr = Array.from(newFiles || [])
+    if (!arr.length) return
+    const detected = await Promise.all(arr.map(detectFile))
+    setQueuedFiles(prev => {
+      const existing = new Set(prev.map(q => q.file.name + q.file.size))
+      const fresh = detected.filter(d => !existing.has(d.file.name + d.file.size))
+      return [...prev, ...fresh]
+    })
+  }, [])
+
+  const onDrop = useCallback(e => {
+    e.preventDefault()
+    setDragOver(false)
+    addFiles(e.dataTransfer?.files)
+  }, [addFiles])
+
+  const onDragOver = e => { e.preventDefault(); setDragOver(true) }
+  const onDragLeave = () => setDragOver(false)
+
+  const removeFile = idx => setQueuedFiles(prev => prev.filter((_, i) => i !== idx))
+
+  const overrideSource = (idx, newSource) => {
+    setQueuedFiles(prev => prev.map((q, i) =>
+      i !== idx ? q : { ...q, detected: { ...q.detected, source: newSource, confidence: "manual" } }
+    ))
+  }
+
+  const onWorkerMessage = useCallback(async event => {
+    const payload = event?.data || {}
+    if (payload.type === "progress") { setStatus(payload.message || payload.stage || "Working..."); setProgress(payload); return }
+    if (payload.type === "error") { setStatus(`Error: ${payload.error}`); setImporting(false); return }
+    if (payload.type === "done") {
+      const next = payload.result || null
+      setResult(next)
+      setReviewRows(Array.isArray(next?.review) ? next.review : [])
+      setSelectedReviewIds([])
+      setStatus("Import analysis complete")
+      setImporting(false)
+    }
+  }, [])
+  useEffect(() => { worker.onmessage = onWorkerMessage }, [worker, onWorkerMessage])
+
+  const processFiles = useCallback(async () => {
+    if (!queuedFiles.length) { setStatus("Add files first"); return }
+    setImporting(true)
+    setResult(null)
+    setReviewRows([])
+    setSelectedReviewIds([])
+    setNutritionResult([])
+    setSleepResult([])
+    setBiometricResult([])
+    setStatus("Reading files...")
+
+    let appleFile = null, technogymFile = null
+    const allNutrition = [], allSleep = [], allBiometrics = [], allRejected = []
+
+    for (const q of queuedFiles) {
+      const src = q.detected.source
+      setStatus(`Processing ${q.file.name} (${SOURCE_LABELS[src]?.label || src})...`)
+
+      if (src === "apple_health") { appleFile = q.file; continue }
+      if (src === "technogym") { technogymFile = q.file; continue }
+
+      // Read full file for CSV parsers (they run on main thread — small files)
+      const text = await new Promise((res, rej) => {
+        const r = new FileReader()
+        r.onload = e => res(e.target?.result || "")
+        r.onerror = () => rej(new Error("Read failed"))
+        r.readAsText(q.file)
+      }).catch(() => null)
+      if (!text) { allRejected.push({ source: src, reason: "File read failed", file: q.file.name }); continue }
+
+      if (src === "fitnessview" || src === "apple_health_csv") {
+        const parsed = parseFitnessViewCSV(text)
+        allRejected.push(...(parsed.rejected || []))
+        // FitnessView workouts feed into the overlap engine as additional Apple-side records
+        if (parsed.workouts.length) {
+          if (!appleFile) {
+            // Use FitnessView as a synthetic apple source
+            const fvSessions = parsed.workouts.map(w => ({
+              ...w, source: "FitnessView", raw_type: w.type,
+              start_date: w.start_date, end_date: w.end_date || w.start_date,
+              calories: w.calories || 0, hr: w.hr || 0, notes: ""
+            }))
+            setStatus(`FitnessView: ${fvSessions.length} sessions queued`)
+            // Store for post-processing — pass alongside apple in worker
+            if (!technogymFile) {
+              // No XML apple — use FitnessView directly as canonical accepted sessions
+              const accepted = fvSessions.map(w => ({
+                session_id: makeSessionId("fv", w),
+                match_confidence: "single_source",
+                relationship: "fitnessview_only",
+                canonical_type: w.type,
+                start_date: w.start_date,
+                end_date: w.end_date,
+                duration_min: w.duration_min,
+                overlap_summary: null,
+                sources: { fitnessview: w, apple: null, technogym: null },
+                preferred_metrics: {
+                  hr: { value: w.hr || null, source: "FitnessView" },
+                  calories: { value: w.calories || null, source: "FitnessView" },
+                  distance: { value: w.distance || null, source: "FitnessView", unit: w.distance_unit, rationale: "FitnessView only" },
+                  power_avg: { value: null, source: null }, level: { value: null, source: null },
+                  rpm_avg: { value: null, source: null }, vo2: { value: null, source: null }
+                }
+              }))
+              setResult({ accepted, all_sessions: accepted, review: [], rejected: allRejected,
+                summary: { accepted: accepted.length, review: 0, rejected: allRejected.length, total: accepted.length } })
+              setImporting(false)
+              setStatus(`FitnessView: ${accepted.length} sessions imported directly`)
+              return
+            }
+          }
+        }
+        continue
+      }
+
+      if (src === "cronometer") {
+        const parsed = parseCronometerCSV(text)
+        allNutrition.push(...(parsed.nutrition || []))
+        allRejected.push(...(parsed.rejected || []))
+        setStatus(`Cronometer: ${parsed.nutrition.length} nutrition entries parsed`)
+        continue
+      }
+
+      if (src === "sleep_cycle") {
+        const parsed = parseSleepCycleCSV(text)
+        allSleep.push(...(parsed.sleep || []))
+        allRejected.push(...(parsed.rejected || []))
+        setStatus(`Sleep Cycle: ${parsed.sleep.length} sleep records parsed`)
+        continue
+      }
+
+      if (src === "ad_heart_track") {
+        const parsed = parseADHeartTrackCSV(text)
+        allBiometrics.push(...(parsed.biometrics || []))
+        allRejected.push(...(parsed.rejected || []))
+        setStatus(`A&D Heart Track: ${parsed.biometrics.length} BP readings parsed`)
+        continue
+      }
+
+      if (src === "ihealth") {
+        const parsed = parseIHealthCSV(text)
+        allBiometrics.push(...(parsed.biometrics || []))
+        allRejected.push(...(parsed.rejected || []))
+        setStatus(`iHealth: ${parsed.biometrics.length} measurements parsed`)
+        continue
+      }
+
+      // Unknown or low-confidence — flag for review, never drop
+      allRejected.push({
+        source: src, reason: `Auto-detection returned '${src}' (confidence: ${q.detected.confidence}). File held for manual review.`,
+        file: q.file.name, firstChunk: q.firstChunk
+      })
+    }
+
+    // Store secondary results
+    if (allNutrition.length) setNutritionResult(allNutrition)
+    if (allSleep.length) setSleepResult(allSleep)
+    if (allBiometrics.length) setBiometricResult(allBiometrics)
+
+    // Send Apple + Technogym to worker for overlap pipeline
+    if (appleFile || technogymFile) {
+      setStatus("Running overlap pipeline...")
+      worker.postMessage({ type: "process", appleFile, technogymFile })
+    } else if (allNutrition.length || allSleep.length || allBiometrics.length) {
+      setStatus("Non-workout files processed. Nutrition, sleep, and biometric data ready to commit.")
+      setImporting(false)
+    } else {
+      setStatus("No processable files found. Check the detected types below.")
+      setImporting(false)
+    }
+  }, [queuedFiles, worker])
+
+  const toggleReviewSelection = useCallback(id => {
+    setSelectedReviewIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }, [])
+
+  const applyBatchAction = useCallback(action => {
+    if (!selectedReviewIds.length) return
+    const selected = new Set(selectedReviewIds)
+    const kept = [], additions = []
+    reviewRows.forEach(row => {
+      if (!selected.has(row.review_id)) { kept.push(row); return }
+      if (action === "same_session") { additions.push(row.merge_preview); return }
+      if (action === "different_sessions") {
+        if (row.source_a?.record) additions.push(makeSessionFromSingleSource("apple_manual", row.source_a.record, null))
+        if (row.source_b?.record) additions.push(makeSessionFromSingleSource("techno_manual", null, row.source_b.record))
+        return
+      }
+      if (action === "ignore_apple") { if (row.source_b?.record) additions.push(makeSessionFromSingleSource("techno_manual", null, row.source_b.record)); return }
+      if (action === "ignore_technogym") { if (row.source_a?.record) additions.push(makeSessionFromSingleSource("apple_manual", row.source_a.record, null)); return }
+      if (action === "reject") return
+      kept.push(row)
+    })
+    const deduped = dedupeCanonicalSessions([...(result?.accepted || []), ...additions])
+    setResult(prev => ({ ...prev, accepted: deduped, all_sessions: deduped, review: kept,
+      summary: { ...prev?.summary, total: deduped.length, accepted: deduped.length, review: kept.length } }))
+    setReviewRows(kept)
+    setSelectedReviewIds([])
+  }, [reviewRows, selectedReviewIds, result])
+
+  const commitAll = useCallback(async () => {
+    const sessions = Array.isArray(result?.accepted) ? result.accepted : []
+    let committed = 0
+    setStatus("Committing...")
+    try {
+      // Commit workout sessions
+      if (sessions.length) {
+        if (supabase) {
+          const { error } = await supabase.from("canonical_sessions").upsert(sessions, { onConflict: "session_id" })
+          if (error) throw error
+        }
+        localStorage.setItem("lift_canonical_sessions", JSON.stringify(sessions))
+        setCanonicalSessions(sessions)
+        committed += sessions.length
+      }
+      // Commit nutrition to user_kv (feeds Calories tab)
+      if (nutritionResult.length && supabase && STORE_USER_ID) {
+        const existing = await store.get("ufd-meal-entries") || []
+        const merged = [...(Array.isArray(existing) ? existing : []), ...nutritionResult.map(n => ({
+          id: makeSessionId("cron", n), date: n.date, meal: n.meal_group || "Other",
+          name: n.food_name, calories: n.calories_kcal || 0,
+          protein_g: n.protein_g, carbs_g: n.carbs_g, fat_g: n.fat_g, fiber_g: n.fiber_g,
+          source: "Cronometer"
+        }))]
+        await store.set("ufd-meal-entries", merged)
+        committed += nutritionResult.length
+      }
+      // Sleep and biometrics — store for future tab integration
+      if (sleepResult.length) localStorage.setItem("lift_sleep_records", JSON.stringify(sleepResult))
+      if (biometricResult.length) localStorage.setItem("lift_biometric_records", JSON.stringify(biometricResult))
+
+      setStatus(`Committed ${committed} records.${sleepResult.length ? ` ${sleepResult.length} sleep records saved.` : ""}${biometricResult.length ? ` ${biometricResult.length} biometrics saved.` : ""}${reviewRows.length ? ` ${reviewRows.length} still in review.` : ""}`)
+    } catch (err) {
+      setStatus(`Commit failed: ${err.message || String(err)}`)
+    }
+  }, [result, nutritionResult, sleepResult, biometricResult, reviewRows.length, setCanonicalSessions])
+
+  const cs = SOURCE_LABELS
+  const s = v => ({ padding: "4px 8px", border: "none", borderRadius: 4, fontSize: 11, cursor: "pointer", background: "#1a1b2e", color: "#aaa", fontFamily: "inherit", ...v })
+
+  return (
+    <div style={{ padding: "16px", display: "grid", gap: "16px" }}>
+
+      {/* Drop zone */}
+      <div style={{ ...cardStyle(), minWidth: 0 }}>
+        <div style={{ fontSize: "11px", letterSpacing: "0.14em", color: "#444", textTransform: "uppercase", marginBottom: "8px" }}>Data import</div>
+        <div style={{ fontSize: "13px", color: "#888", marginBottom: "14px" }}>
+          Drop any export file. Apple Health XML, Technogym JSON, FitnessView, Cronometer, Sleep Cycle, A&D Heart Track, iHealth — all accepted. Source is detected automatically from file contents.
+        </div>
+
+        <div
+          onDrop={onDrop} onDragOver={onDragOver} onDragLeave={onDragLeave}
+          style={{ border: `2px dashed ${dragOver ? "#4a9ee8" : "#1a1b2e"}`, borderRadius: 12, padding: "28px 20px",
+            textAlign: "center", cursor: "pointer", background: dragOver ? "rgba(74,158,232,0.06)" : "transparent",
+            transition: "all 0.15s", marginBottom: 14 }}
+          onClick={() => document.getElementById("lift-file-input").click()}>
+          <div style={{ fontSize: 28, marginBottom: 8 }}>⬇</div>
+          <div style={{ fontSize: "14px", fontWeight: 600, color: "#ccc" }}>Drop files here</div>
+          <div style={{ fontSize: "12px", color: "#555", marginTop: 4 }}>or click to browse — multiple files accepted</div>
+          <input id="lift-file-input" type="file" multiple style={{ display: "none" }}
+            accept=".xml,.json,.csv,.txt"
+            onChange={e => addFiles(e.target.files)} />
+        </div>
+
+        {/* Queued files with detection results */}
+        {queuedFiles.length > 0 && (
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: "11px", letterSpacing: "0.1em", color: "#444", textTransform: "uppercase", marginBottom: 8 }}>Queued files</div>
+            {queuedFiles.map((q, idx) => {
+              const det = q.detected
+              const meta = cs[det.source] || { label: det.source, color: "#888" }
+              const lowConf = det.confidence === "low"
+              return (
+                <div key={idx} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px",
+                  border: `0.5px solid ${lowConf ? "#d97706" : "#1e1e1e"}`, borderRadius: 7, marginBottom: 6,
+                  background: lowConf ? "rgba(217,119,6,0.06)" : "#0a0a0a" }}>
+                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: meta.color, flexShrink: 0 }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "#d8d8d8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{q.file.name}</div>
+                    <div style={{ fontSize: 11, color: meta.color }}>{meta.label}{det.confidence !== "high" ? ` — ${det.confidence} confidence` : ""}</div>
+                  </div>
+                  {lowConf && (
+                    <select onChange={e => overrideSource(idx, e.target.value)} defaultValue=""
+                      style={{ ...s(), border: "0.5px solid #d97706" }}>
+                      <option value="" disabled>Override source</option>
+                      {Object.entries(cs).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                    </select>
+                  )}
+                  <button onClick={() => removeFile(idx)} style={s({ color: "#666" })}>✕</button>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+          <button onClick={processFiles} style={buttonStyle(true)} disabled={importing || !queuedFiles.length}>
+            {importing ? "Processing..." : "Process files"}
+          </button>
+          <button onClick={commitAll} style={buttonStyle(false)}
+            disabled={!result?.accepted?.length && !nutritionResult.length && !sleepResult.length && !biometricResult.length}>
+            Commit to dashboard
+          </button>
+          {queuedFiles.length > 0 && <button onClick={() => setQueuedFiles([])} style={s()}>Clear queue</button>}
+        </div>
+
+        <div style={{ fontSize: "13px", color: "#888" }}>Status: {status}</div>
+        {progress?.processed_bytes && (
+          <div style={{ fontSize: "12px", color: "#555", marginTop: 4 }}>
+            {Math.round((100 * progress.processed_bytes) / Math.max(1, progress.total_bytes || 1))}% of Apple file parsed ({progress.parsed_lines?.toLocaleString() || 0} lines)
+          </div>
+        )}
+      </div>
+
+      {/* Summary */}
+      {(result || nutritionResult.length > 0 || sleepResult.length > 0 || biometricResult.length > 0) && (
+        <div style={{ ...cardStyle(), minWidth: 0 }}>
+          <div style={{ fontWeight: "bold", marginBottom: 10 }}>Results</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 }}>
+            {result && <>
+              <SummaryCell label="Sessions accepted" value={result.summary?.accepted ?? 0} />
+              <SummaryCell label="Needs review" value={result.summary?.review ?? 0} />
+              <SummaryCell label="Rejected" value={result.summary?.rejected ?? 0} />
+            </>}
+            {nutritionResult.length > 0 && <SummaryCell label="Nutrition entries" value={nutritionResult.length} />}
+            {sleepResult.length > 0 && <SummaryCell label="Sleep records" value={sleepResult.length} />}
+            {biometricResult.length > 0 && <SummaryCell label="Biometrics" value={biometricResult.length} />}
+            <SummaryCell label="In dashboard" value={Array.isArray(canonicalSessions) ? canonicalSessions.length : 0} />
+          </div>
+        </div>
+      )}
+
+      {/* Review queue */}
+      {reviewRows.length > 0 && (
+        <div style={{ ...cardStyle(), minWidth: 0 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12, marginBottom: 12 }}>
+            <div>
+              <div style={{ fontWeight: "bold" }}>Review queue ({reviewRows.length})</div>
+              <div style={{ fontSize: "12px", color: "#888", marginTop: 2 }}>
+                These sessions had ambiguous overlaps. Nothing is dropped — resolve each batch then commit.
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {[["same_session","Same session"],["different_sessions","Two sessions"],["ignore_apple","Drop Apple"],["ignore_technogym","Drop Technogym"],["reject","Reject"]].map(([action, label]) => (
+                <button key={action} onClick={() => applyBatchAction(action)} style={s({ fontSize: 12, padding: "5px 10px" })}
+                  disabled={!selectedReviewIds.length}>{label}</button>
+              ))}
+            </div>
+          </div>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid #1a1b2e", textAlign: "left" }}>
+                  {["", "Date", "Apple type", "Technogym type", "Start Δ", "Overlap", "Confidence", "Flag"].map(h => (
+                    <th key={h} style={{ padding: "8px 6px", fontWeight: 600, color: "#888", whiteSpace: "nowrap" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {reviewRows.map(row => (
+                  <tr key={row.review_id} style={{ borderBottom: "1px solid #111", verticalAlign: "top" }}>
+                    <td style={{ padding: "8px 6px" }}><input type="checkbox" checked={selectedReviewIds.includes(row.review_id)} onChange={() => toggleReviewSelection(row.review_id)} /></td>
+                    <td style={{ padding: "8px 6px", whiteSpace: "nowrap" }}>{fmtShortDate(row.source_a?.record?.start_date || row.source_b?.record?.start_date)}</td>
+                    <td style={{ padding: "8px 6px" }}>{row.source_a?.record?.type || "—"}</td>
+                    <td style={{ padding: "8px 6px" }}>{row.source_b?.record?.type || "—"}</td>
+                    <td style={{ padding: "8px 6px", whiteSpace: "nowrap" }}>{isFinite(+row.comparators?.start_diff_min) ? (+row.comparators.start_diff_min).toFixed(1) + " min" : "—"}</td>
+                    <td style={{ padding: "8px 6px", whiteSpace: "nowrap" }}>{isFinite(+row.comparators?.overlap_min) ? (+row.comparators.overlap_min).toFixed(1) + " min" : "—"}</td>
+                    <td style={{ padding: "8px 6px" }}>{isFinite(+row.confidence) ? Math.round(100 * +row.confidence) + "%" : "—"}</td>
+                    <td style={{ padding: "8px 6px", color: "#d97706", fontSize: 11 }}>{Array.isArray(row.reasons) ? row.reasons[0] : "review"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+
+
+function SummaryCell({ label, value }) {
+  return (
+    <div style={{ background: "#07080e", border: "1px solid #1a1b2e", borderRadius: "10px", padding: "12px" }}>
+      <div style={{ fontSize: "12px", opacity: 0.7 }}>{label}</div>
+      <div style={{ fontSize: "22px", fontWeight: 700 }}>{value}</div>
+    </div>
+  )
+}
+
+function DropInput({ label, file, onFile, accept }) {
+  return (
+    <label style={{ background: "#07080e", border: "1px dashed #4a9ee8", borderRadius: "12px", padding: "14px", display: "grid", gap: "8px", cursor: "pointer" }}>
+      <div style={{ fontWeight: 600 }}>{label}</div>
+      <div style={{ fontSize: "12px", opacity: 0.74 }}>{file ? file.name : "Click to choose file"}</div>
+      <input type="file" accept={accept} style={{ display: "none" }} onChange={e => onFile(e.target.files?.[0] || null)} />
+    </label>
+  )
+}
+
+const thStyle = { padding: "10px 8px", fontWeight: 600, whiteSpace: "nowrap" }
+
+const tdStyle = { padding: "10px 8px" }
+
+function makeSessionFromSingleSource(prefix, appleRecord, technoRecord) {
+  return {
+    session_id: makeSessionId(prefix, { appleRecord, technoRecord }),
+    match_confidence: "manual",
+    relationship: null,
+    canonical_type: appleRecord?.type || technoRecord?.type || "Other",
+    start_date: appleRecord?.start_date || technoRecord?.start_date || null,
+    end_date: appleRecord?.end_date || technoRecord?.end_date || null,
+    duration_min: Number(appleRecord?.duration_min ?? technoRecord?.duration_min ?? 0) || 0,
+    overlap_summary: null,
+    sources: {
+      apple: appleRecord || null,
+      technogym: technoRecord || null
+    },
+    preferred_metrics: {
+      hr: appleRecord?.hr != null ? { value: appleRecord.hr, source: "AppleHealth" } : technoRecord?.hr != null ? { value: technoRecord.hr, source: "Technogym" } : { value: null, source: null },
+      calories: appleRecord?.calories != null ? { value: appleRecord.calories, source: "AppleHealth" } : technoRecord?.calories != null ? { value: technoRecord.calories, source: "Technogym" } : { value: null, source: null },
+      distance: technoRecord?.distance != null ? { value: technoRecord.distance, source: "Technogym", rationale: "Manual review resolution", unit: technoRecord.distance_unit || "m" } : appleRecord?.distance != null ? { value: appleRecord.distance, source: "AppleHealth", rationale: "Manual review resolution", unit: appleRecord.distance_unit || null } : { value: null, source: null, rationale: null, unit: null },
+      power_avg: { value: technoRecord?.power_avg ?? null, source: technoRecord?.power_avg != null ? "Technogym" : null },
+      level: { value: technoRecord?.level ?? null, source: technoRecord?.level != null ? "Technogym" : null },
+      rpm_avg: { value: technoRecord?.rpm_avg ?? null, source: technoRecord?.rpm_avg != null ? "Technogym" : null },
+      vo2: { value: technoRecord?.vo2 ?? null, source: technoRecord?.vo2 != null ? "Technogym" : null, note: technoRecord?.vo2 != null ? "Technogym workout-level VO2 estimate" : null }
+    }
+  }
+}
+
+function dedupeCanonicalSessions(sessions) {
+  const seen = new Set()
+  return (Array.isArray(sessions) ? sessions : []).filter(session => {
+    const key = session?.session_id || makeSessionId("session", session)
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  }).sort((a, b) => String(a?.start_date || "").localeCompare(String(b?.start_date || "")))
+}
+
+
 export default function App() {
   const [tab, setTab] = useState("Overview")
   const [rangeKey, setRangeKey] = useState("180D")
@@ -5568,13 +7108,14 @@ return (
 
   </div>
 )}
-{tab === "Log" && (
-  <div>
-    <h3>Log</h3>
-    <div>This tab is next.</div>
-  </div>
+{tab === "Import" && (
+  <ImportTab
+    canonicalSessions={canonicalSessions}
+    setCanonicalSessions={setCanonicalSessions}
+  />
 )}
 
+      
 {tab !== "Overview" && tab !== "Body Comp" && tab !== "Calories" && tab !== "Injury" && tab !== "Forecast" && tab !== "Schedule" && tab !== "Training" && tab !== "Log" && (
   <div>
     <h3>{tab}</h3>
