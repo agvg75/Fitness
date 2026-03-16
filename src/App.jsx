@@ -655,6 +655,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session }) {
   const [cardioFields, setCardioFields] = useState({})
   const [savedEntry, setSavedEntry] = useState(null)
   const [justUndone, setJustUndone] = useState(false)
+  const [sessionDate, setSessionDate] = useState(todayISO())
 
   const saveScheduleKey = async (key, value) => {
     await store.set(key, value)
@@ -751,7 +752,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session }) {
     const cd = CARDIO[day]
     const cf = cardioFields[day] || {}
     const ts = new Date().toISOString()
-    const dateStr = ts.slice(0, 10)
+    const dateStr = sessionDate || ts.slice(0, 10)
 
     const exercises = (prog.exercises || []).map(ex => {
       const vk = getVariant(ex.id)
@@ -1004,7 +1005,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session }) {
             const m = SMETA[d] || {}
             const active = d === activeDay && schedView === "schedule"
             return (
-              <button key={d} onClick={() => { setActiveDay(d); setSchedView("schedule"); setSavedEntry(null) }}
+              <button key={d} onClick={() => { setActiveDay(d); setSchedView("schedule"); setSavedEntry(null); setSessionDate(todayISO()) }}
                 style={{ padding: "6px 12px", border: "none", cursor: "pointer", background: active ? (m.color || "#185FA5") + "22" : "transparent", fontSize: 12, fontWeight: active ? 700 : 500, letterSpacing: "0.06em", textTransform: "uppercase", color: active ? (m.color || "#185FA5") : "#3a3a3a", borderRadius: 6 }}>
                 {d}
                 <div style={{ fontSize: 8, opacity: 0.7, marginTop: 1, color: m.venue === "KNR" ? "#3b82f6" : m.venue === "—" ? "#333" : "#d97706" }}>{m.venue}</div>
@@ -1024,12 +1025,27 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session }) {
       {schedView === "schedule" && (
         <>
           <div style={{ marginBottom: 14, paddingBottom: 10, borderBottom: "1px solid #1a1a1a" }}>
-            <div style={{ fontSize: 20, fontWeight: 700, color: "#e8e8e8", lineHeight: 1 }}>
-              {meta.label || activeDay}
-              <span style={{ fontSize: 13, fontWeight: 600, color: meta.color || "#185FA5", marginLeft: 8 }}>{meta.theme}</span>
-              <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.12em", background: meta.venue === "KNR" ? "#0d1f38" : "#151515", color: meta.venue === "KNR" ? "#3b82f6" : "#444", padding: "2px 7px", borderRadius: 3, marginLeft: 8 }}>{meta.venue}</span>
-              <span style={{ fontSize: 9, fontWeight: 600, color: "#7F77DD", background: "rgba(127,119,221,0.15)", padding: "2px 7px", borderRadius: 3, marginLeft: 6 }}>Kinesiology</span>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+              <div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: "#e8e8e8", lineHeight: 1 }}>
+                  {meta.label || activeDay}
+                  <span style={{ fontSize: 13, fontWeight: 600, color: meta.color || "#185FA5", marginLeft: 8 }}>{meta.theme}</span>
+                  <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.12em", background: meta.venue === "KNR" ? "#0d1f38" : "#151515", color: meta.venue === "KNR" ? "#3b82f6" : "#444", padding: "2px 7px", borderRadius: 3, marginLeft: 8 }}>{meta.venue}</span>
+                  <span style={{ fontSize: 9, fontWeight: 600, color: "#7F77DD", background: "rgba(127,119,221,0.15)", padding: "2px 7px", borderRadius: 3, marginLeft: 6 }}>Kinesiology</span>
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                <input type="date" value={sessionDate} max={todayISO()} onChange={e => setSessionDate(e.target.value)}
+                  style={{ padding: "4px 8px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 12, fontWeight: 600, color: sessionDate !== todayISO() ? "#d97706" : "#888", background: "#111", fontFamily: "inherit", outline: "none", colorScheme: "dark" }} />
+                {sessionDate !== todayISO() && (
+                  <button onClick={() => setSessionDate(todayISO())}
+                    style={{ padding: "4px 8px", border: "0.5px solid #333", borderRadius: 5, fontSize: 10, color: "#666", background: "transparent", cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>Today</button>
+                )}
+              </div>
             </div>
+            {sessionDate !== todayISO() && (
+              <div style={{ fontSize: 10, color: "#d97706", marginTop: 5 }}>Backdating session to {sessionDate}</div>
+            )}
           </div>
 
           {prog.stretch?.length > 0 && (
