@@ -3020,10 +3020,10 @@ useEffect(() => {
     setSession(data?.session ?? null)
   })()
 
-  const sub = supabase.auth.onAuthStateChange(async (_evt, sess) => {
+  const sub = supabase.auth.onAuthStateChange(async (evt, sess) => {
     setSession(sess)
 
-    if (sess?.user?.id) {
+    if (evt === "SIGNED_IN" && sess?.user?.id) {
       const localMeals = JSON.parse(localStorage.getItem("ufd-meal-entries") || "[]")
 
       if (localMeals.length > 0) {
