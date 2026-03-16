@@ -93,13 +93,13 @@ const store = {
 
 const tabs = [
   "Overview",
-  "Body Comp",
-  "Training",
-  "Forecast",
   "Schedule",
-  "Import",
+  "Forecast",
+  "Operational Capacity",
+  "Training",
   "Calories",
-  "Injury"
+  "Body Comp",
+  "Import",
 ]
 
 const rangeOptions = [
