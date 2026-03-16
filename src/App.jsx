@@ -3049,7 +3049,7 @@ useEffect(() => {
     ;(async () => {
       const storedMeals = await store.get("ufd-meal-entries")
       const storedPresets = await store.get("ufd-meal-presets")
-      if (Array.isArray(storedMeals)) setMealEntries(storedMeals)
+      if (Array.isArray(storedMeals) && !session?.user?.id) setMealEntries(storedMeals)
       if (storedPresets && typeof storedPresets === "object") {
         setMealPresets({ ...defaultMealPresets, ...storedPresets })
       }
@@ -3069,11 +3069,11 @@ useEffect(() => {
 
   ;(async () => {
     try {
-      await syncMealsToSupabase(mealEntries, session.user.id)
+      await loadMealsFromSupabase(session.user.id)
     } catch (err) {
       const msg = err?.message || "Unknown sync error"
-      console.error("Initial meal sync failed:", err)
-      setAuthMsg(`Meal sync failed: ${msg}`)
+      console.error("Initial meal load failed:", err)
+      // load error, no user message needed
     }
   })()
 }, [hydrated, session?.user?.id])
@@ -3432,7 +3432,7 @@ async function persistMealEntries(nextEntries) {
   } catch (err) {
     const msg = err?.message || "Unknown sync error"
     console.error("Meal sync failed:", err)
-    setAuthMsg(`Meal sync failed: ${msg}`)
+    // load error, no user message needed
   }
 }
   async function persistMealPresets(nextPresets) {
