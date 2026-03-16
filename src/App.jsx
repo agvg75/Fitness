@@ -3109,6 +3109,13 @@ function parseFitnessViewCSV(text) {
     const raw = lines[i]
     const cells = raw.split(",").map(c => c.trim().replace(/^"|"$/g, ""))
     if (cells.length < 3) continue
+    // Pre-check: reject records with "day" in duration field — these are
+    // background tracking artifacts, not real workout sessions
+    const durCellRaw = iDur >= 0 ? cells[iDur] : ""
+    if (/day/i.test(durCellRaw)) {
+      rejected.push({ source: "FitnessView", reason: "Duration contains 'day' — likely background tracking artifact: " + durCellRaw, raw: raw.slice(0, 200) })
+      continue
+    }
 
     const dateRaw = iDate >= 0 ? cells[iDate] : null
     if (!dateRaw) { rejected.push({ source: "FitnessView", reason: "Missing date", raw: raw.slice(0, 200) }); continue }
@@ -3133,6 +3140,11 @@ function parseFitnessViewCSV(text) {
       else if (plainNum) durationMin = parseFloat(plainNum[1])
     }
 
+    // Reject implausible durations (> 8 hours = almost certainly a tracking artifact)
+    if (durationMin !== null && durationMin > 480) {
+      rejected.push({ source: "FitnessView", reason: `Implausible duration ${Math.round(durationMin)} min — likely background tracking artifact`, raw: raw.slice(0, 200) })
+      continue
+    }
     // Parse distance — strip units
     let distance = null, distanceUnit = null
     if (distRaw && distRaw !== "0" && distRaw !== "") {
@@ -3149,7 +3161,7 @@ function parseFitnessViewCSV(text) {
       else if (pc) paceMinPerMi = parseInt(pc[1]) + parseInt(pc[2]) / 60
     }
 
-    const calories = calRaw ? parseFloat(calRaw.replace(/[^\d.]/g, "")) || null : null
+    const calories = calRaw ? parseFloat(String(calRaw).replace(/,/g, "").replace(/[^\d.]/g, "")) || null : null
     const hr = hrRaw ? parseFloat(hrRaw.replace(/[^\d.]/g, "")) || null : null
 
     // Normalize date to ISO
@@ -3644,13 +3656,14 @@ function ImportTab({ canonicalSessions, setCanonicalSessions }) {
     try {
       // Commit workout sessions
       if (sessions.length) {
-        if (supabase) {
-          const { error } = await supabase.from("canonical_sessions").upsert(sessions, { onConflict: "session_id" })
-          if (error) throw error
-        }
         localStorage.setItem("lift_canonical_sessions", JSON.stringify(sessions))
         setCanonicalSessions(sessions)
         committed += sessions.length
+        if (supabase && STORE_USER_ID) {
+          const withUser = sessions.map(s => ({ ...s, user_id: STORE_USER_ID }))
+          const { error } = await supabase.from("canonical_sessions").upsert(withUser, { onConflict: "session_id" })
+          if (error) console.warn("Supabase write failed:", error.message)
+        }
       }
       // Commit nutrition to user_kv (feeds Calories tab)
       if (nutritionResult.length && supabase && STORE_USER_ID) {
