@@ -3416,12 +3416,12 @@ async function loadMealsFromSupabase(userId) {
 
   setMealEntries(rows)
 }
-async function persistMealEntries(nextEntries) {
+async function persistMealEntries(nextEntries, currentUserId) {
   setMealEntries(nextEntries)
 
   await store.set("ufd-meal-entries", nextEntries)
 
-  const currentUserId = session?.user?.id
+  // currentUserId passed as parameter
   if (!currentUserId) {
     console.log("No active session, meals saved locally only.")
     return
@@ -3456,7 +3456,7 @@ async function persistMealEntries(nextEntries) {
     }
 
     const nextEntries = [...mealEntries, entry].sort((a, b) => String(a.date).localeCompare(String(b.date)))
-    await persistMealEntries(nextEntries)
+    await persistMealEntries(nextEntries, session?.user?.id)
     setShowMealDialog(false)
   }
 
@@ -3476,7 +3476,7 @@ async function persistMealEntries(nextEntries) {
     }
 
     const nextEntries = [...mealEntries, entry].sort((a, b) => String(a.date).localeCompare(String(b.date)))
-    await persistMealEntries(nextEntries)
+    await persistMealEntries(nextEntries, session?.user?.id)
 
     if (saveAsPreset && customMealName.trim()) {
       const nextPresets = {
@@ -3506,7 +3506,7 @@ async function persistMealEntries(nextEntries) {
 
   async function deleteMealEntry(entryId) {
     const nextEntries = mealEntries.filter(row => row.id !== entryId)
-    await persistMealEntries(nextEntries)
+    await persistMealEntries(nextEntries, session?.user?.id)
   }
 
   const todayMeals = useMemo(() => {
