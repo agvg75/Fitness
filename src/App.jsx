@@ -2220,9 +2220,11 @@ function buildWeeklyTrainingBuckets(workouts) {
     return d
   }
 
-  const buckets = {}
-
+const buckets = {}
+  const cutoffMs = Date.now() - 52 * 7 * 24 * 60 * 60 * 1000
   workouts.forEach(w => {
+    const wMs = new Date(w.dateTime || w.date || 0).getTime()
+    if (!Number.isFinite(wMs) || wMs < cutoffMs) return
     const weekStart = startOfWeek(w.dateTime || w.date)
     const key = weekStart.toISOString().slice(0, 10)
 
