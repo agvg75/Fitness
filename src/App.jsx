@@ -4279,7 +4279,8 @@ const normalizedActiveWorkouts = useMemo(() => {
     if (!dateStr && w.start_date) {
       // Replace space-separated offset format to make it parseable
       const raw = String(w.start_date)
-const cleaned = raw.replace(/ ([+-])/, 'T$1')
+const cleaned = raw.replace(/^(d{4}-d{2}-d{2}) (d{2}:d{2}:d{2}) ([+-]d{2}:d{2})$/, '$1T$2$3')
+                          .replace(/^(d{4}-d{2}-d{2}) (d{2}:d{2}:d{2}) ([+-]d{4})$/, '$1T$2$3')
 const d = new Date(cleaned)
 dateStr = Number.isFinite(d.getTime()) ? d.toISOString().slice(0, 10) + 'T12:00:00' : null
     }
