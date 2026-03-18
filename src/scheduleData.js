@@ -75,10 +75,10 @@ export const PROG = {
       { n: "Towel scrunches (L)", d: "5 sets — intrinsic foot activation" },
     ],
     exercises: [
-      { id: "rdl", n: "Romanian deadlift (KB)", fi: "toe", variants: {
-        machine: { n: "KB RDL", sets: "3", reps: "10", load: "70 lb", note: "Hinge, flat back — hamstrings loaded throughout" },
-        db:      { n: "DB RDL", sets: "3", reps: "10–12", load: "TBD", note: "Same hinge pattern, easier grip" },
-        friendly:{ n: "Smith RDL (shallow depth)", sets: "3", reps: "10", load: "TBD", note: "Reduce depth if MTP uncomfortable at full stretch" },
+      { id: "hip_thrust_smith", n: "Hip thrust (Smith machine)", fi: "toe", variants: {
+        machine: { n: "Smith machine hip thrust", sets: "4", reps: "10", load: "Set 1: 115 lb | Sets 2-4: 155 lb", note: "Pause at top, ribs down, chin tucked. Drive through heels." },
+        db:      { n: "DB glute bridge (floor)", sets: "4", reps: "10–12", load: "TBD", note: "DB on hip crease, same pause-at-top cue" },
+        friendly:{ n: "Single-leg glute bridge (floor)", sets: "3", reps: "10", load: "BW", note: "No additional ankle or foot load" },
       }},
       { id: "leg_press", n: "Leg press", fi: "toe", variants: {
         machine: { n: "Technogym leg press", sets: "3", reps: "10", load: "200 lb", note: "Heels down, do not lock knees at top" },
@@ -98,7 +98,7 @@ export const PROG = {
     ],
     core: [
       { n: "Marches w/ band", d: "3×10 each leg — hip flexor drive, pelvis stable" },
-      { n: "90/90 bicycle", d: "3×30 sec — slow and controlled, lumbar flat to floor" },
+      { n: "Dead bugs w/ band", d: "2×15 — band around knees, lumbar pressed to floor, opposite arm/leg extension" },
     ],
   },
 
