@@ -804,7 +804,9 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session }) {
   const getCardioEntries = (day) => {
     if (cardioEntries[day]?.length) return cardioEntries[day]
     const cd = CARDIO[day]
-    return [{ modality: cd.mod, duration: `${cd.dMin}-${cd.dMax}`, notes: "" }]
+    const sessions = cd.sessions || []
+    if (sessions.length > 0) return sessions.map(s => ({ modality: s.mod, duration: `${s.dMin}-${s.dMax}`, notes: "" }))
+    return [{ modality: cd.mod || "run", duration: "", notes: "" }]
   }
 
   const setCardioEntryF = (day, idx, fKey, val) => {
@@ -1065,15 +1067,28 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session }) {
   // ── Cardio block ───────────────────────────────────────────────────────
   const cardioBlock = (day) => {
     const cd = CARDIO[day]
+    const prescribedSessions = cd.sessions || []
     const entries = getCardioEntries(day)
-    const modColor = { run: "#ef4444", bike: "#d97706", swim: "#0ea5e9" }
+    const modColor = { run: "#ef4444", bike: "#d97706", swim: "#0ea5e9", walk: "#22c55e", row: "#8b5cf6" }
     const modLabel = { run: "Run", bike: "Bike", swim: "Swim", walk: "Walk", row: "Row" }
 
     return (
       <div style={{ padding: "12px 14px" }}>
-        <div style={{ fontSize: 11, color: "#666", lineHeight: 1.5, padding: 8, background: "#111", borderRadius: 5, marginBottom: 8 }}>{cd.rationale}</div>
         <div style={{ fontSize: 10, fontWeight: 700, color: "#7F77DD", background: "rgba(127,119,221,0.12)", borderRadius: 4, padding: "2px 8px", display: "inline-block", marginBottom: 10 }}>{cd.goal}</div>
 
+        {prescribedSessions.map((ps, pi) => (
+          <div key={pi} style={{ marginBottom: 8, padding: "8px 10px", background: "#0d0d0d", borderRadius: 6, border: `0.5px solid ${modColor[ps.mod] || "#333"}44` }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+              <div style={{ padding: "2px 8px", borderRadius: 20, fontSize: 10, fontWeight: 700, background: `${modColor[ps.mod] || "#888"}22`, color: modColor[ps.mod] || "#888" }}>{modLabel[ps.mod] || ps.mod}</div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "#d8d8d8" }}>{ps.type}</div>
+              <div style={{ fontSize: 10, color: "#555", marginLeft: "auto" }}>{ps.dMin}–{ps.dMax} min · {ps.dist}</div>
+            </div>
+            <div style={{ fontSize: 11, color: "#555" }}>{ps.rationale}</div>
+            {ps.cnote && <div style={{ fontSize: 10, color: "#444", marginTop: 3, fontStyle: "italic" }}>{ps.cnote}</div>}
+          </div>
+        ))}
+
+        <div style={{ fontSize: 10, fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", margin: "10px 0 6px" }}>Log actual</div>
         {entries.map((entry, idx) => {
           const mc = modColor[entry.modality] || "#888"
           return (
@@ -1096,7 +1111,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session }) {
                   <input type="text" value={entry.duration} onChange={e => setCardioEntryF(day, idx, "duration", e.target.value)}
                     placeholder={idx === 0 ? `${cd.dMin}–${cd.dMax} min` : "minutes"}
                     style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
-                  {idx === 0 && <div style={{ fontSize: 9, color: "#444", marginTop: 2 }}>Target: {cd.dMin}–{cd.dMax} min | Weekly: {cd.wt} min</div>}
+                  {idx === 0 && <div style={{ fontSize: 9, color: "#444", marginTop: 2 }}>Target: {cd.dMin}–{cd.dMax} min</div>}
                 </div>
                 <div>
                   <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Distance / notes</div>
