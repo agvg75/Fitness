@@ -646,34 +646,45 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session }) {
   const [activeDay, setActiveDay] = useState(todayDayKey())
   const [schedView, setSchedView] = useState("schedule")
   const [schedLog, setSchedLog] = useState([])
-  const [undo, setUndo] = useState(null)
   const [expandedLog, setExpandedLog] = useState({})
   const [toast, setToast] = useState(null)
   const [openSections, setOpenSections] = useState({ stretch: true, warmup: true, main: true, core: true, cardio: true })
   const [variants, setVariants] = useState({})
   const [fields, setFields] = useState({})
-  const [cardioFields, setCardioFields] = useState({})
-  const [savedEntry, setSavedEntry] = useState(null)
-  const [justUndone, setJustUndone] = useState(false)
+  const [cardioEntries, setCardioEntries] = useState({}) // { day: [{modality, duration, notes}] }
+  const [checkedItems, setCheckedItems] = useState({})   // { "day_section_index": bool }
+  const [customItems, setCustomItems] = useState({})     // { "day_stretch": [{n,d}], "day_warmup": [...], "day_core": [...] }
+  const [customExercises, setCustomExercises] = useState({}) // { day: [{id,n,sets,reps,load,notes}] }
+  const [savedEntries, setSavedEntries] = useState({})   // { day: { ymca: entry|null, knr: entry|null } }
+  const [justUndone, setJustUndone] = useState(null)    // "ymca" | "knr" | null
   const [sessionDate, setSessionDate] = useState(todayISO())
+
+  const SPLIT_DAYS = ["Tue", "Thu"]
+  const isSplitDay = SPLIT_DAYS.includes(activeDay)
+
+  const VENUE_TIMES = { ymca: "05:30", knr: "09:35" }
+  const VENUE_LABELS = { ymca: "YMCA (5:30–7:00)", knr: "KNR (9:35–10:45)" }
 
   const saveScheduleKey = async (key, value) => {
     await store.set(key, value)
     if (!supabase || !session?.user?.id) return
-    const { error } = await supabase
-      .from("user_kv")
-      .upsert({ user_id: session.user.id, key, value, updated_at: new Date().toISOString() }, { onConflict: "user_id,key" })
+    const { error } = await supabase.from("user_kv").upsert(
+      { user_id: session.user.id, key, value, updated_at: new Date().toISOString() },
+      { onConflict: "user_id,key" }
+    )
     if (error) console.error(`Failed to sync ${key}:`, error)
   }
 
+  // ── Load from storage ──────────────────────────────────────────────────
   useEffect(() => {
     ;(async () => {
       const lg = await store.get("wt-log")
       const ss = await store.get("wt-sessions")
+      const ci = await store.get("wt-custom-items")
+      const cx = await store.get("wt-custom-exercises")
       if (Array.isArray(lg)) setSchedLog(lg)
       if (ss && typeof ss === "object") {
-        const newFields = {}
-        const newVariants = {}
+        const newFields = {}, newVariants = {}
         SDAYS.forEach(d => {
           if (!ss[d]) return
           Object.keys(ss[d]).forEach(exId => {
@@ -684,9 +695,11 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session }) {
             }
           })
         })
-        if (Object.keys(newFields).length > 0) setFields(prev => ({ ...prev, ...newFields }))
-        if (Object.keys(newVariants).length > 0) setVariants(prev => ({ ...prev, ...newVariants }))
+        if (Object.keys(newFields).length) setFields(prev => ({ ...prev, ...newFields }))
+        if (Object.keys(newVariants).length) setVariants(prev => ({ ...prev, ...newVariants }))
       }
+      if (ci && typeof ci === "object") setCustomItems(ci)
+      if (cx && typeof cx === "object") setCustomExercises(cx)
     })()
   }, [session?.user?.id])
 
@@ -715,7 +728,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session }) {
     })
   }
 
-  const setVariant = (day, exId, vk) => {
+  const setVariantFn = (day, exId, vk) => {
     setVariants(prev => ({ ...prev, [exId]: vk }))
     const ex = getProgDay(day).exercises?.find(e => e.id === exId)
     if (ex) {
@@ -733,6 +746,85 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session }) {
     return f.sets !== rx.sets || f.reps !== rx.reps || f.load !== rx.load
   }
 
+  // ── Checked items ──────────────────────────────────────────────────────
+  const checkKey = (day, section, idx) => `${day}_${section}_${idx}`
+  const isChecked = (day, section, idx) => !!checkedItems[checkKey(day, section, idx)]
+  const toggleCheck = (day, section, idx) => {
+    setCheckedItems(prev => ({ ...prev, [checkKey(day, section, idx)]: !prev[checkKey(day, section, idx)] }))
+  }
+
+  // ── Custom items (stretch, warmup, core) ───────────────────────────────
+  const customKey = (day, section) => `${day}_${section}`
+  const getCustomItems = (day, section) => customItems[customKey(day, section)] || []
+
+  const addCustomItem = (day, section) => {
+    const name = prompt(`Add item to ${section}:`)
+    if (!name?.trim()) return
+    const detail = prompt("Description (optional):") || ""
+    const updated = { ...customItems, [customKey(day, section)]: [...getCustomItems(day, section), { n: name.trim(), d: detail.trim() }] }
+    setCustomItems(updated)
+    saveScheduleKey("wt-custom-items", updated)
+  }
+
+  const removeCustomItem = (day, section, idx) => {
+    const arr = getCustomItems(day, section).filter((_, i) => i !== idx)
+    const updated = { ...customItems, [customKey(day, section)]: arr }
+    setCustomItems(updated)
+    saveScheduleKey("wt-custom-items", updated)
+  }
+
+  // ── Custom exercises ───────────────────────────────────────────────────
+  const getCustomExercises = (day) => customExercises[day] || []
+
+  const addCustomExercise = (day) => {
+    const name = prompt("Exercise name:")
+    if (!name?.trim()) return
+    const newEx = { id: `custom_${Date.now()}`, n: name.trim(), sets: "3", reps: "10", load: "", notes: "" }
+    const updated = { ...customExercises, [day]: [...getCustomExercises(day), newEx] }
+    setCustomExercises(updated)
+    saveScheduleKey("wt-custom-exercises", updated)
+  }
+
+  const removeCustomExercise = (day, exId) => {
+    const updated = { ...customExercises, [day]: getCustomExercises(day).filter(e => e.id !== exId) }
+    setCustomExercises(updated)
+    saveScheduleKey("wt-custom-exercises", updated)
+  }
+
+  const setCustomExF = (day, exId, fKey, val) => {
+    setCustomExercises(prev => {
+      const arr = (prev[day] || []).map(e => e.id === exId ? { ...e, [fKey]: val } : e)
+      const updated = { ...prev, [day]: arr }
+      saveScheduleKey("wt-custom-exercises", updated)
+      return updated
+    })
+  }
+
+  // ── Cardio entries ─────────────────────────────────────────────────────
+  const getCardioEntries = (day) => {
+    if (cardioEntries[day]?.length) return cardioEntries[day]
+    const cd = CARDIO[day]
+    return [{ modality: cd.mod, duration: `${cd.dMin}-${cd.dMax}`, notes: "" }]
+  }
+
+  const setCardioEntryF = (day, idx, fKey, val) => {
+    setCardioEntries(prev => {
+      const arr = [...getCardioEntries(day)]
+      arr[idx] = { ...arr[idx], [fKey]: val }
+      return { ...prev, [day]: arr }
+    })
+  }
+
+  const addCardioEntry = (day) => {
+    setCardioEntries(prev => ({ ...prev, [day]: [...getCardioEntries(day), { modality: "run", duration: "", notes: "" }] }))
+  }
+
+  const removeCardioEntry = (day, idx) => {
+    const arr = getCardioEntries(day).filter((_, i) => i !== idx)
+    setCardioEntries(prev => ({ ...prev, [day]: arr.length ? arr : undefined }))
+  }
+
+  // ── Build session store ────────────────────────────────────────────────
   const buildSessionsStore = () => {
     const out = {}
     SDAYS.forEach(d => {
@@ -746,13 +838,11 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session }) {
     return out
   }
 
-  const logSession = async () => {
+  // ── Log session ────────────────────────────────────────────────────────
+  const logSession = async (venue) => {
     const day = activeDay
     const prog = getProgDay(day)
-    const cd = CARDIO[day]
-    const cf = cardioFields[day] || {}
-    const ts = new Date().toISOString()
-    const dateStr = sessionDate || ts.slice(0, 10)
+    const ts = new Date(`${sessionDate}T${VENUE_TIMES[venue] || "12:00"}:00`).toISOString()
 
     const exercises = (prog.exercises || []).map(ex => {
       const vk = getVariant(ex.id)
@@ -766,37 +856,47 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session }) {
       }
     })
 
+    const customExs = getCustomExercises(day).map(e => ({
+      exercise_id: e.id, exercise_name: e.n, variant: "custom", variant_name: e.n,
+      prescribed: { sets: e.sets, reps: e.reps, load: e.load },
+      actual: { sets: e.sets, reps: e.reps, load: e.load },
+      notes: e.notes || "", changed: false,
+    }))
+
+    const checkedStretch = getProgDay(day).stretch?.map((item, i) => ({ ...item, done: isChecked(day, "stretch", i) }))
+    const checkedWarmup = getProgDay(day).warmup?.map((item, i) => ({ ...item, done: isChecked(day, "warmup", i) }))
+
     const entry = {
       id: Date.now(),
       session_id: ts.replace(/\D/g, "").slice(0, 17),
-      logged_at: ts, date: dateStr,
+      logged_at: ts, date: sessionDate,
       day, dayLabel: SMETA[day]?.label || day,
-      theme: SMETA[day]?.theme || "", venue: SMETA[day]?.venue || "",
+      venue: venue || "ymca",
+      venue_label: VENUE_LABELS[venue] || "",
       program: "Kinesiology (primary)",
-      exercises,
-      cardio: {
-        modality: cd.mod, type: cd.type,
-        prescribed_duration_min: `${cd.dMin}-${cd.dMax}`,
-        actual_duration: cf.duration || "", notes: cf.notes || "",
-      },
+      exercises: [...exercises, ...customExs],
+      cardio: getCardioEntries(day),
+      stretch_completed: checkedStretch,
+      warmup_completed: checkedWarmup,
       source: "LIFT Schedule Tab", apple_watch_sync_pending: true,
       data: Object.fromEntries(exercises.map(ex => [ex.exercise_id, [{ r: ex.actual.reps, w: ex.actual.load }]])),
     }
 
     const newLog = [entry, ...schedLog]
     setSchedLog(newLog)
-    setSavedEntry(entry)
-    setJustUndone(false)
+    setSavedEntries(prev => ({ ...prev, [day]: { ...(prev[day] || {}), [venue]: entry } }))
 
     await saveScheduleKey("wt-log", newLog)
     await saveScheduleKey("wt-sessions", buildSessionsStore())
 
     const types = SDAY_TYPES[day] || []
-    if (types.length > 0 && cf.duration) {
-      const summaryEntries = types.map((type, i) => ({
-        id: entry.id + i, date: dateStr, time: "", dateTime: dateStr, type,
-        dur: parseInt(cf.duration) || 0, hr: null, distance: null, calories: null,
-        notes: `from Schedule , ${SMETA[day]?.theme || day}${cf.notes ? " , " + cf.notes : ""}`,
+    const allCardio = getCardioEntries(day)
+    if (types.length > 0 && allCardio.some(c => c.duration)) {
+      const summaryEntries = allCardio.filter(c => c.duration).map((c, i) => ({
+        id: entry.id + i, date: sessionDate, time: VENUE_TIMES[venue] || "", dateTime: ts,
+        type: c.modality === "run" ? "Running" : c.modality === "bike" ? "Cycling" : c.modality === "swim" ? "Swimming" : "Other",
+        dur: parseInt(c.duration) || 0, hr: null, distance: null, calories: null,
+        notes: `from Schedule , ${SMETA[day]?.theme || day}${c.notes ? " , " + c.notes : ""}`,
         _scheduleId: entry.id,
       }))
       const existing = await store.get("ufd-workouts") || storedWorkouts
@@ -806,20 +906,22 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session }) {
       await saveScheduleKey("ufd-workouts", merged)
     }
 
-    showToast("Session logged")
+    showToast(`${VENUE_LABELS[venue] || "Session"} logged`)
   }
 
-  const undoSave = async () => {
-    if (!savedEntry) return
-    const newLog = schedLog.filter(e => e.id !== savedEntry.id)
+  const undoSession = async (venue) => {
+    const day = activeDay
+    const entry = savedEntries[day]?.[venue]
+    if (!entry) return
+    const newLog = schedLog.filter(e => e.id !== entry.id)
     setSchedLog(newLog)
-    const newWorkouts = storedWorkouts.filter(w => w._scheduleId !== savedEntry.id)
+    const newWorkouts = storedWorkouts.filter(w => w._scheduleId !== entry.id)
     setStoredWorkouts(newWorkouts)
-    setSavedEntry(null)
-    setJustUndone(true)
+    setSavedEntries(prev => ({ ...prev, [day]: { ...(prev[day] || {}), [venue]: null } }))
+    setJustUndone(venue)
     await saveScheduleKey("wt-log", newLog)
     await saveScheduleKey("ufd-workouts", newWorkouts)
-    setTimeout(() => setJustUndone(false), 4000)
+    setTimeout(() => setJustUndone(null), 4000)
     showToast("Session removed")
   }
 
@@ -840,7 +942,8 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session }) {
 
   const toggleSection = k => setOpenSections(prev => ({ ...prev, [k]: !prev[k] }))
 
-  const sectionHeader = (key, label, dot, meta) => (
+  // ── Styles ─────────────────────────────────────────────────────────────
+  const secHdr = (key, label, dot, meta) => (
     <div onClick={() => toggleSection(key)}
       style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", cursor: "pointer", borderBottom: openSections[key] ? "1px solid #1a1a1a" : "none" }}>
       <div style={{ width: 8, height: 8, borderRadius: "50%", background: dot, flexShrink: 0 }} />
@@ -850,33 +953,68 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session }) {
     </div>
   )
 
-  const simpleList = items => (
-    <div style={{ padding: "6px 14px 12px" }}>
-      {items.map((item, i) => (
-        <div key={i} style={{ padding: "5px 0", borderBottom: i < items.length - 1 ? "1px solid #111" : "none" }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "#d8d8d8" }}>{item.n}</div>
-          <div style={{ fontSize: 11, color: "#555", marginTop: 1 }}>{item.d}</div>
-        </div>
-      ))}
-    </div>
+  const addBtn = (onClick) => (
+    <button onClick={onClick}
+      style={{ width: "100%", marginTop: 8, padding: "6px", border: "0.5px dashed #333", borderRadius: 5, background: "transparent", color: "#555", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>
+      + Add item
+    </button>
   )
 
-  const exCard = (ex, day) => {
-    const vk = getVariant(ex.id)
-    const v = ex.variants[vk]
-    const f = getF(day, ex.id)
-    const chg = isChanged(day, ex.id)
-    const fl = ex.fi === "toe" ? "Toe-safe" : "Shoulder-safe"
+  // ── Checklist section (stretch / warmup / core) ───────────────────────
+  const checklistSection = (day, section, items, dot, label, meta) => {
+    const custom = getCustomItems(day, section)
+    const allItems = [...(items || []), ...custom]
+    if (!openSections[section]) return (
+      <div style={{ border: "0.5px solid #1a1a1a", borderRadius: 8, marginBottom: 10, overflow: "hidden" }}>
+        {secHdr(section, label, dot, meta)}
+      </div>
+    )
+    return (
+      <div style={{ border: "0.5px solid #1a1a1a", borderRadius: 8, marginBottom: 10, overflow: "hidden" }}>
+        {secHdr(section, label, dot, meta)}
+        <div style={{ padding: "6px 14px 10px" }}>
+          {allItems.map((item, i) => {
+            const isCustom = i >= (items || []).length
+            const customIdx = i - (items || []).length
+            const checked = isChecked(day, section, i)
+            return (
+              <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "5px 0", borderBottom: i < allItems.length - 1 ? "1px solid #111" : "none" }}>
+                <input type="checkbox" checked={checked} onChange={() => toggleCheck(day, section, i)}
+                  style={{ marginTop: 3, flexShrink: 0, accentColor: dot }} />
+                <div style={{ flex: 1, opacity: checked ? 0.5 : 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: checked ? "#555" : "#d8d8d8", textDecoration: checked ? "line-through" : "none" }}>{item.n}</div>
+                  {item.d && <div style={{ fontSize: 11, color: "#555", marginTop: 1 }}>{item.d}</div>}
+                </div>
+                {isCustom && (
+                  <button onClick={() => removeCustomItem(day, section, customIdx)}
+                    style={{ background: "transparent", border: "none", color: "#444", cursor: "pointer", fontSize: 12, padding: "0 4px" }}>✕</button>
+                )}
+              </div>
+            )
+          })}
+          {addBtn(() => addCustomItem(day, section))}
+        </div>
+      </div>
+    )
+  }
+
+  // ── Exercise card ──────────────────────────────────────────────────────
+  const exCard = (ex, day, isCustom = false) => {
+    const vk = isCustom ? "custom" : getVariant(ex.id)
+    const v = isCustom ? ex : ex.variants?.[vk]
+    const f = isCustom ? ex : getF(day, ex.id)
+    const chg = isCustom ? false : isChanged(day, ex.id)
     const vColors = { machine: "#3b82f6", db: "#22c55e", friendly: "#f97316" }
     const vBgs    = { machine: "rgba(59,130,246,0.12)", db: "rgba(34,197,94,0.12)", friendly: "rgba(249,115,22,0.12)" }
+    const fl = ex.fi === "toe" ? "Toe-safe" : "Shoulder-safe"
 
     const fieldInput = (lbl, fKey, rxVal) => (
       <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 3 }}>
         <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em" }}>{lbl}</div>
-        <input type="text" value={f[fKey] || ""}
-          onChange={e => setF(day, ex.id, fKey, e.target.value)}
-          style={{ width: "100%", padding: "5px 7px", border: `0.5px solid ${(f[fKey] || "") !== rxVal ? "#d97706" : "#252525"}`, borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: (f[fKey] || "") !== rxVal ? "rgba(217,119,6,0.1)" : "#111", fontFamily: "inherit", outline: "none" }} />
-        <div style={{ fontSize: 9, color: "#444" }}>Rx: {rxVal}</div>
+        <input type="text" value={(isCustom ? ex[fKey] : f[fKey]) || ""}
+          onChange={e => isCustom ? setCustomExF(day, ex.id, fKey, e.target.value) : setF(day, ex.id, fKey, e.target.value)}
+          style={{ width: "100%", padding: "5px 7px", border: `0.5px solid ${!isCustom && (f[fKey] || "") !== rxVal ? "#d97706" : "#252525"}`, borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: !isCustom && (f[fKey] || "") !== rxVal ? "rgba(217,119,6,0.1)" : "#111", fontFamily: "inherit", outline: "none" }} />
+        {!isCustom && <div style={{ fontSize: 9, color: "#444" }}>Rx: {rxVal}</div>}
       </div>
     )
 
@@ -886,29 +1024,37 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session }) {
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <span style={{ fontSize: 13, fontWeight: 600, color: "#d8d8d8" }}>{ex.n}</span>
             {chg && <span style={{ fontSize: 9, fontWeight: 700, color: "#d97706", background: "rgba(217,119,6,0.15)", borderRadius: 3, padding: "1px 5px" }}>modified</span>}
+            {isCustom && <span style={{ fontSize: 9, color: "#7F77DD", background: "rgba(127,119,221,0.15)", borderRadius: 3, padding: "1px 5px" }}>custom</span>}
           </div>
-          <div style={{ display: "flex", gap: 3 }}>
-            {["machine", "db", "friendly"].map(k => {
-              const lbl = k === "machine" ? "Machine" : k === "db" ? "Dumbbell" : fl
+          <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+            {!isCustom && ["machine", "db", "friendly"].map(k => {
+              const lbl = k === "machine" ? "Machine" : k === "db" ? "DB" : fl
               const active = vk === k
               return (
-                <button key={k} onClick={() => setVariant(day, ex.id, k)}
-                  style={{ padding: "3px 8px", borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: "pointer", border: `0.5px solid ${active ? vColors[k] : "#222"}`, background: active ? vBgs[k] : "transparent", color: active ? vColors[k] : "#444", transition: "all 0.12s" }}>
+                <button key={k} onClick={() => setVariantFn(day, ex.id, k)}
+                  style={{ padding: "3px 7px", borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: "pointer", border: `0.5px solid ${active ? vColors[k] : "#222"}`, background: active ? vBgs[k] : "transparent", color: active ? vColors[k] : "#444" }}>
                   {lbl}
                 </button>
               )
             })}
+            {isCustom && (
+              <button onClick={() => removeCustomExercise(day, ex.id)}
+                style={{ padding: "3px 7px", borderRadius: 4, fontSize: 10, cursor: "pointer", border: "0.5px solid #333", background: "transparent", color: "#555" }}>
+                Remove
+              </button>
+            )}
           </div>
         </div>
         <div style={{ padding: "4px 12px 10px", background: "#0a0a0a" }}>
-          <div style={{ fontSize: 11, color: "#555", padding: "4px 0 6px" }}>{v.n}</div>
+          {!isCustom && <div style={{ fontSize: 11, color: "#555", padding: "4px 0 6px" }}>{v?.n}</div>}
           <div style={{ display: "flex", gap: 8, marginBottom: 6 }}>
-            {fieldInput("Sets", "sets", v.sets)}
-            {fieldInput("Reps", "reps", v.reps)}
-            {fieldInput("Load", "load", v.load)}
+            {fieldInput("Sets", "sets", v?.sets)}
+            {fieldInput("Reps", "reps", v?.reps)}
+            {fieldInput("Load", "load", v?.load)}
           </div>
-          {v.note && <div style={{ fontSize: 11, color: "#555", lineHeight: 1.4, paddingTop: 5, borderTop: "1px solid #1a1a1a", marginBottom: 4 }}>{v.note}</div>}
-          <textarea value={f.notes || ""} onChange={e => setF(day, ex.id, "notes", e.target.value)}
+          {v?.note && <div style={{ fontSize: 11, color: "#555", lineHeight: 1.4, paddingTop: 5, borderTop: "1px solid #1a1a1a", marginBottom: 4 }}>{v.note}</div>}
+          <textarea value={(isCustom ? ex.notes : f.notes) || ""}
+            onChange={e => isCustom ? setCustomExF(day, ex.id, "notes", e.target.value) : setF(day, ex.id, "notes", e.target.value)}
             placeholder="Session note (optional)" rows={1}
             style={{ width: "100%", marginTop: 4, padding: "4px 7px", border: "0.5px solid #1e1e1e", borderRadius: 5, fontSize: 11, color: "#666", background: "#111", fontFamily: "inherit", resize: "none", outline: "none" }} />
         </div>
@@ -916,81 +1062,124 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session }) {
     )
   }
 
+  // ── Cardio block ───────────────────────────────────────────────────────
   const cardioBlock = (day) => {
     const cd = CARDIO[day]
-    const cf = cardioFields[day] || { duration: `${cd.dMin}-${cd.dMax}`, notes: "" }
-    const modColor = { run: "#ef4444", bike: "#d97706", swim: "#0ea5e9" }[cd.mod] || "#888"
-    const modLabel = { run: "Run", bike: "Bike", swim: "Swim" }[cd.mod] || cd.mod
-    const setCarFld = (fKey, val) => setCardioFields(prev => ({ ...prev, [day]: { ...(prev[day] || {}), [fKey]: val } }))
+    const entries = getCardioEntries(day)
+    const modColor = { run: "#ef4444", bike: "#d97706", swim: "#0ea5e9" }
+    const modLabel = { run: "Run", bike: "Bike", swim: "Swim", walk: "Walk", row: "Row" }
 
     return (
       <div style={{ padding: "12px 14px" }}>
-        <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 10 }}>
-          <div style={{ padding: "3px 10px", borderRadius: 20, fontSize: 11, fontWeight: 700, background: `${modColor}22`, color: modColor, whiteSpace: "nowrap" }}>{modLabel}</div>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "#d8d8d8" }}>{cd.type}</div>
-            <div style={{ fontSize: 11, color: "#666", marginTop: 1 }}>{cd.intensity}</div>
-          </div>
-        </div>
         <div style={{ fontSize: 11, color: "#666", lineHeight: 1.5, padding: 8, background: "#111", borderRadius: 5, marginBottom: 8 }}>{cd.rationale}</div>
-        <div style={{ fontSize: 10, fontWeight: 700, color: "#7F77DD", background: "rgba(127,119,221,0.12)", borderRadius: 4, padding: "2px 8px", display: "inline-block", marginBottom: 8 }}>{cd.goal}</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 6 }}>
-          <div>
-            <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Actual duration (min)</div>
-            <input type="text" value={cf.duration} onChange={e => setCarFld("duration", e.target.value)}
-              placeholder={`${cd.dMin}–${cd.dMax} min`}
-              style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
-            <div style={{ fontSize: 9, color: "#444", marginTop: 2 }}>Target: {cd.dMin}–{cd.dMax} min | Weekly: {cd.wt} min</div>
-          </div>
-          <div>
-            <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Distance / notes</div>
-            <input type="text" value={cf.notes} onChange={e => setCarFld("notes", e.target.value)}
-              placeholder={cd.dist}
-              style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
-            <div style={{ fontSize: 9, color: "#444", marginTop: 2 }}>Guide: {cd.dist}</div>
-          </div>
-        </div>
-        {cd.cnote && <div style={{ fontSize: 10, color: "#555", lineHeight: 1.4 }}>{cd.cnote}</div>}
+        <div style={{ fontSize: 10, fontWeight: 700, color: "#7F77DD", background: "rgba(127,119,221,0.12)", borderRadius: 4, padding: "2px 8px", display: "inline-block", marginBottom: 10 }}>{cd.goal}</div>
+
+        {entries.map((entry, idx) => {
+          const mc = modColor[entry.modality] || "#888"
+          return (
+            <div key={idx} style={{ marginBottom: 10, padding: "10px 12px", border: `0.5px solid #1e1e1e`, borderRadius: 7, background: "#0a0a0a" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                <select value={entry.modality} onChange={e => setCardioEntryF(day, idx, "modality", e.target.value)}
+                  style={{ padding: "4px 8px", borderRadius: 20, fontSize: 11, fontWeight: 700, background: `${mc}22`, color: mc, border: `0.5px solid ${mc}`, outline: "none", cursor: "pointer", fontFamily: "inherit" }}>
+                  {["run", "bike", "swim", "walk", "row"].map(m => <option key={m} value={m}>{modLabel[m]}</option>)}
+                </select>
+                {idx === 0 && <span style={{ fontSize: 11, color: "#555" }}>{cd.type} · {cd.intensity}</span>}
+                {idx > 0 && <span style={{ fontSize: 10, color: "#444" }}>Additional session</span>}
+                {idx > 0 && (
+                  <button onClick={() => removeCardioEntry(day, idx)}
+                    style={{ marginLeft: "auto", background: "transparent", border: "none", color: "#444", cursor: "pointer", fontSize: 12 }}>✕</button>
+                )}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                <div>
+                  <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Duration (min)</div>
+                  <input type="text" value={entry.duration} onChange={e => setCardioEntryF(day, idx, "duration", e.target.value)}
+                    placeholder={idx === 0 ? `${cd.dMin}–${cd.dMax} min` : "minutes"}
+                    style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
+                  {idx === 0 && <div style={{ fontSize: 9, color: "#444", marginTop: 2 }}>Target: {cd.dMin}–{cd.dMax} min | Weekly: {cd.wt} min</div>}
+                </div>
+                <div>
+                  <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Distance / notes</div>
+                  <input type="text" value={entry.notes} onChange={e => setCardioEntryF(day, idx, "notes", e.target.value)}
+                    placeholder={idx === 0 ? cd.dist : "e.g. 2 miles"}
+                    style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
+                </div>
+              </div>
+            </div>
+          )
+        })}
+        {addBtn(() => addCardioEntry(day))}
+        {cd.cnote && <div style={{ fontSize: 10, color: "#555", lineHeight: 1.4, marginTop: 8 }}>{cd.cnote}</div>}
       </div>
     )
   }
 
+  // ── Log bar ────────────────────────────────────────────────────────────
   const logBar = () => {
-    if (justUndone) return (
-      <div>
-        <div style={{ padding: "10px 14px", background: "rgba(153,60,29,0.15)", border: "0.5px solid #993C1D", borderRadius: 8, marginBottom: 8 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "#ef4444" }}>Session removed</div>
-          <div style={{ fontSize: 11, color: "#777", marginTop: 2 }}>Fields reset to prescription values.</div>
-        </div>
-        <button onClick={logSession} style={{ width: "100%", padding: 12, background: "#185FA5", color: "#fff", border: "none", borderRadius: 7, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Log this session</button>
-      </div>
-    )
-    if (savedEntry) {
-      const changed = savedEntry.exercises.filter(x => x.changed)
-      return (
-        <div>
-          <div style={{ padding: "10px 14px", background: "rgba(15,110,86,0.15)", border: "0.5px solid #0F6E56", borderRadius: 8, marginBottom: 8 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "#10b981" }}>Session logged</div>
-            <div style={{ fontSize: 10, color: "#555", fontFamily: "monospace", marginTop: 2 }}>{new Date(savedEntry.logged_at).toLocaleString()} · {savedEntry.session_id}</div>
-            <div style={{ marginTop: 6, fontSize: 11, color: "#777", lineHeight: 1.6 }}>
-              {savedEntry.exercises.map(ex => (
-                <div key={ex.exercise_id} style={{ borderBottom: "1px solid #1a1a1a", padding: "2px 0" }}>
-                  {ex.exercise_name}: {ex.actual.sets}×{ex.actual.reps} @ {ex.actual.load}{ex.changed && <span style={{ color: "#d97706", fontWeight: 600 }}> (modified)</span>}
-                </div>
-              ))}
-              {savedEntry.cardio?.actual_duration && <div style={{ paddingTop: 3 }}>Cardio ({savedEntry.cardio.modality}): {savedEntry.cardio.actual_duration} min</div>}
-            </div>
-            {changed.length > 0 && <div style={{ fontSize: 10, color: "#d97706", marginTop: 4 }}>{changed.length} exercise(s) modified from prescription.</div>}
-          </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={undoSave} style={{ flex: 1, padding: 11, background: "transparent", color: "#888", border: "0.5px solid #333", borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Undo save</button>
-            <button onClick={logSession} style={{ flex: 1, padding: 11, background: "#185FA5", color: "#fff", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Re-log / update</button>
-          </div>
-        </div>
-      )
-    }
+    const day = activeDay
+    const saved = savedEntries[day] || {}
+    const venues = isSplitDay ? ["ymca", "knr"] : ["ymca"]
+
     return (
-      <button onClick={logSession} style={{ width: "100%", padding: 13, background: "#185FA5", color: "#fff", border: "none", borderRadius: 7, fontSize: 15, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Log this session</button>
+      <div style={{ marginTop: 16 }}>
+        {/* Date picker */}
+        <div style={{ marginBottom: 10, padding: "10px 14px", border: "0.5px solid #1a1a1a", borderRadius: 8, background: "#0a0a0a", display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#555", whiteSpace: "nowrap" }}>Session date</div>
+          <input type="date" value={sessionDate} max={todayISO()} onChange={e => setSessionDate(e.target.value)}
+            style={{ flex: 1, padding: "5px 8px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: sessionDate !== todayISO() ? "#d97706" : "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none", colorScheme: "dark" }} />
+          {sessionDate !== todayISO() && (
+            <button onClick={() => setSessionDate(todayISO())}
+              style={{ padding: "4px 10px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 11, color: "#666", background: "transparent", cursor: "pointer", fontFamily: "inherit" }}>Today</button>
+          )}
+        </div>
+
+        {justUndone && (
+          <div style={{ padding: "10px 14px", background: "rgba(153,60,29,0.15)", border: "0.5px solid #993C1D", borderRadius: 8, marginBottom: 8 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "#ef4444" }}>Session removed</div>
+          </div>
+        )}
+
+        {venues.map(venue => {
+          const entry = saved[venue]
+          const label = isSplitDay ? VENUE_LABELS[venue] : "Log this session"
+          const timeLabel = isSplitDay ? ` · ${VENUE_TIMES[venue]}` : ""
+
+          if (entry) {
+            const changed = entry.exercises?.filter(x => x.changed) || []
+            return (
+              <div key={venue} style={{ marginBottom: 10 }}>
+                <div style={{ padding: "10px 14px", background: "rgba(15,110,86,0.15)", border: "0.5px solid #0F6E56", borderRadius: 8, marginBottom: 6 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#10b981" }}>{label} — logged</div>
+                  <div style={{ fontSize: 10, color: "#555", fontFamily: "monospace", marginTop: 2 }}>{new Date(entry.logged_at).toLocaleString()} · {entry.session_id}</div>
+                  {changed.length > 0 && <div style={{ fontSize: 10, color: "#d97706", marginTop: 3 }}>{changed.length} exercise(s) modified from prescription</div>}
+                  {entry.cardio?.length > 0 && (
+                    <div style={{ fontSize: 11, color: "#777", marginTop: 3 }}>
+                      Cardio: {entry.cardio.map(c => `${c.duration}min ${c.modality}`).join(" + ")}
+                    </div>
+                  )}
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={() => undoSession(venue)}
+                    style={{ flex: 1, padding: 10, background: "transparent", color: "#888", border: "0.5px solid #333", borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+                    Undo save
+                  </button>
+                  <button onClick={() => logSession(venue)}
+                    style={{ flex: 1, padding: 10, background: "#185FA5", color: "#fff", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+                    Re-log
+                  </button>
+                </div>
+              </div>
+            )
+          }
+
+          return (
+            <button key={venue} onClick={() => logSession(venue)}
+              style={{ width: "100%", padding: 13, background: venue === "knr" ? "#0F6E56" : "#185FA5", color: "#fff", border: "none", borderRadius: 7, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", marginBottom: 8 }}>
+              Log {label}{timeLabel}
+            </button>
+          )
+        })}
+      </div>
     )
   }
 
@@ -999,16 +1188,19 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session }) {
 
   return (
     <div style={{ color: "#d8d8d8", position: "relative" }}>
+      {/* Day navigation */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
         <div style={{ display: "flex", gap: 3, background: "#0a0a0a", borderRadius: 8, padding: 4, border: "1px solid #1a1a1a", flexWrap: "wrap" }}>
           {SDAYS.map(d => {
             const m = SMETA[d] || {}
             const active = d === activeDay && schedView === "schedule"
+            const isSplit = SPLIT_DAYS.includes(d)
             return (
-              <button key={d} onClick={() => { setActiveDay(d); setSchedView("schedule"); setSavedEntry(null); setSessionDate(todayISO()) }}
-                style={{ padding: "6px 12px", border: "none", cursor: "pointer", background: active ? (m.color || "#185FA5") + "22" : "transparent", fontSize: 12, fontWeight: active ? 700 : 500, letterSpacing: "0.06em", textTransform: "uppercase", color: active ? (m.color || "#185FA5") : "#3a3a3a", borderRadius: 6 }}>
+              <button key={d} onClick={() => { setActiveDay(d); setSchedView("schedule"); setSavedEntries(prev => ({ ...prev })) }}
+                style={{ padding: "6px 12px", border: "none", cursor: "pointer", background: active ? (m.color || "#185FA5") + "22" : "transparent", fontSize: 12, fontWeight: active ? 700 : 500, letterSpacing: "0.06em", textTransform: "uppercase", color: active ? (m.color || "#185FA5") : "#3a3a3a", borderRadius: 6, position: "relative" }}>
                 {d}
-                <div style={{ fontSize: 8, opacity: 0.7, marginTop: 1, color: m.venue === "KNR" ? "#3b82f6" : m.venue === "—" ? "#333" : "#d97706" }}>{m.venue}</div>
+                {isSplit && <div style={{ fontSize: 7, color: "#7F77DD", marginTop: 1 }}>split</div>}
+                {!isSplit && <div style={{ fontSize: 8, opacity: 0.7, marginTop: 1, color: m.venue === "KNR" ? "#3b82f6" : m.venue === "—" ? "#333" : "#d97706" }}>{m.venue}</div>}
               </button>
             )
           })}
@@ -1024,64 +1216,47 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session }) {
 
       {schedView === "schedule" && (
         <>
+          {/* Day header */}
           <div style={{ marginBottom: 14, paddingBottom: 10, borderBottom: "1px solid #1a1a1a" }}>
-            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-              <div>
-                <div style={{ fontSize: 20, fontWeight: 700, color: "#e8e8e8", lineHeight: 1 }}>
-                  {meta.label || activeDay}
-                  <span style={{ fontSize: 13, fontWeight: 600, color: meta.color || "#185FA5", marginLeft: 8 }}>{meta.theme}</span>
-                  <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.12em", background: meta.venue === "KNR" ? "#0d1f38" : "#151515", color: meta.venue === "KNR" ? "#3b82f6" : "#444", padding: "2px 7px", borderRadius: 3, marginLeft: 8 }}>{meta.venue}</span>
-                  <span style={{ fontSize: 9, fontWeight: 600, color: "#7F77DD", background: "rgba(127,119,221,0.15)", padding: "2px 7px", borderRadius: 3, marginLeft: 6 }}>Kinesiology</span>
-                </div>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-                <input type="date" value={sessionDate} max={todayISO()} onChange={e => setSessionDate(e.target.value)}
-                  style={{ padding: "4px 8px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 12, fontWeight: 600, color: sessionDate !== todayISO() ? "#d97706" : "#888", background: "#111", fontFamily: "inherit", outline: "none", colorScheme: "dark" }} />
-                {sessionDate !== todayISO() && (
-                  <button onClick={() => setSessionDate(todayISO())}
-                    style={{ padding: "4px 8px", border: "0.5px solid #333", borderRadius: 5, fontSize: 10, color: "#666", background: "transparent", cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>Today</button>
-                )}
-              </div>
+            <div style={{ fontSize: 20, fontWeight: 700, color: "#e8e8e8", lineHeight: 1 }}>
+              {meta.label || activeDay}
+              <span style={{ fontSize: 13, fontWeight: 600, color: meta.color || "#185FA5", marginLeft: 8 }}>{meta.theme}</span>
+              <span style={{ fontSize: 9, fontWeight: 600, color: "#7F77DD", background: "rgba(127,119,221,0.15)", padding: "2px 7px", borderRadius: 3, marginLeft: 6 }}>Kinesiology</span>
+              {isSplitDay && <span style={{ fontSize: 9, fontWeight: 600, color: "#0ea5e9", background: "rgba(14,165,233,0.15)", padding: "2px 7px", borderRadius: 3, marginLeft: 6 }}>Split day</span>}
             </div>
-            {sessionDate !== todayISO() && (
-              <div style={{ fontSize: 10, color: "#d97706", marginTop: 5 }}>Backdating session to {sessionDate}</div>
+            {isSplitDay && (
+              <div style={{ fontSize: 11, color: "#555", marginTop: 4 }}>
+                YMCA 5:30–7:00 am · KNR 9:35–10:45 am
+              </div>
             )}
           </div>
 
-          {prog.stretch?.length > 0 && (
-            <div style={{ border: "0.5px solid #1a1a1a", borderRadius: 8, marginBottom: 10, overflow: "hidden" }}>
-              {sectionHeader("stretch", "Stretch", "#7F77DD", "~5 min")}
-              {openSections.stretch && simpleList(prog.stretch)}
-            </div>
-          )}
+          {/* Stretch */}
+          {prog.stretch?.length > 0 && checklistSection(activeDay, "stretch", prog.stretch, "#7F77DD", "Stretch", "~5 min")}
 
-          {prog.warmup?.length > 0 && (
-            <div style={{ border: "0.5px solid #1a1a1a", borderRadius: 8, marginBottom: 10, overflow: "hidden" }}>
-              {sectionHeader("warmup", "Warm-up", "#BA7517")}
-              {openSections.warmup && simpleList(prog.warmup)}
-            </div>
-          )}
+          {/* Warmup */}
+          {prog.warmup?.length > 0 && checklistSection(activeDay, "warmup", prog.warmup, "#BA7517", "Warm-up", "")}
 
+          {/* Main program */}
           <div style={{ border: "0.5px solid #1a1a1a", borderRadius: 8, marginBottom: 10, overflow: "hidden" }}>
-            {sectionHeader("main", "Main program", "#185FA5")}
+            {secHdr("main", "Main program", "#185FA5", "")}
             {openSections.main && (
               <div style={{ padding: "4px 14px 12px" }}>
                 {prog.exercises?.length > 0
                   ? prog.exercises.map(ex => exCard(ex, activeDay))
                   : <div style={{ textAlign: "center", padding: 16, color: "#444", fontSize: 13 }}>Active recovery — no resistance training today.</div>}
+                {getCustomExercises(activeDay).map(ex => exCard(ex, activeDay, true))}
+                {addBtn(() => addCustomExercise(activeDay))}
               </div>
             )}
           </div>
 
-          {prog.core?.length > 0 && (
-            <div style={{ border: "0.5px solid #1a1a1a", borderRadius: 8, marginBottom: 10, overflow: "hidden" }}>
-              {sectionHeader("core", "Core", "#3B6D11", "~5 min")}
-              {openSections.core && simpleList(prog.core)}
-            </div>
-          )}
+          {/* Core */}
+          {prog.core?.length > 0 && checklistSection(activeDay, "core", prog.core, "#3B6D11", "Core", "~5 min")}
 
+          {/* Cardio */}
           <div style={{ border: "0.5px solid #1a1a1a", borderRadius: 8, marginBottom: 16, overflow: "hidden" }}>
-            {sectionHeader("cardio", "Cardio prescription", "#993C1D")}
+            {secHdr("cardio", "Cardio prescription", "#993C1D", "")}
             {openSections.cardio && cardioBlock(activeDay)}
           </div>
 
@@ -1097,6 +1272,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session }) {
     </div>
   )
 }
+
 
 function deriveDailyNutrition(entries) {
   const byDate = {}
