@@ -10,13 +10,50 @@ export const PROGRAM_META = {
 }
 
 export const CARDIO = {
-  Mon: { mod: "run", badge: "run", type: "Short easy run", dMin: 20, dMax: 25, intensity: "Easy (Zone 2)", dist: "1.5–2 miles", wt: 92, rationale: "Upper body day — legs fresh. Zone 2 preserves recovery capacity for Tuesday legs session.", goal: "10K aerobic base", cnote: "Substitute 25 min easy bike if MTP symptomatic." },
-  Tue: { mod: "bike", badge: "bike", type: "Easy spin — active recovery", dMin: 25, dMax: 35, intensity: "Easy, high cadence (80–95 RPM)", dist: "Time-based", wt: 72, rationale: "Leg day: running contraindicated. High-cadence bike flush clears metabolic waste without eccentric load.", goal: "Aerobic base + triathlon cycling", cnote: "Stationary or Technogym. No hill simulation. Avoid rowing (MTP dorsiflexion)." },
-  Wed: { mod: "run", badge: "run", type: "Medium run — primary volume day", dMin: 35, dMax: 50, intensity: "Easy to easy-moderate (Zone 2)", dist: "2.5–3.5 mi | Bike 45–60 min as substitute", wt: 92, rationale: "No RT today. Primary volume session of the week. Run if legs recovered; bike if MTP or soreness present.", goal: "10K → half-marathon volume build", cnote: "Run has priority for 10K progression. Bike is a legitimate substitute, not a downgrade." },
-  Thu: { mod: "swim", badge: "swim", type: "Technique + easy aerobic", dMin: 25, dMax: 35, intensity: "Easy", dist: "300–500 yards", wt: 66, rationale: "Back/Bi day loads the pulling chain. Swimming reinforces these patterns in a non-compressive environment.", goal: "Triathlon swim — technique phase", cnote: "Drills first: catch-up, fingertip drag, side kick. Then 150–200 yd easy continuous." },
-  Fri: { mod: "bike", badge: "bike", type: "Light recovery session", dMin: 20, dMax: 30, intensity: "Easy", dist: "5–7 mi | Swim 200–300 yd as alternative", wt: 72, rationale: "Hips/Upper RT today. Volume covered earlier. Short cardio maintains frequency without adding fatigue.", goal: "Triathlon base — session frequency", cnote: "20 min is enough if fatigue elevated. Swim is also acceptable today." },
-  Sat: { mod: "run", badge: "run", type: "Longer run — progression session", dMin: 35, dMax: 45, intensity: "Easy to moderate (Zone 2–3)", dist: "2.5–3.5 miles", wt: 92, rationale: "No RT. Saturday is the primary run progression session driving the 10K → half-marathon distance build.", goal: "10K → half-marathon distance build", cnote: "Walk breaks fine. Time on feet matters more than pace. Keep conversational throughout." },
-  Sun: { mod: "swim", badge: "swim", type: "Easy aerobic swim (optional)", dMin: 20, dMax: 30, intensity: "Easy", dist: "200–400 yards", wt: 66, rationale: "Recovery day. Non-impact aerobic stimulus maintains swim frequency without structural load.", goal: "Triathlon swim base — frequency", cnote: "Full rest acceptable if fatigue or soreness elevated." },
+  Mon: {
+    sessions: [
+      { mod: "bike", type: "Warmup ride", dMin: 15, dMax: 15, intensity: "Easy (no resistance)", dist: "4 miles", rationale: "Leg flush before upper body strength. High cadence, minimal load.", cnote: "Do this before or after chest/tri session." },
+      { mod: "run",  type: "Short easy run", dMin: 20, dMax: 25, intensity: "Easy (Zone 2, conversational)", dist: "1.5 miles", rationale: "Light run day — upper body strength today so legs are fresh. Keep fully conversational.", cnote: "If toe speaks up before mile 1, substitute 20 min easy bike." },
+    ],
+    goal: "10K aerobic base — light day", wt: { run: 20, bike: 15 },
+  },
+  Tue: {
+    sessions: [
+      { mod: "swim", type: "Long swim", dMin: 30, dMax: 45, intensity: "Easy to easy-moderate", dist: "1000+ yards", rationale: "Tuesday is the long swim day. Non-compressive, complements back/bi pulling chain at KNR.", cnote: "Do at YMCA 5:30-7am. Drills first 200 yards, then continuous." },
+    ],
+    goal: "Triathlon swim — volume day", wt: { swim: 40 },
+  },
+  Wed: {
+    sessions: [
+      { mod: "run", type: "Medium easy run", dMin: 25, dMax: 35, intensity: "Easy (Zone 2, conversational)", dist: "2 miles", rationale: "No strength today. Primary run volume session of the week. Keep fully conversational throughout.", cnote: "If legs are heavy from Tuesday KNR, reduce to 1.5 miles or substitute easy bike." },
+    ],
+    goal: "10K aerobic base — medium day", wt: { run: 30 },
+  },
+  Thu: {
+    sessions: [
+      { mod: "bike", type: "Warmup ride", dMin: 15, dMax: 20, intensity: "Easy (high cadence, no resistance)", dist: "Light", rationale: "YMCA before KNR. Loosens legs before the back/bi session. Keep effort minimal.", cnote: "YMCA 5:30-7am slot. Stop when you feel warm, not fatigued." },
+      { mod: "swim", type: "Short recovery swim", dMin: 20, dMax: 25, intensity: "Easy", dist: "300 yards", rationale: "Short swim pairs with back/bi KNR day. Pulling chain stimulus in a non-compressive environment.", cnote: "YMCA 5:30-7am slot. Drills only if time allows — otherwise straight easy freestyle." },
+    ],
+    goal: "Triathlon base — recovery cardio before KNR", wt: { bike: 15, swim: 20 },
+  },
+  Fri: {
+    sessions: [
+      { mod: "bike", type: "Long ride", dMin: 35, dMax: 50, intensity: "Easy to easy-moderate (Zone 2)", dist: "8-10 miles", rationale: "Friday is the long bike day. No run today. Keep cadence 80-95 RPM, resistance moderate. Posterior chain is loaded from hip/glute strength — keep intensity aerobic.", cnote: "If hips feel heavy from strength session, reduce to 6 miles and stop at 35 min." },
+    ],
+    goal: "Triathlon cycling — volume day", wt: { bike: 45 },
+  },
+  Sat: {
+    sessions: [
+      { mod: "swim", type: "Medium swim", dMin: 25, dMax: 35, intensity: "Easy", dist: "600 yards", rationale: "Saturday medium swim. Rest day from strength. Non-compressive aerobic stimulus.", cnote: "Can be done before or during child nap window. Easy pace throughout." },
+    ],
+    goal: "Triathlon swim — medium day", wt: { swim: 30 },
+  },
+  Sun: {
+    sessions: [
+      { mod: "run", type: "Longer easy run", dMin: 35, dMax: 45, intensity: "Easy (Zone 2, fully conversational)", dist: "3+ miles", rationale: "Sunday is the long run day. Full rest from strength yesterday. Best setup of the week for the run.", cnote: "Run before or after child nap. Extend past 3 miles only if toe stays silent past mile 2 and legs feel good." },
+    ],
+    goal: "10K → half-marathon distance build", wt: { run: 40 },
+  },
 }
 
 export const PROG = {
