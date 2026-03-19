@@ -655,6 +655,7 @@ const OC_BODY_REGIONS = [
   "IT Band L", "IT Band R", "Knee L", "Knee R",
   "Shin L", "Shin R", "Calf L", "Calf R",
   "Ankle L", "Ankle R",
+  "Toe L", "Toe R",
 ]
 
 // [x%, y%] for front (f) and back (b) silhouette images
@@ -693,6 +694,8 @@ const OC_REGION_COORDS = {
   "Calf R":      { f: null,      b: [67, 82]  },
   "Ankle L":     { f: [33, 91],  b: [33, 91]  },
   "Ankle R":     { f: [67, 91],  b: [67, 91]  },
+  "Toe L":       { f: [30, 96],  b: [30, 96]  },
+  "Toe R":       { f: [70, 96],  b: [70, 96]  },
 }
 
 // Inline SVG body silhouette — viewBox 0 0 100 220, so x/y percentages in
@@ -918,7 +921,7 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
         <div style={cardStyle()}>
           <div style={{ fontSize: "10px", letterSpacing: "0.15em", textTransform: "uppercase", color: "#555", marginBottom: "10px" }}>Add Issue</div>
           <div style={{ display: "grid", gap: "8px" }}>
-            <select value={addForm.key} onChange={e => setAddForm(f => ({ ...f, key: e.target.value }))} style={inputStyle()}>
+            <select value={addForm.key} onChange={e => setAddForm(f => ({ ...f, key: e.target.value, halfLifeHours: null }))} style={inputStyle()}>
               {Object.entries(OC_KEY_META).map(([k, m]) => <option key={k} value={k}>{m.label}</option>)}
             </select>
             <select value={addForm.location} onChange={e => setAddForm(f => ({ ...f, location: e.target.value }))} style={inputStyle()}>
@@ -934,11 +937,11 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
             </div>
             <div>
               <div style={{ fontSize: "11px", color: "#666", marginBottom: "4px" }}>
-                Half-life: {addForm.halfLifeHours || OC_KEY_META[addForm.key]?.halfLifeHours}h
+                Half-life: {addForm.halfLifeHours ?? OC_KEY_META[addForm.key]?.halfLifeHours ?? 72}h
               </div>
               <input type="number" min={1} max={720}
-                placeholder={`default ${OC_KEY_META[addForm.key]?.halfLifeHours}h`}
-                value={addForm.halfLifeHours || ""}
+                placeholder={`default ${OC_KEY_META[addForm.key]?.halfLifeHours ?? 72}h`}
+                value={addForm.halfLifeHours ?? ""}
                 onChange={e => setAddForm(f => ({ ...f, halfLifeHours: e.target.value ? Number(e.target.value) : null }))}
                 style={{ ...inputStyle(), padding: "6px 10px" }} />
             </div>
