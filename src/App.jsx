@@ -577,7 +577,7 @@ function ScheduleLogView({ log, expanded, setExpanded, onDelete, onEdit }) {
               <div>
                 <div style={{ fontSize: "15px", fontWeight: "700", color: "#d0d0d0" }}>
                   {entry.dayLabel} <span style={{ color: m.color }}>{entry.theme}</span>
-                  <span style={{ fontSize: "9px", fontWeight: "700", letterSpacing: "0.1em", background: m.venue === "KNR" ? "#0d1f38" : "#1e1200", color: m.venue === "KNR" ? "#3b82f6" : "#d97706", padding: "2px 7px", borderRadius: "3px", marginLeft: "8px" }}>{m.venue}</span>
+                  <span style={{ fontSize: "9px", fontWeight: "700", letterSpacing: "0.1em", background: entry.venue === "knr" ? "#0d1f38" : "#1e1200", color: entry.venue === "knr" ? "#3b82f6" : "#d97706", padding: "2px 7px", borderRadius: "3px", marginLeft: "8px" }}>{entry.venue_label || entry.venue || m.venue}</span>
                 </div>
                 <div style={{ fontSize: "10px", color: "#3a3a3a", marginTop: "3px" }}>{fmtDateTime(entry.date)}</div>
               </div>
@@ -591,18 +591,15 @@ function ScheduleLogView({ log, expanded, setExpanded, onDelete, onEdit }) {
 
 {open && (
   <div style={{ padding: "10px 14px 14px", borderTop: "1px solid #161616" }}>
-    {entry.cardio && (
-      <div style={{ marginBottom: "10px", padding: "8px 10px", background: "#101622", border: "1px solid #1a2a44", borderRadius: "6px", fontSize: "11px", color: "#9ec5ff" }}>
-        <strong>{entry.cardio.type}</strong>
-        {entry.cardio.distance != null && <> , distance: {entry.cardio.distance}</>}
-        {entry.cardio.duration != null && <> , duration: {entry.cardio.duration} min</>}
-        {entry.cardio.calories != null && <> , calories: {entry.cardio.calories}</>}
-        {entry.cardio.avg_hr != null && <> , avg HR: {entry.cardio.avg_hr}</>}
-        {entry.cardio.notes && <div style={{ marginTop: "4px", color: "#7f93b8" }}>{entry.cardio.notes}</div>}
+    {Array.isArray(entry.cardio) && entry.cardio.filter(c => c.modality || c.duration).map((c, i) => (
+      <div key={i} style={{ marginBottom: "6px", padding: "8px 10px", background: "#101622", border: "1px solid #1a2a44", borderRadius: "6px", fontSize: "11px", color: "#9ec5ff" }}>
+        <strong style={{ textTransform: "capitalize" }}>{c.modality || "Cardio"}</strong>
+        {c.duration && <> , {c.duration} min</>}
+        {c.notes && <div style={{ marginTop: "4px", color: "#7f93b8" }}>{c.notes}</div>}
       </div>
-    )}
+    ))}
 
-    {allEx.length === 0 && (!entry.customExercises || entry.customExercises.length === 0) && <div style={{ fontSize: "12px", color: "#333" }}>No exercise data recorded.</div>}
+    {allEx.length === 0 && !(entry.exercises || []).some(ex => ex.variant === "custom") && <div style={{ fontSize: "12px", color: "#333" }}>No exercise data recorded.</div>}
     {allEx.map(({ ex, sets }) => (
                   <div key={ex.id} style={{ display: "flex", alignItems: "baseline", gap: "12px", padding: "3px 0", borderBottom: "1px solid #121212" }}>
                     <span style={{ fontSize: "13px", fontWeight: "600", color: "#a0a0a0", minWidth: "190px" }}>{ex.name}</span>
@@ -618,18 +615,12 @@ function ScheduleLogView({ log, expanded, setExpanded, onDelete, onEdit }) {
                     </span>
                   </div>
                 ))}
-    {(entry.customExercises || []).map(ex => (
-      <div key={ex.id} style={{ display: "flex", alignItems: "baseline", gap: "12px", padding: "3px 0", borderBottom: "1px solid #121212" }}>
-        <span style={{ fontSize: "13px", fontWeight: "600", color: "#7a7aaa", minWidth: "190px" }}>{ex.name} {ex.note && <span style={{ fontSize: "10px", color: "#3a3a5a", fontStyle: "italic" }}>{ex.note}</span>}</span>
-        <span style={{ fontSize: "11px", color: "#444" }}>
-          {(ex.sets || []).map((s, i) => (
-            <span key={i}>
-              {i > 0 && <span style={{ color: "#2a2a2a" }}> · </span>}
-              <span style={{ color: "#9090c0" }}>{s.r}</span>
-              <span style={{ color: "#333" }}>@</span>
-              <span style={{ color: "#6060a0" }}>{s.w}</span>
-            </span>
-          ))}
+    {(entry.exercises || []).filter(ex => ex.variant === "custom").map(ex => (
+      <div key={ex.exercise_id} style={{ display: "flex", alignItems: "baseline", gap: "12px", padding: "3px 0", borderBottom: "1px solid #121212" }}>
+        <span style={{ fontSize: "13px", fontWeight: "600", color: "#7a7aaa", minWidth: "190px" }}>{ex.exercise_name} {ex.notes && <span style={{ fontSize: "10px", color: "#3a3a5a", fontStyle: "italic" }}>{ex.notes}</span>}</span>
+        <span style={{ fontSize: "11px", color: "#9090c0" }}>
+          {ex.actual?.sets && <span>{ex.actual.sets}×{ex.actual.reps}</span>}
+          {ex.actual?.load && <><span style={{ color: "#333" }}>@</span><span style={{ color: "#6060a0" }}>{ex.actual.load}</span></>}
         </span>
       </div>
     ))}
