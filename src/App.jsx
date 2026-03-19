@@ -4709,10 +4709,20 @@ useEffect(() => {
             ).sort((a, b) => String(a.dateTime || a.date || "").localeCompare(String(b.dateTime || b.date || "")))
             setStoredWorkouts(merged)
             await store.set("ufd-workouts", merged)
-          } else if (Array.isArray(wo)) {
+             } else if (Array.isArray(wo)) {
             setStoredWorkouts(wo)
           }
-
+          const sbLg = data.find(r => r.key === "wt-log")?.value
+          if (Array.isArray(sbLg)) {
+            const local = Array.isArray(lg) ? lg : []
+            const merged = Object.values(
+              [...local, ...sbLg].reduce((acc, e) => { acc[e.id] = e; return acc }, {})
+            ).sort((a, b) => b.id - a.id)
+            setSchedLog(merged)
+            await store.set("wt-log", merged)
+          } else if (Array.isArray(lg)) {
+            setSchedLog(lg)
+          }
         }
       } catch (err) {
         console.warn("Supabase sync fetch failed:", err.message)
