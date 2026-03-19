@@ -695,6 +695,49 @@ const OC_REGION_COORDS = {
   "Ankle R":     { f: [67, 91],  b: [67, 91]  },
 }
 
+// Inline SVG body silhouette — viewBox 0 0 100 220, so x/y percentages in
+// OC_REGION_COORDS map directly to SVG units (x=50 → 50%, y=44 → 44/220≈20%).
+function BodySilhouetteSVG() {
+  const fill = "#161822", stroke = "#2d2f4a", sw = 1.2
+  return (
+    <svg viewBox="0 0 100 220" style={{ width: "100%", display: "block" }}
+      fill={fill} stroke={stroke} strokeWidth={sw} strokeLinejoin="round">
+      {/* Head */}
+      <ellipse cx="50" cy="10" rx="8.5" ry="9.5" />
+      {/* Neck */}
+      <polygon points="45,19 55,19 55,27 45,27" />
+      {/* Torso */}
+      <polygon points="26,27 74,27 69,100 31,100" />
+      {/* Left upper arm */}
+      <polygon points="26,30 14,36 11,65 24,61" />
+      {/* Left forearm */}
+      <polygon points="11,65 8,65 6,93 20,91 24,61" />
+      {/* Left hand */}
+      <polygon points="6,93 5,93 4,114 18,114 20,91" />
+      {/* Right upper arm */}
+      <polygon points="74,30 86,36 89,65 76,61" />
+      {/* Right forearm */}
+      <polygon points="89,65 92,65 94,93 80,91 76,61" />
+      {/* Right hand */}
+      <polygon points="94,93 95,93 96,114 82,114 80,91" />
+      {/* Hips */}
+      <polygon points="31,100 69,100 71,116 29,116" />
+      {/* Left thigh */}
+      <polygon points="29,116 51,116 50,163 27,161" />
+      {/* Left shin */}
+      <polygon points="27,161 50,163 49,202 26,200" />
+      {/* Left foot */}
+      <ellipse cx="37" cy="208" rx="13" ry="5" />
+      {/* Right thigh */}
+      <polygon points="51,116 71,116 73,161 50,163" />
+      {/* Right shin */}
+      <polygon points="50,163 73,161 74,200 51,202" />
+      {/* Right foot */}
+      <ellipse cx="63" cy="208" rx="13" ry="5" />
+    </svg>
+  )
+}
+
 function computeReadiness(items) {
   const active = (items || []).filter(i => i.currentScore > 0)
   if (!active.length) return 100
@@ -793,7 +836,7 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
     const ck = side === "front" ? "f" : "b"
     return (
       <div style={{ position: "relative" }}>
-        <img src={`/${side}_body_clean.png`} alt={side} style={{ width: "100%", display: "block", opacity: 0.65 }} />
+        <BodySilhouetteSVG />
         {active.map(item => {
           const coords = OC_REGION_COORDS[item.location]?.[ck]
           if (!coords) return null
