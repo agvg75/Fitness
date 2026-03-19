@@ -34,7 +34,8 @@ const SYNC_KEYS = new Set([
   "ufd-meal-presets",
   "wt-log",
   "wt-sessions",
-  "ufd-workouts"
+  "ufd-workouts",
+  "oc-items"
 ])
 
 const store = {
@@ -633,7 +634,395 @@ function ScheduleLogView({ log, expanded, setExpanded, onDelete, onEdit }) {
   )
 }
 
-function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, setSchedLog }) {
+// ─── Operational Capacity constants ───────────────────────────────────────────
+const SCORE_LABELS = ["Resolved", "Mild", "Discomfort", "Pain", "Impairment", "Severe"]
+
+const OC_KEY_META = {
+  tendonStatus: { label: "Tendon",     halfLifeHours: 168, scope: "regional", color: "#f59e0b" },
+  muscleStatus: { label: "Muscle",     halfLifeHours: 72,  scope: "regional", color: "#ef4444" },
+  jointStatus:  { label: "Joint",      halfLifeHours: 120, scope: "regional", color: "#3b82f6" },
+  sleepDebt:    { label: "Sleep Debt", halfLifeHours: 48,  scope: "global",   color: "#a78bfa" },
+  illnessLoad:  { label: "Illness",    halfLifeHours: 72,  scope: "global",   color: "#22c55e" },
+}
+
+const OC_BODY_REGIONS = [
+  "Head", "Neck",
+  "Shoulder L", "Shoulder R", "Upper Arm L", "Upper Arm R",
+  "Elbow L", "Elbow R", "Forearm L", "Forearm R", "Wrist L", "Wrist R",
+  "Chest", "Upper Back", "Lower Back", "Core/Abs",
+  "Hip L", "Hip R", "Glute L", "Glute R",
+  "Quad L", "Quad R", "Hamstring L", "Hamstring R",
+  "IT Band L", "IT Band R", "Knee L", "Knee R",
+  "Shin L", "Shin R", "Calf L", "Calf R",
+  "Ankle L", "Ankle R",
+]
+
+// [x%, y%] for front (f) and back (b) silhouette images
+const OC_REGION_COORDS = {
+  "Head":        { f: [50, 4.5], b: [50, 4.5] },
+  "Neck":        { f: [50, 10],  b: [50, 10]  },
+  "Shoulder L":  { f: [25, 19],  b: [25, 19]  },
+  "Shoulder R":  { f: [75, 19],  b: [75, 19]  },
+  "Upper Arm L": { f: [19, 29],  b: [19, 29]  },
+  "Upper Arm R": { f: [81, 29],  b: [81, 29]  },
+  "Elbow L":     { f: [15, 40],  b: [15, 40]  },
+  "Elbow R":     { f: [85, 40],  b: [85, 40]  },
+  "Forearm L":   { f: [12, 49],  b: [12, 49]  },
+  "Forearm R":   { f: [88, 49],  b: [88, 49]  },
+  "Wrist L":     { f: [10, 58],  b: [10, 58]  },
+  "Wrist R":     { f: [90, 58],  b: [90, 58]  },
+  "Chest":       { f: [50, 26],  b: null       },
+  "Upper Back":  { f: null,      b: [50, 24]  },
+  "Lower Back":  { f: null,      b: [50, 42]  },
+  "Core/Abs":    { f: [50, 38],  b: null       },
+  "Hip L":       { f: [35, 52],  b: [35, 52]  },
+  "Hip R":       { f: [65, 52],  b: [65, 52]  },
+  "Glute L":     { f: null,      b: [36, 57]  },
+  "Glute R":     { f: null,      b: [64, 57]  },
+  "Quad L":      { f: [34, 63],  b: null       },
+  "Quad R":      { f: [66, 63],  b: null       },
+  "Hamstring L": { f: null,      b: [34, 63]  },
+  "Hamstring R": { f: null,      b: [66, 63]  },
+  "IT Band L":   { f: [31, 68],  b: [31, 68]  },
+  "IT Band R":   { f: [69, 68],  b: [69, 68]  },
+  "Knee L":      { f: [34, 74],  b: [34, 74]  },
+  "Knee R":      { f: [66, 74],  b: [66, 74]  },
+  "Shin L":      { f: [33, 82],  b: null       },
+  "Shin R":      { f: [67, 82],  b: null       },
+  "Calf L":      { f: null,      b: [33, 82]  },
+  "Calf R":      { f: null,      b: [67, 82]  },
+  "Ankle L":     { f: [33, 91],  b: [33, 91]  },
+  "Ankle R":     { f: [67, 91],  b: [67, 91]  },
+}
+
+function computeReadiness(items) {
+  const active = (items || []).filter(i => i.currentScore > 0)
+  if (!active.length) return 100
+  const regional = active.filter(i => OC_KEY_META[i.key]?.scope === "regional").map(i => i.currentScore)
+  const global   = active.filter(i => OC_KEY_META[i.key]?.scope === "global").map(i => i.currentScore)
+  const maxRegional = regional.length ? Math.max(...regional) : 0
+  const maxGlobal   = global.length   ? Math.max(...global)   : 0
+  const sumAll      = active.reduce((s, i) => s + i.currentScore, 0)
+  return Math.max(0, 100 - Math.round(maxRegional * 12 + maxGlobal * 10 + sumAll * 1.5))
+}
+
+function computeOcPredictedScore(item) {
+  const hoursElapsed = (Date.now() - new Date(item.startDate).getTime()) / 3600000
+  return Math.max(0, (item.initialScore || item.currentScore) * Math.pow(0.5, hoursElapsed / (item.halfLifeHours || 72)))
+}
+
+function computeOcRecoveryDate(item) {
+  const score = item.initialScore || item.currentScore
+  if (!score) return null
+  const hoursToResolve = (item.halfLifeHours || 72) * Math.log2(score / 0.25)
+  if (!Number.isFinite(hoursToResolve) || hoursToResolve <= 0) return null
+  const recoveryMs = new Date(item.startDate).getTime() + hoursToResolve * 3600000
+  const d = new Date(recoveryMs)
+  return d < new Date() ? "Soon" : d.toISOString().slice(0, 10)
+}
+
+// ─── TabOperationalCapacity ────────────────────────────────────────────────────
+function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapacityData }) {
+  const [selectedId, setSelectedId] = useState(null)
+  const [addForm, setAddForm] = useState({ key: "muscleStatus", location: "Quad L", currentScore: 1, halfLifeHours: null })
+
+  const selectedItem = ocItems.find(i => i.id === selectedId) || null
+  const readiness = computeReadiness(ocItems)
+  const readinessColor = readiness >= 80 ? "#4ade80" : readiness >= 60 ? "#fbbf24" : readiness >= 40 ? "#f97316" : "#ef4444"
+  const active = ocItems.filter(i => i.currentScore > 0)
+  const maxReg = active.filter(i => OC_KEY_META[i.key]?.scope === "regional").reduce((m, i) => Math.max(m, i.currentScore), 0)
+  const maxGlb = active.filter(i => OC_KEY_META[i.key]?.scope === "global").reduce((m, i) => Math.max(m, i.currentScore), 0)
+
+  const saveOcItems = async items => {
+    await store.set("oc-items", items)
+    if (supabase && session?.user?.id) {
+      await supabase.from("user_kv").upsert(
+        { user_id: session.user.id, key: "oc-items", value: items, updated_at: new Date().toISOString() },
+        { onConflict: "user_id,key" }
+      )
+    }
+  }
+
+  const addItem = () => {
+    if (!addForm.currentScore) return
+    const meta = OC_KEY_META[addForm.key] || OC_KEY_META.muscleStatus
+    const item = {
+      id: Date.now(),
+      key: addForm.key,
+      location: addForm.location,
+      label: `${meta.label} — ${addForm.location}`,
+      currentScore: Number(addForm.currentScore),
+      initialScore: Number(addForm.currentScore),
+      startDate: new Date().toISOString(),
+      halfLifeHours: Number(addForm.halfLifeHours) || meta.halfLifeHours,
+      episodeCount: 0,
+      lastResolvedDate: null,
+      chronicity: "acute",
+    }
+    const updated = [item, ...ocItems]
+    setOcItems(updated)
+    saveOcItems(updated)
+  }
+
+  const updateItem = (id, changes) => {
+    const updated = ocItems.map(i => i.id === id ? { ...i, ...changes } : i)
+    setOcItems(updated)
+    saveOcItems(updated)
+  }
+
+  const removeItem = id => {
+    const updated = ocItems.filter(i => i.id !== id)
+    setOcItems(updated)
+    saveOcItems(updated)
+    if (selectedId === id) setSelectedId(null)
+  }
+
+  const resolveItem = id => {
+    const item = ocItems.find(i => i.id === id)
+    if (!item) return
+    const episodeCount = (item.episodeCount || 0) + 1
+    const lastResolvedDate = new Date().toISOString()
+    const daysSinceLast = item.lastResolvedDate
+      ? (Date.now() - new Date(item.lastResolvedDate).getTime()) / 86400000 : null
+    const chronicity = episodeCount >= 2 || (daysSinceLast != null && daysSinceLast < 90) ? "chronic" : item.chronicity
+    updateItem(id, { currentScore: 0, episodeCount, lastResolvedDate, chronicity })
+    setSelectedId(null)
+  }
+
+  const renderSilhouette = side => {
+    const ck = side === "front" ? "f" : "b"
+    return (
+      <div style={{ position: "relative" }}>
+        <img src={`/${side}_body_clean.png`} alt={side} style={{ width: "100%", display: "block", opacity: 0.65 }} />
+        {active.map(item => {
+          const coords = OC_REGION_COORDS[item.location]?.[ck]
+          if (!coords) return null
+          const meta = OC_KEY_META[item.key] || OC_KEY_META.muscleStatus
+          const sz = 8 + item.currentScore * 4
+          const chronic = item.chronicity === "chronic"
+          return (
+            <div
+              key={item.id}
+              onClick={() => setSelectedId(selectedId === item.id ? null : item.id)}
+              title={`${item.location} — ${SCORE_LABELS[item.currentScore]}`}
+              style={{
+                position: "absolute", left: `${coords[0]}%`, top: `${coords[1]}%`,
+                width: sz, height: sz, borderRadius: "50%",
+                transform: "translate(-50%, -50%)",
+                background: chronic ? "transparent" : meta.color,
+                border: `2px solid ${meta.color}`,
+                boxShadow: selectedId === item.id ? `0 0 10px ${meta.color}` : "none",
+                cursor: "pointer", zIndex: 10, transition: "box-shadow 0.15s",
+              }}
+            />
+          )
+        })}
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ padding: "16px", maxWidth: "900px" }}>
+
+      {/* ── Readiness score ──────────────────────────────────────── */}
+      <div style={{ ...cardStyle(), marginBottom: "16px", display: "flex", alignItems: "center", gap: "24px", flexWrap: "wrap" }}>
+        <div style={{ minWidth: "90px", textAlign: "center" }}>
+          <div style={{ fontSize: "10px", letterSpacing: "0.15em", textTransform: "uppercase", color: "#555", marginBottom: "2px" }}>Readiness</div>
+          <div style={{ fontSize: "60px", fontWeight: "800", color: readinessColor, lineHeight: 1 }}>{readiness}</div>
+          <div style={{ fontSize: "10px", color: "#555" }}>/100</div>
+        </div>
+        <div style={{ flex: 1, minWidth: "160px" }}>
+          <div style={{ height: "8px", background: "#1a1b2e", borderRadius: "4px", overflow: "hidden", marginBottom: "10px" }}>
+            <div style={{ height: "100%", width: `${readiness}%`, background: readinessColor, transition: "width 0.4s" }} />
+          </div>
+          <div style={{ display: "flex", gap: "12px", fontSize: "10px", flexWrap: "wrap", marginBottom: "6px" }}>
+            <span style={{ color: "#4ade80" }}>● ≥80 Full</span>
+            <span style={{ color: "#fbbf24" }}>● 60–79 Reduced</span>
+            <span style={{ color: "#f97316" }}>● 40–59 Limited</span>
+            <span style={{ color: "#ef4444" }}>● &lt;40 Restricted</span>
+          </div>
+          {active.length > 0 && (
+            <div style={{ fontSize: "11px", color: "#555" }}>
+              {active.length} active issue{active.length !== 1 ? "s" : ""}
+              {" · "}max regional {maxReg}
+              {" · "}max global {maxGlb}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Body map ─────────────────────────────────────────────── */}
+      <div style={{ ...cardStyle(), marginBottom: "16px" }}>
+        <div style={{ fontSize: "10px", letterSpacing: "0.15em", textTransform: "uppercase", color: "#555", marginBottom: "10px" }}>
+          Body Map — tap a dot to inspect
+        </div>
+        <div style={{ display: "flex", gap: "12px", justifyContent: "center" }}>
+          {["front", "back"].map(side => (
+            <div key={side} style={{ flex: "0 0 auto", width: "140px" }}>
+              <div style={{ fontSize: "9px", color: "#444", textAlign: "center", marginBottom: "3px", letterSpacing: "0.1em" }}>{side.toUpperCase()}</div>
+              {renderSilhouette(side)}
+            </div>
+          ))}
+        </div>
+        <div style={{ fontSize: "9px", color: "#444", textAlign: "center", marginTop: "6px" }}>
+          ● acute &nbsp; ○ chronic
+        </div>
+      </div>
+
+      {/* ── Quick Add + Active Issues ─────────────────────────────── */}
+      <div style={{ display: "grid", gridTemplateColumns: window.innerWidth < 600 ? "1fr" : "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
+
+        <div style={cardStyle()}>
+          <div style={{ fontSize: "10px", letterSpacing: "0.15em", textTransform: "uppercase", color: "#555", marginBottom: "10px" }}>Add Issue</div>
+          <div style={{ display: "grid", gap: "8px" }}>
+            <select value={addForm.key} onChange={e => setAddForm(f => ({ ...f, key: e.target.value }))} style={inputStyle()}>
+              {Object.entries(OC_KEY_META).map(([k, m]) => <option key={k} value={k}>{m.label}</option>)}
+            </select>
+            <select value={addForm.location} onChange={e => setAddForm(f => ({ ...f, location: e.target.value }))} style={inputStyle()}>
+              {OC_BODY_REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+            <div>
+              <div style={{ fontSize: "11px", color: "#666", marginBottom: "4px" }}>
+                Severity: {addForm.currentScore}/5 — {SCORE_LABELS[Number(addForm.currentScore)]}
+              </div>
+              <input type="range" min={0} max={5} step={1} value={addForm.currentScore}
+                onChange={e => setAddForm(f => ({ ...f, currentScore: Number(e.target.value) }))}
+                style={{ width: "100%" }} />
+            </div>
+            <div>
+              <div style={{ fontSize: "11px", color: "#666", marginBottom: "4px" }}>
+                Half-life: {addForm.halfLifeHours || OC_KEY_META[addForm.key]?.halfLifeHours}h
+              </div>
+              <input type="number" min={1} max={720}
+                placeholder={`default ${OC_KEY_META[addForm.key]?.halfLifeHours}h`}
+                value={addForm.halfLifeHours || ""}
+                onChange={e => setAddForm(f => ({ ...f, halfLifeHours: e.target.value ? Number(e.target.value) : null }))}
+                style={{ ...inputStyle(), padding: "6px 10px" }} />
+            </div>
+            <button onClick={addItem} style={{ ...buttonStyle(true), fontSize: "12px" }}>+ Add Issue</button>
+          </div>
+        </div>
+
+        <div style={cardStyle()}>
+          <div style={{ fontSize: "10px", letterSpacing: "0.15em", textTransform: "uppercase", color: "#555", marginBottom: "10px" }}>
+            Active Issues ({active.length})
+          </div>
+          {active.length === 0 && (
+            <div style={{ fontSize: "12px", color: "#444", textAlign: "center", padding: "24px 0" }}>No active issues</div>
+          )}
+          {active.map(item => {
+            const meta = OC_KEY_META[item.key] || OC_KEY_META.muscleStatus
+            const pred = computeOcPredictedScore(item)
+            const recov = computeOcRecoveryDate(item)
+            return (
+              <div key={item.id}
+                onClick={() => setSelectedId(selectedId === item.id ? null : item.id)}
+                style={{
+                  padding: "8px 10px", marginBottom: "6px", borderRadius: "6px", cursor: "pointer",
+                  border: `1px solid ${selectedId === item.id ? meta.color : "#1a1b2e"}`,
+                  background: selectedId === item.id ? "#111" : "transparent",
+                }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: "12px", fontWeight: "600", color: meta.color }}>{item.location}</span>
+                  <span style={{ fontSize: "10px", color: "#555" }}>{meta.label}{item.chronicity === "chronic" ? " ⟳" : ""}</span>
+                  <span style={{ fontSize: "18px", fontWeight: "800", color: meta.color }}>{item.currentScore}</span>
+                </div>
+                <div style={{ fontSize: "10px", color: "#444", marginTop: "2px" }}>
+                  pred {pred.toFixed(1)} · recovery {recov || "—"}
+                </div>
+              </div>
+            )
+          })}
+          {ocItems.filter(i => i.currentScore === 0 && i.episodeCount > 0).length > 0 && (
+            <div style={{ fontSize: "10px", color: "#333", marginTop: "8px", textAlign: "center" }}>
+              {ocItems.filter(i => i.currentScore === 0 && i.episodeCount > 0).length} resolved
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Update panel ─────────────────────────────────────────── */}
+      {selectedItem && (
+        <div style={{ ...cardStyle(), marginBottom: "16px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "12px" }}>
+            <div>
+              <span style={{ fontSize: "13px", fontWeight: "700", color: OC_KEY_META[selectedItem.key]?.color }}>{selectedItem.label}</span>
+              {selectedItem.chronicity === "chronic" && (
+                <span style={{ marginLeft: "8px", fontSize: "9px", background: "#1a1b2e", padding: "2px 6px", borderRadius: "4px", color: "#a78bfa", letterSpacing: "0.1em" }}>CHRONIC</span>
+              )}
+            </div>
+            <button onClick={() => setSelectedId(null)} style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: "16px", lineHeight: 1 }}>✕</button>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: window.innerWidth < 600 ? "1fr" : "1fr 1fr", gap: "16px", marginBottom: "12px" }}>
+            <div>
+              <div style={{ fontSize: "11px", color: "#666", marginBottom: "4px" }}>
+                Score: {selectedItem.currentScore}/5 — {SCORE_LABELS[selectedItem.currentScore]}
+              </div>
+              <input type="range" min={0} max={5} step={1} value={selectedItem.currentScore}
+                onChange={e => updateItem(selectedItem.id, { currentScore: Number(e.target.value) })}
+                style={{ width: "100%" }} />
+            </div>
+            <div>
+              <div style={{ fontSize: "11px", color: "#666", marginBottom: "4px" }}>Half-life (hrs)</div>
+              <input type="number" min={1} max={720} value={selectedItem.halfLifeHours}
+                onChange={e => updateItem(selectedItem.id, { halfLifeHours: Number(e.target.value) || selectedItem.halfLifeHours })}
+                style={{ ...inputStyle(), padding: "6px 10px" }} />
+            </div>
+          </div>
+          <div style={{ fontSize: "11px", color: "#555", display: "flex", gap: "12px", flexWrap: "wrap", marginBottom: "12px" }}>
+            <span>Started: {selectedItem.startDate?.slice(0, 10)}</span>
+            <span>·</span>
+            <span>Predicted now: {computeOcPredictedScore(selectedItem).toFixed(1)}</span>
+            <span>·</span>
+            <span>Recovery: {computeOcRecoveryDate(selectedItem) || "—"}</span>
+            <span>·</span>
+            <span>Episodes: {(selectedItem.episodeCount || 0) + 1}</span>
+          </div>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <button onClick={() => resolveItem(selectedItem.id)}
+              style={{ ...buttonStyle(false), fontSize: "11px", color: "#4ade80", borderColor: "#4ade80" }}>
+              Mark Resolved
+            </button>
+            <button onClick={() => removeItem(selectedItem.id)}
+              style={{ ...buttonStyle(false), fontSize: "11px", color: "#ef4444", borderColor: "#ef4444" }}>
+              Delete
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Operational Capacity history chart ───────────────────── */}
+      <div style={{ ...cardStyle(), minWidth: "0" }}>
+        <div style={{ fontSize: "12px", fontWeight: "700", marginBottom: "12px" }}>Operational Capacity History</div>
+        {(!operationalCapacityData || operationalCapacityData.length === 0) ? (
+          <div style={{ fontSize: "12px", color: "#444", textAlign: "center", padding: "40px 0" }}>
+            No injury history — chart will populate once data is imported.
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height={280}>
+            <LineChart data={operationalCapacityData} margin={{ top: 20, right: 20, left: 55, bottom: 35 }}>
+              <CartesianGrid stroke="#1a1b2e" />
+              <XAxis dataKey="label" label={{ value: "Date", position: "bottom", offset: 10, fill: "#ced2f0" }} />
+              <YAxis domain={[0, 100]} label={{ value: "Operational capacity (%)", angle: -90, position: "insideLeft", offset: 15, fill: "#ced2f0", style: { textAnchor: "middle" } }} />
+              <Tooltip formatter={(v, n) => {
+                const lbl = { operationalPct: "Operational", acuteLossPct: "Acute burden", diseaseLossPct: "Disease burden", fatigueLossPct: "Fatigue burden" }
+                return [`${Number(v).toFixed(1)}%`, lbl[n] || n]
+              }} />
+              <Legend verticalAlign="top" height={36} />
+              <Line type="monotone" dataKey="operationalPct" stroke="#e5e7eb" strokeWidth={3} dot={false} name="Operational" />
+              <Line type="monotone" dataKey="acuteLossPct"   stroke="#ef4444" strokeWidth={2} dot={false} name="Acute" />
+              <Line type="monotone" dataKey="diseaseLossPct" stroke="#f59e0b" strokeWidth={2} dot={false} name="Disease" />
+              <Line type="monotone" dataKey="fatigueLossPct" stroke="#a78bfa" strokeWidth={2} dot={false} name="Fatigue" />
+            </LineChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── TabSchedule ──────────────────────────────────────────────────────────────
+function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, setSchedLog, readinessScore }) {
   const [activeDay, setActiveDay] = useState(todayDayKey())
   const [schedView, setSchedView] = useState("schedule")
   const [expandedLog, setExpandedLog] = useState({})
@@ -1242,6 +1631,20 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
 
       {schedView === "schedule" && (
         <>
+          {readinessScore != null && readinessScore < 70 && (
+            <div style={{
+              padding: "10px 14px", borderRadius: "8px", marginBottom: "12px", fontSize: "12px",
+              background: readinessScore >= 60 ? "rgba(251,191,36,0.08)" : readinessScore >= 40 ? "rgba(249,115,22,0.08)" : "rgba(239,68,68,0.08)",
+              border: `1px solid ${readinessScore >= 60 ? "#fbbf24" : readinessScore >= 40 ? "#f97316" : "#ef4444"}`,
+              color: readinessScore >= 60 ? "#fbbf24" : readinessScore >= 40 ? "#f97316" : "#ef4444",
+            }}>
+              ⚠ Readiness {readinessScore}/100 —{" "}
+              {readinessScore >= 60 ? "Reduce load (consider ~20% reduction in weights/duration)" :
+               readinessScore >= 40 ? "Substitute activity (swap high-impact for low-impact)" :
+               readinessScore >= 20 ? "Shift day (consider moving this session)" :
+               "Flag / requires input before training"}
+            </div>
+          )}
           {/* Day header */}
           <div style={{ marginBottom: 14, paddingBottom: 10, borderBottom: "1px solid #1a1a1a" }}>
             <div style={{ fontSize: 20, fontWeight: 700, color: "#e8e8e8", lineHeight: 1 }}>
@@ -4108,6 +4511,7 @@ const [error, setError] = useState("")
 const [storedWorkouts, setStoredWorkouts] = useState([])
 const [canonicalSessions, setCanonicalSessions] = useState([])
 const [schedLog, setSchedLog] = useState([])
+const [ocItems, setOcItems] = useState([])
   const activeWorkouts =
     canonicalSessions && canonicalSessions.length > 0
       ? canonicalSessions
@@ -4680,13 +5084,14 @@ useEffect(() => {
     // Load from localStorage first
     const wo = await store.get("ufd-workouts")
     const lg = await store.get("wt-log")
+    const ocLocal = await store.get("oc-items")
     // Then fetch from Supabase and merge
     if (supabase) {
       try {
         const { data } = await supabase
           .from("user_kv")
           .select("key, value, updated_at")
-          .in("key", ["ufd-workouts", "wt-log"])
+          .in("key", ["ufd-workouts", "wt-log", "oc-items"])
         if (data) {
           const sbWo = data.find(r => r.key === "ufd-workouts")?.value
           console.log("Supabase user_kv fetch:", { sbWo_count: Array.isArray(sbWo)?sbWo.length:0 })
@@ -4715,6 +5120,18 @@ useEffect(() => {
           } else if (Array.isArray(lg)) {
             setSchedLog(lg)
           }
+          // Merge oc-items
+          const sbOc = data.find(r => r.key === "oc-items")?.value
+          if (Array.isArray(sbOc)) {
+            const local = Array.isArray(ocLocal) ? ocLocal : []
+            const merged = Object.values(
+              [...local, ...sbOc].reduce((acc, e) => { acc[e.id] = e; return acc }, {})
+            ).sort((a, b) => b.id - a.id)
+            setOcItems(merged)
+            await store.set("oc-items", merged)
+          } else if (Array.isArray(ocLocal)) {
+            setOcItems(ocLocal)
+          }
         }
       } catch (err) {
         console.warn("Supabase sync fetch failed:", err.message)
@@ -4722,6 +5139,7 @@ useEffect(() => {
       }
     } else {
       if (Array.isArray(wo)) setStoredWorkouts(wo)
+      if (Array.isArray(ocLocal)) setOcItems(ocLocal)
     }
   })()
 }, [])
@@ -5567,6 +5985,9 @@ const operationalScore = useMemo(() => {
 
   return { pct, background }
 }, [injuryPenalties])
+
+const readinessScore = useMemo(() => computeReadiness(ocItems), [ocItems])
+
 const operationalCapacityData = useMemo(() => {
   const entries = Array.isArray(injury) ? injury : []
   if (!entries.length) return []
@@ -6668,86 +7089,6 @@ return (
   </ResponsiveContainer>
 </div>
 
-<div style={{ ...cardStyle(), minWidth: "0" }}>
-  <div style={{ fontWeight: "bold", marginBottom: "12px", minHeight: "20px" }}>
-    Operational Capacity
-  </div>
-
-  <ResponsiveContainer width="100%" height={300}>
-    <LineChart
-      data={operationalCapacityData}
-      margin={{ top: 20, right: 20, left: 55, bottom: 35 }}
-    >
-      <CartesianGrid stroke="#1a1b2e" />
-      <XAxis
-        dataKey="label"
-        label={{
-          value: "Date",
-          position: "bottom",
-          offset: 10,
-          fill: "#ced2f0"
-        }}
-      />
-      <YAxis
-        domain={operationalCapacityDomain}
-        label={{
-          value: "Operational capacity (%)",
-          angle: -90,
-          position: "insideLeft",
-          offset: 15,
-          fill: "#ced2f0",
-          style: { textAnchor: "middle" }
-        }}
-      />
-      <Tooltip
-        formatter={(value, name) => {
-          if (name === "operationalPct") return [`${Number(value).toFixed(1)}%`, "Operational"]
-          if (name === "acuteLossPct") return [`${Number(value).toFixed(1)}%`, "Acute burden"]
-          if (name === "diseaseLossPct") return [`${Number(value).toFixed(1)}%`, "Disease burden"]
-          if (name === "fatigueLossPct") return [`${Number(value).toFixed(1)}%`, "Fatigue burden"]
-          return [value, name]
-        }}
-      />
-      <Legend verticalAlign="top" height={36} />
-
-      <Line
-        type="monotone"
-        dataKey="operationalPct"
-        stroke="#e5e7eb"
-        strokeWidth={3}
-        dot={false}
-        name="Operational"
-      />
-
-      <Line
-        type="monotone"
-        dataKey="acuteLossPct"
-        stroke="#ef4444"
-        strokeWidth={2}
-        dot={false}
-        name="Acute"
-      />
-
-      <Line
-        type="monotone"
-        dataKey="diseaseLossPct"
-        stroke="#f59e0b"
-        strokeWidth={2}
-        dot={false}
-        name="Disease"
-      />
-
-      <Line
-        type="monotone"
-        dataKey="fatigueLossPct"
-        stroke="#a78bfa"
-        strokeWidth={2}
-        dot={false}
-        name="Fatigue"
-      />
-    </LineChart>
-  </ResponsiveContainer>
-</div>
     </div>
   </div>
 )}
@@ -7067,6 +7408,7 @@ return (
     session={session}
     schedLog={schedLog}
     setSchedLog={setSchedLog}
+    readinessScore={readinessScore}
   />
 )}
 
@@ -7076,7 +7418,15 @@ return (
     recentNutrition={recentNutrition}
   />
 )}
-{tab === "Injury" && (
+{tab === "Operational Capacity" && (
+  <TabOperationalCapacity
+    ocItems={ocItems}
+    setOcItems={setOcItems}
+    session={session}
+    operationalCapacityData={operationalCapacityData}
+  />
+)}
+{tab === "_InjuryLegacy" && (
   <div style={{ padding: "16px" }}>
     <h3>Injury Log</h3>
 
@@ -7381,7 +7731,7 @@ return (
 )}
 
       
-{tab !== "Overview" && tab !== "Body Comp" && tab !== "Calories" && tab !== "Injury" && tab !== "Forecast" && tab !== "Schedule" && tab !== "Training" && tab !== "Log" && (
+{tab !== "Overview" && tab !== "Body Comp" && tab !== "Calories" && tab !== "Operational Capacity" && tab !== "Forecast" && tab !== "Schedule" && tab !== "Training" && tab !== "Import" && tab !== "Log" && (
   <div>
     <h3>{tab}</h3>
     <div>This tab is next.</div>
