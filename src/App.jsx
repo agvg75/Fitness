@@ -642,10 +642,9 @@ function ScheduleLogView({ log, expanded, setExpanded, onDelete, onEdit }) {
   )
 }
 
-function TabSchedule({ storedWorkouts, setStoredWorkouts, session }) {
+function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, setSchedLog }) {
   const [activeDay, setActiveDay] = useState(todayDayKey())
   const [schedView, setSchedView] = useState("schedule")
-  const [schedLog, setSchedLog] = useState([])
   const [expandedLog, setExpandedLog] = useState({})
   const [toast, setToast] = useState(null)
   const [openSections, setOpenSections] = useState({ stretch: true, warmup: true, main: true, core: true, cardio: true })
@@ -4117,6 +4116,7 @@ export default function App() {
 const [error, setError] = useState("")
 const [storedWorkouts, setStoredWorkouts] = useState([])
 const [canonicalSessions, setCanonicalSessions] = useState([])
+const [schedLog, setSchedLog] = useState([])
   const activeWorkouts =
     canonicalSessions && canonicalSessions.length > 0
       ? canonicalSessions
@@ -7063,6 +7063,8 @@ return (
     storedWorkouts={storedWorkouts}
     setStoredWorkouts={setStoredWorkouts}
     session={session}
+    schedLog={schedLog}
+    setSchedLog={setSchedLog}
   />
 )}
 
