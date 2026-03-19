@@ -659,44 +659,45 @@ const OC_BODY_REGIONS = [
 ]
 
 // [x%, y%] for front (f) and back (b) silhouette images.
-// Back view x = 100 - front x for all L/R pairs (body faces away, so sides swap).
+// Anatomical convention: patient's LEFT appears on viewer's RIGHT (x > 50) in front view.
+// Back view keeps the same L→right / R→left orientation (transparent-body convention).
 const OC_REGION_COORDS = {
   "Head":        { f: [50, 4.5], b: [50, 4.5] },
   "Neck":        { f: [50, 10],  b: [50, 10]  },
-  "Shoulder L":  { f: [25, 19],  b: [75, 19]  },
-  "Shoulder R":  { f: [75, 19],  b: [25, 19]  },
-  "Upper Arm L": { f: [19, 29],  b: [81, 29]  },
-  "Upper Arm R": { f: [81, 29],  b: [19, 29]  },
-  "Elbow L":     { f: [15, 40],  b: [85, 40]  },
-  "Elbow R":     { f: [85, 40],  b: [15, 40]  },
-  "Forearm L":   { f: [12, 49],  b: [88, 49]  },
-  "Forearm R":   { f: [88, 49],  b: [12, 49]  },
-  "Wrist L":     { f: [10, 58],  b: [90, 58]  },
-  "Wrist R":     { f: [90, 58],  b: [10, 58]  },
+  "Shoulder L":  { f: [75, 19],  b: [75, 19]  },
+  "Shoulder R":  { f: [25, 19],  b: [25, 19]  },
+  "Upper Arm L": { f: [81, 29],  b: [81, 29]  },
+  "Upper Arm R": { f: [19, 29],  b: [19, 29]  },
+  "Elbow L":     { f: [85, 40],  b: [85, 40]  },
+  "Elbow R":     { f: [15, 40],  b: [15, 40]  },
+  "Forearm L":   { f: [88, 49],  b: [88, 49]  },
+  "Forearm R":   { f: [12, 49],  b: [12, 49]  },
+  "Wrist L":     { f: [90, 58],  b: [90, 58]  },
+  "Wrist R":     { f: [10, 58],  b: [10, 58]  },
   "Chest":       { f: [50, 26],  b: null       },
   "Upper Back":  { f: null,      b: [50, 24]  },
   "Lower Back":  { f: null,      b: [50, 42]  },
   "Core/Abs":    { f: [50, 38],  b: null       },
-  "Hip L":       { f: [35, 52],  b: [65, 52]  },
-  "Hip R":       { f: [65, 52],  b: [35, 52]  },
+  "Hip L":       { f: [65, 52],  b: [65, 52]  },
+  "Hip R":       { f: [35, 52],  b: [35, 52]  },
   "Glute L":     { f: null,      b: [65, 57]  },
   "Glute R":     { f: null,      b: [35, 57]  },
-  "Quad L":      { f: [34, 63],  b: null       },
-  "Quad R":      { f: [66, 63],  b: null       },
+  "Quad L":      { f: [66, 63],  b: null       },
+  "Quad R":      { f: [34, 63],  b: null       },
   "Hamstring L": { f: null,      b: [66, 63]  },
   "Hamstring R": { f: null,      b: [34, 63]  },
-  "IT Band L":   { f: [31, 68],  b: [69, 68]  },
-  "IT Band R":   { f: [69, 68],  b: [31, 68]  },
-  "Knee L":      { f: [34, 74],  b: [66, 74]  },
-  "Knee R":      { f: [66, 74],  b: [34, 74]  },
-  "Shin L":      { f: [33, 82],  b: null       },
-  "Shin R":      { f: [67, 82],  b: null       },
+  "IT Band L":   { f: [69, 68],  b: [69, 68]  },
+  "IT Band R":   { f: [31, 68],  b: [31, 68]  },
+  "Knee L":      { f: [66, 74],  b: [66, 74]  },
+  "Knee R":      { f: [34, 74],  b: [34, 74]  },
+  "Shin L":      { f: [67, 82],  b: null       },
+  "Shin R":      { f: [33, 82],  b: null       },
   "Calf L":      { f: null,      b: [67, 82]  },
   "Calf R":      { f: null,      b: [33, 82]  },
-  "Ankle L":     { f: [33, 91],  b: [67, 91]  },
-  "Ankle R":     { f: [67, 91],  b: [33, 91]  },
-  "Toe L":       { f: [30, 96],  b: [70, 96]  },
-  "Toe R":       { f: [70, 96],  b: [30, 96]  },
+  "Ankle L":     { f: [67, 91],  b: [67, 91]  },
+  "Ankle R":     { f: [33, 91],  b: [33, 91]  },
+  "Toe L":       { f: [70, 96],  b: [70, 96]  },
+  "Toe R":       { f: [30, 96],  b: [30, 96]  },
 }
 
 // Inline SVG body silhouette — viewBox 0 0 100 220, so x/y percentages in
@@ -6036,92 +6037,31 @@ const operationalScore = useMemo(() => {
 const readinessScore = useMemo(() => computeReadiness(ocItems), [ocItems])
 
 const operationalCapacityData = useMemo(() => {
-  const entries = Array.isArray(injury) ? injury : []
-  if (!entries.length) return []
+  const items = Array.isArray(ocItems) ? ocItems : []
+  if (!items.length) return []
 
   const today = new Date()
   today.setHours(0, 0, 0, 0)
 
-  const parseDate = value => {
-    if (!value) return null
-    const d = new Date(value)
-    return Number.isNaN(d.getTime()) ? null : d
-  }
-
   const daysBetween = (a, b) =>
     Math.floor((a.getTime() - b.getTime()) / (1000 * 60 * 60 * 24))
 
-  const classifyInjury = row => {
-    const text = String(
-      row?.type ||
-      row?.injury_type ||
-      row?.category ||
-      row?.name ||
-      row?.label ||
-      ""
-    ).toLowerCase()
-
-    if (
-      text.includes("flu") ||
-      text.includes("covid") ||
-      text.includes("cold") ||
-      text.includes("virus") ||
-      text.includes("strep") ||
-      text.includes("infection") ||
-      text.includes("illness")
-    ) {
-      return "disease"
-    }
-
-    if (
-      text.includes("fatigue") ||
-      text.includes("sore") ||
-      text.includes("soreness") ||
-      text.includes("sleep") ||
-      text.includes("recovery") ||
-      text.includes("tired")
-    ) {
-      return "fatigue"
-    }
-
-    return "acute"
+  const classifyItem = item => {
+    if (item.key === "illnessLoad") return "disease"
+    if (item.key === "sleepDebt")   return "fatigue"
+    return "acute" // tendonStatus, muscleStatus, jointStatus
   }
 
-  const categoryTau = {
-    acute: 28,
-    disease: 10,
-    fatigue: 5
-  }
+  const categoryTau = { acute: 28, disease: 10, fatigue: 5 }
 
-  const getSeverity = row => {
-    const val =
-      Number(row?.severity) ||
-      Number(row?.severityScore) ||
-      Number(row?.score) ||
-      0
-
-    return Math.max(0, Math.min(10, val))
-  }
-
-  const getPeakLoss = row => {
-    const severity = getSeverity(row)
-    return Math.max(0, Math.min(0.8, severity / 10))
-  }
-
-  const datedEntries = entries
-    .map(row => {
-      const start =
-        parseDate(row?.date) ||
-        parseDate(row?.start_date) ||
-        parseDate(row?.startDate)
-
-      if (!start) return null
-
+  const datedEntries = items
+    .map(item => {
+      const start = item.startDate ? new Date(item.startDate) : null
+      if (!start || Number.isNaN(start.getTime())) return null
       return {
-        ...row,
         _start: start,
-        _category: classifyInjury(row),
-        _peakLoss: getPeakLoss(row)
+        _category: classifyItem(item),
+        _peakLoss: Math.max(0, Math.min(0.8, (item.initialScore || item.currentScore || 0) / 5))
       }
     })
     .filter(Boolean)
@@ -6137,18 +6077,13 @@ const operationalCapacityData = useMemo(() => {
 
   const series = []
 
-  for (
-    let d = new Date(firstDate);
-    d <= endDate;
-    d.setDate(d.getDate() + 1)
-  ) {
+  for (let d = new Date(firstDate); d <= endDate; d.setDate(d.getDate() + 1)) {
     const acuteLoss = datedEntries
       .filter(e => e._category === "acute")
       .reduce((sum, e) => {
         const age = daysBetween(d, e._start)
         if (age < 0) return sum
-        const tau = categoryTau.acute
-        return sum + e._peakLoss * Math.exp(-age / tau)
+        return sum + e._peakLoss * Math.exp(-age / categoryTau.acute)
       }, 0)
 
     const diseaseLoss = datedEntries
@@ -6156,8 +6091,7 @@ const operationalCapacityData = useMemo(() => {
       .reduce((sum, e) => {
         const age = daysBetween(d, e._start)
         if (age < 0) return sum
-        const tau = categoryTau.disease
-        return sum + e._peakLoss * Math.exp(-age / tau)
+        return sum + e._peakLoss * Math.exp(-age / categoryTau.disease)
       }, 0)
 
     const fatigueLoss = datedEntries
@@ -6165,8 +6099,7 @@ const operationalCapacityData = useMemo(() => {
       .reduce((sum, e) => {
         const age = daysBetween(d, e._start)
         if (age < 0) return sum
-        const tau = categoryTau.fatigue
-        return sum + e._peakLoss * Math.exp(-age / tau)
+        return sum + e._peakLoss * Math.exp(-age / categoryTau.fatigue)
       }, 0)
 
     const totalMultiplier =
@@ -6185,7 +6118,7 @@ const operationalCapacityData = useMemo(() => {
   }
 
   return series
-}, [injury])
+}, [ocItems])
 
 const operationalCapacityDomain = useMemo(() => {
   return [0, 100]
@@ -6679,48 +6612,17 @@ return (
         style={{
           ...cardStyle(),
           minWidth: 0,
-          background:
-            (() => {
-              const vals = [
-                injuryPenalties?.running ?? 1,
-                injuryPenalties?.swimming ?? 1,
-                injuryPenalties?.cycling ?? 1,
-                injuryPenalties?.lifting ?? 1
-              ]
-                .map(Number)
-                .filter(Number.isFinite)
-
-              const pct = vals.length
-                ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 100)
-                : 100
-
-              return pct >= 85
-                ? "rgba(34,197,94,0.16)"
-                : pct >= 60
-                ? "rgba(250,204,21,0.16)"
-                : "rgba(239,68,68,0.16)"
-            })()
+          background: readinessScore >= 80
+            ? "rgba(34,197,94,0.16)"
+            : readinessScore >= 60
+            ? "rgba(250,204,21,0.16)"
+            : "rgba(239,68,68,0.16)"
         }}
       >
         <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "8px" }}>Operational</div>
-        <div style={{ fontSize: "30px", fontWeight: "bold" }}>
-          {(() => {
-            const vals = [
-              injuryPenalties?.running ?? 1,
-              injuryPenalties?.swimming ?? 1,
-              injuryPenalties?.cycling ?? 1,
-              injuryPenalties?.lifting ?? 1
-            ]
-              .map(Number)
-              .filter(Number.isFinite)
-
-            return vals.length
-              ? `${Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 100)}%`
-              : "100%"
-          })()}
-        </div>
+        <div style={{ fontSize: "30px", fontWeight: "bold" }}>{readinessScore}%</div>
         <div style={{ fontSize: "12px", opacity: 0.7, marginTop: "8px" }}>
-          average training capacity across modalities
+          readiness score from OC tab
         </div>
       </div>
     </div>
@@ -7134,6 +7036,34 @@ return (
       />
     </LineChart>
   </ResponsiveContainer>
+</div>
+
+<div style={{ ...cardStyle(), minWidth: "0" }}>
+  <div style={{ fontWeight: "bold", marginBottom: "12px", minHeight: "20px" }}>
+    Operational Capacity
+  </div>
+  {(!operationalCapacityData || operationalCapacityData.length === 0) ? (
+    <div style={{ fontSize: "12px", color: "#444", textAlign: "center", padding: "40px 0" }}>
+      No issues logged — add issues in the Operational Capacity tab to see history.
+    </div>
+  ) : (
+    <ResponsiveContainer width="100%" height={300}>
+      <LineChart data={operationalCapacityData} margin={{ top: 20, right: 20, left: 55, bottom: 35 }}>
+        <CartesianGrid stroke="#1a1b2e" />
+        <XAxis dataKey="label" label={{ value: "Date", position: "bottom", offset: 10, fill: "#ced2f0" }} />
+        <YAxis domain={[0, 100]} label={{ value: "Operational capacity (%)", angle: -90, position: "insideLeft", offset: 15, fill: "#ced2f0", style: { textAnchor: "middle" } }} />
+        <Tooltip formatter={(v, n) => {
+          const lbl = { operationalPct: "Operational", acuteLossPct: "Acute burden", diseaseLossPct: "Disease burden", fatigueLossPct: "Fatigue burden" }
+          return [`${Number(v).toFixed(1)}%`, lbl[n] || n]
+        }} />
+        <Legend verticalAlign="top" height={36} />
+        <Line type="monotone" dataKey="operationalPct" stroke="#e5e7eb" strokeWidth={3} dot={false} name="Operational" />
+        <Line type="monotone" dataKey="acuteLossPct"   stroke="#ef4444" strokeWidth={2} dot={false} name="Acute" />
+        <Line type="monotone" dataKey="diseaseLossPct" stroke="#f59e0b" strokeWidth={2} dot={false} name="Disease" />
+        <Line type="monotone" dataKey="fatigueLossPct" stroke="#a78bfa" strokeWidth={2} dot={false} name="Fatigue" />
+      </LineChart>
+    </ResponsiveContainer>
+  )}
 </div>
 
     </div>
