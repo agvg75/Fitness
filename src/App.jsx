@@ -682,7 +682,28 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session }) {
       const ss = await store.get("wt-sessions")
       const ci = await store.get("wt-custom-items")
       const cx = await store.get("wt-custom-exercises")
-      if (Array.isArray(lg)) setSchedLog(lg)
+      // Fetch wt-log from Supabase and merge with localStorage
+      if (supabase) {
+        try {
+          const { data } = await supabase.from("user_kv").select("value").eq("key", "wt-log")
+          const sbLg = data?.[0]?.value
+          console.log("wt-log from Supabase:", Array.isArray(sbLg) ? sbLg.length + " entries" : "not array", data)
+          if (Array.isArray(sbLg)) {
+            const local = Array.isArray(lg) ? lg : []
+            const merged = Object.values(
+              [...local, ...sbLg].reduce((acc, e) => { acc[e.id] = e; return acc }, {})
+            ).sort((a, b) => b.id - a.id)
+            setSchedLog(merged)
+            await store.set("wt-log", merged)
+          } else if (Array.isArray(lg)) {
+            setSchedLog(lg)
+          }
+        } catch {
+          if (Array.isArray(lg)) setSchedLog(lg)
+        }
+      } else if (Array.isArray(lg)) {
+        setSchedLog(lg)
+      }
       if (ss && typeof ss === "object") {
         const newFields = {}, newVariants = {}
         SDAYS.forEach(d => {
@@ -4665,8 +4686,41 @@ useEffect(() => {
   }, [session])
   useEffect(() => {
   ;(async () => {
+    // Load from localStorage first
     const wo = await store.get("ufd-workouts")
-    if (Array.isArray(wo)) setStoredWorkouts(wo)
+    // Then fetch from Supabase and merge
+    if (supabase) {
+      try {
+        const { data } = await supabase
+          .from("user_kv")
+          .select("key, value, updated_at")
+          .in("key", ["ufd-workouts"])
+        if (data) {
+          const sbWo = data.find(r => r.key === "ufd-workouts")?.value
+          console.log("Supabase user_kv fetch:", { sbWo_count: Array.isArray(sbWo)?sbWo.length:0 })
+          // Merge ufd-workouts: union by id, prefer Supabase if newer
+          if (Array.isArray(sbWo)) {
+            const local = Array.isArray(wo) ? wo : []
+            const merged = Object.values(
+              [...local, ...sbWo].reduce((acc, w) => {
+                if (!acc[w.id] || w.id > acc[w.id].id) acc[w.id] = w
+                return acc
+              }, {})
+            ).sort((a, b) => String(a.dateTime || a.date || "").localeCompare(String(b.dateTime || b.date || "")))
+            setStoredWorkouts(merged)
+            await store.set("ufd-workouts", merged)
+          } else if (Array.isArray(wo)) {
+            setStoredWorkouts(wo)
+          }
+
+        }
+      } catch (err) {
+        console.warn("Supabase sync fetch failed:", err.message)
+        if (Array.isArray(wo)) setStoredWorkouts(wo)
+      }
+    } else {
+      if (Array.isArray(wo)) setStoredWorkouts(wo)
+    }
   })()
 }, [])
 
