@@ -4688,13 +4688,14 @@ useEffect(() => {
   ;(async () => {
     // Load from localStorage first
     const wo = await store.get("ufd-workouts")
+    const lg = await store.get("wt-log")
     // Then fetch from Supabase and merge
     if (supabase) {
       try {
         const { data } = await supabase
           .from("user_kv")
           .select("key, value, updated_at")
-          .in("key", ["ufd-workouts"])
+          .in("key", ["ufd-workouts", "wt-log"])
         if (data) {
           const sbWo = data.find(r => r.key === "ufd-workouts")?.value
           console.log("Supabase user_kv fetch:", { sbWo_count: Array.isArray(sbWo)?sbWo.length:0 })
