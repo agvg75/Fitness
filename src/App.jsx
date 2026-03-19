@@ -4510,7 +4510,7 @@ export default function App() {
 const [error, setError] = useState("")
 const [storedWorkouts, setStoredWorkouts] = useState([])
 const [canonicalSessions, setCanonicalSessions] = useState([])
-const [schedLog, setSchedLog] = useState([])
+const [schedLog, setSchedLog] = useState(() => { try { return JSON.parse(localStorage.getItem('wt-log') || '[]') } catch { return [] } })
 const [ocItems, setOcItems] = useState([])
   const activeWorkouts =
     canonicalSessions && canonicalSessions.length > 0
