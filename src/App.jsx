@@ -1841,7 +1841,7 @@ function projectWeightTrend(weights, nutritionSeries, weeks = 12) {
   return out
 }
 
-function TrainingDashboard({ workouts, recentNutrition }) {
+function TrainingDashboard({ workouts, recentNutrition, healthFitDaily = [] }) {
   const fmt0 = n => Number.isFinite(Number(n)) ? Math.round(Number(n)).toLocaleString() : "0"
   const fmt1 = n => Number.isFinite(Number(n)) ? Number(n).toFixed(1) : "0.0"
 
@@ -1993,6 +1993,23 @@ if (w.category === "Strength") {
     cursor: "pointer"
   })
 
+  const pmfChartData = useMemo(() => {
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - 90)
+    cutoff.setHours(0, 0, 0, 0)
+    return (Array.isArray(healthFitDaily) ? healthFitDaily : [])
+      .filter(r => r.date && new Date(r.date) >= cutoff)
+      .map(r => ({
+        date: r.date,
+        label: String(r.date).slice(5),
+        ctl:  r.ctl  != null ? Number(r.ctl)  : null,
+        atl:  r.atl  != null ? Number(r.atl)  : null,
+        tsb:  r.tsb  != null ? Number(r.tsb)  : null,
+        acwr: r.acwr != null ? Number(r.acwr) : null,
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date))
+  }, [healthFitDaily])
+
   return (
     <div style={{ padding: "16px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", flexWrap: "wrap", marginBottom: "14px" }}>
@@ -2124,6 +2141,29 @@ if (w.category === "Strength") {
             </BarChart>
           </ResponsiveContainer>
         </div>
+
+        {pmfChartData.length > 0 && (
+          <div style={{ background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: "12px", padding: "16px" }}>
+            <div style={{ fontSize: "14px", fontWeight: "700", color: "#ced2f0", marginBottom: "12px" }}>
+              Fitness · Fatigue · Form (90 days)
+            </div>
+            <ResponsiveContainer width="100%" height={260}>
+              <ComposedChart data={pmfChartData} margin={{ top: 4, right: 40, left: 0, bottom: 4 }}>
+                <CartesianGrid stroke="#1a1b2e" />
+                <XAxis dataKey="label" tick={{ fontSize: 11 }} interval={Math.max(1, Math.floor(pmfChartData.length / 12) - 1)} />
+                <YAxis yAxisId="pmf" label={{ value: "TSS", angle: -90, position: "insideLeft", offset: 10, fill: "#8fa8d8", style: { textAnchor: "middle" }, fontSize: 11 }} />
+                <YAxis yAxisId="acwr" orientation="right" domain={[0, 2]} tickCount={5}
+                  label={{ value: "ACWR", angle: 90, position: "insideRight", offset: -10, fill: "#94a3b8", style: { textAnchor: "middle" }, fontSize: 11 }} />
+                <Tooltip formatter={(v, name) => [v != null ? Number(v).toFixed(1) : "—", name]} />
+                <Legend verticalAlign="top" height={28} />
+                <Line yAxisId="pmf" type="monotone" dataKey="ctl" name="Fitness (CTL)" stroke="#4a9ee8" strokeWidth={2} dot={false} connectNulls />
+                <Line yAxisId="pmf" type="monotone" dataKey="atl" name="Fatigue (ATL)" stroke="#ef4444" strokeWidth={2} dot={false} connectNulls />
+                <Line yAxisId="pmf" type="monotone" dataKey="tsb" name="Form (TSB)"    stroke="#4ade80" strokeWidth={2} dot={false} connectNulls />
+                <Line yAxisId="acwr" type="monotone" dataKey="acwr" name="ACWR" stroke="#f59e0b" strokeWidth={1.5} strokeDasharray="5 3" dot={false} connectNulls />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -3729,6 +3769,11 @@ function detectSourceType(filename, firstChunk) {
         firstLine.includes("session_id") && firstLine.includes("variant"))
       return { source: "lift_schedule", format: "csv", confidence: "high" }
 
+    // HealthFit — CTL/ATL/TSB export
+    if (firstLine.includes("fitness (ctl)") || firstLine.includes("fatigue (atl)") ||
+        (firstLine.includes("ctl") && firstLine.includes("atl") && firstLine.includes("tsb")))
+      return { source: "healthfit", format: "csv", confidence: "high" }
+
     // Generic workout CSV — medium confidence, goes to review
     if (firstLine.includes("duration") || firstLine.includes("calories") || firstLine.includes("date"))
       return { source: "generic_workout_csv", format: "csv", confidence: "medium" }
@@ -4054,6 +4099,48 @@ function parseIHealthCSV(text) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// HEALTHFIT CSV PARSER  (CTL/ATL/TSB/ACWR export)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function parseHealthFitCSV(text) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim())
+  if (!lines.length) return { records: [], rejected: [] }
+
+  const headers = lines[0].split(",").map(h => h.trim().replace(/^"|"$/g, "").toLowerCase())
+  const records = []
+  const rejected = []
+
+  const col = name => headers.findIndex(h => h.includes(name.toLowerCase()))
+  const iISO  = col("iso8601")
+  const iDate = iISO >= 0 ? iISO : col("date")
+  const iCTL  = col("fitness")    // "Fitness (CTL)"
+  const iATL  = col("fatigue")    // "Fatigue (ATL)"
+  const iTSB  = col("form")       // "Form (TSB)"
+  const iACWR = col("acwr")
+  const iTRIMP = col("trimp")
+  const iDur  = col("duration")   // "Workout Duration (sec)"
+
+  for (let i = 1; i < lines.length; i++) {
+    const raw = lines[i]
+    const cells = raw.split(",").map(c => c.trim().replace(/^"|"$/g, ""))
+
+    const dateRaw = cells[iDate] || ""
+    if (!dateRaw) { rejected.push({ source: "HealthFit", reason: "Missing date", raw: raw.slice(0, 200) }); continue }
+    const date = String(dateRaw).slice(0, 10)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { rejected.push({ source: "HealthFit", reason: "Unparseable date: " + dateRaw, raw: raw.slice(0, 200) }); continue }
+
+    const n = (idx, fallback = null) => {
+      if (idx < 0) return fallback
+      const v = Number(cells[idx])
+      return Number.isFinite(v) ? v : fallback
+    }
+    records.push({ date, ctl: n(iCTL), atl: n(iATL), tsb: n(iTSB), acwr: n(iACWR), trimp: n(iTRIMP), duration_sec: n(iDur) })
+  }
+
+  return { records, rejected }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // UPDATED ImportTab — single multi-file drop zone with auto-detection
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -4066,6 +4153,7 @@ const SOURCE_LABELS = {
   sleep_cycle:        { label: "Sleep Cycle",           color: "#0ea5e9" },
   ad_heart_track:     { label: "A&D Heart Track",       color: "#f97316" },
   ihealth:            { label: "iHealth",               color: "#14b8a6" },
+  healthfit:          { label: "HealthFit CSV",         color: "#f59e0b" },
   lift_schedule:      { label: "LIFT Schedule",         color: "#7F77DD" },
   generic_workout_csv:{ label: "CSV (review needed)",   color: "#d97706" },
   unknown_json:       { label: "JSON (review needed)",  color: "#d97706" },
@@ -4073,7 +4161,7 @@ const SOURCE_LABELS = {
   unknown:            { label: "Unknown",               color: "#888" },
 }
 
-function ImportTab({ canonicalSessions, setCanonicalSessions }) {
+function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily }) {
   const [queuedFiles, setQueuedFiles] = useState([])  // [{file, detected, firstChunk}]
   const [status, setStatus] = useState("Drop files to import")
   const [progress, setProgress] = useState(null)
@@ -4085,6 +4173,7 @@ function ImportTab({ canonicalSessions, setCanonicalSessions }) {
   const [nutritionResult, setNutritionResult] = useState([])
   const [sleepResult, setSleepResult] = useState([])
   const [biometricResult, setBiometricResult] = useState([])
+  const [healthFitResult, setHealthFitResult] = useState([])
 
   const worker = useMemo(() => createInlineImportWorker(), [])
   useEffect(() => () => worker.terminate(), [worker])
@@ -4153,10 +4242,11 @@ function ImportTab({ canonicalSessions, setCanonicalSessions }) {
     setNutritionResult([])
     setSleepResult([])
     setBiometricResult([])
+    setHealthFitResult([])
     setStatus("Reading files...")
 
     let appleFile = null, technogymFile = null
-    const allNutrition = [], allSleep = [], allBiometrics = [], allRejected = []
+    const allNutrition = [], allSleep = [], allBiometrics = [], allHealthFit = [], allRejected = []
 
     for (const q of queuedFiles) {
       const src = q.detected.source
@@ -4251,6 +4341,14 @@ function ImportTab({ canonicalSessions, setCanonicalSessions }) {
         continue
       }
 
+      if (src === "healthfit") {
+        const parsed = parseHealthFitCSV(text)
+        allHealthFit.push(...(parsed.records || []))
+        allRejected.push(...(parsed.rejected || []))
+        setStatus(`HealthFit: ${parsed.records.length} daily records parsed`)
+        continue
+      }
+
       // Unknown or low-confidence — flag for review, never drop
       allRejected.push({
         source: src, reason: `Auto-detection returned '${src}' (confidence: ${q.detected.confidence}). File held for manual review.`,
@@ -4262,6 +4360,7 @@ function ImportTab({ canonicalSessions, setCanonicalSessions }) {
     if (allNutrition.length) setNutritionResult(allNutrition)
     if (allSleep.length) setSleepResult(allSleep)
     if (allBiometrics.length) setBiometricResult(allBiometrics)
+    if (allHealthFit.length) setHealthFitResult(allHealthFit)
 
     // Send Apple + Technogym to worker for overlap pipeline
     if (appleFile || technogymFile) {
@@ -4336,11 +4435,23 @@ function ImportTab({ canonicalSessions, setCanonicalSessions }) {
       if (sleepResult.length) localStorage.setItem("lift_sleep_records", JSON.stringify(sleepResult))
       if (biometricResult.length) localStorage.setItem("lift_biometric_records", JSON.stringify(biometricResult))
 
-      setStatus(`Committed ${committed} records.${sleepResult.length ? ` ${sleepResult.length} sleep records saved.` : ""}${biometricResult.length ? ` ${biometricResult.length} biometrics saved.` : ""}${reviewRows.length ? ` ${reviewRows.length} still in review.` : ""}`)
+      // HealthFit CTL/ATL/TSB — merge by date into user_kv "healthfit-daily"
+      if (healthFitResult.length) {
+        const existing = await store.get("healthfit-daily") || []
+        const byDate = {}
+        ;(Array.isArray(existing) ? existing : []).forEach(r => { byDate[r.date] = r })
+        healthFitResult.forEach(r => { byDate[r.date] = r })
+        const merged = Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date))
+        await store.set("healthfit-daily", merged)
+        if (setHealthFitDaily) setHealthFitDaily(merged)
+        committed += healthFitResult.length
+      }
+
+      setStatus(`Committed ${committed} records.${sleepResult.length ? ` ${sleepResult.length} sleep records saved.` : ""}${biometricResult.length ? ` ${biometricResult.length} biometrics saved.` : ""}${healthFitResult.length ? ` ${healthFitResult.length} HealthFit records saved.` : ""}${reviewRows.length ? ` ${reviewRows.length} still in review.` : ""}`)
     } catch (err) {
       setStatus(`Commit failed: ${err.message || String(err)}`)
     }
-  }, [result, nutritionResult, sleepResult, biometricResult, reviewRows.length, setCanonicalSessions])
+  }, [result, nutritionResult, sleepResult, biometricResult, healthFitResult, reviewRows.length, setCanonicalSessions, setHealthFitDaily])
 
   const cs = SOURCE_LABELS
   const s = v => ({ padding: "4px 8px", border: "none", borderRadius: 4, fontSize: 11, cursor: "pointer", background: "#1a1b2e", color: "#aaa", fontFamily: "inherit", ...v })
@@ -4558,6 +4669,7 @@ export default function App() {
 const [error, setError] = useState("")
 const [storedWorkouts, setStoredWorkouts] = useState([])
 const [canonicalSessions, setCanonicalSessions] = useState([])
+const [healthFitDaily, setHealthFitDaily] = useState([])
 const [schedLog, setSchedLog] = useState(() => { try { return JSON.parse(localStorage.getItem('wt-log') || '[]') } catch { return [] } })
 const [ocItems, setOcItems] = useState(() => { try { return JSON.parse(localStorage.getItem('oc-items') || '[]') } catch { return [] } })
   const activeWorkouts =
@@ -4940,12 +5052,15 @@ const d = new Date(cleaned)
 dateStr = Number.isFinite(d.getTime()) ? d.toISOString().slice(0, 10) + 'T12:00:00' : null
     }
 
-    // For indoor sessions with no GPS distance, derive a duration-based proxy
+    // For indoor sessions with no GPS distance, derive a duration-based proxy.
+    // Cycling is excluded: indoor bike sessions (Apple Watch, no odometer) return 0 from
+    // Apple Health and would receive an inflated proxy; set null so mileage charts
+    // skip them while session-count and cardioMinutes metrics still accumulate.
     let distance = normalizeDistanceToMiles(w)
     if (distance === 0) {
       const dur = extractDurationMin(w)
       if (dur > 0) {
-        if (category === "Cycling") distance = dur / 3.0       // ~20 mph indoor equivalent
+        if (category === "Cycling") distance = null            // no real distance — exclude from mileage
         else if (category === "Machine Cardio") distance = dur / 4.5  // conservative fallback
         else if (category === "Rowing") distance = dur / 5.0
       }
@@ -5133,13 +5248,15 @@ useEffect(() => {
     const wo = await store.get("ufd-workouts")
     const lg = await store.get("wt-log")
     const ocLocal = await store.get("oc-items")
+    const hfLocal = await store.get("healthfit-daily")
+    if (Array.isArray(hfLocal)) setHealthFitDaily(hfLocal)
     // Then fetch from Supabase and merge
     if (supabase) {
       try {
         const { data } = await supabase
           .from("user_kv")
           .select("key, value, updated_at")
-          .in("key", ["ufd-workouts", "wt-log", "oc-items"])
+          .in("key", ["ufd-workouts", "wt-log", "oc-items", "healthfit-daily"])
         if (data) {
           const sbWo = data.find(r => r.key === "ufd-workouts")?.value
           console.log("Supabase user_kv fetch:", { sbWo_count: Array.isArray(sbWo)?sbWo.length:0 })
@@ -5179,6 +5296,16 @@ useEffect(() => {
             await store.set("oc-items", merged)
           } else if (Array.isArray(ocLocal)) {
             setOcItems(ocLocal)
+          }
+          // HealthFit daily records — merge by date, Supabase wins on conflict
+          const sbHf = data.find(r => r.key === "healthfit-daily")?.value
+          if (Array.isArray(sbHf)) {
+            const byDate = {}
+            ;(Array.isArray(hfLocal) ? hfLocal : []).forEach(r => { byDate[r.date] = r })
+            sbHf.forEach(r => { byDate[r.date] = r })
+            const merged = Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date))
+            setHealthFitDaily(merged)
+            await store.set("healthfit-daily", merged)
           }
         }
       } catch (err) {
@@ -7393,6 +7520,7 @@ return (
   <TrainingDashboard
     workouts={operationalWorkouts}
     recentNutrition={recentNutrition}
+    healthFitDaily={healthFitDaily}
   />
 )}
 {tab === "Operational Capacity" && (
@@ -7704,6 +7832,7 @@ return (
   <ImportTab
     canonicalSessions={canonicalSessions}
     setCanonicalSessions={setCanonicalSessions}
+    setHealthFitDaily={setHealthFitDaily}
   />
 )}
 
