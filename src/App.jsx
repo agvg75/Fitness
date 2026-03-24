@@ -700,9 +700,20 @@ const OC_REGION_COORDS = {
   "Toe R":       { f: [30, 96],  b: [30, 96]  },
 }
 
-// Inline SVG body silhouette — viewBox 0 0 100 220, so x/y percentages in
-// OC_REGION_COORDS map directly to SVG units (x=50 → 50%, y=44 → 44/220≈20%).
+// Body silhouette images — coordinates in OC_REGION_COORDS are CSS percentages
+// (0–100) of the container's width/height, matching the 364×952 PNG dimensions.
+function BodySilhouetteImg({ side }) {
+  const src = side === "back" ? "/data/back_body_clean.png" : "/data/front_body_clean.png"
+  return (
+    <img src={src} alt={side + " body"} style={{ width: "100%", display: "block" }} />
+  )
+}
+// Keep a thin shim so any remaining references compile during transition
 function BodySilhouetteSVG() {
+  return <BodySilhouetteImg side="front" />
+}
+/* --- removed inline SVG placeholder (replaced by PNG) ---
+function BodySilhouetteSVGOld() {
   const fill = "#161822", stroke = "#2d2f4a", sw = 1.2
   return (
     <svg viewBox="0 0 100 220" style={{ width: "100%", display: "block" }}
@@ -743,15 +754,45 @@ function BodySilhouetteSVG() {
   )
 }
 
-function computeReadiness(items) {
-  const active = (items || []).filter(i => i.currentScore > 0)
-  if (!active.length) return 100
+function computeReadinessDetail(ocItems, sleepRecords, healthFitDaily) {
+  // ── Injury penalty (existing formula) ──────────────────────────
+  const active = (ocItems || []).filter(i => i.currentScore > 0)
   const regional = active.filter(i => OC_KEY_META[i.key]?.scope === "regional").map(i => i.currentScore)
   const global   = active.filter(i => OC_KEY_META[i.key]?.scope === "global").map(i => i.currentScore)
   const maxRegional = regional.length ? Math.max(...regional) : 0
   const maxGlobal   = global.length   ? Math.max(...global)   : 0
   const sumAll      = active.reduce((s, i) => s + i.currentScore, 0)
-  return Math.max(0, 100 - Math.round(maxRegional * 12 + maxGlobal * 10 + sumAll * 1.5))
+  const injuryPenalty = active.length ? Math.round(maxRegional * 12 + maxGlobal * 10 + sumAll * 1.5) : 0
+
+  // ── Sleep penalty — average of last 7 nights ───────────────────
+  const sevenDaysAgo = Date.now() - 7 * 24 * 3600000
+  const recentSleep = (Array.isArray(sleepRecords) ? sleepRecords : [])
+    .filter(r => r.date && new Date(r.date).getTime() >= sevenDaysAgo && r.duration_min != null)
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, 7)
+  const avgSleepHours = recentSleep.length
+    ? recentSleep.reduce((s, r) => s + (r.duration_min || 0), 0) / recentSleep.length / 60
+    : null
+  const sleepPenalty = avgSleepHours == null ? 0
+    : avgSleepHours < 5.5 ? 20
+    : avgSleepHours < 6   ? 10
+    : 0
+
+  // ── Training load penalty — most recent TSB ────────────────────
+  const latestTsb = (Array.isArray(healthFitDaily) ? healthFitDaily : [])
+    .filter(r => r.tsb != null)
+    .sort((a, b) => b.date.localeCompare(a.date))[0]?.tsb ?? null
+  const tsbPenalty = latestTsb == null ? 0
+    : latestTsb < -30 ? 20
+    : latestTsb < -20 ? 10
+    : 0
+
+  const score = Math.max(0, 100 - injuryPenalty - sleepPenalty - tsbPenalty)
+  return { score, injuryPenalty, sleepPenalty, tsbPenalty, avgSleepHours, latestTsb, active }
+}
+
+function computeReadiness(items) {
+  return computeReadinessDetail(items, [], []).score
 }
 
 function computeOcPredictedScore(item) {
@@ -770,14 +811,15 @@ function computeOcRecoveryDate(item) {
 }
 
 // ─── TabOperationalCapacity ────────────────────────────────────────────────────
-function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapacityData }) {
+function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapacityData, healthFitDaily, sleepRecords }) {
   const [selectedId, setSelectedId] = useState(null)
   const [addForm, setAddForm] = useState({ key: "muscleStatus", location: "Quad L", currentScore: 1, halfLifeHours: null })
 
   const selectedItem = ocItems.find(i => i.id === selectedId) || null
-  const readiness = computeReadiness(ocItems)
+  const rd = computeReadinessDetail(ocItems, sleepRecords, healthFitDaily)
+  const readiness = rd.score
   const readinessColor = readiness >= 80 ? "#4ade80" : readiness >= 60 ? "#fbbf24" : readiness >= 40 ? "#f97316" : "#ef4444"
-  const active = ocItems.filter(i => i.currentScore > 0)
+  const active = rd.active
   const maxReg = active.filter(i => OC_KEY_META[i.key]?.scope === "regional").reduce((m, i) => Math.max(m, i.currentScore), 0)
   const maxGlb = active.filter(i => OC_KEY_META[i.key]?.scope === "global").reduce((m, i) => Math.max(m, i.currentScore), 0)
 
@@ -889,13 +931,33 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
             <span style={{ color: "#f97316" }}>● 40–59 Limited</span>
             <span style={{ color: "#ef4444" }}>● &lt;40 Restricted</span>
           </div>
-          {active.length > 0 && (
-            <div style={{ fontSize: "11px", color: "#555" }}>
-              {active.length} active issue{active.length !== 1 ? "s" : ""}
-              {" · "}max regional {maxReg}
-              {" · "}max global {maxGlb}
+          {/* ── Penalty breakdown ── */}
+          <div style={{ fontSize: "11px", color: "#667", marginTop: "4px", display: "grid", gap: "3px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span style={{ color: rd.injuryPenalty > 0 ? "#f97316" : "#445" }}>
+                Injury{active.length > 0 ? ` (${active.length} active, reg ${maxReg} / glb ${maxGlb})` : ""}
+              </span>
+              <span style={{ fontWeight: "600", color: rd.injuryPenalty > 0 ? "#f97316" : "#445" }}>
+                {rd.injuryPenalty > 0 ? `−${rd.injuryPenalty}` : "0"}
+              </span>
             </div>
-          )}
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span style={{ color: rd.sleepPenalty > 0 ? "#a78bfa" : "#445" }}>
+                Sleep{rd.avgSleepHours != null ? ` (7d avg ${rd.avgSleepHours.toFixed(1)}h)` : " (no data)"}
+              </span>
+              <span style={{ fontWeight: "600", color: rd.sleepPenalty > 0 ? "#a78bfa" : "#445" }}>
+                {rd.sleepPenalty > 0 ? `−${rd.sleepPenalty}` : "0"}
+              </span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span style={{ color: rd.tsbPenalty > 0 ? "#ef4444" : "#445" }}>
+                Training load{rd.latestTsb != null ? ` (TSB ${rd.latestTsb > 0 ? "+" : ""}${Number(rd.latestTsb).toFixed(1)})` : " (no data)"}
+              </span>
+              <span style={{ fontWeight: "600", color: rd.tsbPenalty > 0 ? "#ef4444" : "#445" }}>
+                {rd.tsbPenalty > 0 ? `−${rd.tsbPenalty}` : "0"}
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1070,7 +1132,7 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
 }
 
 // ─── TabSchedule ──────────────────────────────────────────────────────────────
-function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, setSchedLog, readinessScore }) {
+function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, setSchedLog, readinessScore, ocItems = [] }) {
   const [activeDay, setActiveDay] = useState(todayDayKey())
   const [schedView, setSchedView] = useState("schedule")
   const [expandedLog, setExpandedLog] = useState({})
@@ -1155,6 +1217,24 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     setToast(msg)
     setTimeout(() => setToast(null), 2500)
   }, [])
+
+  const CARDIO_INJURY_REGIONS = {
+    run:  ["Ankle", "Toe", "Knee", "Shin"],
+    bike: ["Knee", "Hip", "Glute"],
+    swim: ["Shoulder"],
+  }
+  const getInjuryNote = (keywords) => {
+    if (!keywords?.length) return null
+    const hits = ocItems.filter(i => i.currentScore >= 3 && keywords.some(kw => (i.location || "").includes(kw)))
+    if (!hits.length) return null
+    return hits.map(i => `${i.location} (${SCORE_LABELS[i.currentScore] || i.currentScore})`).join(", ")
+  }
+  const injuryTag = (note) => note ? (
+    <div style={{ fontSize: 10, color: "#f97316", marginTop: 4, display: "flex", alignItems: "flex-start", gap: 4 }}>
+      <span style={{ flexShrink: 0 }}>⚠</span>
+      <span>Active injury: {note} — monitor and modify if symptomatic</span>
+    </div>
+  ) : null
 
   const getProgDay = (day) => PROG[day] || { stretch: [], warmup: [], exercises: [], core: [] }
   const getVariant = (exId) => variants[exId] || "machine"
@@ -1503,6 +1583,9 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
             {fieldInput("Load", "load", v?.load)}
           </div>
           {v?.note && <div style={{ fontSize: 11, color: "#555", lineHeight: 1.4, paddingTop: 5, borderTop: "1px solid #1a1a1a", marginBottom: 4 }}>{v.note}</div>}
+          {!isCustom && injuryTag(getInjuryNote(
+            ex.fi === "shoulder" ? ["Shoulder"] : ex.fi === "toe" ? ["Toe", "Ankle"] : null
+          ))}
           <textarea value={(isCustom ? ex.notes : f.notes) || ""}
             onChange={e => isCustom ? setCustomExF(day, ex.id, "notes", e.target.value) : setF(day, ex.id, "notes", e.target.value)}
             placeholder="Session note (optional)" rows={1}
@@ -1533,6 +1616,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
             </div>
             <div style={{ fontSize: 11, color: "#555" }}>{ps.rationale}</div>
             {ps.cnote && <div style={{ fontSize: 10, color: "#444", marginTop: 3, fontStyle: "italic" }}>{ps.cnote}</div>}
+            {injuryTag(getInjuryNote(CARDIO_INJURY_REGIONS[ps.mod]))}
           </div>
         ))}
 
@@ -1679,18 +1763,19 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
 
       {schedView === "schedule" && (
         <>
-          {readinessScore != null && readinessScore < 70 && (
+          {readinessScore != null && readinessScore < 80 && (
             <div style={{
               padding: "10px 14px", borderRadius: "8px", marginBottom: "12px", fontSize: "12px",
               background: readinessScore >= 60 ? "rgba(251,191,36,0.08)" : readinessScore >= 40 ? "rgba(249,115,22,0.08)" : "rgba(239,68,68,0.08)",
               border: `1px solid ${readinessScore >= 60 ? "#fbbf24" : readinessScore >= 40 ? "#f97316" : "#ef4444"}`,
               color: readinessScore >= 60 ? "#fbbf24" : readinessScore >= 40 ? "#f97316" : "#ef4444",
             }}>
-              ⚠ Readiness {readinessScore}/100 —{" "}
-              {readinessScore >= 60 ? "Reduce load (consider ~20% reduction in weights/duration)" :
-               readinessScore >= 40 ? "Substitute activity (swap high-impact for low-impact)" :
-               readinessScore >= 20 ? "Shift day (consider moving this session)" :
-               "Flag / requires input before training"}
+              ⚠ Readiness {readinessScore}% —{" "}
+              {readinessScore >= 60
+                ? "consider reducing today's load by 20 to 30%"
+                : readinessScore >= 40
+                ? "substitute high-impact activity with low-impact alternative or shift session"
+                : "flag for rest or minimal movement only. Long-term targets remain on track."}
             </div>
           )}
           {/* Day header */}
@@ -4161,7 +4246,7 @@ const SOURCE_LABELS = {
   unknown:            { label: "Unknown",               color: "#888" },
 }
 
-function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily }) {
+function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily, setSleepRecords }) {
   const [queuedFiles, setQueuedFiles] = useState([])  // [{file, detected, firstChunk}]
   const [status, setStatus] = useState("Drop files to import")
   const [progress, setProgress] = useState(null)
@@ -4432,7 +4517,15 @@ function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily 
         committed += nutritionResult.length
       }
       // Sleep and biometrics — store for future tab integration
-      if (sleepResult.length) localStorage.setItem("lift_sleep_records", JSON.stringify(sleepResult))
+      if (sleepResult.length) {
+        const existing = JSON.parse(localStorage.getItem("lift_sleep_records") || "[]")
+        const byDate = {}
+        ;(Array.isArray(existing) ? existing : []).forEach(r => { byDate[r.date] = r })
+        sleepResult.forEach(r => { byDate[r.date] = r })
+        const merged = Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date))
+        localStorage.setItem("lift_sleep_records", JSON.stringify(merged))
+        if (setSleepRecords) setSleepRecords(merged)
+      }
       if (biometricResult.length) localStorage.setItem("lift_biometric_records", JSON.stringify(biometricResult))
 
       // HealthFit CTL/ATL/TSB — merge by date into user_kv "healthfit-daily"
@@ -4451,7 +4544,7 @@ function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily 
     } catch (err) {
       setStatus(`Commit failed: ${err.message || String(err)}`)
     }
-  }, [result, nutritionResult, sleepResult, biometricResult, healthFitResult, reviewRows.length, setCanonicalSessions, setHealthFitDaily])
+  }, [result, nutritionResult, sleepResult, biometricResult, healthFitResult, reviewRows.length, setCanonicalSessions, setHealthFitDaily, setSleepRecords])
 
   const cs = SOURCE_LABELS
   const s = v => ({ padding: "4px 8px", border: "none", borderRadius: 4, fontSize: 11, cursor: "pointer", background: "#1a1b2e", color: "#aaa", fontFamily: "inherit", ...v })
@@ -4670,6 +4763,7 @@ const [error, setError] = useState("")
 const [storedWorkouts, setStoredWorkouts] = useState([])
 const [canonicalSessions, setCanonicalSessions] = useState([])
 const [healthFitDaily, setHealthFitDaily] = useState([])
+const [sleepRecords, setSleepRecords] = useState(() => { try { return JSON.parse(localStorage.getItem("lift_sleep_records") || "[]") } catch { return [] } })
 const [schedLog, setSchedLog] = useState(() => { try { return JSON.parse(localStorage.getItem('wt-log') || '[]') } catch { return [] } })
 const [ocItems, setOcItems] = useState(() => { try { return JSON.parse(localStorage.getItem('oc-items') || '[]') } catch { return [] } })
   const activeWorkouts =
@@ -6161,7 +6255,10 @@ const operationalScore = useMemo(() => {
   return { pct, background }
 }, [injuryPenalties])
 
-const readinessScore = useMemo(() => computeReadiness(ocItems), [ocItems])
+const readinessScore = useMemo(
+  () => computeReadinessDetail(ocItems, sleepRecords, healthFitDaily).score,
+  [ocItems, sleepRecords, healthFitDaily]
+)
 
 const operationalCapacityData = useMemo(() => {
   const items = Array.isArray(ocItems) ? ocItems : []
@@ -6598,8 +6695,8 @@ return (
   <div style={{ fontSize: "64px", fontWeight: "800", lineHeight: 1, marginTop: 0, marginBottom: "6px" }}>
     L.I.F.T.
   </div>
-  <div style={{ fontSize: 12, opacity: 0.6 }}>Build check: Mar 12</div>
-  <div style={{ fontSize: "13px", opacity: 0.85, marginBottom: "4px" }}>
+  <div style={{ fontSize: 11, opacity: 0.4 }}>Build check: Mar 23 2026</div>
+  <div style={{ fontSize: "11px", opacity: 0.85, marginBottom: "4px" }}>
     Longitudinal Integrated Fitness Tracker
   </div>
   {!hydrated && <div style={{ fontSize: "12px", opacity: 0.8 }}>Loading synced data...</div>}
@@ -7513,6 +7610,7 @@ return (
     schedLog={schedLog}
     setSchedLog={setSchedLog}
     readinessScore={readinessScore}
+    ocItems={ocItems}
   />
 )}
 
@@ -7529,6 +7627,8 @@ return (
     setOcItems={setOcItems}
     session={session}
     operationalCapacityData={operationalCapacityData}
+    healthFitDaily={healthFitDaily}
+    sleepRecords={sleepRecords}
   />
 )}
 {tab === "_InjuryLegacy" && (
@@ -7833,6 +7933,7 @@ return (
     canonicalSessions={canonicalSessions}
     setCanonicalSessions={setCanonicalSessions}
     setHealthFitDaily={setHealthFitDaily}
+    setSleepRecords={setSleepRecords}
   />
 )}
 
