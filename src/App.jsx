@@ -883,7 +883,7 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
     const ck = side === "front" ? "f" : "b"
     return (
       <div style={{ position: "relative" }}>
-        <BodySilhouetteSVG />
+        <BodySilhouetteImg side={side} />
         {active.map(item => {
           const coords = OC_REGION_COORDS[item.location]?.[ck]
           if (!coords) return null
