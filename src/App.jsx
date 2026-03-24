@@ -705,7 +705,7 @@ const OC_REGION_COORDS = {
 function BodySilhouetteImg({ side }) {
   const src = side === "back" ? "/back_body_clean.png" : "/front_body_clean.png"
   return (
-    <img src={src} alt={side + " body"} style={{ width: "100%", display: "block" }} />
+    <img src={src} alt={side + " body"} style={{ width: "100%", display: "block", background: "transparent" }} />
   )
 }
 // Keep a thin shim so any remaining references compile during transition
