@@ -3125,6 +3125,7 @@ self.onmessage = async function(event) {
       technogym: technogym.diagnostics,
       overlaps: overlapBundle.summary
     };
+    built.appleSleep = apple.sleep || [];
 
     self.postMessage({ type: 'done', result: built });
   } catch (error) {
@@ -3208,6 +3209,7 @@ function parseAppleHealthFile(file) {
   const dedupe = new Set();
   const statDistance = new Map();
   const swimLaps = new Map();
+  const sleepSegments = new Map(); // date → total asleep minutes
   const statTypes = new Set([
     'HKQuantityTypeIdentifierDistanceWalkingRunning',
     'HKQuantityTypeIdentifierDistanceCycling',
@@ -3224,6 +3226,22 @@ function parseAppleHealthFile(file) {
       const unit = getAttr(line, 'unit');
       if (type && startDate && statTypes.has(type) && Number.isFinite(sum)) {
         statDistance.set(startDate, { sum, unit: unit || null });
+      }
+      return;
+    }
+
+    if (line.includes('<Record ') && line.includes('HKCategoryTypeIdentifierSleepAnalysis')) {
+      const val = getAttr(line, 'value') || '';
+      const isAsleep = val.includes('Asleep'); // Core, Deep, REM, Unspecified — excludes Awake/InBed
+      if (isAsleep) {
+        const startDate = getAttr(line, 'startDate');
+        const endDate = getAttr(line, 'endDate');
+        const durMin = minutesBetween(startDate, endDate);
+        if (Number.isFinite(durMin) && durMin > 0 && startDate) {
+          // Attribute the sleep to the calendar date of the end time (morning of wake)
+          const day = String(endDate || startDate).slice(0, 10);
+          sleepSegments.set(day, (sleepSegments.get(day) || 0) + durMin);
+        }
       }
       return;
     }
@@ -3305,18 +3323,26 @@ function parseAppleHealthFile(file) {
     return (toMs(a.start_date) || 0) - (toMs(b.start_date) || 0);
   });
 
+  const sleep = Array.from(sleepSegments.entries()).map(([date, duration_min]) => ({
+    source: 'AppleHealth',
+    date,
+    duration_min: Math.round(duration_min),
+  })).sort((a, b) => a.date.localeCompare(b.date));
+
   return {
     workouts: workouts.map(function(w) {
       const copy = Object.assign({}, w);
       delete copy.raw_start_date;
       return copy;
     }),
+    sleep,
     rejected,
     diagnostics: {
       parsed_lines: lineCount,
       deduplicated_workouts: dedupe.size,
       distance_stats_found: statDistance.size,
-      swim_days_found: swimLaps.size
+      swim_days_found: swimLaps.size,
+      sleep_days_found: sleepSegments.size
     }
   };
 }
@@ -4271,10 +4297,18 @@ function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily,
       setResult(next)
       setReviewRows(Array.isArray(next?.review) ? next.review : [])
       setSelectedReviewIds([])
+      if (Array.isArray(next?.appleSleep) && next.appleSleep.length) {
+        setSleepResult(prev => {
+          const byDate = {}
+          ;(Array.isArray(prev) ? prev : []).forEach(r => { byDate[r.date] = r })
+          next.appleSleep.forEach(r => { byDate[r.date] = r })
+          return Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date))
+        })
+      }
       setStatus("Import analysis complete")
       setImporting(false)
     }
-  }, [])
+  }, [setSleepResult])
   useEffect(() => { worker.onmessage = onWorkerMessage }, [worker, onWorkerMessage])
 
   const processFiles = useCallback(async () => {
