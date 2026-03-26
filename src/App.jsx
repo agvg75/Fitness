@@ -1090,8 +1090,46 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
   )
 }
 
+function DailyReadinessPanel({ readinessScore, latestHealthFit, ocItems }) {
+  const tsb = latestHealthFit?.tsb ?? null
+  const hasActiveIssue = (ocItems || []).some(i => i.currentScore >= 3)
+  let status, color, bg, rationale
+  if (readinessScore < 40 || hasActiveIssue) {
+    status = "RED"; color = "#ff5252"; bg = "rgba(255,82,82,0.15)"
+    rationale = hasActiveIssue
+      ? `OC ${readinessScore} · Active issue score ≥3 · Substitute exercises affecting flagged regions`
+      : `OC ${readinessScore} · TSB ${tsb != null ? tsb.toFixed(1) : "—"} · Substitute exercises affecting flagged regions`
+  } else if (readinessScore < 60 || (tsb != null && tsb < -20)) {
+    status = "ORANGE"; color = "#ff8c42"; bg = "rgba(255,140,66,0.15)"
+    rationale = `OC ${readinessScore} · TSB ${tsb != null ? tsb.toFixed(1) : "—"} · Reduce working weight 10–15%, cap at 2 sets on compounds`
+  } else if (readinessScore < 80 || (tsb != null && tsb < -10)) {
+    status = "YELLOW"; color = "#ffeb3b"; bg = "rgba(255,235,59,0.15)"
+    rationale = `OC ${readinessScore} · TSB ${tsb != null ? tsb.toFixed(1) : "—"} · Execute as written, no additions today`
+  } else {
+    status = "GREEN"; color = "#4caf50"; bg = "rgba(76,175,80,0.15)"
+    rationale = `OC ${readinessScore} · TSB ${tsb != null ? tsb.toFixed(1) : "—"} · Good to go — load up or add a set`
+  }
+  return (
+    <div style={{ padding: "10px 14px", borderRadius: 8, marginBottom: 12, border: `1px solid ${color}`, background: bg, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+      <div style={{ width: 10, height: 10, borderRadius: "50%", background: color, flexShrink: 0 }} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ fontSize: 12, color, fontWeight: 700, marginRight: 8 }}>{status}</span>
+        <span style={{ fontSize: 12, color: "#aaa" }}>{rationale}</span>
+        {tsb == null && (
+          <span style={{ fontSize: 11, color: "#555", marginLeft: 8 }}>· Import HealthFit CSV for TSB data</span>
+        )}
+      </div>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 12, background: "rgba(255,255,255,0.06)", color: "#aaa" }}>OC {readinessScore}</span>
+        {tsb != null && <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 12, background: "rgba(255,255,255,0.06)", color: "#aaa" }}>TSB {tsb.toFixed(1)}</span>}
+        {latestHealthFit?.ctl != null && <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 12, background: "rgba(255,255,255,0.06)", color: "#aaa" }}>CTL {latestHealthFit.ctl.toFixed(1)}</span>}
+      </div>
+    </div>
+  )
+}
+
 // ─── TabSchedule ──────────────────────────────────────────────────────────────
-function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, setSchedLog, readinessScore, ocItems = [] }) {
+function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, setSchedLog, readinessScore, latestHealthFit = null, ocItems = [] }) {
   const [activeDay, setActiveDay] = useState(todayDayKey())
   const [schedView, setSchedView] = useState("schedule")
   const [expandedLog, setExpandedLog] = useState({})
@@ -1694,6 +1732,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
 
   return (
     <div style={{ color: "#d8d8d8", position: "relative" }}>
+      <DailyReadinessPanel readinessScore={readinessScore} latestHealthFit={latestHealthFit} ocItems={ocItems} />
       {/* Day navigation */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
         <div style={{ display: "flex", gap: 3, background: "#0a0a0a", borderRadius: 8, padding: 4, border: "1px solid #1a1a1a", flexWrap: "wrap" }}>
@@ -1722,21 +1761,6 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
 
       {schedView === "schedule" && (
         <>
-          {readinessScore != null && readinessScore < 80 && (
-            <div style={{
-              padding: "10px 14px", borderRadius: "8px", marginBottom: "12px", fontSize: "12px",
-              background: readinessScore >= 60 ? "rgba(251,191,36,0.08)" : readinessScore >= 40 ? "rgba(249,115,22,0.08)" : "rgba(239,68,68,0.08)",
-              border: `1px solid ${readinessScore >= 60 ? "#fbbf24" : readinessScore >= 40 ? "#f97316" : "#ef4444"}`,
-              color: readinessScore >= 60 ? "#fbbf24" : readinessScore >= 40 ? "#f97316" : "#ef4444",
-            }}>
-              ⚠ Readiness {readinessScore}% —{" "}
-              {readinessScore >= 60
-                ? "consider reducing today's load by 20 to 30%"
-                : readinessScore >= 40
-                ? "substitute high-impact activity with low-impact alternative or shift session"
-                : "flag for rest or minimal movement only. Long-term targets remain on track."}
-            </div>
-          )}
           {/* Day header */}
           <div style={{ marginBottom: 14, paddingBottom: 10, borderBottom: "1px solid #1a1a1a" }}>
             <div style={{ fontSize: 20, fontWeight: 700, color: "#e8e8e8", lineHeight: 1 }}>
@@ -6258,6 +6282,12 @@ const readinessScore = useMemo(
   [ocItems, sleepRecords, healthFitDaily]
 )
 
+const latestHealthFit = useMemo(() => {
+  const arr = Array.isArray(healthFitDaily) ? healthFitDaily : []
+  return arr.filter(r => r.tsb != null || r.ctl != null || r.atl != null)
+    .sort((a, b) => b.date.localeCompare(a.date))[0] ?? null
+}, [healthFitDaily])
+
 const operationalCapacityData = useMemo(() => {
   const items = Array.isArray(ocItems) ? ocItems : []
   if (!items.length) return []
@@ -7608,6 +7638,7 @@ return (
     schedLog={schedLog}
     setSchedLog={setSchedLog}
     readinessScore={readinessScore}
+    latestHealthFit={latestHealthFit}
     ocItems={ocItems}
   />
 )}
