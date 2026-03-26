@@ -1994,7 +1994,7 @@ function projectWeightTrend(weights, nutritionSeries, weeks = 12) {
   return out
 }
 
-function TrainingDashboard({ workouts, recentNutrition, healthFitDaily = [] }) {
+function TrainingDashboard({ workouts, recentNutrition, healthFitDaily = [], schedLog = [] }) {
   const fmt0 = n => Number.isFinite(Number(n)) ? Math.round(Number(n)).toLocaleString() : "0"
   const fmt1 = n => Number.isFinite(Number(n)) ? Number(n).toFixed(1) : "0.0"
 
@@ -5978,13 +5978,19 @@ async function persistMealEntries(nextEntries, currentUserId) {
     return Math.max(2500, ...filteredNutrition.map(r => toNum(r.calories) + 100))
 }, [filteredNutrition])
 
+const strengthFromSchedule = useMemo(() => {
+  return (Array.isArray(schedLog) ? schedLog : [])
+    .filter(e => (e.exercises || []).some(ex => ex.variant !== "cardio"))
+    .map(e => ({ date: e.date, dateTime: e.logged_at || e.date, category: "Strength" }))
+}, [schedLog])
+
 const trainingSummary = useMemo(() => {
-  return buildTrainingSummary(operationalWorkouts)
-}, [operationalWorkouts])
+  return buildTrainingSummary([...operationalWorkouts, ...strengthFromSchedule])
+}, [operationalWorkouts, strengthFromSchedule])
 
 const weeklyTrainingBuckets = useMemo(() => {
-  return buildWeeklyTrainingBuckets(operationalWorkouts)
-}, [operationalWorkouts])
+  return buildWeeklyTrainingBuckets([...operationalWorkouts, ...strengthFromSchedule])
+}, [operationalWorkouts, strengthFromSchedule])
 useEffect(() => {
   console.log("LIFT ingestion check")
   console.log("operationalWorkouts count:", operationalWorkouts?.length ?? 0)
@@ -7730,9 +7736,10 @@ return (
 
 {tab === "Training" && (
   <TrainingDashboard
-    workouts={operationalWorkouts}
+    workouts={[...operationalWorkouts, ...strengthFromSchedule]}
     recentNutrition={recentNutrition}
     healthFitDaily={healthFitDaily}
+    schedLog={schedLog}
   />
 )}
 {tab === "Operational Capacity" && (
