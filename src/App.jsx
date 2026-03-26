@@ -5452,7 +5452,7 @@ useEffect(() => {
         const { data } = await supabase
           .from("user_kv")
           .select("key, value, updated_at")
-          .in("key", ["ufd-workouts", "wt-log", "oc-items", "healthfit-daily"])
+          .in("key", ["ufd-workouts", "wt-log", "oc-items", "healthfit-daily", "wt-sessions"])
         if (data) {
           const sbWo = data.find(r => r.key === "ufd-workouts")?.value
           console.log("Supabase user_kv fetch:", { sbWo_count: Array.isArray(sbWo)?sbWo.length:0 })
