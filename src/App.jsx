@@ -124,6 +124,29 @@ function getExerciseFlag(exerciseName, ocItems) {
   return hit ? { flagged: true, note } : { flagged: false }
 }
 
+function getExerciseHistory(exerciseName, wtSessions) {
+  if (!exerciseName || !Array.isArray(wtSessions) || !wtSessions.length) return []
+  const lower = exerciseName.toLowerCase()
+  const entries = []
+  for (const sess of wtSessions) {
+    const exs = sess.exercises || []
+    const match = exs.find(e => {
+      const n = (e.exercise_name || e.name || "").toLowerCase()
+      return n.includes(lower) || lower.includes(n.split(" ")[0])
+    })
+    if (!match) continue
+    // extract max numeric weight from sets
+    let maxW = null
+    const sets = match.sets || (match.actual ? [match.actual] : [])
+    for (const s of sets) {
+      const w = parseFloat(s.weight ?? s.load ?? s.w ?? 0)
+      if (Number.isFinite(w) && w > 0 && (maxW === null || w > maxW)) maxW = w
+    }
+    if (maxW !== null) entries.push({ date: sess.date || "", weight: maxW })
+  }
+  return entries.sort((a, b) => a.date.localeCompare(b.date)).slice(-8)
+}
+
 const tabs = [
   "Overview",
   "Schedule",
@@ -1580,10 +1603,29 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     return (
       <div key={ex.id} style={{ marginTop: 10, border: `0.5px solid ${chg ? "#d97706" : "#1e1e1e"}`, borderRadius: 7, overflow: "hidden" }}>
         <div style={{ padding: "8px 12px 7px", display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, flexWrap: "wrap", background: "#0d0d0d" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
             <span style={{ fontSize: 13, fontWeight: 600, color: "#d8d8d8" }}>{ex.n}</span>
             {chg && <span style={{ fontSize: 9, fontWeight: 700, color: "#d97706", background: "rgba(217,119,6,0.15)", borderRadius: 3, padding: "1px 5px" }}>modified</span>}
             {isCustom && <span style={{ fontSize: 9, color: "#7F77DD", background: "rgba(127,119,221,0.15)", borderRadius: 3, padding: "1px 5px" }}>custom</span>}
+            {!isCustom && (() => {
+              const hist = getExerciseHistory(ex.n, schedLog)
+              if (hist.length < 3) return null
+              const weights = hist.map(h => h.weight)
+              const minW = Math.min(...weights), maxW = Math.max(...weights)
+              const range = maxW - minW || 1
+              const pts = weights.map((w, i) => `${(i / (weights.length - 1)) * 78 + 1},${23 - ((w - minW) / range) * 22}`).join(" ")
+              const lastW = weights[weights.length - 1]
+              const last3Same = weights.slice(-3).every(w => w === lastW)
+              const suggested = last3Same && readinessScore >= 70 ? lastW + 5 : readinessScore < 60 ? Math.round(lastW * 0.9) : lastW
+              return (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                  <svg width="80" height="24" style={{ verticalAlign: "middle" }}>
+                    <polyline points={pts} fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" />
+                  </svg>
+                  <span style={{ fontSize: 10, color: "#666" }}>Suggested: {suggested} lb</span>
+                </span>
+              )
+            })()}
           </div>
           <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
             {!isCustom && ["machine", "db", "friendly"].map(k => {
