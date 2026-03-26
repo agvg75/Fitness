@@ -620,10 +620,16 @@ function ScheduleLogView({ log, expanded, setExpanded, onDelete, onEdit }) {
 
       {log.map(entry => {
         const m = SMETA[entry.day]
-        const allEx = []
-        ;(PLAN[entry.day]?.sections || []).forEach(sec => sec.ex.forEach(ex => {
-          if (entry.data[ex.id]) allEx.push({ ex, sets: entry.data[ex.id] })
-        }))
+        const allExercises = entry.exercises || []
+        const programExs = allExercises.filter(ex => ex.variant !== "custom")
+        const customExs  = allExercises.filter(ex => ex.variant === "custom")
+
+        const fmtActual = (ex) => {
+          const { sets, reps, load } = ex.actual || {}
+          if (!sets && !reps && !load) return "—"
+          const setsReps = (sets && reps) ? `${sets}x${reps}` : sets ? `${sets} sets` : reps ? `${reps} reps` : ""
+          return load ? `${setsReps} @ ${load} lb` : setsReps
+        }
 
         const open = expanded[entry.id]
 
@@ -655,29 +661,28 @@ function ScheduleLogView({ log, expanded, setExpanded, onDelete, onEdit }) {
       </div>
     ))}
 
-    {allEx.length === 0 && !(entry.exercises || []).some(ex => ex.variant === "custom") && <div style={{ fontSize: "12px", color: "#333" }}>No exercise data recorded.</div>}
-    {allEx.map(({ ex, sets }) => (
-                  <div key={ex.id} style={{ display: "flex", alignItems: "baseline", gap: "12px", padding: "3px 0", borderBottom: "1px solid #121212" }}>
-                    <span style={{ fontSize: "13px", fontWeight: "600", color: "#a0a0a0", minWidth: "190px" }}>{ex.name}</span>
-                    <span style={{ fontSize: "11px", color: "#444" }}>
-                      {sets.map((s, i) => (
-                        <span key={i}>
-                          {i > 0 && <span style={{ color: "#2a2a2a" }}> · </span>}
-                          <span style={{ color: "#c0c0c0" }}>{s.r}</span>
-                          <span style={{ color: "#333" }}>@</span>
-                          <span style={{ color: "#888" }}>{s.w}</span>
-                        </span>
-                      ))}
-                    </span>
-                  </div>
-                ))}
-    {(entry.exercises || []).filter(ex => ex.variant === "custom").map(ex => (
+    {allExercises.length === 0 && <div style={{ fontSize: "12px", color: "#333" }}>No exercise data recorded.</div>}
+
+    {programExs.map(ex => (
       <div key={ex.exercise_id} style={{ display: "flex", alignItems: "baseline", gap: "12px", padding: "3px 0", borderBottom: "1px solid #121212" }}>
-        <span style={{ fontSize: "13px", fontWeight: "600", color: "#7a7aaa", minWidth: "190px" }}>{ex.exercise_name} {ex.notes && <span style={{ fontSize: "10px", color: "#3a3a5a", fontStyle: "italic" }}>{ex.notes}</span>}</span>
-        <span style={{ fontSize: "11px", color: "#9090c0" }}>
-          {ex.actual?.sets && <span>{ex.actual.sets}×{ex.actual.reps}</span>}
-          {ex.actual?.load && <><span style={{ color: "#333" }}>@</span><span style={{ color: "#6060a0" }}>{ex.actual.load}</span></>}
+        <span style={{ fontSize: "13px", fontWeight: "600", color: "#a0a0a0", minWidth: "190px" }}>{ex.exercise_name}</span>
+        <span style={{ fontSize: "11px", color: "#888" }}>{fmtActual(ex)}</span>
+        {ex.notes && <span style={{ fontSize: "10px", color: "#3a3a3a", fontStyle: "italic" }}>{ex.notes}</span>}
+      </div>
+    ))}
+
+    {programExs.length > 0 && customExs.length > 0 && (
+      <div style={{ borderTop: "1px solid #1a1a1a", margin: "6px 0" }} />
+    )}
+
+    {customExs.map(ex => (
+      <div key={ex.exercise_id} style={{ display: "flex", alignItems: "baseline", gap: "12px", padding: "3px 0", borderBottom: "1px solid #121212" }}>
+        <span style={{ fontSize: "13px", fontWeight: "600", color: "#7a7aaa", minWidth: "190px" }}>
+          {ex.exercise_name}
+          {ex.notes && <span style={{ fontSize: "10px", color: "#3a3a5a", fontStyle: "italic", marginLeft: 6 }}>{ex.notes}</span>}
+          <span style={{ fontSize: "9px", color: "#3a3a5a", marginLeft: 6 }}>custom</span>
         </span>
+        <span style={{ fontSize: "11px", color: "#9090c0" }}>{fmtActual(ex)}</span>
       </div>
     ))}
               </div>
