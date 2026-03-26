@@ -4196,7 +4196,12 @@ function parseHealthFitCSV(text) {
 
     const dateRaw = cells[iDate] || ""
     if (!dateRaw) { rejected.push({ source: "HealthFit", reason: "Missing date", raw: raw.slice(0, 200) }); continue }
-    const date = String(dateRaw).slice(0, 10)
+    let date = String(dateRaw).slice(0, 10)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      // Try "Mar 18, 2026" or other locale-parseable formats
+      const d = new Date(dateRaw)
+      if (!Number.isNaN(d.getTime())) date = d.toISOString().slice(0, 10)
+    }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { rejected.push({ source: "HealthFit", reason: "Unparseable date: " + dateRaw, raw: raw.slice(0, 200) }); continue }
 
     const n = (idx, fallback = null) => {
