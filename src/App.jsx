@@ -92,6 +92,38 @@ const store = {
   }
 }
 
+const EXERCISE_REGIONS = {
+  'leg press':      { regions: ['Knee L','Knee R','Quad L','Quad R','Toe L','Toe R'], note: 'heels planted, avoid toe-off at top' },
+  'hip thrust':     { regions: ['Hip L','Hip R','Glute L','Glute R','Toe L','Toe R'], note: 'heels elevated on plate if toe sensitive' },
+  'leg curl':       { regions: ['Hamstring L','Hamstring R'], note: 'full ROM unless hamstring tender' },
+  'leg extension':  { regions: ['Quad L','Quad R','Knee L','Knee R'], note: 'avoid if knee irritated' },
+  'lat pulldown':   { regions: ['Shoulder L','Shoulder R','Upper Back'], note: 'depress scapula before pulling' },
+  'cable row':      { regions: ['Upper Back','Lower Back'], note: 'brace core, avoid lumbar flexion' },
+  'seated row':     { regions: ['Upper Back','Lower Back'], note: 'brace core, avoid lumbar flexion' },
+  'chest press':    { regions: ['Shoulder L','Shoulder R','Chest'], note: 'reduce ROM if shoulder irritated' },
+  'chest-press':    { regions: ['Shoulder L','Shoulder R','Chest'], note: 'reduce ROM if shoulder irritated' },
+  'bicep curl':     { regions: ['Elbow L','Elbow R'], note: 'supinate fully, no wrist compensation' },
+  'calf raise':     { regions: ['Ankle L','Ankle R','Toe L','Toe R'], note: 'skip if MTP irritated' },
+  'rdl':            { regions: ['Hamstring L','Hamstring R','Lower Back'], note: 'hinge at hip, neutral spine' },
+  'romanian':       { regions: ['Hamstring L','Hamstring R','Lower Back'], note: 'hinge at hip, neutral spine' },
+  'shoulder press': { regions: ['Shoulder L','Shoulder R'], note: 'reduce range if shoulder irritated' },
+  'hip abduction':  { regions: ['Hip L','Hip R'], note: '' },
+  'hip adduction':  { regions: ['Hip L','Hip R'], note: '' },
+}
+
+function getExerciseFlag(exerciseName, ocItems) {
+  if (!exerciseName || !ocItems?.length) return { flagged: false }
+  const lower = exerciseName.toLowerCase()
+  const key = Object.keys(EXERCISE_REGIONS).find(k => lower.includes(k))
+  if (!key) return { flagged: false }
+  const { regions, note } = EXERCISE_REGIONS[key]
+  const hit = ocItems.some(item =>
+    item.currentScore >= 2 &&
+    regions.some(r => (item.location || "").toLowerCase() === r.toLowerCase())
+  )
+  return hit ? { flagged: true, note } : { flagged: false }
+}
+
 const tabs = [
   "Overview",
   "Schedule",
@@ -1583,6 +1615,12 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
           {!isCustom && injuryTag(getInjuryNote(
             ex.fi === "shoulder" ? ["Shoulder"] : ex.fi === "toe" ? ["Toe", "Ankle"] : null
           ))}
+          {(() => { const flag = getExerciseFlag(ex.n, ocItems); return flag.flagged ? (
+            <div style={{ fontSize: 11, color: "#ff8c42", marginTop: 4, display: "flex", alignItems: "flex-start", gap: 4 }}>
+              <span style={{ flexShrink: 0 }}>●</span>
+              <span>{flag.note}</span>
+            </div>
+          ) : null })()}
           <textarea value={(isCustom ? ex.notes : f.notes) || ""}
             onChange={e => isCustom ? setCustomExF(day, ex.id, "notes", e.target.value) : setF(day, ex.id, "notes", e.target.value)}
             placeholder="Session note (optional)" rows={1}
