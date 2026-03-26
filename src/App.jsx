@@ -2295,6 +2295,60 @@ if (w.category === "Strength") {
           </ResponsiveContainer>
         </div>
 
+        {(() => {
+          const KEY_EXERCISES = [
+            { name: "Hip Thrust",   match: "hip thrust",   baseline: null },
+            { name: "Leg Press",    match: "leg press",     baseline: 320 },
+            { name: "Leg Curl",     match: "leg curl",      baseline: 125 },
+            { name: "Lat Pulldown", match: "lat pulldown",  baseline: 133 },
+            { name: "Cable Row",    match: "cable row",     baseline: 133 },
+            { name: "Bicep Curl",   match: "bicep curl",    baseline: 75 },
+          ]
+          const log = Array.isArray(schedLog) ? schedLog : []
+          const charts = KEY_EXERCISES.map(({ name, match, baseline }) => {
+            const points = []
+            for (const sess of log) {
+              const ex = (sess.exercises || []).find(e =>
+                (e.exercise_name || "").toLowerCase().includes(match)
+              )
+              if (!ex) continue
+              const w = parseFloat(ex.actual?.load)
+              if (!Number.isFinite(w) || w <= 0) continue
+              points.push({ date: (sess.date || "").slice(0, 10), weight: w })
+            }
+            const sorted = points.sort((a, b) => a.date.localeCompare(b.date))
+            return { name, baseline, data: sorted }
+          }).filter(c => c.data.length > 0)
+          if (!charts.length) return null
+          return (
+            <div style={{ background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: "12px", padding: "16px" }}>
+              <div style={{ fontSize: "14px", fontWeight: "700", color: "#ced2f0", marginBottom: "12px" }}>
+                Strength Progression
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "16px" }}>
+                {charts.map(({ name, baseline, data }) => (
+                  <div key={name}>
+                    <div style={{ fontSize: "11px", fontWeight: "600", color: "#8fa8d8", marginBottom: "4px" }}>{name}</div>
+                    <ResponsiveContainer width="100%" height={120}>
+                      <LineChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
+                        <CartesianGrid stroke="#1a1b2e" />
+                        <XAxis dataKey="date" tick={{ fontSize: 9 }} interval="preserveStartEnd" />
+                        <YAxis tick={{ fontSize: 9 }} width={36} />
+                        <Tooltip formatter={v => [`${v} lb`, "Weight"]} />
+                        <Line type="monotone" dataKey="weight" stroke="#ffd166" strokeWidth={2} dot={{ r: 3 }} connectNulls />
+                        {baseline != null && (
+                          <ReferenceLine y={baseline} stroke="#4a9ee8" strokeDasharray="4 2"
+                            label={{ value: `Baseline ${baseline}`, position: "insideTopRight", fontSize: 9, fill: "#4a9ee8" }} />
+                        )}
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+        })()}
+
         {pmfChartData.length > 0 && (
           <div style={{ background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: "12px", padding: "16px" }}>
             <div style={{ fontSize: "14px", fontWeight: "700", color: "#ced2f0", marginBottom: "12px" }}>
