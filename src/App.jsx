@@ -623,6 +623,16 @@ function ScheduleLogView({ log, expanded, setExpanded, onDelete, onEdit }) {
         const allExercises = entry.exercises || []
         const programExs = allExercises.filter(ex => ex.variant !== "custom")
         const customExs  = allExercises.filter(ex => ex.variant === "custom")
+        // fallback: render slug-keyed data from imported entries (e.g. ymca xlsx import)
+        const importedExs = (allExercises.length === 0 && entry.data)
+          ? Object.keys(entry.data).map(slug => ({
+              exercise_id: slug,
+              exercise_name: slug.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()),
+              actual: { sets: entry.data[slug].length, reps: entry.data[slug][0]?.r, load: entry.data[slug][0]?.w },
+              _sets: entry.data[slug],
+              variant: "imported",
+            }))
+          : []
 
         const fmtActual = (ex) => {
           const { sets, reps, load } = ex.actual || {}
@@ -685,6 +695,28 @@ function ScheduleLogView({ log, expanded, setExpanded, onDelete, onEdit }) {
         <span style={{ fontSize: "11px", color: "#9090c0" }}>{fmtActual(ex)}</span>
       </div>
     ))}
+    {importedExs.length > 0 && programExs.length === 0 && customExs.length === 0 && (
+      <>
+        {importedExs.map(ex => (
+          <div key={ex.exercise_id} style={{ display: "flex", alignItems: "baseline", gap: "12px", padding: "3px 0", borderBottom: "1px solid #121212" }}>
+            <span style={{ fontSize: "13px", fontWeight: "600", color: "#6a9a6a", minWidth: "190px" }}>
+              {ex.exercise_name}
+              <span style={{ fontSize: "9px", color: "#3a6a3a", marginLeft: 6 }}>imported</span>
+            </span>
+            <span style={{ fontSize: "11px", color: "#888" }}>
+              {ex._sets.map((s, i) => (
+                <span key={i}>
+                  {i > 0 && <span style={{ color: "#2a2a2a" }}> · </span>}
+                  <span style={{ color: "#c0c0c0" }}>{s.r}</span>
+                  <span style={{ color: "#333" }}>@</span>
+                  <span style={{ color: "#888" }}>{s.w}</span>
+                </span>
+              ))}
+            </span>
+          </div>
+        ))}
+      </>
+    )}
               </div>
             )}
           </div>
