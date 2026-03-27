@@ -1528,7 +1528,45 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   }
 
   const toggleSection = k => setOpenSections(prev => ({ ...prev, [k]: !prev[k] }))
+ const importRef = useRef(null)
 
+  const exportLog = () => {
+    const payload = {
+      _meta: { exported: new Date().toISOString(), version: "1.0", entries: schedLog.length },
+      log: schedLog,
+    }
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `workout_log_${new Date().toISOString().slice(0, 10)}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+    showToast("Exported")
+  }
+
+  const importLog = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = async (ev) => {
+      try {
+        const parsed = JSON.parse(ev.target.result)
+        if (!parsed.log || !Array.isArray(parsed.log)) throw new Error("bad format")
+        const existingIds = new Set(schedLog.map(e => e.id))
+        const newEntries = parsed.log.filter(e => !existingIds.has(e.id))
+        const merged = [...newEntries, ...schedLog].sort((a, b) => b.id - a.id)
+        setSchedLog(merged)
+        await saveScheduleKey("wt-log", merged)
+        showToast(`Imported ${newEntries.length} new entries`)
+        setSchedView("log")
+      } catch (_) {
+        showToast("Import failed — check file format")
+      }
+    }
+    reader.readAsText(file)
+    e.target.value = ""
+  }
   // ── Styles ─────────────────────────────────────────────────────────────
   const secHdr = (key, label, dot, meta) => (
     <div onClick={() => toggleSection(key)}
@@ -1817,6 +1855,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
 
   return (
     <div style={{ color: "#d8d8d8", position: "relative" }}>
+      <input ref={importRef} type="file" accept=".json" style={{ display: "none" }} onChange={importLog} />
       <DailyReadinessPanel readinessScore={readinessScore} latestHealthFit={latestHealthFit} ocItems={ocItems} />
       {/* Day navigation */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
@@ -1835,9 +1874,13 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
             )
           })}
         </div>
-        <button onClick={() => setSchedView(v => v === "log" ? "schedule" : "log")} style={buttonStyle(false)}>
-          {schedView === "log" ? "◀ Schedule" : `Log (${schedLog.length})`}
-        </button>
+<div style={{ display: "flex", gap: 6 }}>
+          <button onClick={() => setSchedView(v => v === "log" ? "schedule" : "log")} style={buttonStyle(false)}>
+            {schedView === "log" ? "◀ Schedule" : `Log (${schedLog.length})`}
+          </button>
+          <button onClick={exportLog} style={buttonStyle(false)}>Export ↓</button>
+          <button onClick={() => importRef.current?.click()} style={buttonStyle(false)}>Import ↑</button>
+        </div>
       </div>
 
       {schedView === "log" && (
@@ -4911,6 +4954,319 @@ function dedupeCanonicalSessions(sessions) {
   }).sort((a, b) => String(a?.start_date || "").localeCompare(String(b?.start_date || "")))
 }
 
+const SCH_DAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+const SCH_META = {
+  Mon: { label:"Monday",    theme:"Upper Push",           venue:"YMCA", color:"#d97706" },
+  Tue: { label:"Tuesday",   theme:"Legs",                 venue:"KNR",  color:"#3b82f6" },
+  Wed: { label:"Wednesday", theme:"Shoulder & Arms",      venue:"YMCA", color:"#d97706" },
+  Thu: { label:"Thursday",  theme:"Back / Biceps",        venue:"KNR",  color:"#3b82f6" },
+  Fri: { label:"Friday",    theme:"Hips / Upper + Swim",  venue:"KNR",  color:"#3b82f6" },
+  Sat: { label:"Saturday",  theme:"Hip Legs + Long Run",  venue:"YMCA", color:"#d97706" },
+  Sun: { label:"Sunday",    theme:"Rest / Easy Swim",     venue:"—",    color:"#444" },
+};
+const schMk = (r, w) => ({ r: String(r), w: String(w) });
+const SCH_PLAN = {
+  Mon: {
+    cardio: "Speed run · 20–30 min · Zone 3–4 · Easy jog warm-up 5 min first",
+    warmup: [],
+    topNote: null,
+    sections: [
+      { h: "A — Push Primary", ex: [
+        { id:"m1", name:"Chest Press",      sub:"Technogym machine",              def:[schMk(6,110),schMk(6,110),schMk(6,110)],                   note:"2-0-2 tempo · full ROM" },
+        { id:"m2", name:"Incline Press",    sub:"DB incline / Smith low angle",   def:[schMk("8-12","—"),schMk("8-12","—"),schMk("8-12","—")],     note:"Low incline · shoulder-safe" },
+      ]},
+      { h: "B — Shoulder", ex: [
+        { id:"m3", name:"Face Pull / ER",   sub:"Cable or resistance band",       def:[schMk("12-15","—"),schMk("12-15","—"),schMk("12-15","—")],  note:"Elbows high · rear delt + rotator cuff" },
+        { id:"m4", name:"Shoulder Press",   sub:"Technogym / DB",                 def:[schMk("8-12","—"),schMk("8-12","—")],                       note:"Neutral grip if neck tight" },
+      ]},
+      { h: "C — Triceps", ex: [
+        { id:"m5", name:"Triceps Overhead", sub:"Cable / 30 lb DB",               def:[schMk("8-12",30),schMk("8-12",30)],                         note:"Full stretch at top · smooth lockout" },
+        { id:"m6", name:"Triceps Pushdown", sub:"Cable pressdown",                def:[schMk("10-15",35),schMk("10-15",35),schMk("10-15",35)],     note:"Elbows fixed · full extension" },
+      ]},
+    ],
+  },
+  Tue: {
+    cardio: null,
+    warmup: [
+      "Stationary bike 5–10 min (light → moderate)",
+      "Standing calf raises 2×8 off step",
+      "Bodyweight squat 2×8 · band around knees optional",
+      "Ankle (L) inversion + dorsiflexion 2×10 · band assisted",
+      "Towel scrunches (L) 5 sets",
+    ],
+    topNote: null,
+    sections: [
+      { h: "Glutes / Hips", ex: [
+        { id:"t1", name:"Hip Thrust",             sub:"Machine or Smith bar",           def:[schMk(10,115),schMk(8,135),schMk(8,165)],  note:"Full hip ext · pause at top · ribs down" },
+      ]},
+      { h: "Quads / Posterior Chain", ex: [
+        { id:"t2", name:"Leg Press — Heel Drive", sub:"Endurance protocol · machine",   def:[schMk(15,160),schMk(15,160),schMk(15,160)], note:"Heels high · controlled · endurance mode" },
+        { id:"t3", name:"KB RDL",                 sub:"Kettlebell · form focus",         def:[schMk(10,50),schMk(10,50),schMk(10,50)],   note:"Hinge not squat · flat back" },
+        { id:"t6", name:"Leg Curl",               sub:"Machine",                         def:[schMk(8,100),schMk(8,100),schMk(8,100)],   note:"3-count eccentric · slow lower" },
+        { id:"t7", name:"Leg Extension",          sub:"Machine",                         def:[schMk(12,80),schMk(12,80),schMk(12,80)],   note:"Full extension · controlled" },
+      ]},
+      { h: "Hip Stability", ex: [
+        { id:"t4", name:"Lateral Band Walk", sub:"Green band · ~15 ft per lap", def:[schMk("2 laps","band"),schMk("2 laps","band")], note:"Maintain tension throughout" },
+        { id:"t5", name:"Monster Walk",      sub:"Green band",                   def:[schMk("2 laps","band"),schMk("2 laps","band")], note:"Forward/diagonal · band above knees" },
+      ]},
+      { h: "Core", ex: [
+        { id:"t8", name:"Marches w/ Band", sub:"3×10 each side", def:[schMk("10e","band"),schMk("10e","band"),schMk("10e","band")], note:"Pelvic neutral · don't let hip drop" },
+        { id:"t9", name:"90/90 Bicycle",   sub:"3×30 sec",       def:[schMk("30s","BW"),schMk("30s","BW"),schMk("30s","BW")],     note:"Slow · controlled · back flat" },
+      ]},
+    ],
+  },
+  Wed: {
+    cardio: "Easy run · 30 min · Zone 2 · Conversational pace · Run BEFORE lifting",
+    warmup: [],
+    topNote: null,
+    sections: [
+      { h: "Rear / Side Delt", ex: [
+        { id:"w1", name:"Rear Delt Fly",    sub:"Reverse pec deck / DB incline",  def:[schMk("12-15",7),schMk("12-15",7),schMk("12-15",7)],       note:"Light · 2-1-2 tempo · perfect control" },
+        { id:"w2", name:"Lateral Raise",    sub:"Cable / DB",                      def:[schMk("12-20","—"),schMk("12-20","—"),schMk("12-20","—"),schMk("12-20","—")], note:"Constant tension · no swing" },
+      ]},
+      { h: "Shoulder Health", ex: [
+        { id:"w3", name:"Face Pull / ER",   sub:"Cable face pull / band", def:[schMk("12-15","—"),schMk("12-15","—")], note:"Skip if done Monday" },
+      ]},
+      { h: "Triceps", ex: [
+        { id:"w4", name:"Triceps Pushdown", sub:"Cable pressdown", def:[schMk(10,35),schMk(10,35),schMk(10,35)], note:"Elbows fixed · 2-0-2 tempo" },
+      ]},
+      { h: "Carryover (if needed)", ex: [
+        { id:"w5", name:"Leg Curl", sub:"Machine · only if missed Tuesday", def:[schMk(8,100),schMk(8,100),schMk(8,100)], note:"Skip if completed at KNR Tuesday" },
+      ]},
+    ],
+  },
+  Thu: {
+    cardio: null,
+    warmup: [
+      "Cable shoulder ER/IR 2×10 @ 10 lb",
+      "Banded X's 2×8 each side",
+      "Arm circles 2×30 sec each direction",
+    ],
+    topNote: "KNR Day 4 — Back / Bi. Confirm exact movements and loads with your kinesiologist and update accordingly.",
+    sections: [
+      { h: "Back Primary", ex: [
+        { id:"th1", name:"Lat Pulldown",        sub:"Machine or cable",      def:[schMk("8-12","—"),schMk("8-12","—"),schMk("8-12","—")],   note:"Chest up · elbows to ribs · 2-1-2" },
+        { id:"th2", name:"Seated Row",          sub:"Cable · close grip",    def:[schMk("8-12","—"),schMk("8-12","—"),schMk("8-12","—")],   note:"Scapula retraction · don't round at finish" },
+        { id:"th3", name:"Chest-Supported Row", sub:"Machine or incline DB", def:[schMk("10-12","—"),schMk("10-12","—"),schMk("10-12","—")], note:"Chest on pad · full ROM" },
+      ]},
+      { h: "Biceps", ex: [
+        { id:"th4", name:"Biceps Curl",  sub:"Cable EZ curl / DB curl", def:[schMk("8-12",25),schMk("8-12",25),schMk("8-12",25)], note:"No sway · full elbow extension · 2-0-2" },
+        { id:"th5", name:"Hammer Curl", sub:"DB alternating",            def:[schMk("10-12","—"),schMk("10-12","—")],               note:"Neutral grip · full ROM" },
+      ]},
+    ],
+  },
+  Fri: {
+    cardio: "Swim · 1000 m · No backstroke · Pull buoy or fins if toe is irritated",
+    warmup: [
+      "Cat/Cows 10 slow",
+      "Glute Bridges 2×10",
+      "Hip CARs 8e slow",
+      "Arm circles 2×30 sec each direction",
+    ],
+    topNote: null,
+    sections: [
+      { h: "Hip", ex: [
+        { id:"f1", name:"Hip Abduction",          sub:"Abductor machine",             def:[schMk(10,100),schMk(10,100),schMk(10,100)], note:"Full ROM · controlled return" },
+        { id:"f2", name:"Hip Adduction",          sub:"Adductor machine",             def:[schMk(10,60),schMk(10,60),schMk(10,60)],   note:"Pelvic control throughout" },
+        { id:"f3", name:"KB Swing",               sub:"Kettlebell · hip hinge drive", def:[schMk(8,25),schMk(8,25),schMk(8,25)],     note:"Power from glutes · not arms" },
+      ]},
+      { h: "Anti-rotation Core", ex: [
+        { id:"f4", name:"Pallof Press",           sub:"Cable · split stance", def:[schMk("8e",30),schMk("8e",30),schMk("8e",30)], note:"Brace · press slowly · zero rotation" },
+      ]},
+      { h: "Shoulder Health", ex: [
+        { id:"f5", name:"Shoulder Clock w/ Band", sub:"Resistance band", def:[schMk("5e","band"),schMk("5e","band"),schMk("5e","band")], note:"Full range · light load only" },
+      ]},
+      { h: "Core", ex: [
+        { id:"f6", name:"Russian Twists", sub:"3×30 sec", def:[schMk("30s","BW"),schMk("30s","BW"),schMk("30s","BW")], note:"Feet elevated optional · controlled" },
+      ]},
+    ],
+  },
+  Sat: {
+    cardio: "Long easy run · 45–60 min · Zone 2 · Conversational · Run BEFORE lifting",
+    warmup: [],
+    topNote: null,
+    sections: [
+      { h: "A — Calf / Ankle (Run Resilience)", ex: [
+        { id:"s1", name:"Seated Calf Raise",       sub:"Machine or seated DB", def:[schMk("10-15","—"),schMk("10-15","—"),schMk("10-15","—"),schMk("10-15","—")], note:"Soleus focus · 2-2-3 tempo · full stretch" },
+        { id:"s2", name:"Single-Leg Calf Raise",   sub:"DB or bodyweight",     def:[schMk("8-10/leg","BW"),schMk("8-10/leg","BW"),schMk("8-10/leg","BW")],      note:"3-count lower · full range" },
+        { id:"s3", name:"Tibialis Raise",           sub:"Wall shin raises",     def:[schMk("15-25","BW"),schMk("15-25","BW"),schMk("15-25","BW")],               note:"Heels on ground · toes up · stop if sharp shin pain" },
+      ]},
+      { h: "B — Hip-Dominant Posterior Chain", ex: [
+        { id:"s4", name:"Romanian Deadlift",        sub:"DB or barbell",              def:[schMk("10-12","—"),schMk("10-12","—"),schMk("10-12","—")], note:"Hinge · flat back · 3-1-2 tempo" },
+        { id:"s5", name:"Hamstring Eccentric Curl", sub:"Leg curl · 4s eccentric",   def:[schMk("8-10","—"),schMk("8-10","—"),schMk("8-10","—")],   note:"4-second lowering" },
+        { id:"s6", name:"Hip Thrust",               sub:"Machine or Smith · lighter", def:[schMk("10-12","—"),schMk("10-12","—"),schMk("10-12","—")], note:"Can sub glute bridge if fatigued" },
+      ]},
+      { h: "C — Hip Stability / Core", ex: [
+        { id:"s7", name:"Adductor Machine", sub:"Inner thigh",         def:[schMk("10-15","—"),schMk("10-15","—"),schMk("10-15","—")], note:"Pelvic control · progress slowly" },
+        { id:"s8", name:"Pallof Press",     sub:"Cable anti-rotation", def:[schMk("10-15","—"),schMk("10-15","—"),schMk("10-15","—")], note:"Brace · no rotation · 2-1-2" },
+      ]},
+    ],
+  },
+  Sun: {
+    cardio: "Rest or easy swim · Optional 20–30 min · No resistance training today",
+    warmup: [],
+    topNote: null,
+    sections: [],
+  },
+};
+const schDefaultForDay = day => {
+  const data = {};
+  (SCH_PLAN[day]?.sections || []).forEach(sec =>
+    sec.ex.forEach(ex => { data[ex.id] = ex.def.map(s => ({...s})); })
+  );
+  return data;
+};
+const schTodayKey = () => {
+  const d = new Date().getDay();
+  return ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d];
+};
+const schFmtDate = iso => {
+  const d = new Date(iso);
+  return d.toLocaleDateString("en-US", { weekday:"short", month:"short", day:"numeric" })
+    + " · " + d.toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit" });
+};
+function SchBlock({ color, label, children }) {
+  return (
+    <div style={{ background:"#111", border:"1px solid #1a1a1a", borderLeft:`3px solid ${color}`, borderRadius:8, padding:"11px 14px", marginBottom:12 }}>
+      <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:9, letterSpacing:"0.18em", color:"#444", textTransform:"uppercase", marginBottom:7 }}>{label}</div>
+      {children}
+    </div>
+  );
+}
+
+function SchWarmupRow({ text }) {
+  const [done, setDone] = React.useState(false);
+  return (
+    <div onClick={() => setDone(v => !v)} style={{ display:"flex", alignItems:"center", gap:9, padding:"4px 0", cursor:"pointer", fontSize:12, color: done ? "#444" : "#888", textDecoration: done ? "line-through" : "none" }}>
+      <div style={{ width:14, height:14, border:"1px solid #333", borderRadius:3, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", background: done ? "#1e3a1e" : "transparent" }}>
+        {done && <span style={{ fontSize:9, color:"#4a8" }}>✓</span>}
+      </div>
+      {text}
+    </div>
+  );
+}
+
+function SchExCard({ ex, setData, accent, onUpdate, onAdd, onRemove }) {
+  const [collapsed, setCollapsed] = React.useState(false);
+  return (
+    <div style={{ background:"#111", border:"1px solid #1a1a1a", borderRadius:8, marginBottom:7, overflow:"hidden", "--ac": accent }}>
+      <div onClick={() => setCollapsed(v => !v)} style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", padding:"10px 12px 8px", cursor:"pointer" }}>
+        <div>
+          <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:15, fontWeight:700, color:"#e0e0e0" }}>{ex.name}</div>
+          <div style={{ fontSize:11, color:"#3a3a3a", marginTop:1 }}>{ex.sub}</div>
+        </div>
+        <div style={{ display:"flex", alignItems:"flex-start", gap:10 }}>
+          <div style={{ fontSize:11, color:"#444", textAlign:"right", maxWidth:170, fontStyle:"italic", lineHeight:1.35 }}>{ex.note}</div>
+          <div style={{ color:"#333", fontSize:12, marginTop:1 }}>{collapsed ? "▸" : "▾"}</div>
+        </div>
+      </div>
+      {!collapsed && (
+        <div style={{ padding:"0 12px 10px", borderTop:"1px solid #161616" }}>
+          <div style={{ display:"grid", gridTemplateColumns:"26px 1fr 14px 1fr 22px", gap:4, alignItems:"center", paddingTop:8, paddingBottom:4 }}>
+            {["SET","REPS","","LOAD",""].map((h,i) => (
+              <div key={i} style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:9, letterSpacing:"0.14em", color:"#333", textAlign:"center" }}>{h}</div>
+            ))}
+          </div>
+          {setData.map((s, i) => (
+            <div key={i} className="sch-set-row" style={{ display:"grid", gridTemplateColumns:"26px 1fr 14px 1fr 22px", gap:4, alignItems:"center", marginBottom:4 }}>
+              <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:10, color:"#3a3a3a", textAlign:"center" }}>S{i+1}</div>
+              <input className="sch-rw" type="text" value={s.r} onChange={e => onUpdate(i, "r", e.target.value)} />
+              <div style={{ textAlign:"center", fontSize:10, color:"#333" }}>@</div>
+              <input className="sch-rw" type="text" value={s.w} onChange={e => onUpdate(i, "w", e.target.value)} />
+              <button className="sch-set-del" onClick={() => onRemove(i)} style={{ background:"none", border:"none", color:"#444", cursor:"pointer", fontSize:13, padding:0, visibility: setData.length > 1 ? "visible" : "hidden" }}>×</button>
+            </div>
+          ))}
+          <button onClick={onAdd} style={{ marginTop:4, width:"100%", background:"none", border:"1px dashed #1e1e1e", borderRadius:4, color:"#333", fontSize:10, padding:"4px 0", cursor:"pointer", fontFamily:"'Barlow Condensed',sans-serif", letterSpacing:"0.08em" }}>+ add set</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SchLogView({ log, expanded, setExpanded, onDelete, onExport, onImport }) {
+  const toggle = id => setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
+  const BtnBar = () => (
+    <div style={{ display:"flex", gap:8, marginBottom:16, alignItems:"center" }}>
+      <button onClick={onExport} style={{ background:"#0d1a0d", border:"1px solid #1a3a1a", borderRadius:6, color:"#4a8a4a", fontSize:11, fontFamily:"'Barlow Condensed',sans-serif", letterSpacing:"0.08em", padding:"7px 14px", cursor:"pointer" }}>Export JSON ↓</button>
+      <button onClick={onImport} style={{ background:"#0d0d1a", border:"1px solid #1a1a3a", borderRadius:6, color:"#4a4a8a", fontSize:11, fontFamily:"'Barlow Condensed',sans-serif", letterSpacing:"0.08em", padding:"7px 14px", cursor:"pointer" }}>Import JSON ↑</button>
+    </div>
+  );
+  if (log.length === 0) return (
+    <div><BtnBar />
+      <div style={{ textAlign:"center", padding:"60px 20px" }}>
+        <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:28, fontWeight:700, color:"#222" }}>No sessions logged yet</div>
+        <div style={{ fontSize:13, color:"#333", marginTop:10 }}>Complete a session and press Log Session to begin.</div>
+      </div>
+    </div>
+  );
+  return (
+    <div>
+      <BtnBar />
+      <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:9, letterSpacing:"0.2em", color:"#333", textTransform:"uppercase", marginBottom:14 }}>
+        Session History — {log.length} {log.length === 1 ? "entry" : "entries"}
+      </div>
+      {log.map(entry => {
+        const m = SCH_META[entry.day] || { color:"#666", venue:"?" };
+        const open = expanded[entry.id];
+        // PATCHED: render plan exercises, then fall back to any imported slugs
+        const allEx = [];
+        const planIds = new Set();
+        (SCH_PLAN[entry.day]?.sections || []).forEach(sec =>
+          sec.ex.forEach(ex => {
+            if (entry.data[ex.id]) { allEx.push({ ex, sets: entry.data[ex.id] }); planIds.add(ex.id); }
+          })
+        );
+        Object.keys(entry.data).forEach(slug => {
+          if (!planIds.has(slug)) {
+            const label = slug.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+            allEx.push({ ex: { id:slug, name:label, sub:'imported' }, sets: entry.data[slug] });
+          }
+        });
+        return (
+          <div key={entry.id} style={{ background:"#0e0e0e", border:"1px solid #1a1a1a", borderLeft:`3px solid ${m.color}`, borderRadius:8, marginBottom:10, overflow:"hidden" }}>
+            <div onClick={() => toggle(entry.id)} style={{ padding:"10px 14px", display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer" }}>
+              <div>
+                <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:15, fontWeight:700, color:"#d0d0d0" }}>
+                  {entry.dayLabel}
+                  <span style={{ color:m.color, marginLeft:6 }}>{entry.theme}</span>
+                  <span style={{ fontSize:9, fontWeight:700, letterSpacing:"0.1em", background: m.venue==="KNR" ? "#0d1f38" : "#1e1200", color: m.venue==="KNR" ? "#3b82f6" : "#d97706", padding:"2px 7px", borderRadius:3, marginLeft:8, verticalAlign:"middle" }}>{entry.venue || m.venue}</span>
+                </div>
+                <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:10, color:"#3a3a3a", marginTop:3 }}>{schFmtDate(entry.date)}</div>
+              </div>
+              <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+                <button onClick={e => { e.stopPropagation(); onDelete(entry.id); }} style={{ background:"none", border:"1px solid #1e1e1e", borderRadius:4, color:"#3a3a3a", fontSize:10, padding:"4px 10px", cursor:"pointer" }}>Delete</button>
+                <span style={{ color:"#333", fontSize:12, marginLeft:4 }}>{open ? "▴" : "▾"}</span>
+              </div>
+            </div>
+            {open && (
+              <div style={{ padding:"10px 14px 14px", borderTop:"1px solid #161616" }}>
+                {allEx.length === 0 && <div style={{ fontSize:12, color:"#333" }}>No exercise data recorded.</div>}
+                {allEx.map(({ ex, sets }) => (
+                  <div key={ex.id} style={{ display:"flex", alignItems:"baseline", gap:12, padding:"3px 0", borderBottom:"1px solid #121212" }}>
+                    <span style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:13, fontWeight:600, color: ex.sub==='imported' ? "#6a9a6a" : "#a0a0a0", minWidth:190 }}>
+                      {ex.name}
+                      {ex.sub==='imported' && <span style={{ fontSize:9, color:"#3a6a3a", marginLeft:5, fontWeight:400 }}>imported</span>}
+                    </span>
+                    <span style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:11, color:"#444" }}>
+                      {sets.map((s, i) => (
+                        <span key={i}>
+                          {i > 0 && <span style={{ color:"#2a2a2a" }}> · </span>}
+                          <span style={{ color:"#c0c0c0" }}>{s.r}</span>
+                          <span style={{ color:"#333" }}>@</span>
+                          <span style={{ color:"#888" }}>{s.w}</span>
+                        </span>
+                      ))}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 export default function App() {
   const [tab, setTab] = useState("Overview")
