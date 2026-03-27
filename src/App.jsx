@@ -6422,7 +6422,7 @@ async function persistMealEntries(nextEntries, currentUserId) {
 
 const strengthFromSchedule = useMemo(() => {
   return (Array.isArray(schedLog) ? schedLog : [])
-    .filter(e => (e.exercises || []).some(ex => ex.variant !== "cardio"))
+.filter(e => (e.exercises || []).some(ex => ex.variant !== "cardio") || (e.data && Object.keys(e.data).length > 0))
     .map(e => ({ date: e.date, dateTime: e.logged_at || e.date, category: "Strength" }))
 }, [schedLog])
 
