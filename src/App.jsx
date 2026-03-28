@@ -788,8 +788,8 @@ const OC_REGION_COORDS = {
   "Calf R":      { f: null,      b: [33, 82]  },
   "Ankle L":     { f: [67, 91],  b: [67, 91]  },
   "Ankle R":     { f: [33, 91],  b: [33, 91]  },
-  "Toe L":       { f: [70, 96],  b: [70, 96]  },
-  "Toe R":       { f: [30, 96],  b: [30, 96]  },
+  "Toe L":       { f: [70, 96],  b: [30, 96]  },
+  "Toe R":       { f: [30, 96],  b: [70, 96]  },
 }
 
 // Body silhouette images — coordinates in OC_REGION_COORDS are CSS percentages
@@ -1012,95 +1012,100 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
         </div>
       </div>
 
-      {/* ── Body map ─────────────────────────────────────────────── */}
-      <div style={{ ...cardStyle(), marginBottom: "16px" }}>
-        <div style={{ fontSize: "10px", letterSpacing: "0.15em", textTransform: "uppercase", color: "#555", marginBottom: "10px" }}>
-          Body Map — tap a dot to inspect
-        </div>
-        <div style={{ display: "flex", gap: "12px", justifyContent: "center" }}>
-          {["front", "back"].map(side => (
-            <div key={side} style={{ flex: "0 0 auto", width: "140px" }}>
-              <div style={{ fontSize: "9px", color: "#444", textAlign: "center", marginBottom: "3px", letterSpacing: "0.1em" }}>{side.toUpperCase()}</div>
-              {renderSilhouette(side)}
-            </div>
-          ))}
-        </div>
-        <div style={{ fontSize: "9px", color: "#444", textAlign: "center", marginTop: "6px" }}>
-          ● acute &nbsp; ○ chronic
-        </div>
-      </div>
+     {/* ── Two-column: left controls / right silhouettes ─────────── */}
+      <div style={{ display: "grid", gridTemplateColumns: window.innerWidth < 700 ? "1fr" : "1fr 380px", gap: "20px", marginBottom: "16px", alignItems: "start" }}>
 
-      {/* ── Quick Add + Active Issues ─────────────────────────────── */}
-      <div style={{ display: "grid", gridTemplateColumns: window.innerWidth < 600 ? "1fr" : "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
+        {/* LEFT: Add Issue + Active Issues stacked */}
+        <div style={{ display: "grid", gap: "16px" }}>
+          <div style={cardStyle()}>
+            <div style={{ fontSize: "10px", letterSpacing: "0.15em", textTransform: "uppercase", color: "#555", marginBottom: "10px" }}>Add Issue</div>
+            <div style={{ display: "grid", gap: "8px" }}>
+              <select value={addForm.key} onChange={e => setAddForm(f => ({ ...f, key: e.target.value, halfLifeHours: null }))} style={inputStyle()}>
+                {Object.entries(OC_KEY_META).map(([k, m]) => <option key={k} value={k}>{m.label}</option>)}
+              </select>
+              <select value={addForm.location} onChange={e => setAddForm(f => ({ ...f, location: e.target.value }))} style={inputStyle()}>
+                {OC_BODY_REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
+              </select>
+              <div>
+                <div style={{ fontSize: "11px", color: "#666", marginBottom: "4px" }}>
+                  Severity: {addForm.currentScore}/5 — {SCORE_LABELS[Number(addForm.currentScore)]}
+                </div>
+                <input type="range" min={0} max={5} step={1} value={addForm.currentScore}
+                  onChange={e => setAddForm(f => ({ ...f, currentScore: Number(e.target.value) }))}
+                  style={{ width: "100%" }} />
+              </div>
+              <div>
+                <div style={{ fontSize: "11px", color: "#666", marginBottom: "4px" }}>
+                  Half-life: {addForm.halfLifeHours ?? OC_KEY_META[addForm.key]?.halfLifeHours ?? 72}h
+                </div>
+                <input type="number" min={1} max={720}
+                  placeholder={`default ${OC_KEY_META[addForm.key]?.halfLifeHours ?? 72}h`}
+                  value={addForm.halfLifeHours ?? ""}
+                  onChange={e => setAddForm(f => ({ ...f, halfLifeHours: e.target.value ? Number(e.target.value) : null }))}
+                  style={{ ...inputStyle(), padding: "6px 10px" }} />
+              </div>
+              <button onClick={addItem} style={{ ...buttonStyle(true), fontSize: "12px" }}>+ Add Issue</button>
+            </div>
+          </div>
 
-        <div style={cardStyle()}>
-          <div style={{ fontSize: "10px", letterSpacing: "0.15em", textTransform: "uppercase", color: "#555", marginBottom: "10px" }}>Add Issue</div>
-          <div style={{ display: "grid", gap: "8px" }}>
-            <select value={addForm.key} onChange={e => setAddForm(f => ({ ...f, key: e.target.value, halfLifeHours: null }))} style={inputStyle()}>
-              {Object.entries(OC_KEY_META).map(([k, m]) => <option key={k} value={k}>{m.label}</option>)}
-            </select>
-            <select value={addForm.location} onChange={e => setAddForm(f => ({ ...f, location: e.target.value }))} style={inputStyle()}>
-              {OC_BODY_REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
-            </select>
-            <div>
-              <div style={{ fontSize: "11px", color: "#666", marginBottom: "4px" }}>
-                Severity: {addForm.currentScore}/5 — {SCORE_LABELS[Number(addForm.currentScore)]}
-              </div>
-              <input type="range" min={0} max={5} step={1} value={addForm.currentScore}
-                onChange={e => setAddForm(f => ({ ...f, currentScore: Number(e.target.value) }))}
-                style={{ width: "100%" }} />
+          <div style={cardStyle()}>
+            <div style={{ fontSize: "10px", letterSpacing: "0.15em", textTransform: "uppercase", color: "#555", marginBottom: "10px" }}>
+              Active Issues ({active.length})
             </div>
-            <div>
-              <div style={{ fontSize: "11px", color: "#666", marginBottom: "4px" }}>
-                Half-life: {addForm.halfLifeHours ?? OC_KEY_META[addForm.key]?.halfLifeHours ?? 72}h
+            {active.length === 0 && (
+              <div style={{ fontSize: "12px", color: "#444", textAlign: "center", padding: "24px 0" }}>No active issues</div>
+            )}
+            {active.map(item => {
+              const meta = OC_KEY_META[item.key] || OC_KEY_META.muscleStatus
+              const pred = computeOcPredictedScore(item)
+              const recov = computeOcRecoveryDate(item)
+              return (
+                <div key={item.id}
+                  onClick={() => setSelectedId(selectedId === item.id ? null : item.id)}
+                  style={{
+                    padding: "8px 10px", marginBottom: "6px", borderRadius: "6px", cursor: "pointer",
+                    border: `1px solid ${selectedId === item.id ? meta.color : "#1a1b2e"}`,
+                    background: selectedId === item.id ? "#111" : "transparent",
+                  }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: "12px", fontWeight: "600", color: meta.color }}>{item.location}</span>
+                    <span style={{ fontSize: "10px", color: "#555" }}>{meta.label}{item.chronicity === "chronic" ? " ⟳" : ""}</span>
+                    <span style={{ fontSize: "18px", fontWeight: "800", color: meta.color }}>{item.currentScore}</span>
+                  </div>
+                  <div style={{ fontSize: "10px", color: "#444", marginTop: "2px" }}>
+                    pred {pred.toFixed(1)} · recovery {recov || "—"}
+                  </div>
+                </div>
+              )
+            })}
+            {ocItems.filter(i => i.currentScore === 0 && i.episodeCount > 0).length > 0 && (
+              <div style={{ fontSize: "10px", color: "#333", marginTop: "8px", textAlign: "center" }}>
+                {ocItems.filter(i => i.currentScore === 0 && i.episodeCount > 0).length} resolved
               </div>
-              <input type="number" min={1} max={720}
-                placeholder={`default ${OC_KEY_META[addForm.key]?.halfLifeHours ?? 72}h`}
-                value={addForm.halfLifeHours ?? ""}
-                onChange={e => setAddForm(f => ({ ...f, halfLifeHours: e.target.value ? Number(e.target.value) : null }))}
-                style={{ ...inputStyle(), padding: "6px 10px" }} />
-            </div>
-            <button onClick={addItem} style={{ ...buttonStyle(true), fontSize: "12px" }}>+ Add Issue</button>
+            )}
           </div>
         </div>
 
+        {/* RIGHT: Body map silhouettes */}
         <div style={cardStyle()}>
           <div style={{ fontSize: "10px", letterSpacing: "0.15em", textTransform: "uppercase", color: "#555", marginBottom: "10px" }}>
-            Active Issues ({active.length})
+            Body Map — tap a dot to inspect
           </div>
-          {active.length === 0 && (
-            <div style={{ fontSize: "12px", color: "#444", textAlign: "center", padding: "24px 0" }}>No active issues</div>
-          )}
-          {active.map(item => {
-            const meta = OC_KEY_META[item.key] || OC_KEY_META.muscleStatus
-            const pred = computeOcPredictedScore(item)
-            const recov = computeOcRecoveryDate(item)
-            return (
-              <div key={item.id}
-                onClick={() => setSelectedId(selectedId === item.id ? null : item.id)}
-                style={{
-                  padding: "8px 10px", marginBottom: "6px", borderRadius: "6px", cursor: "pointer",
-                  border: `1px solid ${selectedId === item.id ? meta.color : "#1a1b2e"}`,
-                  background: selectedId === item.id ? "#111" : "transparent",
-                }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: "12px", fontWeight: "600", color: meta.color }}>{item.location}</span>
-                  <span style={{ fontSize: "10px", color: "#555" }}>{meta.label}{item.chronicity === "chronic" ? " ⟳" : ""}</span>
-                  <span style={{ fontSize: "18px", fontWeight: "800", color: meta.color }}>{item.currentScore}</span>
-                </div>
-                <div style={{ fontSize: "10px", color: "#444", marginTop: "2px" }}>
-                  pred {pred.toFixed(1)} · recovery {recov || "—"}
-                </div>
+          <div style={{ display: "flex", gap: "16px", justifyContent: "center" }}>
+            {["front", "back"].map(side => (
+              <div key={side} style={{ flex: "0 0 auto", width: "170px" }}>
+                <div style={{ fontSize: "9px", color: "#444", textAlign: "center", marginBottom: "3px", letterSpacing: "0.1em" }}>{side.toUpperCase()}</div>
+                {renderSilhouette(side)}
               </div>
-            )
-          })}
-          {ocItems.filter(i => i.currentScore === 0 && i.episodeCount > 0).length > 0 && (
-            <div style={{ fontSize: "10px", color: "#333", marginTop: "8px", textAlign: "center" }}>
-              {ocItems.filter(i => i.currentScore === 0 && i.episodeCount > 0).length} resolved
-            </div>
-          )}
+            ))}
+          </div>
+          <div style={{ fontSize: "9px", color: "#444", textAlign: "center", marginTop: "8px" }}>
+            ● acute &nbsp; ○ chronic
+          </div>
         </div>
+
       </div>
+
 
       {/* ── Update panel ─────────────────────────────────────────── */}
       {selectedItem && (
