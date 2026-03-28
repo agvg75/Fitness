@@ -26,7 +26,7 @@ const workouts = raw.map(r => {
   return {
     source: "Technogym",
     raw_type: "MachineWorkout",
-    type: "Machine Cardio",
+    type: "Indoor Cycling",
     start_date: r.on,
     end_date: new Date(new Date(r.on).getTime() + duration_sec * 1000).toISOString(),
     duration_min: duration_sec ? duration_sec / 60 : null,
