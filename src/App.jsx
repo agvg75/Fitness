@@ -2164,7 +2164,7 @@ function TrainingDashboard({ workouts, recentNutrition, healthFitDaily = [], sch
 if (w.category === "Strength") {
   grouped[key].strengthSessions += 1
 } else if (
-  ["Running", "Walking", "Cycling", "Swimming", "Elliptical", "Rowing", "Stairs", "Machine Cardio"].includes(w.category)
+  ["Running", "Walking", "Cycling", "Swimming", "Elliptical", "Rowing", "Stairs", "Machine Cardio", "Indoor Cycling"].includes(w.category)
 ) {
   grouped[key].cardioDistance += Number(w.distance || 0)
   grouped[key].cardioCalories += Number(w.calories || 0)
@@ -2483,7 +2483,7 @@ const last28 = workouts.filter(w => new Date(w.dateTime || w.date) >= daysAgo(28
     }
 
     if (
-      ["Running", "Walking", "Cycling", "Swimming", "Elliptical", "Rowing", "Stairs", "Machine Cardio"].includes(w.category)
+      ["Running", "Walking", "Cycling", "Swimming", "Elliptical", "Rowing", "Stairs", "Machine Cardio", "Indoor Cycling"].includes(w.category)
     ) {
       summary.cardioMinutes28 += Number(w.dur || 0)
     }
@@ -3231,7 +3231,7 @@ const buckets = {}
     } else if (w.category === "Strength") {
       buckets[key].strength += 1
     } else if (
-      ["Elliptical", "Rowing", "Stairs", "Machine Cardio"].includes(w.category)
+      ["Elliptical", "Rowing", "Stairs", "Machine Cardio", "Indoor Cycling"].includes(w.category)
     ) {
       buckets[key].cardioMinutes += Number(w.dur || 0)
     }
@@ -3602,7 +3602,7 @@ function classifyTechnogym(workout) {
   if (raw.includes('ellip')) return 'Elliptical';
   if (raw.includes('stair')) return 'Stair Climbing';
   if (raw.includes('strength') || raw.includes('weight')) return 'Traditional Strength Training';
-  return 'Machine Cardio';
+  return "Indoor Cycling";
 }
 
 function looksLikeTechnogymSession(obj) {
