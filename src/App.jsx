@@ -151,10 +151,10 @@ const tabs = [
   "Overview",
   "Schedule",
   "Forecast",
-  "Operational Capacity",
+  "Capacity",
   "Training",
   "Calories",
-  "Body Comp",
+  "Composition",
   "Import",
 ]
 
@@ -7858,7 +7858,7 @@ return (
     </div>
   </div>
 )}
-      {tab === "Body Comp" && (
+      {tab === "Composition" && (
         <div>
           <h3>Body Composition</h3>
 
@@ -8188,7 +8188,7 @@ return (
     schedLog={schedLog}
   />
 )}
-{tab === "Operational Capacity" && (
+{tab === "Capacity" && (
   <TabOperationalCapacity
     ocItems={ocItems}
     setOcItems={setOcItems}
@@ -8505,7 +8505,7 @@ return (
 )}
 
       
-{tab !== "Overview" && tab !== "Body Comp" && tab !== "Calories" && tab !== "Operational Capacity" && tab !== "Forecast" && tab !== "Schedule" && tab !== "Training" && tab !== "Import" && tab !== "Log" && (
+{tab !== "Overview" && tab !== "Composition" && tab !== "Calories" && tab !== "Capacity" && tab !== "Forecast" && tab !== "Schedule" && tab !== "Training" && tab !== "Import" && tab !== "Log" && (
   <div>
     <h3>{tab}</h3>
     <div>This tab is next.</div>
