@@ -250,14 +250,14 @@ function todayISO() {
 const SDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 const SMETA = {
-  Mon: { label: "Monday", theme: "Upper Push", venue: "YMCA", color: "#d97706" },
-  Tue: { label: "Tuesday", theme: "Legs", venue: "KNR", color: "#3b82f6" },
-  Wed: { label: "Wednesday", theme: "Shoulder & Arms", venue: "YMCA", color: "#d97706" },
-  Thu: { label: "Thursday", theme: "Back / Biceps", venue: "KNR", color: "#3b82f6" },
-  Fri: { label: "Friday", theme: "Hips / Upper + Swim", venue: "KNR", color: "#3b82f6" },
-  Sat: { label: "Saturday", theme: "Hip Legs + Long Run", venue: "YMCA", color: "#d97706" },
-  Sun: { label: "Sunday", theme: "Rest / Easy Swim", venue: "—", color: "#444" }
-}
+  Mon: { label:"Monday",    theme:"Upper Push + Bike",       venue:"YMCA", color:"#d97706" },
+  Tue: { label:"Tuesday",   theme:"Legs + Swim",             venue:"KNR",  color:"#3b82f6" },
+  Wed: { label:"Wednesday", theme:"Recovery",                venue:"—",    color:"#444"    },
+  Thu: { label:"Thursday",  theme:"Upper / Arms + Bike",     venue:"KNR",  color:"#3b82f6" },
+  Fri: { label:"Friday",    theme:"Hips / Core + Long Bike", venue:"YMCA", color:"#d97706" },
+  Sat: { label:"Saturday",  theme:"Long Run",                venue:"—",    color:"#444"    },
+  Sun: { label:"Sunday",    theme:"Aerobic Recovery",        venue:"—",    color:"#444"    },
+};
 
 const mk = (r, w) => ({ r: String(r), w: String(w) })
 
