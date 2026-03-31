@@ -4992,6 +4992,7 @@ function dedupeCanonicalSessions(sessions) {
 }
 
 const SCH_DAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+const _SCHED_V = 2;
 const SCH_META = {
   Mon: { label:"Monday",    theme:"Upper Push + Bike",       venue:"YMCA", color:"#d97706" },
   Tue: { label:"Tuesday",   theme:"Legs + Swim",             venue:"KNR",  color:"#3b82f6" },
