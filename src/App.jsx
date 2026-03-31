@@ -4993,37 +4993,37 @@ function dedupeCanonicalSessions(sessions) {
 
 const SCH_DAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 const SCH_META = {
-  Mon: { label:"Monday",    theme:"Upper Push",           venue:"YMCA", color:"#d97706" },
-  Tue: { label:"Tuesday",   theme:"Legs",                 venue:"KNR",  color:"#3b82f6" },
-  Wed: { label:"Wednesday", theme:"Shoulder & Arms",      venue:"YMCA", color:"#d97706" },
-  Thu: { label:"Thursday",  theme:"Back / Biceps",        venue:"KNR",  color:"#3b82f6" },
-  Fri: { label:"Friday",    theme:"Hips / Upper + Swim",  venue:"KNR",  color:"#3b82f6" },
-  Sat: { label:"Saturday",  theme:"Hip Legs + Long Run",  venue:"YMCA", color:"#d97706" },
-  Sun: { label:"Sunday",    theme:"Rest / Easy Swim",     venue:"—",    color:"#444" },
+  Mon: { label:"Monday",    theme:"Upper Push + Bike",       venue:"YMCA", color:"#d97706" },
+  Tue: { label:"Tuesday",   theme:"Legs + Swim",             venue:"KNR",  color:"#3b82f6" },
+  Wed: { label:"Wednesday", theme:"Recovery",                venue:"—",    color:"#444"    },
+  Thu: { label:"Thursday",  theme:"Upper / Arms + Bike",     venue:"KNR",  color:"#3b82f6" },
+  Fri: { label:"Friday",    theme:"Hips / Core + Long Bike", venue:"YMCA", color:"#d97706" },
+  Sat: { label:"Saturday",  theme:"Long Run",                venue:"—",    color:"#444"    },
+  Sun: { label:"Sunday",    theme:"Aerobic Recovery",        venue:"—",    color:"#444"    },
 };
 const schMk = (r, w) => ({ r: String(r), w: String(w) });
 const SCH_PLAN = {
   Mon: {
-    cardio: "Speed run · 20–30 min · Zone 3–4 · Easy jog warm-up 5 min first",
+    cardio: "Easy bike · 30–40 min · Zone 2 · After strength · Technogym or YMCA bike",
     warmup: [],
     topNote: null,
     sections: [
       { h: "A — Push Primary", ex: [
-        { id:"m1", name:"Chest Press",      sub:"Technogym machine",              def:[schMk(6,110),schMk(6,110),schMk(6,110)],                   note:"2-0-2 tempo · full ROM" },
-        { id:"m2", name:"Incline Press",    sub:"DB incline / Smith low angle",   def:[schMk("8-12","—"),schMk("8-12","—"),schMk("8-12","—")],     note:"Low incline · shoulder-safe" },
+        { id:"m1", name:"Chest Press",      sub:"Technogym machine",             def:[schMk(6,110),schMk(6,110),schMk(6,110)],               note:"2-0-2 tempo · full ROM" },
+        { id:"m2", name:"Incline Press",    sub:"DB incline / Smith low angle",  def:[schMk("8-12","—"),schMk("8-12","—"),schMk("8-12","—")], note:"Low incline · shoulder-safe" },
       ]},
       { h: "B — Shoulder", ex: [
-        { id:"m3", name:"Face Pull / ER",   sub:"Cable or resistance band",       def:[schMk("12-15","—"),schMk("12-15","—"),schMk("12-15","—")],  note:"Elbows high · rear delt + rotator cuff" },
-        { id:"m4", name:"Shoulder Press",   sub:"Technogym / DB",                 def:[schMk("8-12","—"),schMk("8-12","—")],                       note:"Neutral grip if neck tight" },
+        { id:"m3", name:"Face Pull / ER",   sub:"Cable or resistance band",      def:[schMk("12-15","—"),schMk("12-15","—"),schMk("12-15","—")], note:"Elbows high · rear delt + rotator cuff" },
+        { id:"m4", name:"Shoulder Press",   sub:"Technogym / DB",                def:[schMk("8-12","—"),schMk("8-12","—")],                     note:"Neutral grip if neck tight" },
       ]},
       { h: "C — Triceps", ex: [
-        { id:"m5", name:"Triceps Overhead", sub:"Cable / 30 lb DB",               def:[schMk("8-12",30),schMk("8-12",30)],                         note:"Full stretch at top · smooth lockout" },
-        { id:"m6", name:"Triceps Pushdown", sub:"Cable pressdown",                def:[schMk("10-15",35),schMk("10-15",35),schMk("10-15",35)],     note:"Elbows fixed · full extension" },
+        { id:"m5", name:"Triceps Overhead", sub:"Cable / 30 lb DB",              def:[schMk("8-12",30),schMk("8-12",30)],                       note:"Full stretch at top · smooth lockout" },
+        { id:"m6", name:"Triceps Pushdown", sub:"Cable pressdown",               def:[schMk("10-15",35),schMk("10-15",35),schMk("10-15",35)],   note:"Elbows fixed · full extension" },
       ]},
     ],
   },
   Tue: {
-    cardio: null,
+    cardio: "600 yd swim · After KNR · Easy aerobic pace · No backstroke · Pull buoy if toe irritated",
     warmup: [
       "Stationary bike 5–10 min (light → moderate)",
       "Standing calf raises 2×8 off step",
@@ -5031,20 +5031,20 @@ const SCH_PLAN = {
       "Ankle (L) inversion + dorsiflexion 2×10 · band assisted",
       "Towel scrunches (L) 5 sets",
     ],
-    topNote: null,
+    topNote: "KNR Day 2 — Legs. Confirm exact movements and loads with your kinesiologist and update accordingly.",
     sections: [
       { h: "Glutes / Hips", ex: [
-        { id:"t1", name:"Hip Thrust",             sub:"Machine or Smith bar",           def:[schMk(10,115),schMk(8,135),schMk(8,165)],  note:"Full hip ext · pause at top · ribs down" },
+        { id:"t1", name:"Hip Thrust",             sub:"Machine or Smith bar",          def:[schMk(10,115),schMk(8,135),schMk(8,165)],   note:"Full hip ext · pause at top · ribs down" },
       ]},
       { h: "Quads / Posterior Chain", ex: [
-        { id:"t2", name:"Leg Press — Heel Drive", sub:"Endurance protocol · machine",   def:[schMk(15,160),schMk(15,160),schMk(15,160)], note:"Heels high · controlled · endurance mode" },
-        { id:"t3", name:"KB RDL",                 sub:"Kettlebell · form focus",         def:[schMk(10,50),schMk(10,50),schMk(10,50)],   note:"Hinge not squat · flat back" },
-        { id:"t6", name:"Leg Curl",               sub:"Machine",                         def:[schMk(8,100),schMk(8,100),schMk(8,100)],   note:"3-count eccentric · slow lower" },
-        { id:"t7", name:"Leg Extension",          sub:"Machine",                         def:[schMk(12,80),schMk(12,80),schMk(12,80)],   note:"Full extension · controlled" },
+        { id:"t2", name:"Leg Press — Heel Drive", sub:"Endurance protocol · machine",  def:[schMk(15,160),schMk(15,160),schMk(15,160)], note:"Heels high · controlled · endurance mode" },
+        { id:"t3", name:"KB RDL",                 sub:"Kettlebell · form focus",        def:[schMk(10,50),schMk(10,50),schMk(10,50)],    note:"Hinge not squat · flat back" },
+        { id:"t6", name:"Leg Curl",               sub:"Machine",                        def:[schMk(8,100),schMk(8,100),schMk(8,100)],    note:"3-count eccentric · slow lower" },
+        { id:"t7", name:"Leg Extension",          sub:"Machine",                        def:[schMk(12,80),schMk(12,80),schMk(12,80)],    note:"Full extension · controlled" },
       ]},
       { h: "Hip Stability", ex: [
         { id:"t4", name:"Lateral Band Walk", sub:"Green band · ~15 ft per lap", def:[schMk("2 laps","band"),schMk("2 laps","band")], note:"Maintain tension throughout" },
-        { id:"t5", name:"Monster Walk",      sub:"Green band",                   def:[schMk("2 laps","band"),schMk("2 laps","band")], note:"Forward/diagonal · band above knees" },
+        { id:"t5", name:"Monster Walk",      sub:"Green band",                  def:[schMk("2 laps","band"),schMk("2 laps","band")], note:"Forward/diagonal · band above knees" },
       ]},
       { h: "Core", ex: [
         { id:"t8", name:"Marches w/ Band", sub:"3×10 each side", def:[schMk("10e","band"),schMk("10e","band"),schMk("10e","band")], note:"Pelvic neutral · don't let hip drop" },
@@ -5053,27 +5053,13 @@ const SCH_PLAN = {
     ],
   },
   Wed: {
-    cardio: "Easy run · 30 min · Zone 2 · Conversational pace · Run BEFORE lifting",
+    cardio: "Swim 800–1200 yd · Zone 2 aerobic only · No intervals · Row 20 min easy after",
     warmup: [],
-    topNote: null,
-    sections: [
-      { h: "Rear / Side Delt", ex: [
-        { id:"w1", name:"Rear Delt Fly",    sub:"Reverse pec deck / DB incline",  def:[schMk("12-15",7),schMk("12-15",7),schMk("12-15",7)],       note:"Light · 2-1-2 tempo · perfect control" },
-        { id:"w2", name:"Lateral Raise",    sub:"Cable / DB",                      def:[schMk("12-20","—"),schMk("12-20","—"),schMk("12-20","—"),schMk("12-20","—")], note:"Constant tension · no swing" },
-      ]},
-      { h: "Shoulder Health", ex: [
-        { id:"w3", name:"Face Pull / ER",   sub:"Cable face pull / band", def:[schMk("12-15","—"),schMk("12-15","—")], note:"Skip if done Monday" },
-      ]},
-      { h: "Triceps", ex: [
-        { id:"w4", name:"Triceps Pushdown", sub:"Cable pressdown", def:[schMk(10,35),schMk(10,35),schMk(10,35)], note:"Elbows fixed · 2-0-2 tempo" },
-      ]},
-      { h: "Carryover (if needed)", ex: [
-        { id:"w5", name:"Leg Curl", sub:"Machine · only if missed Tuesday", def:[schMk(8,100),schMk(8,100),schMk(8,100)], note:"Skip if completed at KNR Tuesday" },
-      ]},
-    ],
+    topNote: "Recovery day. No strength work. Swim and row only. Keep heart rate conversational throughout.",
+    sections: [],
   },
   Thu: {
-    cardio: null,
+    cardio: "Moderate bike · 40–50 min · Zone 2–3 · After KNR · Technogym or YMCA bike",
     warmup: [
       "Cable shoulder ER/IR 2×10 @ 10 lb",
       "Banded X's 2×8 each side",
@@ -5082,18 +5068,18 @@ const SCH_PLAN = {
     topNote: "KNR Day 4 — Back / Bi. Confirm exact movements and loads with your kinesiologist and update accordingly.",
     sections: [
       { h: "Back Primary", ex: [
-        { id:"th1", name:"Lat Pulldown",        sub:"Machine or cable",      def:[schMk("8-12","—"),schMk("8-12","—"),schMk("8-12","—")],   note:"Chest up · elbows to ribs · 2-1-2" },
-        { id:"th2", name:"Seated Row",          sub:"Cable · close grip",    def:[schMk("8-12","—"),schMk("8-12","—"),schMk("8-12","—")],   note:"Scapula retraction · don't round at finish" },
+        { id:"th1", name:"Lat Pulldown",        sub:"Machine or cable",      def:[schMk("8-12","—"),schMk("8-12","—"),schMk("8-12","—")],    note:"Chest up · elbows to ribs · 2-1-2" },
+        { id:"th2", name:"Seated Row",          sub:"Cable · close grip",    def:[schMk("8-12","—"),schMk("8-12","—"),schMk("8-12","—")],    note:"Scapula retraction · don't round at finish" },
         { id:"th3", name:"Chest-Supported Row", sub:"Machine or incline DB", def:[schMk("10-12","—"),schMk("10-12","—"),schMk("10-12","—")], note:"Chest on pad · full ROM" },
       ]},
       { h: "Biceps", ex: [
         { id:"th4", name:"Biceps Curl",  sub:"Cable EZ curl / DB curl", def:[schMk("8-12",25),schMk("8-12",25),schMk("8-12",25)], note:"No sway · full elbow extension · 2-0-2" },
-        { id:"th5", name:"Hammer Curl", sub:"DB alternating",            def:[schMk("10-12","—"),schMk("10-12","—")],               note:"Neutral grip · full ROM" },
+        { id:"th5", name:"Hammer Curl", sub:"DB alternating",           def:[schMk("10-12","—"),schMk("10-12","—")],               note:"Neutral grip · full ROM" },
       ]},
     ],
   },
   Fri: {
-    cardio: "Swim · 1000 m · No backstroke · Pull buoy or fins if toe is irritated",
+    cardio: "Long bike · 45–75 min · Zone 2 · After strength · Technogym or outdoor",
     warmup: [
       "Cat/Cows 10 slow",
       "Glute Bridges 2×10",
@@ -5103,12 +5089,12 @@ const SCH_PLAN = {
     topNote: null,
     sections: [
       { h: "Hip", ex: [
-        { id:"f1", name:"Hip Abduction",          sub:"Abductor machine",             def:[schMk(10,100),schMk(10,100),schMk(10,100)], note:"Full ROM · controlled return" },
-        { id:"f2", name:"Hip Adduction",          sub:"Adductor machine",             def:[schMk(10,60),schMk(10,60),schMk(10,60)],   note:"Pelvic control throughout" },
-        { id:"f3", name:"KB Swing",               sub:"Kettlebell · hip hinge drive", def:[schMk(8,25),schMk(8,25),schMk(8,25)],     note:"Power from glutes · not arms" },
+        { id:"f1", name:"Hip Abduction", sub:"Abductor machine",             def:[schMk(10,100),schMk(10,100),schMk(10,100)], note:"Full ROM · controlled return" },
+        { id:"f2", name:"Hip Adduction", sub:"Adductor machine",             def:[schMk(10,60),schMk(10,60),schMk(10,60)],   note:"Pelvic control throughout" },
+        { id:"f3", name:"KB Swing",      sub:"Kettlebell · hip hinge drive", def:[schMk(8,25),schMk(8,25),schMk(8,25)],     note:"Power from glutes · not arms" },
       ]},
       { h: "Anti-rotation Core", ex: [
-        { id:"f4", name:"Pallof Press",           sub:"Cable · split stance", def:[schMk("8e",30),schMk("8e",30),schMk("8e",30)], note:"Brace · press slowly · zero rotation" },
+        { id:"f4", name:"Pallof Press", sub:"Cable · split stance", def:[schMk("8e",30),schMk("8e",30),schMk("8e",30)], note:"Brace · press slowly · zero rotation" },
       ]},
       { h: "Shoulder Health", ex: [
         { id:"f5", name:"Shoulder Clock w/ Band", sub:"Resistance band", def:[schMk("5e","band"),schMk("5e","band"),schMk("5e","band")], note:"Full range · light load only" },
@@ -5119,30 +5105,26 @@ const SCH_PLAN = {
     ],
   },
   Sat: {
-    cardio: "Long easy run · 45–60 min · Zone 2 · Conversational · Run BEFORE lifting",
-    warmup: [],
-    topNote: null,
+    cardio: "Long easy run · 30–60 min · Zone 2 · Build weekly · Conversational pace throughout",
+    warmup: [
+      "Dynamic leg swings 10e forward + lateral",
+      "Walking lunges 2×8",
+      "Ankle circles 10e each direction",
+      "Easy 5 min walk before running pace",
+    ],
+    topNote: "Run first. Calf and tibialis work after. Keep post-run strength brief and low-load — this is run resilience maintenance, not a training stimulus.",
     sections: [
-      { h: "A — Calf / Ankle (Run Resilience)", ex: [
-        { id:"s1", name:"Seated Calf Raise",       sub:"Machine or seated DB", def:[schMk("10-15","—"),schMk("10-15","—"),schMk("10-15","—"),schMk("10-15","—")], note:"Soleus focus · 2-2-3 tempo · full stretch" },
-        { id:"s2", name:"Single-Leg Calf Raise",   sub:"DB or bodyweight",     def:[schMk("8-10/leg","BW"),schMk("8-10/leg","BW"),schMk("8-10/leg","BW")],      note:"3-count lower · full range" },
-        { id:"s3", name:"Tibialis Raise",           sub:"Wall shin raises",     def:[schMk("15-25","BW"),schMk("15-25","BW"),schMk("15-25","BW")],               note:"Heels on ground · toes up · stop if sharp shin pain" },
-      ]},
-      { h: "B — Hip-Dominant Posterior Chain", ex: [
-        { id:"s4", name:"Romanian Deadlift",        sub:"DB or barbell",              def:[schMk("10-12","—"),schMk("10-12","—"),schMk("10-12","—")], note:"Hinge · flat back · 3-1-2 tempo" },
-        { id:"s5", name:"Hamstring Eccentric Curl", sub:"Leg curl · 4s eccentric",   def:[schMk("8-10","—"),schMk("8-10","—"),schMk("8-10","—")],   note:"4-second lowering" },
-        { id:"s6", name:"Hip Thrust",               sub:"Machine or Smith · lighter", def:[schMk("10-12","—"),schMk("10-12","—"),schMk("10-12","—")], note:"Can sub glute bridge if fatigued" },
-      ]},
-      { h: "C — Hip Stability / Core", ex: [
-        { id:"s7", name:"Adductor Machine", sub:"Inner thigh",         def:[schMk("10-15","—"),schMk("10-15","—"),schMk("10-15","—")], note:"Pelvic control · progress slowly" },
-        { id:"s8", name:"Pallof Press",     sub:"Cable anti-rotation", def:[schMk("10-15","—"),schMk("10-15","—"),schMk("10-15","—")], note:"Brace · no rotation · 2-1-2" },
+      { h: "Calf / Ankle — Run Resilience", ex: [
+        { id:"s1", name:"Seated Calf Raise",     sub:"Machine or seated DB", def:[schMk("10-15","—"),schMk("10-15","—"),schMk("10-15","—"),schMk("10-15","—")], note:"Soleus focus · 2-2-3 tempo · full stretch" },
+        { id:"s2", name:"Single-Leg Calf Raise", sub:"DB or bodyweight",     def:[schMk("8-10/leg","BW"),schMk("8-10/leg","BW"),schMk("8-10/leg","BW")],      note:"3-count lower · full range" },
+        { id:"s3", name:"Tibialis Raise",         sub:"Wall shin raises",     def:[schMk("15-25","BW"),schMk("15-25","BW"),schMk("15-25","BW")],               note:"Heels on ground · toes up · stop if sharp shin pain" },
       ]},
     ],
   },
   Sun: {
-    cardio: "Rest or easy swim · Optional 20–30 min · No resistance training today",
+    cardio: "Long swim 1000–1500 yd · or Easy bike 45–60 min · Zone 1–2 · Aerobic recovery only · No strength",
     warmup: [],
-    topNote: null,
+    topNote: "Recovery day. Aerobic only. Choose swim or bike based on what feels fresher. No strength work.",
     sections: [],
   },
 };
