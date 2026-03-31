@@ -7226,6 +7226,137 @@ const calorieChartData = useMemo(() => {
     target: calorieTarget.targetCalories
   }))
 }, [filteredNutrition, calorieTarget])
+
+const trainingReadinessData = useMemo(() => {
+  const tau1 = 27
+  const tau2 = 18
+  const alpha1 = 1 - Math.exp(-1 / tau1)
+  const alpha2 = 1 - Math.exp(-1 / tau2)
+
+  const toDateKey = workout => {
+    const candidates = [workout?.date, workout?.start_date, workout?.dateTime]
+
+    for (const raw of candidates) {
+      if (!raw) continue
+      const d = new Date(raw)
+      if (Number.isFinite(d.getTime())) return d.toISOString().slice(0, 10)
+      const text = String(raw)
+      if (text.length >= 10) return text.slice(0, 10)
+    }
+    return null
+  }
+
+  const dailyLoad = new Map()
+
+  const getDurationMin = workout => {
+    const candidates = [
+      workout?.duration_min,
+      workout?.durationMin,
+      workout?.preferred_metrics?.duration?.value,
+      workout?.dur,
+      workout?.minutes,
+      workout?.duration
+    ]
+
+    for (const c of candidates) {
+      const v = Number(c)
+      if (Number.isFinite(v) && v > 0) return v > 600 ? v / 60 : v
+    }
+
+    const start = workout?.start_date ? new Date(workout.start_date) : null
+    const end = workout?.end_date ? new Date(workout.end_date) : null
+    if (start && end && Number.isFinite(start.getTime()) && Number.isFinite(end.getTime())) {
+      const mins = (end.getTime() - start.getTime()) / 60000
+      if (Number.isFinite(mins) && mins > 0) return mins
+    }
+
+    return 0
+  }
+
+  const getAvgHr = workout => {
+    const candidates = [
+      workout?.preferred_metrics?.hr?.value,
+      workout?.hr,
+      workout?.avg_hr,
+      workout?.heart_rate_avg,
+      workout?.sources?.apple?.hr_avg,
+      workout?.sources?.technogym?.hr_avg
+    ]
+
+    for (const c of candidates) {
+      const v = Number(c)
+      if (Number.isFinite(v) && v > 0) return v
+    }
+
+    return null
+  }
+
+  ;(Array.isArray(activeWorkouts) ? activeWorkouts : []).forEach(w => {
+    const dateKey = toDateKey(w)
+    if (!dateKey) return
+
+    const rawType = w?.canonical_type || w?.type || "Other"
+    const normalizedType = normalizeWorkoutType(rawType, w)
+
+    const durationMin = getDurationMin(w)
+    const avgHr = getAvgHr(w)
+    const hrFactor = avgHr != null ? Math.max(0.6, Math.min(1.7, avgHr / 140)) : 1
+
+    const stressCandidates = [w?.preferred_metrics?.trimp?.value, w?.trimp, durationMin * hrFactor, durationMin]
+    const load = stressCandidates.map(Number).find(v => Number.isFinite(v) && v > 0) || 0
+
+    if (!dailyLoad.has(dateKey)) {
+      dailyLoad.set(dateKey, {
+        overall: 0,
+        running: 0,
+        cycling: 0,
+        swimming: 0
+      })
+    }
+
+    const bucket = dailyLoad.get(dateKey)
+    bucket.overall += load
+    if (normalizedType === "Running") bucket.running += load
+    if (normalizedType === "Cycling") bucket.cycling += load
+    if (normalizedType === "Swimming") bucket.swimming += load
+  })
+
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const start = new Date(today)
+  start.setDate(start.getDate() - 89)
+
+  const state = {
+    overall: { ctl: 0, atl: 0 },
+    running: { ctl: 0, atl: 0 },
+    cycling: { ctl: 0, atl: 0 },
+    swimming: { ctl: 0, atl: 0 }
+  }
+
+  const series = []
+  const keys = ["overall", "running", "cycling", "swimming"]
+
+  for (let d = new Date(start); d <= today; d.setDate(d.getDate() + 1)) {
+    const date = d.toISOString().slice(0, 10)
+    const load = dailyLoad.get(date) || { overall: 0, running: 0, cycling: 0, swimming: 0 }
+
+    keys.forEach(k => {
+      state[k].ctl = state[k].ctl + alpha1 * (Number(load[k] || 0) - state[k].ctl)
+      state[k].atl = state[k].atl + alpha2 * (Number(load[k] || 0) - state[k].atl)
+    })
+
+    series.push({
+      date,
+      label: fmtShortDate(date),
+      overallTsb: Number((state.overall.ctl - state.overall.atl).toFixed(1)),
+      runningTsb: Number((state.running.ctl - state.running.atl).toFixed(1)),
+      cyclingTsb: Number((state.cycling.ctl - state.cycling.atl).toFixed(1)),
+      swimmingTsb: Number((state.swimming.ctl - state.swimming.atl).toFixed(1))
+    })
+  }
+
+  return series
+}, [activeWorkouts])
 return (
   <div
     style={{
@@ -7412,10 +7543,10 @@ return (
 
 , gap: "16px", marginBottom: "20px", alignItems: "start" }}>
       <div style={{ ...cardStyle(), minWidth: "0" }}>
-        <div style={{ fontWeight: "bold", marginBottom: "12px" }}>Calories Trend ({rangeOptions.find(r => r.key === rangeKey)?.label ?? rangeKey})</div>
+        <div style={{ fontWeight: "bold", marginBottom: "12px" }}>Training Readiness (TSB, last 90 days)</div>
         <ResponsiveContainer width="100%" height={320}>
           <LineChart
-  data={calorieChartData}
+  data={trainingReadinessData}
   margin={{ top: 20, right: 20, left: 55, bottom: 35 }}
 >
             <CartesianGrid stroke="#1a1b2e" />
@@ -7429,9 +7560,9 @@ return (
   }}
 />
             <YAxis
-  domain={[0, chartMaxCalories]}
+  domain={["auto", "auto"]}
   label={{
-    value: "Calories (kcal/day)",
+    value: "TSB",
     angle: -90,
     position: "insideLeft",
     offset: 15,
@@ -7441,29 +7572,37 @@ return (
 />
             <Tooltip />
             <Legend verticalAlign="top" height={36} />
+            <ReferenceLine y={0} stroke="#6b7280" strokeDasharray="4 4" />
             <Line
               type="monotone"
-              dataKey="calories"
-              stroke="#4acfe8"
+              dataKey="overallTsb"
+              stroke="#f97316"
               strokeWidth={2}
               dot={false}
-              name="Calories"
+              name="Overall TSB"
             />
             <Line
               type="monotone"
-              dataKey="target"
-              stroke="#ffd166"
-              strokeDasharray="6 6"
+              dataKey="runningTsb"
+              stroke="#22c55e"
               dot={false}
-              name="Target"
+              name="Running TSB"
             />
             <Line
               type="monotone"
-              dataKey="calories7"
-              stroke="#ffffff"
+              dataKey="cyclingTsb"
+              stroke="#3b82f6"
               strokeWidth={2}
               dot={false}
-              name="7 day avg"
+              name="Cycling TSB"
+            />
+            <Line
+              type="monotone"
+              dataKey="swimmingTsb"
+              stroke="#a855f7"
+              strokeWidth={2}
+              dot={false}
+              name="Swimming TSB"
             />
           </LineChart>
         </ResponsiveContainer>
