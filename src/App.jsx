@@ -14,8 +14,7 @@ import {
   AreaChart,
   Area,
   ComposedChart,
-  ReferenceLine,
-  ReferenceArea
+  ReferenceLine
 } from "recharts"
 import { createClient } from "@supabase/supabase-js"
 
@@ -2075,7 +2074,7 @@ function projectWeightTrend(weights, nutritionSeries, weeks = 12) {
   return out
 }
 
-function TrainingDashboard({ workouts, recentNutrition, healthFitDaily = [], schedLog = [], ocItems = [], userAge = null }) {
+function TrainingDashboard({ workouts, recentNutrition, healthFitDaily = [], schedLog = [] }) {
   const fmt0 = n => Number.isFinite(Number(n)) ? Math.round(Number(n)).toLocaleString() : "0"
   const fmt1 = n => Number.isFinite(Number(n)) ? Number(n).toFixed(1) : "0.0"
 
@@ -2228,114 +2227,21 @@ if (w.category === "Strength") {
   })
 
   const pmfChartData = useMemo(() => {
-    const tau1 = 27
-    const tau2 = 18
-    const now = new Date()
-    const cutoff = new Date(now)
+    const cutoff = new Date()
     cutoff.setDate(cutoff.getDate() - 90)
     cutoff.setHours(0, 0, 0, 0)
-
-    const byDay = {}
-    ;(Array.isArray(workouts) ? workouts : []).forEach(w => {
-      const date = String(w?.dateTime || w?.date || "").slice(0, 10)
-      if (!date) return
-      const dt = new Date(`${date}T00:00:00`)
-      if (!Number.isFinite(dt.getTime())) return
-      const category = String(w?.category || "").toLowerCase()
-      const duration = Number(w?.duration_min ?? w?.dur ?? w?.sources?.apple?.duration_min ?? 0)
-      const hr = Number(w?.preferred_metrics?.hr?.value ?? w?.hr ?? w?.sources?.apple?.hr ?? 130)
-      const dur = Number.isFinite(duration) && duration > 0 ? duration : 0
-      const hrSafe = Number.isFinite(hr) && hr > 0 ? hr : 130
-      const stress = Math.max(0, (dur / 60) * (hrSafe / 150) * 100)
-      if (!byDay[date]) byDay[date] = { total: 0, run: 0, bike: 0, swim: 0, strength: 0, strengthLoad: 0 }
-      byDay[date].total += stress
-      if (category === "running" || category === "walking") byDay[date].run += stress
-      if (category === "cycling" || category === "indoor cycling") byDay[date].bike += stress
-      if (category === "swimming") byDay[date].swim += stress
-      if (category === "strength") {
-        byDay[date].strength += 1
-        byDay[date].strengthLoad += stress
-      }
-    })
-
-    let ctl = 0
-    let atl = 0
-    let runCtl = 0
-    let runAtl = 0
-    let bikeCtl = 0
-    let bikeAtl = 0
-    let swimCtl = 0
-    let swimAtl = 0
-    const rows = []
-    const start = new Date(now)
-    start.setDate(start.getDate() - 120)
-    start.setHours(0, 0, 0, 0)
-
-    for (let d = new Date(start); d <= now; d.setDate(d.getDate() + 1)) {
-      const date = d.toISOString().slice(0, 10)
-      const day = byDay[date] || { total: 0, run: 0, bike: 0, swim: 0, strength: 0, strengthLoad: 0 }
-
-      ctl = ctl + (day.total - ctl) / tau1
-      atl = atl + (day.total - atl) / tau2
-      runCtl = runCtl + (day.run - runCtl) / tau1
-      runAtl = runAtl + (day.run - runAtl) / tau2
-      bikeCtl = bikeCtl + (day.bike - bikeCtl) / tau1
-      bikeAtl = bikeAtl + (day.bike - bikeAtl) / tau2
-      swimCtl = swimCtl + (day.swim - swimCtl) / tau1
-      swimAtl = swimAtl + (day.swim - swimAtl) / tau2
-
-      if (d < cutoff) continue
-      rows.push({
-        date,
-        label: String(date).slice(5),
-        ctl: Number(ctl.toFixed(1)),
-        atl: Number(atl.toFixed(1)),
-        tsb: Number((ctl - atl).toFixed(1)),
-        runningTsb: Number((runCtl - runAtl).toFixed(1)),
-        cyclingTsb: Number((bikeCtl - bikeAtl).toFixed(1)),
-        swimmingTsb: Number((swimCtl - swimAtl).toFixed(1)),
-        strengthSessions: day.strength,
-        strengthLoad: Number(day.strengthLoad.toFixed(1)),
-        acwr: null
-      })
-    }
-
-    for (let i = 0; i < rows.length; i += 1) {
-      const short = rows.slice(Math.max(0, i - 6), i + 1).reduce((s, r) => s + Number(r.atl || 0), 0)
-      const longRows = rows.slice(Math.max(0, i - 27), i + 1)
-      const long = longRows.reduce((s, r) => s + Number(r.atl || 0), 0)
-      const shortAvg = short / Math.min(7, i + 1)
-      const longAvg = long / Math.max(1, longRows.length)
-      rows[i].acwr = longAvg > 0 ? Number((shortAvg / longAvg).toFixed(2)) : null
-      rows[i].riskZone = rows[i].tsb < -20 ? "red" : rows[i].tsb < -10 ? "orange" : rows[i].tsb < -5 ? "yellow" : "green"
-    }
-
-    const last = rows[rows.length - 1]
-    const prev = rows[rows.length - 2]
-    const tsbSlope = last && prev ? Number((last.tsb - prev.tsb).toFixed(2)) : 0
-    const fastNegativeSlope = tsbSlope <= -3
-    const acwrAlert = !!(last?.acwr != null && last.acwr > 1.3)
-    const flaggedRegions = (Array.isArray(ocItems) ? ocItems : []).filter(i => Number(i?.currentScore || 0) >= 3)
-    const regionNames = flaggedRegions.map(i => String(i.location || "").toLowerCase())
-    const regionConflict = regionNames.length > 0
-      ? (Array.isArray(schedLog) ? schedLog : []).slice(-14).some(sess =>
-          (sess.exercises || []).some(ex => {
-            const exName = String(ex.exercise_name || ex.n || "").toLowerCase()
-            const matched = Object.keys(EXERCISE_REGIONS).find(k => exName.includes(k))
-            if (!matched) return false
-            return EXERCISE_REGIONS[matched].regions.some(r => regionNames.includes(String(r).toLowerCase()))
-          })
-        )
-      : false
-    const highStrengthFlagged = !!(last && last.strengthLoad > 90 && regionNames.length > 0)
-    const ageFactor = Number.isFinite(Number(userAge)) ? Math.max(0, (Number(userAge) - 40) * 0.4) : 0
-    const riskPenalty = (acwrAlert ? 12 : 0) + (fastNegativeSlope ? 10 : 0) + (regionConflict ? 8 : 0) + (highStrengthFlagged ? 8 : 0) + ageFactor
-    const baseReadiness = Math.max(0, Math.min(100, 100 + Number(last?.tsb || 0) * 1.8))
-    const riskAdjustedReadiness = Math.max(0, Math.min(100, Math.round(baseReadiness - riskPenalty)))
-    const readinessBand = riskAdjustedReadiness >= 75 ? "green" : riskAdjustedReadiness >= 60 ? "yellow" : riskAdjustedReadiness >= 40 ? "orange" : "red"
-
-    return { rows, alerts: { acwrAlert, fastNegativeSlope, regionConflict, highStrengthFlagged }, riskAdjustedReadiness, readinessBand, tau1, tau2 }
-  }, [workouts, ocItems, schedLog, userAge])
+    return (Array.isArray(healthFitDaily) ? healthFitDaily : [])
+      .filter(r => r.date && new Date(r.date) >= cutoff)
+      .map(r => ({
+        date: r.date,
+        label: String(r.date).slice(5),
+        ctl:  r.ctl  != null ? Number(r.ctl)  : null,
+        atl:  r.atl  != null ? Number(r.atl)  : null,
+        tsb:  r.tsb  != null ? Number(r.tsb)  : null,
+        acwr: r.acwr != null ? Number(r.acwr) : null,
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date))
+  }, [healthFitDaily])
 
   return (
     <div style={{ padding: "16px" }}>
@@ -2523,59 +2429,25 @@ if (w.category === "Strength") {
           )
         })()}
 
-        {pmfChartData.rows.length > 0 && (
+        {pmfChartData.length > 0 && (
           <div style={{ background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: "12px", padding: "16px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: "12px", flexWrap: "wrap" }}>
-              <div style={{ fontSize: "14px", fontWeight: "700", color: "#ced2f0" }}>
-                Fitness · Fatigue · Form (90 days)
-              </div>
-              <div style={{
-                padding: "6px 10px",
-                borderRadius: 8,
-                background: pmfChartData.readinessBand === "green" ? "rgba(34,197,94,0.2)" : pmfChartData.readinessBand === "yellow" ? "rgba(250,204,21,0.2)" : pmfChartData.readinessBand === "orange" ? "rgba(249,115,22,0.2)" : "rgba(239,68,68,0.2)",
-                color: pmfChartData.readinessBand === "green" ? "#86efac" : pmfChartData.readinessBand === "yellow" ? "#fde047" : pmfChartData.readinessBand === "orange" ? "#fdba74" : "#fca5a5",
-                fontSize: 12,
-                fontWeight: 700
-              }}>
-                Training Readiness {pmfChartData.riskAdjustedReadiness}%
-              </div>
-            </div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10, fontSize: 11 }}>
-              <span style={{ color: pmfChartData.alerts.acwrAlert ? "#fca5a5" : "#86efac" }}>ACWR {pmfChartData.alerts.acwrAlert ? "alert" : "ok"}</span>
-              <span style={{ color: pmfChartData.alerts.fastNegativeSlope ? "#fca5a5" : "#86efac" }}>TSB slope {pmfChartData.alerts.fastNegativeSlope ? "fast negative" : "stable"}</span>
-              <span style={{ color: pmfChartData.alerts.regionConflict ? "#fca5a5" : "#86efac" }}>Tissue conflict {pmfChartData.alerts.regionConflict ? "detected" : "none"}</span>
-              <span style={{ color: pmfChartData.alerts.highStrengthFlagged ? "#fca5a5" : "#86efac" }}>Strength flagged region {pmfChartData.alerts.highStrengthFlagged ? "high" : "ok"}</span>
-              <span style={{ color: "#94a3b8" }}>τ1={pmfChartData.tau1}, τ2={pmfChartData.tau2}</span>
+            <div style={{ fontSize: "14px", fontWeight: "700", color: "#ced2f0", marginBottom: "12px" }}>
+              Fitness · Fatigue · Form (90 days)
             </div>
             <ResponsiveContainer width="100%" height={260}>
-              <ComposedChart data={pmfChartData.rows} margin={{ top: 4, right: 40, left: 0, bottom: 4 }}>
+              <ComposedChart data={pmfChartData} margin={{ top: 4, right: 40, left: 0, bottom: 4 }}>
                 <CartesianGrid stroke="#1a1b2e" />
-                <XAxis dataKey="label" tick={{ fontSize: 11 }} interval={Math.max(1, Math.floor(pmfChartData.rows.length / 12) - 1)} />
+                <XAxis dataKey="label" tick={{ fontSize: 11 }} interval={Math.max(1, Math.floor(pmfChartData.length / 12) - 1)} />
                 <YAxis yAxisId="pmf" label={{ value: "TSS", angle: -90, position: "insideLeft", offset: 10, fill: "#8fa8d8", style: { textAnchor: "middle" }, fontSize: 11 }} />
                 <YAxis yAxisId="acwr" orientation="right" domain={[0, 2]} tickCount={5}
                   label={{ value: "ACWR", angle: 90, position: "insideRight", offset: -10, fill: "#94a3b8", style: { textAnchor: "middle" }, fontSize: 11 }} />
                 <Tooltip formatter={(v, name) => [v != null ? Number(v).toFixed(1) : "—", name]} />
                 <Legend verticalAlign="top" height={28} />
-                <ReferenceArea yAxisId="pmf" y1={-60} y2={-20} fill="rgba(239,68,68,0.16)" ifOverflow="extendDomain" />
-                <ReferenceArea yAxisId="pmf" y1={-20} y2={-10} fill="rgba(249,115,22,0.14)" ifOverflow="extendDomain" />
-                <ReferenceArea yAxisId="pmf" y1={-10} y2={-5} fill="rgba(250,204,21,0.12)" ifOverflow="extendDomain" />
                 <Line yAxisId="pmf" type="monotone" dataKey="ctl" name="Fitness (CTL)" stroke="#4a9ee8" strokeWidth={2} dot={false} connectNulls />
                 <Line yAxisId="pmf" type="monotone" dataKey="atl" name="Fatigue (ATL)" stroke="#ef4444" strokeWidth={2} dot={false} connectNulls />
-                <Line yAxisId="pmf" type="monotone" dataKey="tsb" name="Overall TSB" stroke="#4ade80" strokeWidth={2} dot={false} connectNulls />
-                <Line yAxisId="pmf" type="monotone" dataKey="runningTsb" name="Running TSB" stroke="#38bdf8" strokeWidth={1.4} dot={false} connectNulls />
-                <Line yAxisId="pmf" type="monotone" dataKey="cyclingTsb" name="Cycling TSB" stroke="#a78bfa" strokeWidth={1.4} dot={false} connectNulls />
-                <Line yAxisId="pmf" type="monotone" dataKey="swimmingTsb" name="Swimming TSB" stroke="#f472b6" strokeWidth={1.4} dot={false} connectNulls />
+                <Line yAxisId="pmf" type="monotone" dataKey="tsb" name="Form (TSB)"    stroke="#4ade80" strokeWidth={2} dot={false} connectNulls />
                 <Line yAxisId="acwr" type="monotone" dataKey="acwr" name="ACWR" stroke="#f59e0b" strokeWidth={1.5} strokeDasharray="5 3" dot={false} connectNulls />
               </ComposedChart>
-            </ResponsiveContainer>
-            <ResponsiveContainer width="100%" height={90}>
-              <BarChart data={pmfChartData.rows} margin={{ top: 4, right: 40, left: 0, bottom: 4 }}>
-                <CartesianGrid stroke="#1a1b2e" />
-                <XAxis dataKey="label" tick={{ fontSize: 10 }} interval={Math.max(1, Math.floor(pmfChartData.rows.length / 14) - 1)} />
-                <YAxis allowDecimals={false} />
-                <Tooltip formatter={(v, name) => [Number(v || 0).toFixed(0), name]} />
-                <Bar dataKey="strengthSessions" name="Strength sessions/day" fill="rgba(255,209,102,0.7)" />
-              </BarChart>
             </ResponsiveContainer>
           </div>
         )}
@@ -8298,7 +8170,6 @@ return (
     recentNutrition={recentNutrition}
     healthFitDaily={healthFitDaily}
     schedLog={schedLog}
-    ocItems={ocItems}
   />
 )}
 {tab === "Capacity" && (
