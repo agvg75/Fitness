@@ -805,7 +805,45 @@ function BodySilhouetteSVG() {
   return <BodySilhouetteImg side="front" />
 }
 
-function computeReadinessDetail(ocItems, sleepRecords, healthFitDaily) {
+function deriveTsbDailyFromWorkouts(workouts = []) {
+  const byDate = {}
+  ;(Array.isArray(workouts) ? workouts : []).forEach(w => {
+    const date = String(w?.dateTime || w?.date || "").slice(0, 10)
+    if (!date) return
+    if (!byDate[date]) byDate[date] = { date, load: 0 }
+
+    const dur = Number(w?.dur || 0)
+    const cal = Number(w?.calories || 0)
+    const dist = Number(w?.distance || 0)
+    const category = String(w?.category || "")
+
+    let load = 0
+    if (Number.isFinite(dur) && dur > 0) load += dur
+    if (Number.isFinite(cal) && cal > 0) load += cal / 12
+    if (Number.isFinite(dist) && dist > 0) {
+      const distanceWeight = category === "Running" ? 10 : 6
+      load += dist * distanceWeight
+    }
+    if (category === "Strength") load += Math.max(20, dur * 0.6)
+
+    byDate[date].load += load
+  })
+
+  const dates = Object.keys(byDate).sort((a, b) => a.localeCompare(b))
+  let ctl = null
+  let atl = null
+  const out = []
+  dates.forEach(date => {
+    const load = byDate[date].load
+    ctl = ctl == null ? load : ctl + (load - ctl) * (1 / 42)
+    atl = atl == null ? load : atl + (load - atl) * (1 / 7)
+    const tsb = ctl - atl
+    out.push({ date, ctl, atl, tsb, load })
+  })
+  return out
+}
+
+function computeReadinessDetail(ocItems, sleepRecords, tsbDaily) {
   // ── Injury penalty (existing formula) ──────────────────────────
   const active = (ocItems || []).filter(i => i.currentScore > 0)
   const regional = active.filter(i => OC_KEY_META[i.key]?.scope === "regional").map(i => i.currentScore)
@@ -830,7 +868,7 @@ function computeReadinessDetail(ocItems, sleepRecords, healthFitDaily) {
     : 0
 
   // ── Training load penalty — most recent TSB ────────────────────
-  const latestTsb = (Array.isArray(healthFitDaily) ? healthFitDaily : [])
+  const latestTsb = (Array.isArray(tsbDaily) ? tsbDaily : [])
     .filter(r => r.tsb != null)
     .sort((a, b) => b.date.localeCompare(a.date))[0]?.tsb ?? null
   const tsbPenalty = latestTsb == null ? 0
@@ -862,12 +900,12 @@ function computeOcRecoveryDate(item) {
 }
 
 // ─── TabOperationalCapacity ────────────────────────────────────────────────────
-function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapacityData, healthFitDaily, sleepRecords }) {
+function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapacityData, tsbDaily, sleepRecords }) {
   const [selectedId, setSelectedId] = useState(null)
   const [addForm, setAddForm] = useState({ key: "muscleStatus", location: "Quad L", currentScore: 1, halfLifeHours: null })
 
   const selectedItem = ocItems.find(i => i.id === selectedId) || null
-  const rd = computeReadinessDetail(ocItems, sleepRecords, healthFitDaily)
+  const rd = computeReadinessDetail(ocItems, sleepRecords, tsbDaily)
   const readiness = rd.score
   const readinessColor = readiness >= 80 ? "#4ade80" : readiness >= 60 ? "#fbbf24" : readiness >= 40 ? "#f97316" : "#ef4444"
   const active = rd.active
@@ -2074,7 +2112,7 @@ function projectWeightTrend(weights, nutritionSeries, weeks = 12) {
   return out
 }
 
-function TrainingDashboard({ workouts, recentNutrition, healthFitDaily = [], schedLog = [] }) {
+function TrainingDashboard({ workouts, recentNutrition, tsbDaily = [], schedLog = [] }) {
   const fmt0 = n => Number.isFinite(Number(n)) ? Math.round(Number(n)).toLocaleString() : "0"
   const fmt1 = n => Number.isFinite(Number(n)) ? Number(n).toFixed(1) : "0.0"
 
@@ -2230,7 +2268,7 @@ if (w.category === "Strength") {
     const cutoff = new Date()
     cutoff.setDate(cutoff.getDate() - 90)
     cutoff.setHours(0, 0, 0, 0)
-    return (Array.isArray(healthFitDaily) ? healthFitDaily : [])
+    return (Array.isArray(tsbDaily) ? tsbDaily : [])
       .filter(r => r.date && new Date(r.date) >= cutoff)
       .map(r => ({
         date: r.date,
@@ -2241,7 +2279,7 @@ if (w.category === "Strength") {
         acwr: r.acwr != null ? Number(r.acwr) : null,
       }))
       .sort((a, b) => a.date.localeCompare(b.date))
-  }, [healthFitDaily])
+  }, [tsbDaily])
 
   return (
     <div style={{ padding: "16px" }}>
@@ -5746,6 +5784,11 @@ const operationalWorkouts = useMemo(() => {
   )
 }, [normalizedActiveWorkouts, normalizedStoredWorkouts])
 
+const tsbDaily = useMemo(
+  () => deriveTsbDailyFromWorkouts(operationalWorkouts),
+  [operationalWorkouts]
+)
+
 
 const [session, setSession] = useState(null)
 const [email, setEmail] = useState("avidal@ilstu.edu")
@@ -6799,15 +6842,15 @@ const operationalScore = useMemo(() => {
 }, [injuryPenalties])
 
 const readinessScore = useMemo(
-  () => computeReadinessDetail(ocItems, sleepRecords, healthFitDaily).score,
-  [ocItems, sleepRecords, healthFitDaily]
+  () => computeReadinessDetail(ocItems, sleepRecords, tsbDaily).score,
+  [ocItems, sleepRecords, tsbDaily]
 )
 
 const latestHealthFit = useMemo(() => {
-  const arr = Array.isArray(healthFitDaily) ? healthFitDaily : []
+  const arr = Array.isArray(tsbDaily) ? tsbDaily : []
   return arr.filter(r => r.tsb != null || r.ctl != null || r.atl != null)
     .sort((a, b) => b.date.localeCompare(a.date))[0] ?? null
-}, [healthFitDaily])
+}, [tsbDaily])
 
 const operationalCapacityData = useMemo(() => {
   const items = Array.isArray(ocItems) ? ocItems : []
@@ -8168,7 +8211,7 @@ return (
   <TrainingDashboard
     workouts={[...operationalWorkouts, ...strengthFromSchedule]}
     recentNutrition={recentNutrition}
-    healthFitDaily={healthFitDaily}
+    tsbDaily={tsbDaily}
     schedLog={schedLog}
   />
 )}
@@ -8178,7 +8221,7 @@ return (
     setOcItems={setOcItems}
     session={session}
     operationalCapacityData={operationalCapacityData}
-    healthFitDaily={healthFitDaily}
+    tsbDaily={tsbDaily}
     sleepRecords={sleepRecords}
   />
 )}
