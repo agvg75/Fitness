@@ -14,7 +14,8 @@ import {
   AreaChart,
   Area,
   ComposedChart,
-  ReferenceLine
+  ReferenceLine,
+  ReferenceArea
 } from "recharts"
 import { createClient } from "@supabase/supabase-js"
 
@@ -6754,6 +6755,118 @@ const trainingLoadDistanceMax = useMemo(() => {
   const maxVal = Math.max(...vals)
   return Math.max(6, Math.ceil(maxVal * 1.1))
 }, [trainingLoadChartData])
+
+const overviewTrainingReadiness = useMemo(() => {
+  const daysByRange = { "30D": 30, "90D": 90, "180D": 180, "1Y": 365, "ALL": null }
+  const cutoffDays = daysByRange[rangeKey] ?? 180
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const buckets = (weeklyTrainingBuckets || []).filter(w => {
+    if (cutoffDays == null) return true
+    const dt = new Date(w.weekStart)
+    if (Number.isNaN(dt.getTime())) return false
+    const diffDays = Math.floor((today - dt) / (1000 * 60 * 60 * 24))
+    return diffDays <= cutoffDays
+  })
+  if (!buckets.length) {
+    return {
+      data: [],
+      tsbDomain: [-6, 6],
+      latestAcwr: null,
+      acwrState: { key: "none", label: "Insufficient ACWR data", color: "#94a3b8" },
+      recommendation: "Need more training history to generate a readiness recommendation.",
+      badge: { text: "No trend", color: "#94a3b8" }
+    }
+  }
+
+  const alpha = tauDays => 1 - Math.exp(-7 / tauDays)
+  const acuteAlpha = alpha(7)
+  const chronicAlpha = alpha(28)
+  const calcSeries = extractor => {
+    let acute = null
+    let chronic = null
+    return buckets.map(w => {
+      const load = Number(extractor(w) || 0)
+      acute = acute == null ? load : acute + acuteAlpha * (load - acute)
+      chronic = chronic == null ? load : chronic + chronicAlpha * (load - chronic)
+      const tsb = acute != null && chronic != null ? (chronic - acute) : null
+      return { tsb, acute, chronic }
+    })
+  }
+
+  const overallSeries = calcSeries(w =>
+    Number(w.running || 0) +
+    Number(w.swimming || 0) +
+    Number(w.cycling || 0) * 0.4
+  )
+  const runSeries = calcSeries(w => Number(w.running || 0))
+  const cycleSeries = calcSeries(w => Number(w.cycling || 0) * 0.4)
+  const swimSeries = calcSeries(w => Number(w.swimming || 0))
+
+  const data = buckets.map((w, i) => {
+    const o = overallSeries[i] || {}
+    return {
+      label: fmtShortDate(w.weekStart),
+      tsbOverall: o.tsb,
+      tsbRunning: runSeries[i]?.tsb ?? null,
+      tsbCycling: cycleSeries[i]?.tsb ?? null,
+      tsbSwimming: swimSeries[i]?.tsb ?? null,
+      acwr: (o.acute != null && o.chronic != null && o.chronic > 0.01) ? (o.acute / o.chronic) : null,
+      strengthLoad: Number(w.strength || 0)
+    }
+  })
+
+  const tsbVals = data.flatMap(row => [
+    row.tsbOverall,
+    row.tsbRunning,
+    row.tsbCycling,
+    row.tsbSwimming
+  ]).map(Number).filter(Number.isFinite)
+  const minVal = tsbVals.length ? Math.min(...tsbVals) : -4
+  const maxVal = tsbVals.length ? Math.max(...tsbVals) : 4
+  const span = Math.max(1, maxVal - minVal)
+  const pad = Math.max(2, span * 0.15)
+  const tsbDomain = [Math.min(minVal - pad, 0), Math.max(maxVal + pad, 0)]
+
+  const latest = data[data.length - 1] || {}
+  const latestAcwr = Number.isFinite(Number(latest.acwr)) ? Number(latest.acwr) : null
+  const acwrLower = 0.8
+  const acwrUpper = 1.3
+  let acwrState = { key: "none", label: "Insufficient ACWR data", color: "#94a3b8" }
+  if (latestAcwr != null) {
+    if (latestAcwr < acwrLower) acwrState = { key: "low", label: "Under baseline load", color: "#60a5fa" }
+    else if (latestAcwr > acwrUpper) acwrState = { key: "high", label: "Load spike", color: "#ef4444" }
+    else acwrState = { key: "in", label: "Within target band", color: "#4ade80" }
+  }
+
+  const last6 = data.slice(-6)
+  const first = last6[0]?.tsbOverall
+  const last = last6[last6.length - 1]?.tsbOverall
+  const tsbSlope = Number.isFinite(first) && Number.isFinite(last) && last6.length > 1 ? (last - first) / (last6.length - 1) : 0
+  const tissueConflict = (ocItems || []).some(item => Number(item?.currentScore || 0) >= 3)
+  const flaggedRegion = (ocItems || []).some(item => Number(item?.currentScore || 0) >= 2)
+  const recentStrength = data.slice(-3).map(d => Number(d.strengthLoad || 0)).filter(Number.isFinite)
+  const avgRecentStrength = recentStrength.length ? recentStrength.reduce((a, b) => a + b, 0) / recentStrength.length : 0
+  const highStrengthOnFlagged = flaggedRegion && avgRecentStrength >= 3.5
+
+  let recommendation = "Maintain current training pattern and monitor readiness trend."
+  let badge = { text: "Stable", color: "#94a3b8" }
+  if (tissueConflict) {
+    recommendation = "Tissue conflict detected. Reduce load on the flagged region and substitute a non-overlapping modality."
+    badge = { text: "Tissue conflict", color: "#ef4444" }
+  } else if (highStrengthOnFlagged) {
+    recommendation = "High strength load on an irritated region. Reduce lower-body lifting volume 40–50 percent or switch to upper body only."
+    badge = { text: "Strength conflict", color: "#f97316" }
+  } else if (acwrState.key === "high" || tsbSlope <= -1.2) {
+    recommendation = "Fatigue accumulating quickly. Reduce the next key run by 30–50 percent, skip intensity, keep easy cross training only."
+    badge = { text: "High fatigue", color: "#ef4444" }
+  } else if (acwrState.key === "low" && (last == null || last >= -8 || tsbSlope >= -0.2)) {
+    recommendation = "Below recent baseline load. Safe to rebuild gradually, increase aerobic load 10–15 percent this week, avoid spikes above 20 percent."
+    badge = { text: "Rebuild window", color: "#60a5fa" }
+  }
+
+  return { data, tsbDomain, latestAcwr, acwrState, recommendation, badge }
+}, [weeklyTrainingBuckets, rangeKey, ocItems])
 const bodyForecast = useMemo(() => {
   return buildBodyForecast({
     daily,
@@ -7396,7 +7509,74 @@ return (
         <div style={{ fontSize: "30px", fontWeight: "bold" }}>{readinessScore}%</div>
         <div style={{ fontSize: "12px", opacity: 0.7, marginTop: "8px" }}>
           readiness score from OC tab
+</div>
+</div>
+</div>
+
+    <div style={{ ...cardStyle(), minWidth: "0", marginBottom: "20px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px", flexWrap: "wrap", marginBottom: "8px" }}>
+        <div style={{ fontWeight: "bold" }}>Overview Training Readiness</div>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+          <span style={{ fontSize: "11px", color: "#9ca3af" }}>Readiness badge</span>
+          <span style={{
+            fontSize: "11px",
+            fontWeight: "700",
+            padding: "3px 8px",
+            borderRadius: "999px",
+            color: "#0b1220",
+            background: overviewTrainingReadiness.badge.color
+          }}>
+            {overviewTrainingReadiness.badge.text}
+          </span>
+          {overviewTrainingReadiness.latestAcwr != null && (
+            <span style={{ fontSize: "11px", color: overviewTrainingReadiness.acwrState.color }}>
+              ACWR {overviewTrainingReadiness.latestAcwr.toFixed(2)} · {overviewTrainingReadiness.acwrState.label}
+            </span>
+          )}
         </div>
+      </div>
+
+      <div style={{ fontSize: "11px", color: "#9ca3af", marginBottom: "10px" }} title="ACWR compares recent load to your recent baseline">
+        ACWR compares recent load to your recent baseline.
+      </div>
+
+      <ResponsiveContainer width="100%" height={285}>
+        <ComposedChart data={overviewTrainingReadiness.data} margin={{ top: 12, right: 18, left: 48, bottom: 20 }}>
+          <CartesianGrid stroke="#1a1b2e" />
+          <XAxis dataKey="label" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
+          <YAxis
+            yAxisId="tsb"
+            domain={overviewTrainingReadiness.tsbDomain}
+            tick={{ fontSize: 10 }}
+            label={{ value: "TSB", angle: -90, position: "insideLeft", offset: 10, fill: "#ced2f0", style: { textAnchor: "middle" } }}
+          />
+          <Tooltip formatter={(value, name) => [value != null ? Number(value).toFixed(2) : "—", name]} />
+          <Legend verticalAlign="top" height={30} />
+          <ReferenceArea yAxisId="tsb" y1={Math.max(-30, overviewTrainingReadiness.tsbDomain[0])} y2={Math.min(-10, overviewTrainingReadiness.tsbDomain[1])} ifOverflow="hidden" fill="#ef4444" fillOpacity={0.08} />
+          <ReferenceArea yAxisId="tsb" y1={Math.max(-10, overviewTrainingReadiness.tsbDomain[0])} y2={Math.min(5, overviewTrainingReadiness.tsbDomain[1])} ifOverflow="hidden" fill="#22c55e" fillOpacity={0.07} />
+          <ReferenceArea yAxisId="tsb" y1={Math.max(5, overviewTrainingReadiness.tsbDomain[0])} y2={Math.min(25, overviewTrainingReadiness.tsbDomain[1])} ifOverflow="hidden" fill="#f59e0b" fillOpacity={0.06} />
+          <ReferenceLine yAxisId="tsb" y={0} stroke="#94a3b8" strokeDasharray="4 3" />
+          <Line yAxisId="tsb" type="monotone" dataKey="tsbOverall"  name="TSB overall (raw)"  stroke="#4ade80" strokeWidth={2.2} dot={false} connectNulls />
+          <Line yAxisId="tsb" type="monotone" dataKey="tsbRunning"  name="TSB running (raw)"  stroke="#ef4444" strokeWidth={1.6} dot={false} connectNulls />
+          <Line yAxisId="tsb" type="monotone" dataKey="tsbCycling"  name="TSB cycling (raw)"  stroke="#38bdf8" strokeWidth={1.6} dot={false} connectNulls />
+          <Line yAxisId="tsb" type="monotone" dataKey="tsbSwimming" name="TSB swimming (raw)" stroke="#a78bfa" strokeWidth={1.6} dot={false} connectNulls />
+        </ComposedChart>
+      </ResponsiveContainer>
+
+      <div style={{ marginTop: "8px" }}>
+        <div style={{ fontSize: "11px", color: "#9ca3af", marginBottom: "4px" }}>Strength load strip (sessions / week)</div>
+        <ResponsiveContainer width="100%" height={70}>
+          <BarChart data={overviewTrainingReadiness.data}>
+            <XAxis dataKey="label" hide />
+            <YAxis hide domain={[0, "auto"]} />
+            <Tooltip formatter={v => [Number(v || 0).toFixed(1), "Strength load"]} />
+            <Bar dataKey="strengthLoad" fill="#a78bfa" radius={[2, 2, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+
+      <div style={{ marginTop: "8px", fontSize: "12px", color: "#d1d5db" }}>
+        {overviewTrainingReadiness.recommendation}
       </div>
     </div>
 
