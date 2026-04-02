@@ -7271,6 +7271,26 @@ const calorieChartData = useMemo(() => {
     target: calorieTarget.targetCalories
   }))
 }, [filteredNutrition, calorieTarget])
+
+const tsbOverviewData = useMemo(() => {
+  const arr = Array.isArray(healthFitDaily) ? healthFitDaily : []
+  const filtered = selectedRangePoints == null ? arr : arr.filter(r => {
+    if (!r.date) return false
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - selectedRangePoints)
+    cutoff.setHours(0, 0, 0, 0)
+    return new Date(r.date + "T12:00:00") >= cutoff
+  })
+  return filtered
+    .filter(r => r.ctl != null || r.atl != null || r.tsb != null)
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map(r => ({
+      label: String(r.date).slice(5),
+      ctl:  r.ctl  != null ? Number(r.ctl)  : null,
+      atl:  r.atl  != null ? Number(r.atl)  : null,
+      tsb:  r.tsb  != null ? Number(r.tsb)  : null,
+    }))
+}, [healthFitDaily, selectedRangePoints])
 return (
   <div
     style={{
@@ -7456,6 +7476,32 @@ return (
 
 
 , gap: "16px", marginBottom: "20px", alignItems: "start" }}>
+      <div style={{ ...cardStyle(), minWidth: "0" }}>
+  <div style={{ fontWeight: "bold", marginBottom: "12px", minHeight: "20px" }}>
+    Training Readiness TSB v2 ({rangeOptions.find(r => r.key === rangeKey)?.label ?? rangeKey})
+  </div>
+  {tsbOverviewData.length === 0 ? (
+    <div style={{ fontSize: "12px", color: "#888", padding: "20px 0", textAlign: "center" }}>
+      {computedTSB
+        ? <span>CTL {computedTSB.global.ctl} · ATL {computedTSB.global.atl} · TSB {computedTSB.global.tsb} (computed from workouts — import HealthFit CSV for history)</span>
+        : "Import HealthFit CSV for CTL/ATL/TSB trend"}
+    </div>
+  ) : (
+    <ResponsiveContainer width="100%" height={300}>
+      <LineChart data={tsbOverviewData} margin={{ top: 20, right: 20, left: 55, bottom: 35 }}>
+        <CartesianGrid stroke="#1a1b2e" />
+        <XAxis dataKey="label" label={{ value: "Date", position: "bottom", offset: 10, fill: "#ced2f0" }} />
+        <YAxis label={{ value: "TSS (arbitrary)", angle: -90, position: "insideLeft", offset: 15, fill: "#ced2f0", style: { textAnchor: "middle" } }} />
+        <Tooltip formatter={(v, n) => [v != null ? Number(v).toFixed(1) : "—", n]} />
+        <Legend verticalAlign="top" height={36} />
+        <Line type="monotone" dataKey="ctl" name="Fitness (CTL)" stroke="#4a9ee8" strokeWidth={2} dot={false} connectNulls />
+        <Line type="monotone" dataKey="atl" name="Fatigue (ATL)" stroke="#ef4444" strokeWidth={2} dot={false} connectNulls />
+        <Line type="monotone" dataKey="tsb" name="Form (TSB)"    stroke="#4ade80" strokeWidth={2} dot={false} connectNulls />
+      </LineChart>
+    </ResponsiveContainer>
+  )}
+</div>
+
       <div style={{ ...cardStyle(), minWidth: "0" }}>
   <div style={{ fontWeight: "bold", marginBottom: "12px", minHeight: "20px" }}>
     Performance Readiness
