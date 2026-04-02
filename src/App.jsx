@@ -797,7 +797,7 @@ const OC_REGION_COORDS = {
 function BodySilhouetteImg({ side }) {
   const src = side === "back" ? "/back_body_clean.png" : "/front_body_clean.png"
   return (
-   <img src={src} alt={side + " body"} style={{ width: "100%", display: "block" }} />
+   <img src={src} alt={side + " body"} style={{ width: "100%", display: "block" }} />node -e "const d=require('./public/data/workouts.json'); const c={}; d.forEach(w=>{const t=w.canonical_type||'unknown';c[t]=(c[t]||0)+1;}); console.log(d.length, JSON.stringify(c))"
 
   )
 }// Keep a thin shim so any remaining references compile during transition
@@ -1187,7 +1187,7 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
   )
 }
 
-function DailyReadinessPanel({ readinessScore, latestHealthFit, ocItems }) {
+function DailyReadinessPanel({ readinessScore, latestHealthFit, ocItems, computedTSB = null }) {
   const tsb = latestHealthFit?.tsb ?? null
   const hasActiveIssue = (ocItems || []).some(i => i.currentScore >= 3)
   let status, color, bg, rationale
@@ -1212,7 +1212,10 @@ function DailyReadinessPanel({ readinessScore, latestHealthFit, ocItems }) {
       <div style={{ flex: 1, minWidth: 0 }}>
         <span style={{ fontSize: 12, color, fontWeight: 700, marginRight: 8 }}>{status}</span>
         <span style={{ fontSize: 12, color: "#aaa" }}>{rationale}</span>
-        {tsb == null && (
+        {tsb == null && computedTSB != null && (
+          <span style={{ fontSize: 11, color: "#888", marginLeft: 8 }}>· TSB {computedTSB.global.tsb} (computed)</span>
+        )}
+        {tsb == null && computedTSB == null && (
           <span style={{ fontSize: 11, color: "#555", marginLeft: 8 }}>· Import HealthFit CSV for TSB data</span>
         )}
       </div>
@@ -1226,7 +1229,7 @@ function DailyReadinessPanel({ readinessScore, latestHealthFit, ocItems }) {
 }
 
 // ─── TabSchedule ──────────────────────────────────────────────────────────────
-function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, setSchedLog, readinessScore, latestHealthFit = null, ocItems = [] }) {
+function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, setSchedLog, readinessScore, latestHealthFit = null, ocItems = [], computedTSB = null }) {
   const [activeDay, setActiveDay] = useState(todayDayKey())
   const [schedView, setSchedView] = useState("schedule")
   const [expandedLog, setExpandedLog] = useState({})
@@ -1893,7 +1896,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   return (
     <div style={{ color: "#d8d8d8", position: "relative" }}>
       <input ref={importRef} type="file" accept=".json" style={{ display: "none" }} onChange={importLog} />
-      <DailyReadinessPanel readinessScore={readinessScore} latestHealthFit={latestHealthFit} ocItems={ocItems} />
+      <DailyReadinessPanel readinessScore={readinessScore} latestHealthFit={latestHealthFit} ocItems={ocItems} computedTSB={computedTSB} />
       {/* Day navigation */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
         <div style={{ display: "flex", gap: 3, background: "#0a0a0a", borderRadius: 8, padding: 4, border: "1px solid #1a1a1a", flexWrap: "wrap" }}>
@@ -6809,6 +6812,47 @@ const latestHealthFit = useMemo(() => {
     .sort((a, b) => b.date.localeCompare(a.date))[0] ?? null
 }, [healthFitDaily])
 
+const computedTSB = useMemo(() => {
+  if (!canonicalSessions?.length) return null;
+  const INTENSITY = {
+    Running: 1.0, Cycling: 0.55, "Indoor Cycling": 0.6,
+    Swimming: 1.1, "Traditional Strength Training": 0.7,
+    "Functional Strength Training": 0.65, Walking: 0.3
+  };
+  const dailyLoad = { all: {}, Running: {}, Cycling: {}, Swimming: {} };
+  canonicalSessions.forEach(s => {
+    const d = (s.start_date || s.dateTime || "").slice(0, 10);
+    if (!d) return;
+    const dur = s.duration_min || (s.duration_sec / 60) || 0;
+    const type = s.canonical_type || s.type || "";
+    const load = dur * (INTENSITY[type] ?? 0.5);
+    ["all", ...(["Running","Cycling","Swimming"].includes(type) ? [type] : [])].forEach(k => {
+      dailyLoad[k][d] = (dailyLoad[k][d] || 0) + load;
+    });
+  });
+  const calcTSB = (loadMap) => {
+    const days = Object.keys(loadMap).sort();
+    if (!days.length) return { ctl: 0, atl: 0, tsb: 0 };
+    let ctl = 0, atl = 0;
+    const eCtl = Math.exp(-1/42), eAtl = Math.exp(-1/7);
+    let prev = days[0];
+    days.forEach(d => {
+      const gap = (new Date(d) - new Date(prev)) / 86400000;
+      for (let i = 0; i < gap - 1; i++) { ctl = ctl * eCtl; atl = atl * eAtl; }
+      ctl = ctl * eCtl + (loadMap[d] || 0) * (1 - eCtl);
+      atl = atl * eAtl + (loadMap[d] || 0) * (1 - eAtl);
+      prev = d;
+    });
+    return { ctl: +ctl.toFixed(1), atl: +atl.toFixed(1), tsb: +(ctl - atl).toFixed(1) };
+  };
+  return {
+    global: calcTSB(dailyLoad.all),
+    running: calcTSB(dailyLoad.Running),
+    cycling: calcTSB(dailyLoad.Cycling),
+    swimming: calcTSB(dailyLoad.Swimming),
+  };
+}, [canonicalSessions])
+
 const operationalCapacityData = useMemo(() => {
   const items = Array.isArray(ocItems) ? ocItems : []
   if (!items.length) return []
@@ -7412,6 +7456,106 @@ return (
 
 , gap: "16px", marginBottom: "20px", alignItems: "start" }}>
       <div style={{ ...cardStyle(), minWidth: "0" }}>
+  <div style={{ fontWeight: "bold", marginBottom: "12px", minHeight: "20px" }}>
+    Performance Readiness
+  </div>
+
+  <div style={{ marginBottom: "14px" }}>
+
+<ResponsiveContainer width="100%" height={300}>
+      <LineChart
+  data={readinessProjectionData}
+  margin={{ top: 20, right: 20, left: 55, bottom: 35 }}
+>
+        <CartesianGrid stroke="#1a1b2e" />
+        <XAxis
+          type="number"
+          dataKey="month"
+          domain={[0, readinessProjectionMaxMonth]}
+          allowDecimals={false}
+          tickCount={Math.min(readinessProjectionMaxMonth + 1, 8)}
+          label={{
+  value: "Months from now",
+  position: "bottom",
+  offset: 10,
+  fill: "#ced2f0"
+}}
+        />
+        <YAxis
+          domain={[0, 100]}
+          label={{
+  value: "Completion readiness (%)",
+  angle: -90,
+  position: "insideLeft",
+  offset: 15,
+  fill: "#ced2f0",
+  style: { textAnchor: "middle" }
+}}
+        />
+        <Tooltip
+          formatter={(value, name) => [`${Number(value).toFixed(1)}%`, name]}
+          labelFormatter={value => `${value} months`}
+        />
+        <Legend verticalAlign="top" height={36} />
+
+        <Line
+          type="monotone"
+          dataKey="fiveK"
+          stroke="#ef4444"
+          strokeWidth={2}
+          dot={false}
+          name="5K"
+        />
+
+        <Line
+          type="monotone"
+          dataKey="tenK"
+          stroke="#22c55e"
+          strokeWidth={2}
+          dot={false}
+          name="10K"
+        />
+
+        <Line
+          type="monotone"
+          dataKey="half"
+          stroke="#facc15"
+          strokeWidth={2}
+          dot={false}
+          name="Half marathon"
+        />
+
+        <Line
+          type="monotone"
+          dataKey="tri"
+          stroke="#a78bfa"
+          strokeWidth={3}
+          dot={false}
+          name="Olympic triathlon"
+        />
+
+        {eventReadinessMarkers
+          .filter(marker => marker.month != null)
+          .map(marker => (
+            <ReferenceLine
+              key={marker.key}
+              x={marker.month}
+              stroke={marker.color}
+              strokeDasharray="6 4"
+              label={{
+  value: marker.label,
+  angle: -90,
+  position: "top",
+  fill: marker.color
+}}
+            />
+          ))}
+      </LineChart>
+    </ResponsiveContainer>
+  </div>
+</div>
+
+      <div style={{ ...cardStyle(), minWidth: "0" }}>
         <div style={{ fontWeight: "bold", marginBottom: "12px" }}>Calories Trend ({rangeOptions.find(r => r.key === rangeKey)?.label ?? rangeKey})</div>
         <ResponsiveContainer width="100%" height={320}>
           <LineChart
@@ -7468,7 +7612,18 @@ return (
           </LineChart>
         </ResponsiveContainer>
       </div>
+    </div>
 
+    <div style={{ display: "grid", gridTemplateColumns: window.innerWidth < 768 ? "1fr" : "repeat(2, minmax(0, 1fr))"
+
+
+
+
+
+
+
+
+, gap: "16px", marginBottom: "20px", alignItems: "start" }}>
       <div style={{ ...cardStyle(), minWidth: "0" }}>
         <div style={{ fontWeight: "bold", marginBottom: "12px" }}>Weight Trend, actual and 7 day average ({rangeOptions.find(r => r.key === rangeKey)?.label ?? rangeKey})</div>
         <ResponsiveContainer width="100%" height={320}>
@@ -7524,18 +7679,7 @@ return (
           </LineChart>
         </ResponsiveContainer>
       </div>
-    </div>
 
-    <div style={{ display: "grid", gridTemplateColumns: window.innerWidth < 768 ? "1fr" : "repeat(2, minmax(0, 1fr))"
-
-
-
-
-
-
-
-
-, gap: "16px", marginBottom: "20px", alignItems: "start" }}>
       <div style={{ ...cardStyle(), minWidth: "0" }}>
         <div style={{ fontWeight: "bold", marginBottom: "12px" }}>
           Training Load
@@ -7637,106 +7781,6 @@ return (
           </ComposedChart>
         </ResponsiveContainer>
       </div>
-
-      <div style={{ ...cardStyle(), minWidth: "0" }}>
-  <div style={{ fontWeight: "bold", marginBottom: "12px", minHeight: "20px" }}>
-    Performance Readiness
-  </div>
-
-  <div style={{ marginBottom: "14px" }}>
-
-<ResponsiveContainer width="100%" height={300}>
-      <LineChart
-  data={readinessProjectionData}
-  margin={{ top: 20, right: 20, left: 55, bottom: 35 }}
->
-        <CartesianGrid stroke="#1a1b2e" />
-        <XAxis
-          type="number"
-          dataKey="month"
-          domain={[0, readinessProjectionMaxMonth]}
-          allowDecimals={false}
-          tickCount={Math.min(readinessProjectionMaxMonth + 1, 8)}
-          label={{
-  value: "Months from now",
-  position: "bottom",
-  offset: 10,
-  fill: "#ced2f0"
-}}
-        />
-        <YAxis
-          domain={[0, 100]}
-          label={{
-  value: "Completion readiness (%)",
-  angle: -90,
-  position: "insideLeft",
-  offset: 15,
-  fill: "#ced2f0",
-  style: { textAnchor: "middle" }
-}}
-        />
-        <Tooltip
-          formatter={(value, name) => [`${Number(value).toFixed(1)}%`, name]}
-          labelFormatter={value => `${value} months`}
-        />
-        <Legend verticalAlign="top" height={36} />
-
-        <Line
-          type="monotone"
-          dataKey="fiveK"
-          stroke="#ef4444"
-          strokeWidth={2}
-          dot={false}
-          name="5K"
-        />
-
-        <Line
-          type="monotone"
-          dataKey="tenK"
-          stroke="#22c55e"
-          strokeWidth={2}
-          dot={false}
-          name="10K"
-        />
-
-        <Line
-          type="monotone"
-          dataKey="half"
-          stroke="#facc15"
-          strokeWidth={2}
-          dot={false}
-          name="Half marathon"
-        />
-
-        <Line
-          type="monotone"
-          dataKey="tri"
-          stroke="#a78bfa"
-          strokeWidth={3}
-          dot={false}
-          name="Olympic triathlon"
-        />
-
-        {eventReadinessMarkers
-          .filter(marker => marker.month != null)
-          .map(marker => (
-            <ReferenceLine
-              key={marker.key}
-              x={marker.month}
-              stroke={marker.color}
-              strokeDasharray="6 4"
-              label={{
-  value: marker.label,
-  angle: -90,
-  position: "top",
-  fill: marker.color
-}}
-            />
-          ))}
-      </LineChart>
-    </ResponsiveContainer>
-  </div>
-</div>
 </div>
 
     <div style={{ display: "grid", gridTemplateColumns: window.innerWidth < 768 ? "1fr" : "repeat(2, minmax(0, 1fr))"
@@ -8161,6 +8205,7 @@ return (
     readinessScore={readinessScore}
     latestHealthFit={latestHealthFit}
     ocItems={ocItems}
+    computedTSB={computedTSB}
   />
 )}
 
