@@ -237,6 +237,50 @@ function toNum(v) {
   return Number.isFinite(n) ? n : 0
 }
 
+const K_STRENGTH_SYSTEMIC = 2.5
+
+function normalizeExerciseName(name) {
+  return String(name || "").trim().toLowerCase()
+}
+
+function matchExerciseRegions(exerciseName) {
+  const lower = normalizeExerciseName(exerciseName)
+  const key = Object.keys(EXERCISE_REGIONS).find(k => lower.includes(k))
+  return key ? (EXERCISE_REGIONS[key]?.regions || []) : []
+}
+
+function parseSetTriplet(rawSet) {
+  if (!rawSet || typeof rawSet !== "object") return { sets: 1, reps: 0, load: 0 }
+  const reps = Number(rawSet.reps ?? rawSet.r ?? 0)
+  const load = Number(rawSet.load ?? rawSet.weight ?? rawSet.w ?? 0)
+  const sets = Number(rawSet.sets ?? 1)
+  return {
+    sets: Number.isFinite(sets) && sets > 0 ? sets : 1,
+    reps: Number.isFinite(reps) && reps > 0 ? reps : 0,
+    load: Number.isFinite(load) && load > 0 ? load : 0
+  }
+}
+
+function computeExerciseStrengthLoad(exercise) {
+  if (!exercise) return 0
+
+  const setRows = Array.isArray(exercise.sets) ? exercise.sets : []
+  if (setRows.length > 0) {
+    return setRows.reduce((sum, setRow) => {
+      const { sets, reps, load } = parseSetTriplet(setRow)
+      return sum + sets * reps * load
+    }, 0)
+  }
+
+  const actual = exercise.actual || exercise.prescribed || null
+  if (actual) {
+    const { sets, reps, load } = parseSetTriplet(actual)
+    return sets * reps * load
+  }
+
+  return 0
+}
+
 function fmtShortDate(dateStr) {
   if (!dateStr) return "NA"
   const d = new Date(dateStr)
@@ -3215,6 +3259,7 @@ const buckets = {}
         swimming: 0,
         cycling: 0,
         strength: 0,
+        strengthLoad: 0,
         cardioMinutes: 0
       }
     }
@@ -3230,6 +3275,7 @@ const buckets = {}
       buckets[key].cardioMinutes += Number(w.dur || 0)
     } else if (w.category === "Strength") {
       buckets[key].strength += 1
+      buckets[key].strengthLoad += Number(w.strengthLoad || 0)
     } else if (
       ["Elliptical", "Rowing", "Stairs", "Machine Cardio", "Indoor Cycling"].includes(w.category)
     ) {
@@ -3243,28 +3289,35 @@ const buckets = {}
 
 const trimmed = ordered.slice(-52)
 
+const maxStrengthLoad = Math.max(...trimmed.map(w => Number(w.strengthLoad || 0)), 1)
 const maxLoad = Math.max(
-  ...trimmed.map(w =>
-    (w.running || 0) +
-    (w.swimming || 0) * 2 +
-    (w.cycling || 0) * 0.4 +
-    (w.strength || 0) * 2 +
-    (w.cardioMinutes || 0) * 0.08
-  ),
+  ...trimmed.map(w => {
+    const aerobicImpulse =
+      (w.running || 0) +
+      (w.swimming || 0) * 2 +
+      (w.cycling || 0) * 0.4 +
+      (w.cardioMinutes || 0) * 0.08
+    const normalizedStrengthLoad = Number(w.strengthLoad || 0) / maxStrengthLoad
+    const overallWeeklyImpulse = aerobicImpulse + K_STRENGTH_SYSTEMIC * normalizedStrengthLoad
+    return overallWeeklyImpulse
+  }),
   1
 )
 
 return trimmed.map(w => {
-  const loadRaw =
+  const aerobicImpulse =
       (w.running || 0) +
       (w.swimming || 0) * 2 +
       (w.cycling || 0) * 0.4 +
-      (w.strength || 0) * 2 +
       (w.cardioMinutes || 0) * 0.08
+  const normalizedStrengthLoad = Number(w.strengthLoad || 0) / maxStrengthLoad
+  const overallWeeklyImpulse = aerobicImpulse + K_STRENGTH_SYSTEMIC * normalizedStrengthLoad
 
   return {
     ...w,
-    trainingLoad: loadRaw / maxLoad
+    normalizedStrengthLoad,
+    overallWeeklyImpulse,
+    trainingLoad: overallWeeklyImpulse / maxLoad
   }
 })
 }
@@ -6409,10 +6462,89 @@ async function persistMealEntries(nextEntries, currentUserId) {
 }, [filteredNutrition])
 
 const strengthFromSchedule = useMemo(() => {
-  return (Array.isArray(schedLog) ? schedLog : [])
-    .filter(e => (e.exercises || []).some(ex => ex.variant !== "cardio") || (e.data && Object.keys(e.data).length > 0))
-    .map(e => ({ date: e.date, dateTime: e.logged_at || e.date, category: "Strength" }))
-}, [schedLog])
+  const byDate = new Map()
+  const upsertDate = date => {
+    if (!byDate.has(date)) {
+      byDate.set(date, {
+        date,
+        dateTime: date,
+        category: "Strength",
+        strengthLoad: 0,
+        strengthLoadSource: "exercise-log",
+        strengthLoadConfidence: "high",
+        regionLoads: {}
+      })
+    }
+    return byDate.get(date)
+  }
+
+  ;(Array.isArray(schedLog) ? schedLog : []).forEach(entry => {
+    const date = String(entry?.date || entry?.logged_at || "").slice(0, 10)
+    if (!date) return
+
+    let dailyLoad = 0
+    const regionLoads = {}
+    ;(Array.isArray(entry?.exercises) ? entry.exercises : []).forEach(ex => {
+      const exName = ex?.exercise_name || ex?.name || ex?.exercise_id || "exercise"
+      const exLoad = computeExerciseStrengthLoad(ex)
+      if (!(exLoad > 0)) return
+      dailyLoad += exLoad
+      const regions = matchExerciseRegions(exName)
+      if (regions.length) {
+        const split = exLoad / regions.length
+        regions.forEach(region => {
+          regionLoads[region] = Number(regionLoads[region] || 0) + split
+        })
+      }
+    })
+
+    if (!(dailyLoad > 0) && entry?.data && typeof entry.data === "object") {
+      Object.entries(entry.data).forEach(([exerciseKey, sets]) => {
+        const setList = Array.isArray(sets) ? sets : []
+        const exLoad = setList.reduce((sum, s) => {
+          const { sets: nSets, reps, load } = parseSetTriplet(s)
+          return sum + nSets * reps * load
+        }, 0)
+        if (!(exLoad > 0)) return
+        dailyLoad += exLoad
+        const regions = matchExerciseRegions(exerciseKey)
+        if (regions.length) {
+          const split = exLoad / regions.length
+          regions.forEach(region => {
+            regionLoads[region] = Number(regionLoads[region] || 0) + split
+          })
+        }
+      })
+    }
+
+    if (dailyLoad > 0) {
+      const row = upsertDate(date)
+      row.strengthLoad += dailyLoad
+      row.dateTime = entry?.logged_at || row.dateTime
+      Object.entries(regionLoads).forEach(([region, v]) => {
+        row.regionLoads[region] = Number(row.regionLoads[region] || 0) + Number(v || 0)
+      })
+    }
+  })
+
+  ;(Array.isArray(activeWorkouts) ? activeWorkouts : []).forEach(w => {
+    const category = normalizeWorkoutType(w?.type || w?.canonical_type || w?.category || w?.sport, w)
+    if (category !== "Strength") return
+    const date = String(w?.date || w?.dateTime || w?.start_date || "").slice(0, 10)
+    if (!date) return
+    if (byDate.has(date) && Number(byDate.get(date)?.strengthLoad || 0) > 0) return
+    const fallbackLoad = Math.max(0, Number(w?.dur || w?.durationMin || 0)) * 12
+    const row = upsertDate(date)
+    row.strengthLoad += fallbackLoad
+    row.strengthLoadSource = "strength-session-fallback"
+    row.strengthLoadConfidence = "low"
+    row.dateTime = w?.dateTime || row.dateTime
+  })
+
+  return Array.from(byDate.values())
+    .filter(row => Number(row.strengthLoad || 0) > 0)
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)))
+}, [schedLog, activeWorkouts])
 
 const trainingSummary = useMemo(() => {
   return buildTrainingSummary([...operationalWorkouts, ...strengthFromSchedule])
@@ -6461,8 +6593,8 @@ const maxLoadVisible = Math.max(
     (w.running || 0) +
     (w.swimming || 0) +
     (w.cycling || 0) * 0.4 +
-    (w.strength || 0) * 2 +
-    (w.cardioMinutes || 0) * 0.08
+    (w.cardioMinutes || 0) * 0.08 +
+    K_STRENGTH_SYSTEMIC * Number(w.normalizedStrengthLoad || 0)
   ),
   1
 )
@@ -6473,12 +6605,14 @@ const maxLoadVisible = Math.max(
     swimming: w.swimming ?? 0,
     cycling: w.cycling ?? 0,
     strength: w.strength ?? 0,
+    strengthLoad: Number(w.strengthLoad || 0),
+    normalizedStrengthLoadPct: Math.round(Number(w.normalizedStrengthLoad || 0) * 100),
 trainingLoadPct: Math.round(((
   (w.running || 0) +
   (w.swimming || 0) +
   (w.cycling || 0) * 0.4 +
-  (w.strength || 0) * 2 +
-  (w.cardioMinutes || 0) * 0.08
+  (w.cardioMinutes || 0) * 0.08 +
+  K_STRENGTH_SYSTEMIC * Number(w.normalizedStrengthLoad || 0)
 ) / maxLoadVisible) * 100),
 
   }))
@@ -7572,7 +7706,7 @@ return (
               yAxisId="strength"
               orientation="right"
               label={{
-  value: "Miles per week",
+  value: "Load index",
   angle: 90,
   position: "insideRight",
   offset: -15,
@@ -7581,17 +7715,23 @@ return (
 }}
               allowDecimals={false}
             />
-            <Tooltip />
+            <Tooltip
+              formatter={(value, name) => {
+                if (name === "Normalized strength load (%)") return [`${Number(value || 0).toFixed(0)}%`, "Normalized strength load (weekly max=100)"]
+                if (name === "Strength load (sets×reps×load)") return [Number(value || 0).toFixed(0), "Strength load (raw sets×reps×load)"]
+                return [value, name]
+              }}
+            />
             <Legend verticalAlign="top" height={36} />
 
             <Area
               yAxisId="strength"
               type="monotone"
-              dataKey="trainingLoadPct"
+              dataKey="normalizedStrengthLoadPct"
               stroke="none"
-              fill="#6b7280"
-              fillOpacity={0.22}
-              name="Normalized training load"
+              fill="#a78bfa"
+              fillOpacity={0.2}
+              name="Normalized strength load (%)"
             />
 
             <Line
@@ -7627,12 +7767,11 @@ return (
             <Line
               yAxisId="strength"
               type="monotone"
-              dataKey="strength"
-              stroke="#a78bfa"
-              strokeWidth={3}
-              strokeDasharray="6 4"
+              dataKey="strengthLoad"
+              stroke="#c4b5fd"
+              strokeWidth={1.5}
               dot={false}
-              name="Strength sessions"
+              name="Strength load (sets×reps×load)"
             />
           </ComposedChart>
         </ResponsiveContainer>
