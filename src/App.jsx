@@ -6853,6 +6853,55 @@ const computedTSB = useMemo(() => {
   };
 }, [canonicalSessions])
 
+const tsbV2Panel = useMemo(() => {
+  const tau1 = 27, tau2 = 18, lookbackDays = 90, warmupDays = 42
+  const now = new Date(); now.setHours(0,0,0,0)
+  const start = new Date(now); start.setDate(start.getDate() - (lookbackDays + warmupDays - 1))
+  const dayKeys = []
+  for (let d = new Date(start); d <= now; d.setDate(d.getDate() + 1))
+    dayKeys.push(d.toISOString().slice(0,10))
+  const mkL = () => ({ overall:0, running:0, cycling:0, swimming:0, strength:0 })
+  const dailyLoads = Object.fromEntries(dayKeys.map(k => [k, mkL()]))
+  const wkts = Array.isArray(normalizedActiveWorkouts) ? normalizedActiveWorkouts : []
+  wkts.forEach(w => {
+    const date = String(w.date || '').slice(0,10)
+    if (!dailyLoads[date]) return
+    const cat = normalizeWorkoutType(w.type, w)
+    const dur = Number(w.duration_min ?? w.dur ?? 0) || 0
+    const hr = Number(w.preferred_metrics?.hr?.value ?? w.hr ?? 0) || 0
+    const load = Math.max(0, dur * (hr > 0 ? Math.max(0.75, Math.min(1.35, hr/145)) : 1))
+    if (load <= 0) return
+    dailyLoads[date].overall += load
+    if (cat === 'Running' || cat === 'Walking') dailyLoads[date].running += load
+    if (cat === 'Cycling') dailyLoads[date].cycling += load
+    if (cat === 'Swimming') dailyLoads[date].swimming += load
+    if (cat === 'Strength') dailyLoads[date].strength += load
+  })
+  const acute = {overall:0,running:0,cycling:0,swimming:0}
+  const chronic = {overall:0,running:0,cycling:0,swimming:0}
+  const aA = 1 - Math.exp(-1/tau2), aC = 1 - Math.exp(-1/tau1)
+  const allRows = dayKeys.map(date => {
+    const load = dailyLoads[date]
+    const row = { date }
+    ;['overall','running','cycling','swimming'].forEach(k => {
+      acute[k] += aA * (load[k] - acute[k])
+      chronic[k] += aC * (load[k] - chronic[k])
+      row[`${k}Tsb`] = Number((chronic[k] - acute[k]).toFixed(2))
+    })
+    row.strengthLoad = Number((load.strength || 0).toFixed(2))
+    return row
+  })
+  const rows = allRows.slice(-lookbackDays).map(r => ({ ...r, label: String(r.date).slice(5) }))
+  const sVals = rows.map(r => r.strengthLoad).filter(v => Number.isFinite(v))
+  const sMin = sVals.length ? Math.min(...sVals) : 0
+  const sMax = sVals.length ? Math.max(...sVals) : 1
+  rows.forEach(r => { r.strengthNorm = sMax > sMin ? Number((((r.strengthLoad-sMin)/(sMax-sMin))*100).toFixed(1)) : 0 })
+  const cur = rows[rows.length-1] || {}
+  const tsbNow = cur.overallTsb ?? 0
+  const risk = tsbNow < -25 ? 'red' : tsbNow < -15 ? 'orange' : tsbNow < -8 ? 'yellow' : 'green'
+  return { rows, alerts: [], readinessRiskLabel: risk, readinessDetail: { score: Math.round(50 + tsbNow) } }
+}, [normalizedActiveWorkouts, schedLog, ocItems])
+
 const operationalCapacityData = useMemo(() => {
   const items = Array.isArray(ocItems) ? ocItems : []
   if (!items.length) return []
@@ -7037,25 +7086,20 @@ const eventThresholds = {
   tri: 88
 }
 
-  const logisticPct = (baseReadiness, threshold, steepness = 0.18) => {
-    const x = baseReadiness - threshold
-    return Math.max(0, Math.min(100, 100 / (1 + Math.exp(-steepness * x))))
-  }
+  const logisticPct = (month, monthThreshold, k = 0.3) =>
+    Number((100 / (1 + Math.exp(-k * (month - monthThreshold)))).toFixed(1))
 
   const maxMonth = 24
   const series = []
 
   for (let month = 0; month <= maxMonth; month += 1) {
-    const base = interpolateBaseReadiness(month)
-
     series.push({
       month,
       label: month === 0 ? "Now" : `${month}M`,
-      baseReadiness: Number(base.toFixed(1)),
-      fiveK: Number(logisticPct(base, eventThresholds.fiveK, 0.30).toFixed(1)),
-tenK: Number(logisticPct(base, eventThresholds.tenK, 0.24).toFixed(1)),
-half: Number(logisticPct(base, eventThresholds.half, 0.20).toFixed(1)),
-tri: Number(logisticPct(base, eventThresholds.tri, 0.18).toFixed(1))
+      fiveK: logisticPct(month, 4,  0.30),
+      tenK:  logisticPct(month, 8,  0.24),
+      half:  logisticPct(month, 14, 0.20),
+      tri:   logisticPct(month, 20, 0.18),
     })
   }
 
@@ -7477,29 +7521,46 @@ return (
 
 , gap: "16px", marginBottom: "20px", alignItems: "start" }}>
       <div style={{ ...cardStyle(), minWidth: "0" }}>
-  <div style={{ fontWeight: "bold", marginBottom: "12px", minHeight: "20px" }}>
-    Training Readiness TSB v2 ({rangeOptions.find(r => r.key === rangeKey)?.label ?? rangeKey})
-  </div>
-  {tsbOverviewData.length === 0 ? (
-    <div style={{ fontSize: "12px", color: "#888", padding: "20px 0", textAlign: "center" }}>
-      {computedTSB
-        ? <span>CTL {computedTSB.global.ctl} · ATL {computedTSB.global.atl} · TSB {computedTSB.global.tsb} (computed from workouts — import HealthFit CSV for history)</span>
-        : "Import HealthFit CSV for CTL/ATL/TSB trend"}
-    </div>
-  ) : (
-    <ResponsiveContainer width="100%" height={300}>
-      <LineChart data={tsbOverviewData} margin={{ top: 20, right: 20, left: 55, bottom: 35 }}>
-        <CartesianGrid stroke="#1a1b2e" />
-        <XAxis dataKey="label" label={{ value: "Date", position: "bottom", offset: 10, fill: "#ced2f0" }} />
-        <YAxis label={{ value: "TSS (arbitrary)", angle: -90, position: "insideLeft", offset: 15, fill: "#ced2f0", style: { textAnchor: "middle" } }} />
-        <Tooltip formatter={(v, n) => [v != null ? Number(v).toFixed(1) : "—", n]} />
-        <Legend verticalAlign="top" height={36} />
-        <Line type="monotone" dataKey="ctl" name="Fitness (CTL)" stroke="#4a9ee8" strokeWidth={2} dot={false} connectNulls />
-        <Line type="monotone" dataKey="atl" name="Fatigue (ATL)" stroke="#ef4444" strokeWidth={2} dot={false} connectNulls />
-        <Line type="monotone" dataKey="tsb" name="Form (TSB)"    stroke="#4ade80" strokeWidth={2} dot={false} connectNulls />
-      </LineChart>
-    </ResponsiveContainer>
-  )}
+{(() => {
+  const riskPalette = {
+    green: { fill: 'rgba(34,197,94,0.10)', accent: '#4ade80', label: 'Green' },
+    yellow: { fill: 'rgba(250,204,21,0.11)', accent: '#facc15', label: 'Yellow' },
+    orange: { fill: 'rgba(249,115,22,0.12)', accent: '#fb923c', label: 'Orange' },
+    red: { fill: 'rgba(239,68,68,0.13)', accent: '#ef4444', label: 'Red' }
+  }
+  const panel = tsbV2Panel || { rows: [], alerts: [], readinessRiskLabel: 'green', readinessDetail: { score: 'NA' } }
+  const badge = riskPalette[panel.readinessRiskLabel] || riskPalette.green
+  return (
+    <>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10, marginBottom:10 }}>
+        <div style={{ fontWeight:'bold', minHeight:'20px' }}>Training Readiness (TSB v2)</div>
+        <div style={{ background:'rgba(10,12,22,0.9)', border:`1px solid ${badge.accent}`, borderRadius:10, padding:'6px 10px', textAlign:'right', minWidth:106 }}>
+          <div style={{ fontSize:10, opacity:0.7 }}>Readiness</div>
+          <div style={{ fontSize:18, fontWeight:800, color:badge.accent }}>{panel.readinessDetail?.score ?? 'NA'}</div>
+          <div style={{ fontSize:11, color:badge.accent }}>{badge.label}</div>
+        </div>
+      </div>
+      {panel.rows.length > 0 ? (
+        <ResponsiveContainer width="100%" height={270}>
+          <ComposedChart data={panel.rows} margin={{ top:12, right:16, left:45, bottom:20 }}>
+            <CartesianGrid stroke="#1a1b2e" />
+            <XAxis dataKey="label" tick={{ fontSize:10 }} interval={Math.max(1, Math.floor((panel.rows.length||1)/12)-1)} />
+            <YAxis domain={['auto','auto']} label={{ value:'TSB', angle:-90, position:'insideLeft', fill:'#9ca3af', style:{ textAnchor:'middle' } }} />
+            <ReferenceLine y={0} stroke="#444" strokeDasharray="3 3" />
+            <Tooltip formatter={(v,n) => [Number(v).toFixed(2), n]} />
+            <Legend verticalAlign="top" height={28} />
+            <Line type="monotone" dataKey="overallTsb" name="Overall TSB" stroke="#e5e7eb" strokeWidth={2.2} dot={false} connectNulls />
+            <Line type="monotone" dataKey="runningTsb" name="Running TSB" stroke="#ef4444" strokeWidth={1.8} dot={false} connectNulls />
+            <Line type="monotone" dataKey="cyclingTsb" name="Cycling TSB" stroke="#22d3ee" strokeWidth={1.8} dot={false} connectNulls />
+            <Line type="monotone" dataKey="swimmingTsb" name="Swimming TSB" stroke="#a78bfa" strokeWidth={1.8} dot={false} connectNulls />
+          </ComposedChart>
+        </ResponsiveContainer>
+      ) : (
+        <div style={{ color:'#666', fontSize:12, padding:'20px 0' }}>CTL {computedTSB?.global?.ctl?.toFixed(1) ?? '—'} · ATL {computedTSB?.global?.atl?.toFixed(1) ?? '—'} · TSB {computedTSB?.global?.tsb?.toFixed(1) ?? '—'} (computed from workouts)</div>
+      )}
+    </>
+  )
+})()}
 </div>
 
       <div style={{ ...cardStyle(), minWidth: "0" }}>
