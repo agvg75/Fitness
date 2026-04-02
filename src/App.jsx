@@ -14,6 +14,7 @@ import {
   AreaChart,
   Area,
   ComposedChart,
+  ReferenceArea,
   ReferenceLine
 } from "recharts"
 import { createClient } from "@supabase/supabase-js"
