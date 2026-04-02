@@ -7000,29 +7000,65 @@ const readinessProjectionData = useMemo(() => {
   if (!enduranceForecast) return []
 
   const rNow = Number(enduranceForecast.readinessNow ?? 0) > 0 ? Number(enduranceForecast.readinessNow) : 50
-  // Derive slope from projected 1m value; floor at 0.8 so curves never go flat
-  const rawSlope = Number(enduranceForecast.readiness1m ?? rNow) - rNow
-  const effectiveSlope = Math.max(0.8, rawSlope)
-  // k controls steepness: scales with training trajectory, floored so curves always rise
-  const k = effectiveSlope * 0.3
+  const anchors = [
+    { month: 0,  readiness: rNow },
+    { month: 1,  readiness: Number(enduranceForecast.readiness1m  ?? 0) > 0 ? Number(enduranceForecast.readiness1m)  : rNow },
+    { month: 3,  readiness: Number(enduranceForecast.readiness3m  ?? 0) > 0 ? Number(enduranceForecast.readiness3m)  : rNow },
+    { month: 6,  readiness: Number(enduranceForecast.readiness6m  ?? 0) > 0 ? Number(enduranceForecast.readiness6m)  : rNow },
+    { month: 12, readiness: Number(enduranceForecast.readiness12m ?? 0) > 0 ? Number(enduranceForecast.readiness12m) : rNow }
+  ].filter(d => Number.isFinite(d.readiness))
 
-  // Month-based thresholds: month at which each event's readiness crosses 50%
-  const monthThresholds = { fiveK: 4, tenK: 8, half: 14, tri: 20 }
-  const logistic = (month, threshold) =>
-    Number(Math.max(0, Math.min(100, 100 / (1 + Math.exp(-k * (month - threshold))))).toFixed(1))
+  if (!anchors.length) return []
+
+  const interpolateBaseReadiness = month => {
+    if (month <= anchors[0].month) return anchors[0].readiness
+
+    for (let i = 1; i < anchors.length; i += 1) {
+      const prev = anchors[i - 1]
+      const curr = anchors[i]
+
+      if (month <= curr.month) {
+        const frac = (month - prev.month) / (curr.month - prev.month || 1)
+        return prev.readiness + frac * (curr.readiness - prev.readiness)
+      }
+    }
+
+    const last = anchors[anchors.length - 1]
+    const prev = anchors.length > 1 ? anchors[anchors.length - 2] : last
+    const slope = (last.readiness - prev.readiness) / (last.month - prev.month || 1)
+
+    return Math.max(0, Math.min(100, last.readiness + slope * (month - last.month)))
+  }
+
+const eventThresholds = {
+  fiveK: 45,
+  tenK: 58,
+  half: 70,
+  tri: 88
+}
+
+  const logisticPct = (baseReadiness, threshold, steepness = 0.18) => {
+    const x = baseReadiness - threshold
+    return Math.max(0, Math.min(100, 100 / (1 + Math.exp(-steepness * x))))
+  }
 
   const maxMonth = 24
   const series = []
+
   for (let month = 0; month <= maxMonth; month += 1) {
+    const base = interpolateBaseReadiness(month)
+
     series.push({
       month,
       label: month === 0 ? "Now" : `${month}M`,
-      fiveK: logistic(month, monthThresholds.fiveK),
-      tenK:  logistic(month, monthThresholds.tenK),
-      half:  logistic(month, monthThresholds.half),
-      tri:   logistic(month, monthThresholds.tri),
+      baseReadiness: Number(base.toFixed(1)),
+      fiveK: Number(logisticPct(base, eventThresholds.fiveK, 0.30).toFixed(1)),
+tenK: Number(logisticPct(base, eventThresholds.tenK, 0.24).toFixed(1)),
+half: Number(logisticPct(base, eventThresholds.half, 0.20).toFixed(1)),
+tri: Number(logisticPct(base, eventThresholds.tri, 0.18).toFixed(1))
     })
   }
+
   return series
 }, [enduranceForecast])
 const eventReadinessMarkers = useMemo(() => {
