@@ -14,7 +14,8 @@ import {
   AreaChart,
   Area,
   ComposedChart,
-  ReferenceLine
+  ReferenceLine,
+  ReferenceArea
 } from "recharts"
 import { createClient } from "@supabase/supabase-js"
 
@@ -6483,6 +6484,137 @@ trainingLoadPct: Math.round(((
 
   }))
 }, [weeklyTrainingBuckets, rangeKey])
+
+const overviewTrainingReadiness = useMemo(() => {
+  const tau1 = 27
+  const tau2 = 18
+  const src = Array.isArray(operationalWorkouts) ? operationalWorkouts : []
+  if (!src.length) {
+    return {
+      chart: [],
+      latest: null,
+      badge: { label: "No data", color: "#94a3b8", bg: "rgba(148,163,184,0.2)" },
+      alerts: []
+    }
+  }
+
+  const byDate = new Map()
+  const addLoad = (date, key, val) => {
+    if (!date || !Number.isFinite(val) || val <= 0) return
+    if (!byDate.has(date)) byDate.set(date, { running: 0, cycling: 0, swimming: 0, strength: 0 })
+    byDate.get(date)[key] += val
+  }
+
+  src.forEach(w => {
+    const date = String(w?.date || w?.dateTime || "").slice(0, 10)
+    if (!date) return
+    const dur = Number(w?.dur || 0)
+    const dist = Number(w?.distance || 0)
+    const category = String(w?.category || "").toLowerCase()
+    const cardioLoad = Math.max(0, dur > 0 ? dur : dist * 10)
+
+    if (category === "running" || category === "walking") addLoad(date, "running", cardioLoad)
+    if (category === "cycling") addLoad(date, "cycling", cardioLoad)
+    if (category === "swimming") addLoad(date, "swimming", cardioLoad)
+    if (category === "strength") addLoad(date, "strength", Math.max(20, dur || 30))
+  })
+
+  const dates = [...byDate.keys()].sort()
+  if (!dates.length) return { chart: [], latest: null, badge: { label: "No data", color: "#94a3b8", bg: "rgba(148,163,184,0.2)" }, alerts: [] }
+  const start = new Date(dates[0])
+  const end = new Date()
+  start.setHours(0, 0, 0, 0)
+  end.setHours(0, 0, 0, 0)
+
+  const full = []
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    const key = d.toISOString().slice(0, 10)
+    const loads = byDate.get(key) || { running: 0, cycling: 0, swimming: 0, strength: 0 }
+    full.push({
+      date: key,
+      label: fmtShortDate(key),
+      runningLoad: loads.running,
+      cyclingLoad: loads.cycling,
+      swimmingLoad: loads.swimming,
+      strengthLoad: loads.strength,
+      overallLoad: loads.running + loads.cycling + loads.swimming
+    })
+  }
+
+  let ctlOverall = 0, atlOverall = 0
+  let ctlRun = 0, atlRun = 0
+  let ctlBike = 0, atlBike = 0
+  let ctlSwim = 0, atlSwim = 0
+  const acuteQueue = []
+  const chronicQueue = []
+  let acuteSum = 0
+  let chronicSum = 0
+
+  const tsbOverallHistory = []
+  const computed = full.map(d => {
+    ctlOverall += (d.overallLoad - ctlOverall) / tau1
+    atlOverall += (d.overallLoad - atlOverall) / tau2
+    ctlRun += (d.runningLoad - ctlRun) / tau1
+    atlRun += (d.runningLoad - atlRun) / tau2
+    ctlBike += (d.cyclingLoad - ctlBike) / tau1
+    atlBike += (d.cyclingLoad - atlBike) / tau2
+    ctlSwim += (d.swimmingLoad - ctlSwim) / tau1
+    atlSwim += (d.swimmingLoad - atlSwim) / tau2
+
+    acuteQueue.push(d.overallLoad)
+    acuteSum += d.overallLoad
+    if (acuteQueue.length > 7) acuteSum -= acuteQueue.shift()
+    chronicQueue.push(d.overallLoad)
+    chronicSum += d.overallLoad
+    if (chronicQueue.length > 28) chronicSum -= chronicQueue.shift()
+
+    const acuteAvg = acuteQueue.length ? acuteSum / acuteQueue.length : 0
+    const chronicAvg = chronicQueue.length ? chronicSum / chronicQueue.length : 0
+    const acwr = chronicAvg > 0 ? acuteAvg / chronicAvg : null
+    const tsbOverall = ctlOverall - atlOverall
+    tsbOverallHistory.push(tsbOverall)
+    const i = tsbOverallHistory.length - 1
+    const tsbSlope3d = i >= 3 ? tsbOverall - tsbOverallHistory[i - 3] : null
+
+    return {
+      ...d,
+      acwr,
+      tsbOverall,
+      tsbRunning: ctlRun - atlRun,
+      tsbCycling: ctlBike - atlBike,
+      tsbSwimming: ctlSwim - atlSwim,
+      tsbSlope3d
+    }
+  })
+
+  const latest = computed[computed.length - 1] || null
+  const ocFlagged = (Array.isArray(ocItems) ? ocItems : []).filter(i => Number(i?.currentScore || 0) >= 3)
+  const acwrAlert = latest?.acwr != null && (latest.acwr > 1.5 || latest.acwr < 0.8)
+  const slopeAlert = latest?.tsbSlope3d != null && latest.tsbSlope3d < -9
+  const tissueAlert = ocFlagged.length > 0
+  const strength7 = computed.slice(-7).reduce((s, r) => s + Number(r.strengthLoad || 0), 0)
+  const highStrengthOnFlag = tissueAlert && strength7 >= 240
+
+  const alerts = [
+    acwrAlert ? `ACWR ${latest.acwr.toFixed(2)} outside 0.8–1.5` : null,
+    slopeAlert ? `TSB drop ${latest.tsbSlope3d.toFixed(1)} over 3 days` : null,
+    tissueAlert ? `Tissue conflict (${ocFlagged.length} OC item${ocFlagged.length > 1 ? "s" : ""} ≥3)` : null,
+    highStrengthOnFlag ? `High strength load (${Math.round(strength7)} in 7d) on flagged regions` : null
+  ].filter(Boolean)
+
+  const riskScore = alerts.length + (latest?.tsbOverall != null && latest.tsbOverall < -20 ? 1 : 0)
+  const badge =
+    riskScore >= 3
+      ? { label: "High risk", color: "#ef4444", bg: "rgba(239,68,68,0.18)" }
+      : riskScore >= 1
+      ? { label: "Caution", color: "#f59e0b", bg: "rgba(245,158,11,0.18)" }
+      : { label: "Ready", color: "#22c55e", bg: "rgba(34,197,94,0.18)" }
+
+  const points = rangeOptions.find(r => r.key === rangeKey)?.points ?? 180
+  const visible = points == null ? computed : computed.slice(-points)
+
+  return { chart: visible, latest, badge, alerts }
+}, [operationalWorkouts, ocItems, rangeKey])
 const vo2ProxyData = useMemo(() => {
   const runs = (operationalWorkouts || [])
     .map(w => {
@@ -7412,61 +7544,64 @@ return (
 
 , gap: "16px", marginBottom: "20px", alignItems: "start" }}>
       <div style={{ ...cardStyle(), minWidth: "0" }}>
-        <div style={{ fontWeight: "bold", marginBottom: "12px" }}>Calories Trend ({rangeOptions.find(r => r.key === rangeKey)?.label ?? rangeKey})</div>
-        <ResponsiveContainer width="100%" height={320}>
-          <LineChart
-  data={calorieChartData}
-  margin={{ top: 20, right: 20, left: 55, bottom: 35 }}
->
-            <CartesianGrid stroke="#1a1b2e" />
-            <XAxis
-  dataKey="label"
-  label={{
-    value: "Date",
-    position: "bottom",
-    offset: 10,
-    fill: "#ced2f0"
-  }}
-/>
-            <YAxis
-  domain={[0, chartMaxCalories]}
-  label={{
-    value: "Calories (kcal/day)",
-    angle: -90,
-    position: "insideLeft",
-    offset: 15,
-    fill: "#ced2f0",
-    style: { textAnchor: "middle" }
-  }}
-/>
-            <Tooltip />
-            <Legend verticalAlign="top" height={36} />
-            <Line
-              type="monotone"
-              dataKey="calories"
-              stroke="#4acfe8"
-              strokeWidth={2}
-              dot={false}
-              name="Calories"
-            />
-            <Line
-              type="monotone"
-              dataKey="target"
-              stroke="#ffd166"
-              strokeDasharray="6 6"
-              dot={false}
-              name="Target"
-            />
-            <Line
-              type="monotone"
-              dataKey="calories7"
-              stroke="#ffffff"
-              strokeWidth={2}
-              dot={false}
-              name="7 day avg"
-            />
-          </LineChart>
-        </ResponsiveContainer>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px", gap: "8px", flexWrap: "wrap" }}>
+          <div style={{ fontWeight: "bold" }}>Training Readiness ({rangeOptions.find(r => r.key === rangeKey)?.label ?? rangeKey})</div>
+          <span style={{ fontSize: "11px", padding: "4px 9px", borderRadius: "999px", background: overviewTrainingReadiness.badge.bg, color: overviewTrainingReadiness.badge.color, border: `1px solid ${overviewTrainingReadiness.badge.color}` }}>
+            {overviewTrainingReadiness.badge.label}
+          </span>
+        </div>
+
+        {overviewTrainingReadiness.chart.length === 0 ? (
+          <div style={{ fontSize: "12px", opacity: 0.7, padding: "10px 0" }}>No training readiness data yet.</div>
+        ) : (
+          <>
+            <ResponsiveContainer width="100%" height={270}>
+              <ComposedChart data={overviewTrainingReadiness.chart} margin={{ top: 8, right: 20, left: 45, bottom: 20 }}>
+                <CartesianGrid stroke="#1a1b2e" />
+                <XAxis dataKey="label" />
+                <YAxis
+                  domain={[-45, 20]}
+                  label={{ value: "TSB", angle: -90, position: "insideLeft", offset: 8, fill: "#ced2f0", style: { textAnchor: "middle" } }}
+                />
+                <Tooltip formatter={(v, n) => [Number(v).toFixed(1), n]} />
+                <Legend verticalAlign="top" height={28} />
+                <ReferenceArea y1={-45} y2={-25} fill="#ef4444" fillOpacity={0.12} />
+                <ReferenceArea y1={-25} y2={-10} fill="#f59e0b" fillOpacity={0.10} />
+                <ReferenceArea y1={-10} y2={20} fill="#22c55e" fillOpacity={0.08} />
+                <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="4 4" />
+                <Line type="monotone" dataKey="tsbOverall" name="overall" stroke="#e5e7eb" strokeWidth={2.4} dot={false} connectNulls />
+                <Line type="monotone" dataKey="tsbRunning" name="running" stroke="#ef4444" strokeWidth={1.9} dot={false} connectNulls />
+                <Line type="monotone" dataKey="tsbCycling" name="cycling" stroke="#facc15" strokeWidth={1.9} dot={false} connectNulls />
+                <Line type="monotone" dataKey="tsbSwimming" name="swimming" stroke="#22c55e" strokeWidth={1.9} dot={false} connectNulls />
+              </ComposedChart>
+            </ResponsiveContainer>
+
+            <div style={{ marginTop: "4px" }}>
+              <ResponsiveContainer width="100%" height={74}>
+                <BarChart data={overviewTrainingReadiness.chart} margin={{ top: 2, right: 20, left: 45, bottom: 10 }}>
+                  <CartesianGrid stroke="#1a1b2e" vertical={false} />
+                  <XAxis dataKey="label" hide />
+                  <YAxis hide />
+                  <Tooltip formatter={v => [Math.round(Number(v) || 0), "strength load"]} />
+                  <Bar dataKey="strengthLoad" name="strength load strip" fill="#a78bfa" fillOpacity={0.6} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div style={{ marginTop: "8px", fontSize: "11px", opacity: 0.85, display: "flex", gap: "6px", flexWrap: "wrap" }}>
+              <span>ACWR {overviewTrainingReadiness.latest?.acwr != null ? overviewTrainingReadiness.latest.acwr.toFixed(2) : "—"}</span>
+              <span>•</span>
+              <span>TSB slope(3d) {overviewTrainingReadiness.latest?.tsbSlope3d != null ? overviewTrainingReadiness.latest.tsbSlope3d.toFixed(1) : "—"}</span>
+              <span>•</span>
+              <span>tau1=27 tau2=18</span>
+            </div>
+            {overviewTrainingReadiness.alerts.length > 0 && (
+              <ul style={{ margin: "8px 0 0", paddingLeft: "16px", fontSize: "11px", color: "#fca5a5" }}>
+                {overviewTrainingReadiness.alerts.map(msg => <li key={msg}>{msg}</li>)}
+              </ul>
+            )}
+          </>
+        )}
       </div>
 
       <div style={{ ...cardStyle(), minWidth: "0" }}>
