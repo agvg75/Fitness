@@ -6853,143 +6853,6 @@ const computedTSB = useMemo(() => {
   };
 }, [canonicalSessions])
 
-const tsbV2Panel = useMemo(() => {
-  const tau1 = 27
-  const tau2 = 18
-  const lookbackDays = 90
-  const warmupDays = 42
-  const now = new Date()
-  now.setHours(0, 0, 0, 0)
-  const start = new Date(now)
-  start.setDate(start.getDate() - (lookbackDays + warmupDays - 1))
-
-  const dayKeys = []
-  for (let d = new Date(start); d <= now; d.setDate(d.getDate() + 1)) {
-    dayKeys.push(d.toISOString().slice(0, 10))
-  }
-
-  const mkLoads = () => ({ overall: 0, running: 0, cycling: 0, swimming: 0, strength: 0 })
-  const dailyLoads = Object.fromEntries(dayKeys.map(k => [k, mkLoads()]))
-
-  ;(Array.isArray(normalizedActiveWorkouts) ? normalizedActiveWorkouts : []).forEach(w => {
-    const date = String(w.date || "").slice(0, 10)
-    if (!dailyLoads[date]) return
-    const category = normalizeWorkoutType(w.type, w)
-    const dur = Number(w.duration_min ?? w.dur ?? 0) || 0
-    const hr = Number(w.preferred_metrics?.hr?.value ?? w.hr ?? 0) || 0
-    const hrFactor = hr > 0 ? Math.max(0.75, Math.min(1.35, hr / 145)) : 1
-    const baseLoad = Math.max(0, dur * hrFactor)
-    if (baseLoad <= 0) return
-
-    dailyLoads[date].overall += baseLoad
-    if (category === "Running" || category === "Walking") dailyLoads[date].running += baseLoad
-    if (category === "Cycling") dailyLoads[date].cycling += baseLoad
-    if (category === "Swimming") dailyLoads[date].swimming += baseLoad
-    if (category === "Strength") {
-      dailyLoads[date].strength += baseLoad
-    }
-  })
-
-  ;(Array.isArray(schedLog) ? schedLog : []).forEach(sess => {
-    const date = String(sess?.date || "").slice(0, 10)
-    if (!dailyLoads[date]) return
-    const exercises = Array.isArray(sess?.exercises) ? sess.exercises : []
-    const estLoad = exercises.reduce((sum, ex) => {
-      const sets = Array.isArray(ex?.sets) ? ex.sets : (ex?.actual ? [ex.actual] : [])
-      if (!sets.length) return sum + 30
-      const setLoad = sets.reduce((acc, s) => {
-        const reps = Number(s?.reps ?? s?.r ?? 8) || 8
-        const load = Number(s?.load ?? s?.weight ?? s?.w ?? 0) || 0
-        return acc + Math.max(0, reps * Math.max(0, load))
-      }, 0)
-      return sum + (setLoad > 0 ? setLoad / 45 : 25)
-    }, 0)
-    if (estLoad > 0) {
-      dailyLoads[date].strength += estLoad
-      dailyLoads[date].overall += estLoad * 0.45
-    }
-  })
-
-  const acute = { overall: 0, running: 0, cycling: 0, swimming: 0 }
-  const chronic = { overall: 0, running: 0, cycling: 0, swimming: 0 }
-  const alphaA = 1 - Math.exp(-1 / tau2)
-  const alphaC = 1 - Math.exp(-1 / tau1)
-  const allRows = dayKeys.map(date => {
-    const load = dailyLoads[date]
-    const row = { date }
-    ;["overall", "running", "cycling", "swimming"].forEach(k => {
-      acute[k] += alphaA * (load[k] - acute[k])
-      chronic[k] += alphaC * (load[k] - chronic[k])
-      row[`${k}Tsb`] = Number((chronic[k] - acute[k]).toFixed(2))
-      row[`${k}Acwr`] = chronic[k] > 0 ? Number((acute[k] / chronic[k]).toFixed(3)) : null
-    })
-    row.strengthLoad = Number((load.strength || 0).toFixed(2))
-    return row
-  })
-
-  const rows = allRows.slice(-lookbackDays).map(r => ({ ...r, label: String(r.date).slice(5) }))
-  const strengthVals = rows.map(r => r.strengthLoad).filter(v => Number.isFinite(v))
-  const sMin = strengthVals.length ? Math.min(...strengthVals) : 0
-  const sMax = strengthVals.length ? Math.max(...strengthVals) : 1
-  rows.forEach(r => {
-    r.strengthNorm = sMax > sMin ? Number((((r.strengthLoad - sMin) / (sMax - sMin)) * 100).toFixed(1)) : 0
-  })
-
-  const current = rows[rows.length - 1] || null
-  const last8 = rows.slice(-8).filter(r => Number.isFinite(r.overallTsb))
-  const tsbSlope7 = last8.length >= 2 ? (last8[last8.length - 1].overallTsb - last8[0].overallTsb) / (last8.length - 1) : 0
-  const activeIssues = (Array.isArray(ocItems) ? ocItems : []).filter(i => Number(i.currentScore) >= 2)
-  const tissueIssueWeight = Math.min(1, activeIssues.reduce((s, i) => s + Number(i.currentScore || 0), 0) / 20)
-
-  const recentStrength = rows.slice(-14).reduce((s, r) => s + Number(r.strengthNorm || 0), 0) / 14
-  const lowerBodyKeywords = ["knee", "quad", "hamstring", "hip", "glute", "ankle", "toe", "shin", "calf"]
-  const lowerBodyIssue = activeIssues.some(i => lowerBodyKeywords.some(k => String(i.location || "").toLowerCase().includes(k)))
-
-  const overlapHits = (Array.isArray(schedLog) ? schedLog : []).slice(-7).reduce((sum, sess) => {
-    const exercises = Array.isArray(sess?.exercises) ? sess.exercises : []
-    return sum + exercises.filter(ex => getExerciseFlag(ex?.exercise_name || ex?.name || "", activeIssues).flagged).length
-  }, 0)
-  const tissueConflictScore = Math.min(1, tissueIssueWeight * 0.6 + Math.min(1, overlapHits / 6) * 0.4)
-  const ageSensitivityModifier = 50 >= 50 ? 1.1 : 1
-
-  const riskForRow = r => {
-    const tsbBurden = r.overallTsb < -25 ? 0.45 : r.overallTsb < -15 ? 0.3 : r.overallTsb < -8 ? 0.15 : 0.05
-    const acwrBurden = r.overallAcwr > 1.5 ? 0.4 : r.overallAcwr > 1.3 ? 0.25 : 0.05
-    const slopeBurden = tsbSlope7 < -2.5 ? 0.32 : tsbSlope7 < -1.2 ? 0.2 : 0.05
-    const score = (tsbBurden + acwrBurden + slopeBurden + tissueConflictScore * 0.35) * ageSensitivityModifier
-    return Math.max(0, Math.min(1, score))
-  }
-
-  const toLevel = score => (
-    score >= 0.8 ? "red" :
-    score >= 0.6 ? "orange" :
-    score >= 0.35 ? "yellow" : "green"
-  )
-
-  rows.forEach(r => {
-    const riskScore = riskForRow(r)
-    r.riskScore = Number(riskScore.toFixed(3))
-    r.riskLevel = toLevel(riskScore)
-  })
-
-  const acwr = current?.overallAcwr ?? null
-  const readinessDetail = computeReadinessDetail(ocItems, sleepRecords, healthFitDaily)
-
-  const riskFromScore = (100 - readinessDetail.score) / 100
-  const readinessRiskLabel = toLevel(riskFromScore)
-
-  const alerts = []
-  if (acwr != null && acwr > 1.5) alerts.push({ key: "acwr-hi", level: "red", text: "Ramp rate elevated" })
-  else if (acwr != null && acwr > 1.3) alerts.push({ key: "acwr-c", level: "yellow", text: "Ramp rate elevated" })
-  if (tsbSlope7 < -2.5 && (current?.overallTsb ?? 0) < 0) alerts.push({ key: "fatigue-hi", level: "red", text: "Fatigue accumulating fast" })
-  else if (tsbSlope7 < -1.2) alerts.push({ key: "fatigue-c", level: "yellow", text: "Fatigue accumulating fast" })
-  if (tissueConflictScore > 0.3) alerts.push({ key: "tissue", level: tissueConflictScore > 0.6 ? "orange" : "yellow", text: "Tissue conflict" })
-  if (lowerBodyIssue && recentStrength > 60) alerts.push({ key: "strength-region", level: "red", text: "Heavy strength load on flagged region" })
-  if (!alerts.length) alerts.push({ key: "plan", level: "green", text: "Train as planned" })
-
-  return { rows, current, tsbSlope7, acwr, tissueConflictScore, ageSensitivityModifier, readinessDetail, readinessRiskLabel, alerts }
-}, [normalizedActiveWorkouts, schedLog, ocItems, sleepRecords, healthFitDaily])
-
 const operationalCapacityData = useMemo(() => {
   const items = Array.isArray(ocItems) ? ocItems : []
   if (!items.length) return []
@@ -7578,67 +7441,30 @@ return (
 
 , gap: "16px", marginBottom: "20px", alignItems: "start" }}>
       <div style={{ ...cardStyle(), minWidth: "0" }}>
-        {(() => {
-          const riskPalette = {
-            green: { fill: "rgba(34,197,94,0.10)", accent: "#4ade80", label: "Green" },
-            yellow: { fill: "rgba(250,204,21,0.11)", accent: "#facc15", label: "Yellow" },
-            orange: { fill: "rgba(249,115,22,0.12)", accent: "#fb923c", label: "Orange" },
-            red: { fill: "rgba(239,68,68,0.13)", accent: "#ef4444", label: "Red" }
-          }
-          const rr = tsbV2Panel.readinessRiskLabel || "green"
-          const badge = riskPalette[rr] || riskPalette.green
-          return (
-            <>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 10 }}>
-                <div style={{ fontWeight: "bold", minHeight: "20px" }}>Training Readiness (TSB v2)</div>
-                <div style={{ background: "rgba(10,12,22,0.9)", border: `1px solid ${badge.accent}`, borderRadius: 10, padding: "6px 10px", textAlign: "right", minWidth: 106 }}>
-                  <div style={{ fontSize: 10, opacity: 0.7 }}>Readiness</div>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: badge.accent }}>{tsbV2Panel.readinessDetail?.score ?? "NA"}</div>
-                  <div style={{ fontSize: 11, color: badge.accent }}>{badge.label}</div>
-                </div>
-              </div>
-              <ResponsiveContainer width="100%" height={270}>
-                <ComposedChart data={tsbV2Panel.rows} margin={{ top: 12, right: 16, left: 45, bottom: 20 }}>
-                  <CartesianGrid stroke="#1a1b2e" />
-                  <XAxis dataKey="label" tick={{ fontSize: 10 }} interval={Math.max(1, Math.floor((tsbV2Panel.rows?.length || 1) / 12) - 1)} />
-                  <YAxis domain={["auto", "auto"]} label={{ value: "TSB", angle: -90, position: "insideLeft", fill: "#9ca3af", style: { textAnchor: "middle" } }} />
-                  {tsbV2Panel.rows.map((r, i) => (
-                    <ReferenceArea key={`risk-${r.date}`} x1={r.label} x2={tsbV2Panel.rows[Math.min(i + 1, tsbV2Panel.rows.length - 1)]?.label || r.label} y1={-200} y2={200}
-                      ifOverflow="hidden" fill={riskPalette[r.riskLevel]?.fill || riskPalette.green.fill} strokeOpacity={0} />
-                  ))}
-                  <Tooltip formatter={(v, n) => [Number(v).toFixed(2), n]} />
-                  <Legend verticalAlign="top" height={28} />
-                  <Line type="monotone" dataKey="overallTsb" name="Overall TSB" stroke="#e5e7eb" strokeWidth={2.2} dot={false} />
-                  <Line type="monotone" dataKey="runningTsb" name="Running TSB" stroke="#ef4444" strokeWidth={1.8} dot={false} />
-                  <Line type="monotone" dataKey="cyclingTsb" name="Cycling TSB" stroke="#22d3ee" strokeWidth={1.8} dot={false} />
-                  <Line type="monotone" dataKey="swimmingTsb" name="Swimming TSB" stroke="#a78bfa" strokeWidth={1.8} dot={false} />
-                </ComposedChart>
-              </ResponsiveContainer>
-              <div style={{ marginTop: 6 }}>
-                <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 4 }}>Strength load (normalized)</div>
-                <ResponsiveContainer width="100%" height={66}>
-                  <BarChart data={tsbV2Panel.rows} margin={{ top: 0, right: 8, left: 8, bottom: 0 }}>
-                    <XAxis dataKey="label" hide />
-                    <YAxis hide domain={[0, 100]} />
-                    <Tooltip formatter={v => [`${Number(v).toFixed(0)}`, "Strength load"]} />
-                    <Bar dataKey="strengthNorm" name="Strength load" fill="#7c3aed" fillOpacity={0.45} radius={[2, 2, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
-                {tsbV2Panel.alerts.map(a => {
-                  const c = riskPalette[a.level] || riskPalette.green
-                  return (
-                    <span key={a.key} style={{ fontSize: 11, border: `1px solid ${c.accent}`, color: c.accent, background: "rgba(3,7,18,0.6)", padding: "4px 8px", borderRadius: 999 }}>
-                      {a.text}
-                    </span>
-                  )
-                })}
-              </div>
-            </>
-          )
-        })()}
-      </div>
+  <div style={{ fontWeight: "bold", marginBottom: "12px", minHeight: "20px" }}>
+    Training Readiness TSB v2 ({rangeOptions.find(r => r.key === rangeKey)?.label ?? rangeKey})
+  </div>
+  {tsbOverviewData.length === 0 ? (
+    <div style={{ fontSize: "12px", color: "#888", padding: "20px 0", textAlign: "center" }}>
+      {computedTSB
+        ? <span>CTL {computedTSB.global.ctl} · ATL {computedTSB.global.atl} · TSB {computedTSB.global.tsb} (computed from workouts — import HealthFit CSV for history)</span>
+        : "Import HealthFit CSV for CTL/ATL/TSB trend"}
+    </div>
+  ) : (
+    <ResponsiveContainer width="100%" height={300}>
+      <LineChart data={tsbOverviewData} margin={{ top: 20, right: 20, left: 55, bottom: 35 }}>
+        <CartesianGrid stroke="#1a1b2e" />
+        <XAxis dataKey="label" label={{ value: "Date", position: "bottom", offset: 10, fill: "#ced2f0" }} />
+        <YAxis label={{ value: "TSS (arbitrary)", angle: -90, position: "insideLeft", offset: 15, fill: "#ced2f0", style: { textAnchor: "middle" } }} />
+        <Tooltip formatter={(v, n) => [v != null ? Number(v).toFixed(1) : "—", n]} />
+        <Legend verticalAlign="top" height={36} />
+        <Line type="monotone" dataKey="ctl" name="Fitness (CTL)" stroke="#4a9ee8" strokeWidth={2} dot={false} connectNulls />
+        <Line type="monotone" dataKey="atl" name="Fatigue (ATL)" stroke="#ef4444" strokeWidth={2} dot={false} connectNulls />
+        <Line type="monotone" dataKey="tsb" name="Form (TSB)"    stroke="#4ade80" strokeWidth={2} dot={false} connectNulls />
+      </LineChart>
+    </ResponsiveContainer>
+  )}
+</div>
 
       <div style={{ ...cardStyle(), minWidth: "0" }}>
   <div style={{ fontWeight: "bold", marginBottom: "12px", minHeight: "20px" }}>
