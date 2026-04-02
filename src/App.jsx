@@ -797,7 +797,7 @@ const OC_REGION_COORDS = {
 function BodySilhouetteImg({ side }) {
   const src = side === "back" ? "/back_body_clean.png" : "/front_body_clean.png"
   return (
-   <img src={src} alt={side + " body"} style={{ width: "100%", display: "block" }} />node -e "const d=require('./public/data/workouts.json'); const c={}; d.forEach(w=>{const t=w.canonical_type||'unknown';c[t]=(c[t]||0)+1;}); console.log(d.length, JSON.stringify(c))"
+   <img src={src} alt={side + " body"} style={{ width: "100%", display: "block" }} />
 
   )
 }// Keep a thin shim so any remaining references compile during transition
