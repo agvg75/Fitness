@@ -6999,12 +6999,13 @@ const racePrediction = useMemo(() => {
 const readinessProjectionData = useMemo(() => {
   if (!enduranceForecast) return []
 
+  const rNow = Number(enduranceForecast.readinessNow ?? 0) > 0 ? Number(enduranceForecast.readinessNow) : 50
   const anchors = [
-    { month: 0, readiness: Number(enduranceForecast.readinessNow ?? 0) },
-    { month: 1, readiness: Number(enduranceForecast.readiness1m ?? 0) },
-    { month: 3, readiness: Number(enduranceForecast.readiness3m ?? 0) },
-    { month: 6, readiness: Number(enduranceForecast.readiness6m ?? 0) },
-    { month: 12, readiness: Number(enduranceForecast.readiness12m ?? 0) }
+    { month: 0,  readiness: rNow },
+    { month: 1,  readiness: Number(enduranceForecast.readiness1m  ?? 0) > 0 ? Number(enduranceForecast.readiness1m)  : rNow },
+    { month: 3,  readiness: Number(enduranceForecast.readiness3m  ?? 0) > 0 ? Number(enduranceForecast.readiness3m)  : rNow },
+    { month: 6,  readiness: Number(enduranceForecast.readiness6m  ?? 0) > 0 ? Number(enduranceForecast.readiness6m)  : rNow },
+    { month: 12, readiness: Number(enduranceForecast.readiness12m ?? 0) > 0 ? Number(enduranceForecast.readiness12m) : rNow }
   ].filter(d => Number.isFinite(d.readiness))
 
   if (!anchors.length) return []
@@ -7288,7 +7289,7 @@ return (
   <div style={{ fontSize: "64px", fontWeight: "800", lineHeight: 1, marginTop: 0, marginBottom: "6px" }}>
     L.I.F.T.
   </div>
-  <div style={{ fontSize: 11, opacity: 0.4 }}>Build check: Mar 23 2026</div>
+  <div style={{ fontSize: 11, opacity: 0.4 }}>Build check: Apr 2 2026</div>
   <div style={{ fontSize: "11px", opacity: 0.85, marginBottom: "4px" }}>
     Longitudinal Integrated Fitness Tracker
   </div>
