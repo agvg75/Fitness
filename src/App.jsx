@@ -14,7 +14,8 @@ import {
   AreaChart,
   Area,
   ComposedChart,
-  ReferenceLine
+  ReferenceLine,
+  ReferenceArea
 } from "recharts"
 import { createClient } from "@supabase/supabase-js"
 
@@ -235,6 +236,13 @@ function f1(v) {
 function toNum(v) {
   const n = Number(v)
   return Number.isFinite(n) ? n : 0
+}
+
+function stableRound(value, decimals = 2, epsilon = 1e-9) {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return null
+  const p = 10 ** decimals
+  return Math.round((n + epsilon) * p) / p
 }
 
 function fmtShortDate(dateStr) {
@@ -6483,6 +6491,133 @@ trainingLoadPct: Math.round(((
 
   }))
 }, [weeklyTrainingBuckets, rangeKey])
+
+const tsbV2Panel = useMemo(() => {
+  const tauChronic = 27
+  const tauAcute = 18
+  const lookbackDays = 90
+  const warmupDays = 42
+  const now = new Date()
+  now.setHours(0, 0, 0, 0)
+  const start = new Date(now)
+  start.setDate(start.getDate() - (lookbackDays + warmupDays - 1))
+
+  const dayKeys = []
+  for (let d = new Date(start); d <= now; d.setDate(d.getDate() + 1)) {
+    dayKeys.push(d.toISOString().slice(0, 10))
+  }
+  const dailyLoads = Object.fromEntries(
+    dayKeys.map(k => [k, { overall: 0, running: 0, cycling: 0, swimming: 0, strength: 0 }])
+  )
+
+  ;(Array.isArray(normalizedActiveWorkouts) ? normalizedActiveWorkouts : []).forEach(w => {
+    const date = String(w.date || "").slice(0, 10)
+    if (!dailyLoads[date]) return
+    const category = normalizeWorkoutType(w.type, w)
+    const dur = Number(w.duration_min ?? w.dur ?? 0) || 0
+    const hr = Number(w.preferred_metrics?.hr?.value ?? w.hr ?? 0) || 0
+    const hrFactor = hr > 0 ? Math.max(0.75, Math.min(1.35, hr / 145)) : 1
+    const baseLoad = Math.max(0, dur * hrFactor)
+    if (baseLoad <= 0) return
+
+    dailyLoads[date].overall += baseLoad
+    if (category === "Running" || category === "Walking") dailyLoads[date].running += baseLoad
+    if (category === "Cycling") dailyLoads[date].cycling += baseLoad
+    if (category === "Swimming") dailyLoads[date].swimming += baseLoad
+    if (category === "Strength") dailyLoads[date].strength += baseLoad
+  })
+
+  ;(Array.isArray(schedLog) ? schedLog : []).forEach(sess => {
+    const date = String(sess?.date || "").slice(0, 10)
+    if (!dailyLoads[date]) return
+    const exercises = Array.isArray(sess?.exercises) ? sess.exercises : []
+    const estLoad = exercises.reduce((sum, ex) => {
+      const sets = Array.isArray(ex?.sets) ? ex.sets : (ex?.actual ? [ex.actual] : [])
+      if (!sets.length) return sum + 30
+      const setLoad = sets.reduce((acc, s) => {
+        const reps = Number(s?.reps ?? s?.r ?? 8) || 8
+        const load = Number(s?.load ?? s?.weight ?? s?.w ?? 0) || 0
+        return acc + Math.max(0, reps * Math.max(0, load))
+      }, 0)
+      return sum + (setLoad > 0 ? setLoad / 45 : 25)
+    }, 0)
+    if (estLoad > 0) {
+      dailyLoads[date].strength += estLoad
+      dailyLoads[date].overall += estLoad * 0.45
+    }
+  })
+
+  const acute = { overall: 0, running: 0, cycling: 0, swimming: 0 }
+  const chronic = { overall: 0, running: 0, cycling: 0, swimming: 0 }
+  const alphaAcute = 1 - Math.exp(-1 / tauAcute)
+  const alphaChronic = 1 - Math.exp(-1 / tauChronic)
+
+  const allRows = dayKeys.map(date => {
+    const load = dailyLoads[date]
+    const row = { date }
+    ;["overall", "running", "cycling", "swimming"].forEach(k => {
+      acute[k] += alphaAcute * (load[k] - acute[k])
+      chronic[k] += alphaChronic * (load[k] - chronic[k])
+      row[`${k}Tsb`] = stableRound(chronic[k] - acute[k], 2)
+    })
+    row.overallAcwr = chronic.overall > 0 ? stableRound(acute.overall / chronic.overall, 2) : null
+    row.strengthLoad = stableRound(load.strength || 0, 2) ?? 0
+    return row
+  })
+
+  const rows = allRows.slice(-lookbackDays).map(r => ({ ...r, label: String(r.date).slice(5) }))
+  const strengthVals = rows.map(r => Number(r.strengthLoad)).filter(Number.isFinite)
+  const sMin = strengthVals.length ? Math.min(...strengthVals) : 0
+  const sMax = strengthVals.length ? Math.max(...strengthVals) : 1
+  rows.forEach(r => {
+    r.strengthNorm = sMax > sMin ? stableRound(((r.strengthLoad - sMin) / (sMax - sMin)) * 100, 1) : 0
+  })
+
+  const current = rows[rows.length - 1] || null
+  const riskFromTsb = t => (
+    t < -25 ? "red" : t < -15 ? "orange" : t < -8 ? "yellow" : "green"
+  )
+  rows.forEach(r => { r.riskLevel = riskFromTsb(Number(r.overallTsb ?? 0)) })
+
+  const tsbSeriesVals = rows
+    .flatMap(r => [r.overallTsb, r.runningTsb, r.cyclingTsb, r.swimmingTsb])
+    .filter(v => Number.isFinite(v))
+
+  let tsbDomain = [-12, 12]
+  if (tsbSeriesVals.length) {
+    const minRaw = Math.min(...tsbSeriesVals)
+    const maxRaw = Math.max(...tsbSeriesVals)
+    const spread = Math.max(1, maxRaw - minRaw)
+    const pad = Math.max(2, spread * 0.12)
+    let low = minRaw - pad
+    let high = maxRaw + pad
+    const zeroNearby = low <= 0 && high >= 0
+      ? true
+      : Math.abs((low + high) / 2) <= Math.max(6, spread * 0.55)
+    if (zeroNearby) {
+      low = Math.min(low, -1)
+      high = Math.max(high, 1)
+    }
+    tsbDomain = [Math.floor(low), Math.ceil(high)]
+  }
+
+  const acwrDisplay = stableRound(current?.overallAcwr, 2)
+  const recommendation = (() => {
+    if (!current) return "No recent load signal yet."
+    if (current.overallTsb < -20 || (acwrDisplay != null && acwrDisplay > 1.5)) return "Reduce intensity today and keep total load controlled."
+    if (current.overallTsb < -10 || (acwrDisplay != null && acwrDisplay > 1.3)) return "Train, but avoid adding extra volume."
+    if (current.overallTsb > 8 && (acwrDisplay == null || acwrDisplay < 1.2)) return "You can push key work if symptoms stay quiet."
+    return "Proceed as planned with normal progression."
+  })()
+
+  const alerts = []
+  if (acwrDisplay != null && acwrDisplay > 1.5) alerts.push({ key: "acwr-hi", level: "red", text: "Ramp rate elevated" })
+  else if (acwrDisplay != null && acwrDisplay > 1.3) alerts.push({ key: "acwr-c", level: "yellow", text: "Ramp rate elevated" })
+  if ((current?.overallTsb ?? 0) < -20) alerts.push({ key: "tsb-low", level: "orange", text: "High fatigue state" })
+  if (!alerts.length) alerts.push({ key: "plan", level: "green", text: "Train as planned" })
+
+  return { rows, current, acwrDisplay, tsbDomain, recommendation, alerts }
+}, [normalizedActiveWorkouts, schedLog])
 const vo2ProxyData = useMemo(() => {
   const runs = (operationalWorkouts || [])
     .map(w => {
@@ -7639,104 +7774,97 @@ return (
       </div>
 
       <div style={{ ...cardStyle(), minWidth: "0" }}>
-  <div style={{ fontWeight: "bold", marginBottom: "12px", minHeight: "20px" }}>
-    Performance Readiness
-  </div>
+        {(() => {
+          const riskPalette = {
+            green: { fill: "rgba(34,197,94,0.10)", accent: "#4ade80", label: "Green" },
+            yellow: { fill: "rgba(250,204,21,0.11)", accent: "#facc15", label: "Yellow" },
+            orange: { fill: "rgba(249,115,22,0.12)", accent: "#fb923c", label: "Orange" },
+            red: { fill: "rgba(239,68,68,0.13)", accent: "#ef4444", label: "Red" }
+          }
+          const currentTsb = Number(tsbV2Panel.current?.overallTsb ?? 0)
+          const rr = currentTsb < -25 ? "red" : currentTsb < -15 ? "orange" : currentTsb < -8 ? "yellow" : "green"
+          const badge = riskPalette[rr] || riskPalette.green
+          return (
+            <>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 10 }}>
+                <div style={{ fontWeight: "bold", minHeight: "20px" }}>Training Readiness (TSB v2)</div>
+                <div style={{ background: "rgba(10,12,22,0.9)", border: `1px solid ${badge.accent}`, borderRadius: 10, padding: "6px 10px", textAlign: "right", minWidth: 106 }}>
+                  <div style={{ fontSize: 10, opacity: 0.7 }}>Readiness</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: badge.accent }}>{readinessScore}</div>
+                  <div style={{ fontSize: 11, color: badge.accent }}>{badge.label}</div>
+                </div>
+              </div>
 
-  <div style={{ marginBottom: "14px" }}>
+              <ResponsiveContainer width="100%" height={270}>
+                <ComposedChart data={tsbV2Panel.rows} margin={{ top: 12, right: 16, left: 45, bottom: 20 }}>
+                  <CartesianGrid stroke="#1a1b2e" />
+                  <XAxis dataKey="label" tick={{ fontSize: 10 }} interval={Math.max(1, Math.floor((tsbV2Panel.rows?.length || 1) / 12) - 1)} />
+                  <YAxis
+                    yAxisId="tsb"
+                    domain={tsbV2Panel.tsbDomain}
+                    tickFormatter={v => `${Math.round(v)}`}
+                    allowDecimals={false}
+                    label={{ value: "TSB", angle: -90, position: "insideLeft", fill: "#9ca3af", style: { textAnchor: "middle" } }}
+                  />
+                  <YAxis yAxisId="strengthBg" hide domain={[0, 100]} />
+                  {tsbV2Panel.rows.map((r, i) => (
+                    <ReferenceArea
+                      key={`risk-${r.date}`}
+                      x1={r.label}
+                      x2={tsbV2Panel.rows[Math.min(i + 1, tsbV2Panel.rows.length - 1)]?.label || r.label}
+                      yAxisId="tsb"
+                      y1={tsbV2Panel.tsbDomain[0]}
+                      y2={tsbV2Panel.tsbDomain[1]}
+                      ifOverflow="hidden"
+                      fill={riskPalette[r.riskLevel]?.fill || riskPalette.green.fill}
+                      strokeOpacity={0}
+                    />
+                  ))}
+                  <Area
+                    yAxisId="strengthBg"
+                    type="monotone"
+                    dataKey="strengthNorm"
+                    name="Strength load (decorative)"
+                    stroke="none"
+                    fill="#7c3aed"
+                    fillOpacity={0.16}
+                    isAnimationActive={false}
+                  />
+                  <Tooltip
+                    formatter={(v, n) => {
+                      if (n === "ACWR") return [v != null ? Number(v).toFixed(2) : "—", "ACWR (recent load vs baseline)"]
+                      return [v != null ? Number(v).toFixed(2) : "—", n]
+                    }}
+                  />
+                  <Legend verticalAlign="top" height={28} />
+                  <Line type="monotone" yAxisId="tsb" dataKey="overallTsb" name="Overall TSB" stroke="#e5e7eb" strokeWidth={2.4} dot={false} />
+                  <Line type="monotone" yAxisId="tsb" dataKey="runningTsb" name="Running TSB" stroke="#ef4444" strokeWidth={1.8} dot={false} />
+                  <Line type="monotone" yAxisId="tsb" dataKey="cyclingTsb" name="Cycling TSB" stroke="#22d3ee" strokeWidth={1.8} dot={false} />
+                  <Line type="monotone" yAxisId="tsb" dataKey="swimmingTsb" name="Swimming TSB" stroke="#a78bfa" strokeWidth={1.8} dot={false} />
+                  <Line type="monotone" yAxisId="tsb" dataKey="overallAcwr" name="ACWR" stroke="#f59e0b" strokeWidth={1.6} strokeDasharray="5 3" dot={false} />
+                </ComposedChart>
+              </ResponsiveContainer>
 
-<ResponsiveContainer width="100%" height={300}>
-      <LineChart
-  data={readinessProjectionData}
-  margin={{ top: 20, right: 20, left: 55, bottom: 35 }}
->
-        <CartesianGrid stroke="#1a1b2e" />
-        <XAxis
-          type="number"
-          dataKey="month"
-          domain={[0, readinessProjectionMaxMonth]}
-          allowDecimals={false}
-          tickCount={Math.min(readinessProjectionMaxMonth + 1, 8)}
-          label={{
-  value: "Months from now",
-  position: "bottom",
-  offset: 10,
-  fill: "#ced2f0"
-}}
-        />
-        <YAxis
-          domain={[0, 100]}
-          label={{
-  value: "Completion readiness (%)",
-  angle: -90,
-  position: "insideLeft",
-  offset: 15,
-  fill: "#ced2f0",
-  style: { textAnchor: "middle" }
-}}
-        />
-        <Tooltip
-          formatter={(value, name) => [`${Number(value).toFixed(1)}%`, name]}
-          labelFormatter={value => `${value} months`}
-        />
-        <Legend verticalAlign="top" height={36} />
-
-        <Line
-          type="monotone"
-          dataKey="fiveK"
-          stroke="#ef4444"
-          strokeWidth={2}
-          dot={false}
-          name="5K"
-        />
-
-        <Line
-          type="monotone"
-          dataKey="tenK"
-          stroke="#22c55e"
-          strokeWidth={2}
-          dot={false}
-          name="10K"
-        />
-
-        <Line
-          type="monotone"
-          dataKey="half"
-          stroke="#facc15"
-          strokeWidth={2}
-          dot={false}
-          name="Half marathon"
-        />
-
-        <Line
-          type="monotone"
-          dataKey="tri"
-          stroke="#a78bfa"
-          strokeWidth={3}
-          dot={false}
-          name="Olympic triathlon"
-        />
-
-        {eventReadinessMarkers
-          .filter(marker => marker.month != null)
-          .map(marker => (
-            <ReferenceLine
-              key={marker.key}
-              x={marker.month}
-              stroke={marker.color}
-              strokeDasharray="6 4"
-              label={{
-  value: marker.label,
-  angle: -90,
-  position: "top",
-  fill: marker.color
-}}
-            />
-          ))}
-      </LineChart>
-    </ResponsiveContainer>
-  </div>
-</div>
+              <div style={{ fontSize: 11, opacity: 0.75, marginTop: 6 }}>
+                ACWR: <strong>{tsbV2Panel.acwrDisplay != null ? tsbV2Panel.acwrDisplay.toFixed(2) : "—"}</strong> · compares recent load to recent baseline.
+              </div>
+              <div style={{ fontSize: 12, opacity: 0.8, marginTop: 6 }}>
+                {tsbV2Panel.recommendation}
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
+                {tsbV2Panel.alerts.map(a => {
+                  const c = riskPalette[a.level] || riskPalette.green
+                  return (
+                    <span key={a.key} style={{ fontSize: 11, border: `1px solid ${c.accent}`, color: c.accent, background: "rgba(3,7,18,0.6)", padding: "4px 8px", borderRadius: 999 }}>
+                      {a.text}
+                    </span>
+                  )
+                })}
+              </div>
+            </>
+          )
+        })()}
+      </div>
 </div>
 
     <div style={{ display: "grid", gridTemplateColumns: window.innerWidth < 768 ? "1fr" : "repeat(2, minmax(0, 1fr))"
