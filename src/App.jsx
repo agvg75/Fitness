@@ -14,7 +14,8 @@ import {
   AreaChart,
   Area,
   ComposedChart,
-  ReferenceLine
+  ReferenceLine,
+  ReferenceArea
 } from "recharts"
 import { createClient } from "@supabase/supabase-js"
 
@@ -6483,6 +6484,64 @@ trainingLoadPct: Math.round(((
 
   }))
 }, [weeklyTrainingBuckets, rangeKey])
+const overviewReadinessCore = useMemo(() => {
+  if (!trainingLoadChartData?.length) return []
+
+  const calcTsbSeries = values => {
+    let atl = Number(values[0] || 0)
+    let ctl = Number(values[0] || 0)
+    const alphaAtl = 2 / (7 + 1)
+    const alphaCtl = 2 / (28 + 1)
+
+    return values.map(vRaw => {
+      const v = Number(vRaw || 0)
+      atl = atl + alphaAtl * (v - atl)
+      ctl = ctl + alphaCtl * (v - ctl)
+      return ctl - atl
+    })
+  }
+
+  const overall = calcTsbSeries(trainingLoadChartData.map(d => Number(d.trainingLoadPct || 0)))
+  const running = calcTsbSeries(trainingLoadChartData.map(d => Number(d.running || 0)))
+  const cycling = calcTsbSeries(trainingLoadChartData.map(d => Number(d.cycling || 0)))
+  const swimming = calcTsbSeries(trainingLoadChartData.map(d => Number(d.swimming || 0)))
+
+  return trainingLoadChartData.map((d, i) => ({
+    ...d,
+    tsbOverall: Number(overall[i]?.toFixed(1)),
+    tsbRunning: Number(running[i]?.toFixed(1)),
+    tsbCycling: Number(cycling[i]?.toFixed(1)),
+    tsbSwimming: Number(swimming[i]?.toFixed(1)),
+  }))
+}, [trainingLoadChartData])
+
+const overviewReadinessTsbDomain = useMemo(() => {
+  const vals = overviewReadinessCore
+    .flatMap(d => [d.tsbOverall, d.tsbRunning, d.tsbCycling, d.tsbSwimming])
+    .map(Number)
+    .filter(Number.isFinite)
+
+  if (!vals.length) return [-35, 20]
+
+  const minRaw = Math.min(-35, ...vals)
+  const maxRaw = Math.max(15, ...vals)
+  const minRounded = Math.floor(minRaw / 5) * 5
+  const maxRounded = Math.ceil(maxRaw / 5) * 5
+  return [minRounded, maxRounded]
+}, [overviewReadinessCore])
+
+const overviewReadinessChartData = useMemo(() => {
+  if (!overviewReadinessCore.length) return []
+  const maxStrength = Math.max(1, ...overviewReadinessCore.map(d => Number(d.strength || 0)))
+  const [domainMin, domainMax] = overviewReadinessTsbDomain
+  const span = Math.max(10, domainMax - domainMin)
+  const bgHeight = span * 0.35
+
+  return overviewReadinessCore.map(d => ({
+    ...d,
+    strengthBackdrop: Number((domainMin + (Number(d.strength || 0) / maxStrength) * bgHeight).toFixed(1))
+  }))
+}, [overviewReadinessCore, overviewReadinessTsbDomain])
 const vo2ProxyData = useMemo(() => {
   const runs = (operationalWorkouts || [])
     .map(w => {
@@ -7538,17 +7597,18 @@ return (
 , gap: "16px", marginBottom: "20px", alignItems: "start" }}>
       <div style={{ ...cardStyle(), minWidth: "0" }}>
         <div style={{ fontWeight: "bold", marginBottom: "12px" }}>
-          Training Load
+          Training Readiness (TSB v2)
         </div>
 
         <ResponsiveContainer width="100%" height={320}>
           <ComposedChart
-  data={trainingLoadChartData}
+  data={overviewReadinessChartData}
   margin={{ top: 20, right: 20, left: 55, bottom: 35 }}
 >
             <CartesianGrid stroke="#1a1b2e" />
             <XAxis
   dataKey="label"
+  tick={{ fontSize: 11 }}
   label={{
     value: "Date",
     position: "bottom",
@@ -7557,10 +7617,13 @@ return (
   }}
 />
             <YAxis
-              yAxisId="distance"
+              yAxisId="tsb"
               orientation="left"
+              domain={overviewReadinessTsbDomain}
+              allowDecimals={false}
+              tickFormatter={v => `${Math.round(Number(v || 0))}`}
               label={{
-  value: "Training load (%)",
+  value: "TSB",
   angle: -90,
   position: "insideLeft",
   offset: 15,
@@ -7568,71 +7631,69 @@ return (
   style: { textAnchor: "middle" }
 }}
             />
-            <YAxis
-              yAxisId="strength"
-              orientation="right"
-              label={{
-  value: "Miles per week",
-  angle: 90,
-  position: "insideRight",
-  offset: -15,
-  fill: "#a78bfa",
-  style: { textAnchor: "middle" }
-}}
-              allowDecimals={false}
+            <Tooltip
+              formatter={(value, name) => [value != null ? Number(value).toFixed(1) : "—", name]}
             />
-            <Tooltip />
             <Legend verticalAlign="top" height={36} />
 
+            <ReferenceArea yAxisId="tsb" y1={-120} y2={-30} fill="#ef4444" fillOpacity={0.26} ifOverflow="extendDomain" />
+            <ReferenceArea yAxisId="tsb" y1={-30} y2={-20} fill="#f97316" fillOpacity={0.23} ifOverflow="extendDomain" />
+            <ReferenceArea yAxisId="tsb" y1={-20} y2={-10} fill="#facc15" fillOpacity={0.2} ifOverflow="extendDomain" />
+            <ReferenceArea yAxisId="tsb" y1={-10} y2={80} fill="#22c55e" fillOpacity={0.18} ifOverflow="extendDomain" />
+
             <Area
-              yAxisId="strength"
+              yAxisId="tsb"
               type="monotone"
-              dataKey="trainingLoadPct"
+              dataKey="strengthBackdrop"
               stroke="none"
-              fill="#6b7280"
-              fillOpacity={0.22}
-              name="Normalized training load"
+              fill="#a78bfa"
+              fillOpacity={0.28}
+              name="Strength load (background)"
+              baseValue={overviewReadinessTsbDomain[0]}
             />
 
             <Line
-              yAxisId="strength"
+              yAxisId="tsb"
               type="monotone"
-              dataKey="running"
+              dataKey="tsbOverall"
+              stroke="#e5e7eb"
+              strokeWidth={4}
+              dot={false}
+              name="overall"
+              connectNulls
+            />
+
+            <Line
+              yAxisId="tsb"
+              type="monotone"
+              dataKey="tsbRunning"
               stroke="#ef4444"
               strokeWidth={2}
               dot={false}
-              name="Run miles"
+              name="running"
+              connectNulls
             />
 
             <Line
-              yAxisId="strength"
+              yAxisId="tsb"
               type="monotone"
-              dataKey="swimming"
+              dataKey="tsbCycling"
+              stroke="#4acfe8"
+              strokeWidth={2}
+              dot={false}
+              name="cycling"
+              connectNulls
+            />
+
+            <Line
+              yAxisId="tsb"
+              type="monotone"
+              dataKey="tsbSwimming"
               stroke="#22c55e"
               strokeWidth={2}
               dot={false}
-              name="Swim miles"
-            />
-
-            <Line
-              yAxisId="distance"
-              type="monotone"
-              dataKey="cycling"
-              stroke="#facc15"
-              strokeWidth={2}
-              dot={false}
-              name="Cycle miles"
-            />
-
-            <Line
-              yAxisId="strength"
-              type="monotone"
-              dataKey="strength"
-              stroke="#a78bfa"
-              strokeWidth={3}
-              strokeDasharray="6 4"
-              dot={false}
-              name="Strength sessions"
+              name="swimming"
+              connectNulls
             />
           </ComposedChart>
         </ResponsiveContainer>
