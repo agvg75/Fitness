@@ -1245,6 +1245,8 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const [savedEntries, setSavedEntries] = useState({})   // { day: { ymca: entry|null, knr: entry|null } }
   const [justUndone, setJustUndone] = useState(null)    // "ymca" | "knr" | null
   const [sessionDate, setSessionDate] = useState(todayISO())
+  const [pendingVenue, setPendingVenue] = useState(null)   // venue awaiting exercise selection
+  const [pendingChecked, setPendingChecked] = useState({}) // { [exercise_id]: bool }
 
   const SPLIT_DAYS = ["Tue", "Thu"]
   const isSplitDay = SPLIT_DAYS.includes(activeDay)
@@ -1467,7 +1469,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   }
 
   // ── Log session ────────────────────────────────────────────────────────
-  const logSession = async (venue) => {
+  const logSession = async (venue, checkedIds = null) => {
     const day = activeDay
     const prog = getProgDay(day)
     const ts = new Date(`${sessionDate}T${VENUE_TIMES[venue] || "12:00"}:00`).toISOString()
@@ -1491,6 +1493,9 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       notes: e.notes || "", changed: false,
     }))
 
+    const filteredExercises = checkedIds != null ? exercises.filter(ex => checkedIds.has(ex.exercise_id)) : exercises
+    const filteredCustomExs = checkedIds != null ? customExs.filter(ex => checkedIds.has(ex.exercise_id)) : customExs
+
     const checkedStretch = getProgDay(day).stretch?.map((item, i) => ({ ...item, done: isChecked(day, "stretch", i) }))
     const checkedWarmup = getProgDay(day).warmup?.map((item, i) => ({ ...item, done: isChecked(day, "warmup", i) }))
 
@@ -1502,12 +1507,12 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       venue: venue || "ymca",
       venue_label: VENUE_LABELS[venue] || "",
       program: "Kinesiology (primary)",
-      exercises: [...exercises, ...customExs],
+      exercises: [...filteredExercises, ...filteredCustomExs],
       cardio: getCardioEntries(day),
       stretch_completed: checkedStretch,
       warmup_completed: checkedWarmup,
       source: "LIFT Schedule Tab", apple_watch_sync_pending: true,
-      data: Object.fromEntries(exercises.map(ex => [ex.exercise_id, [{ r: ex.actual.reps, w: ex.actual.load }]])),
+      data: Object.fromEntries(filteredExercises.map(ex => [ex.exercise_id, [{ r: ex.actual.reps, w: ex.actual.load }]])),
     }
 
     const newLog = [entry, ...schedLog]
@@ -1880,8 +1885,58 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
             )
           }
 
+          if (pendingVenue === venue) {
+            const day = activeDay
+            const prog = getProgDay(day)
+            const allExs = [
+              ...(prog.exercises || []).map(ex => ({ id: ex.id, name: ex.n })),
+              ...getCustomExercises(day).map(e => ({ id: e.id, name: e.n }))
+            ]
+            return (
+              <div key={venue} style={{ marginBottom: 10, padding: "14px", border: `0.5px solid ${venue === "knr" ? "#0F6E56" : "#185FA5"}`, borderRadius: 8, background: "#0a0a0a" }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#ced2f0", marginBottom: 10 }}>
+                  {label} — select exercises to log
+                </div>
+                {allExs.map(ex => (
+                  <label key={ex.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0", cursor: "pointer", fontSize: 13, color: "#ccc" }}>
+                    <input
+                      type="checkbox"
+                      checked={pendingChecked[ex.id] ?? true}
+                      onChange={e => setPendingChecked(prev => ({ ...prev, [ex.id]: e.target.checked }))}
+                      style={{ accentColor: "#4a9ee8", width: 14, height: 14, cursor: "pointer" }}
+                    />
+                    {ex.name}
+                  </label>
+                ))}
+                <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                  <button onClick={() => setPendingVenue(null)}
+                    style={{ flex: 1, padding: 10, background: "transparent", color: "#888", border: "0.5px solid #333", borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+                    Cancel
+                  </button>
+                  <button onClick={() => {
+                    const checkedIds = new Set(Object.keys(pendingChecked).filter(id => pendingChecked[id]))
+                    logSession(venue, checkedIds)
+                    setPendingVenue(null)
+                  }}
+                    style={{ flex: 1, padding: 10, background: venue === "knr" ? "#0F6E56" : "#185FA5", color: "#fff", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+                    Confirm log
+                  </button>
+                </div>
+              </div>
+            )
+          }
+
           return (
-            <button key={venue} onClick={() => logSession(venue)}
+            <button key={venue} onClick={() => {
+              const day = activeDay
+              const prog = getProgDay(day)
+              const allExs = [
+                ...(prog.exercises || []).map(ex => ({ id: ex.id })),
+                ...getCustomExercises(day).map(e => ({ id: e.id }))
+              ]
+              setPendingChecked(Object.fromEntries(allExs.map(ex => [ex.id, true])))
+              setPendingVenue(venue)
+            }}
               style={{ width: "100%", padding: 13, background: venue === "knr" ? "#0F6E56" : "#185FA5", color: "#fff", border: "none", borderRadius: 7, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", marginBottom: 8 }}>
               Log {label}{timeLabel}
             </button>
@@ -5613,6 +5668,23 @@ function estimateDynamicCalorieTarget({
   lowerGoal = 145,
   minimumCalories = 1200
 }) {
+  // Empirically calibrated constants — BMR ~1520, TDEE ~2100 (scale-derived, April 2026)
+  // Update after each DEXA scan or if sustained weight exits 140–180 lb range
+  const CALIBRATED_BMR = 1520
+  const CALIBRATED_MAINTENANCE = 2100
+  const CALIBRATED_FAT_LOSS_TARGET = 1700
+  if (Number.isFinite(Number(currentWeight)) && Number(currentWeight) >= 140 && Number(currentWeight) <= 180) {
+    const w = Number(currentWeight)
+    return {
+      estimatedMaintenance: CALIBRATED_MAINTENANCE,
+      targetCalories: CALIBRATED_FAT_LOSS_TARGET,
+      deficit: CALIBRATED_MAINTENANCE - CALIBRATED_FAT_LOSS_TARGET,
+      phase: w <= 145 ? "at_target" : "fat_loss",
+      distanceTo150: w - 150,
+      distanceTo145: w - 145,
+      bmr: CALIBRATED_BMR
+    }
+  }
   const weight = Number(currentWeight || 0)
   const maintenance = Number(estimatedMaintenance || 0)
 
@@ -6899,8 +6971,10 @@ const tsbV2Panel = useMemo(() => {
   rows.forEach(r => { r.strengthNorm = sMax > sMin ? Number((((r.strengthLoad-sMin)/(sMax-sMin))*100).toFixed(1)) : 0 })
   const cur = rows[rows.length-1] || {}
   const tsbNow = cur.overallTsb ?? 0
-  const riskFromScore = readinessScore >= 75 ? 'green' : readinessScore >= 50 ? 'yellow' : readinessScore >= 25 ? 'orange' : 'red'
-  const risk = readinessScore != null ? riskFromScore : (tsbNow < -25 ? 'red' : tsbNow < -15 ? 'orange' : tsbNow < -8 ? 'yellow' : 'green')
+  const riskFromOC = readinessScore != null
+    ? (readinessScore >= 75 ? 'green' : readinessScore >= 50 ? 'yellow' : readinessScore >= 25 ? 'orange' : 'red')
+    : null
+  const risk = riskFromOC ?? (tsbNow < -25 ? 'red' : tsbNow < -15 ? 'orange' : tsbNow < -8 ? 'yellow' : 'green')
   return { rows, alerts: [], readinessRiskLabel: risk, readinessDetail: { score: readinessScore ?? Math.round(50 + tsbNow) } }
 }, [normalizedActiveWorkouts, schedLog, ocItems, readinessScore])
 
