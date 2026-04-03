@@ -8309,12 +8309,6 @@ return (
                 <div style={{ fontWeight: "bold" }}>Daily Template</div>
                 <button onClick={() => setShowAddPreset(s => !s)} style={{ ...buttonStyle(false), fontSize:10, padding:"3px 8px" }}>+ Add to presets</button>
               </div>
-                <button
-                  onClick={() => setShowAddPreset(s => !s)}
-                  style={{ ...buttonStyle(false), fontSize:10, padding:"3px 8px" }}>
-                  + Add to presets
-                </button>
-              </div>
               <div style={{ fontSize: 11, opacity: 0.6 }}>
                 {templateTotals.calories > 0
                   ? `${templateTotals.calories} kcal / ${templateTotals.protein_g}g protein default. Fills chart on unlogged days.`
