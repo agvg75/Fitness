@@ -5710,8 +5710,8 @@ function estimateDynamicCalorieTarget({
       targetCalories: CALIBRATED_FAT_LOSS_TARGET,
       deficit: CALIBRATED_MAINTENANCE - CALIBRATED_FAT_LOSS_TARGET,
       phase: w > 0 && w <= 145 ? "at_target" : "fat_loss",
-      distanceTo150: w > 0 ? w - 150 : null,
-      distanceTo145: w > 0 ? w - 145 : null,
+      distanceTo150: w > 0 ? Math.round(w - 150) : null,
+      distanceTo145: w > 0 ? Math.round(w - 145) : null,
       bmr: CALIBRATED_BMR
     }
   }
@@ -8307,12 +8307,12 @@ return (
               <div style={{ display:"flex", alignItems:"center", gap:10 }}>
                  <div style={{ display:"flex", alignItems:"center", gap:10 }}>
                 <div style={{ fontWeight: "bold" }}>Daily Template</div>
-                <button onClick={() => setShowAddPreset(s => !s)} style={{ ...buttonStyle(false), fontSize:10, padding:"3px 8px" }}>+ Add meal</button>
+                <button onClick={() => setShowAddPreset(s => !s)} style={{ ...buttonStyle(false), fontSize:10, padding:"3px 8px" }}>+ Add to presets</button>
               </div>
                 <button
                   onClick={() => setShowAddPreset(s => !s)}
                   style={{ ...buttonStyle(false), fontSize:10, padding:"3px 8px" }}>
-                  + Add meal
+                  + Add to presets
                 </button>
               </div>
               <div style={{ fontSize: 11, opacity: 0.6 }}>
