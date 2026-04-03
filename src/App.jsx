@@ -6513,8 +6513,30 @@ async function persistMealEntries(nextEntries, currentUserId) {
 
 const strengthFromSchedule = useMemo(() => {
   return (Array.isArray(schedLog) ? schedLog : [])
-    .filter(e => (e.exercises || []).some(ex => ex.variant !== "cardio") || (e.data && Object.keys(e.data).length > 0))
-    .map(e => ({ date: e.date, dateTime: e.logged_at || e.date, category: "Strength" }))
+    .filter(e =>
+      (e.exercises || []).some(ex => ex.variant !== "cardio") ||
+      (e.data && Object.keys(e.data).length > 0)
+    )
+    .map(e => {
+      // Estimate TRIMP from logged sets/reps/weight if present, else use flat 40
+      const exList = e.exercises || []
+      const strengthEx = exList.filter(ex => ex.variant !== "cardio")
+      let trimp = 40 // default for a logged strength session
+      if (strengthEx.length > 0) {
+        const totalSets = strengthEx.reduce((acc, ex) => {
+          const sets = Array.isArray(ex.sets) ? ex.sets.length : (ex.sets || 3)
+          return acc + sets
+        }, 0)
+        trimp = Math.round(Math.min(80, 8 + totalSets * 3.5)) // ~40 for 9 sets, ~66 for 16 sets
+      }
+      return {
+        date: e.date,
+        dateTime: e.logged_at || e.date,
+        category: "Strength",
+        trimp,
+        duration: 3600
+      }
+    })
 }, [schedLog])
 
 const trainingSummary = useMemo(() => {
@@ -6954,7 +6976,7 @@ const computedTSB = useMemo(() => {
 }, [canonicalSessions])
 
 const tsbV2Panel = useMemo(() => {
-  const tau1 = 27, tau2 = 18, lookbackDays = 90, warmupDays = 42
+  const tau1 = 27, tau2 = 18, lookbackDays = selectedRangePoints ?? 90, warmupDays = 42
   const now = new Date(); now.setHours(0,0,0,0)
   const start = new Date(now); start.setDate(start.getDate() - (lookbackDays + warmupDays - 1))
   const dayKeys = []
@@ -7003,7 +7025,7 @@ const tsbV2Panel = useMemo(() => {
     : null
   const risk = riskFromOC ?? (tsbNow < -25 ? 'red' : tsbNow < -15 ? 'orange' : tsbNow < -8 ? 'yellow' : 'green')
   return { rows, alerts: [], readinessRiskLabel: risk, readinessDetail: { score: readinessScore ?? Math.round(50 + tsbNow) } }
-}, [normalizedActiveWorkouts, schedLog, ocItems, readinessScore])
+}, [normalizedActiveWorkouts, schedLog, ocItems, readinessScore, selectedRangePoints])
 
 const operationalCapacityData = useMemo(() => {
   const items = Array.isArray(ocItems) ? ocItems : []
@@ -7192,13 +7214,24 @@ const eventThresholds = {
   const logisticPct = (month, threshold, k, offset) =>
     Number((100 / (1 + Math.exp(-k * (month + offset - threshold)))).toFixed(1))
 
-  const baseR = Math.min(99, Math.max(1, rNow))
-  const offsets = {
-    fiveK: 4  - Math.log(100/baseR - 1) / 0.30,
-    tenK:  8  - Math.log(100/baseR - 1) / 0.24,
-    half:  14 - Math.log(100/baseR - 1) / 0.20,
-    tri:   20 - Math.log(100/baseR - 1) / 0.18,
-  }
+  // AFTER: activity-specific starting readiness from CTL
+const currentCTL = computedTSB?.global?.ctl ?? enduranceForecast?.ctl ?? 30
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v))
+
+// CTL thresholds calibrated to tau1=27 fitted model
+// [minFeasible, optimalBase] for each activity
+const activityR = {
+  fiveK: clamp(Math.round(1 + 98 * (currentCTL - 15) / (35 - 15)), 1, 99),
+  tenK:  clamp(Math.round(1 + 98 * (currentCTL - 25) / (50 - 25)), 1, 99),
+  half:  clamp(Math.round(1 + 98 * (currentCTL - 35) / (65 - 35)), 1, 99),
+  tri:   clamp(Math.round(1 + 98 * (currentCTL - 40) / (75 - 40)), 1, 99),
+}
+const offsets = {
+  fiveK: 4  - Math.log(100/activityR.fiveK - 1) / 0.30,
+  tenK:  8  - Math.log(100/activityR.tenK  - 1) / 0.24,
+  half:  14 - Math.log(100/activityR.half  - 1) / 0.20,
+  tri:   20 - Math.log(100/activityR.tri   - 1) / 0.18,
+}
 
   const maxMonth = 24
   const series = []
@@ -7634,11 +7667,23 @@ return (
     <>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10, marginBottom:10 }}>
         <div style={{ fontWeight:'bold', minHeight:'20px' }}>Training Readiness</div>
-        <div style={{ background:'rgba(10,12,22,0.9)', border:`1px solid ${badge.accent}`, borderRadius:10, padding:'6px 10px', textAlign:'right', minWidth:106 }}>
-          <div style={{ fontSize:10, opacity:0.7 }}>Readiness</div>
-          <div style={{ fontSize:18, fontWeight:800, color:badge.accent }}>{panel.readinessDetail?.score ?? 'NA'}</div>
-          <div style={{ fontSize:11, color:badge.accent }}>{badge.label}</div>
-        </div>
+{(() => {
+  const tsb = panel.readinessDetail?.score ?? 0
+  let borderColor = '#4ade80', msg = ''
+  if (tsb < -20)
+    { borderColor = '#ef4444'; msg = 'Acute fatigue. Substitute today\'s session with recovery swim or complete rest.' }
+  else if (tsb < -10)
+    { borderColor = '#fb923c'; msg = 'Moderate fatigue. Reduce intensity; replace run with easy bike or swim.' }
+  else if (tsb > 10)
+    { borderColor = '#4ade80'; msg = 'Form is positive. Good window for quality work or long run.' }
+  else
+    { borderColor = '#facc15'; msg = 'Neutral form. Proceed with scheduled session at controlled effort.' }
+  return (
+    <div style={{ borderLeft:`3px solid ${borderColor}`, paddingLeft:9, fontSize:11, color:'#ccc', lineHeight:1.5 }}>
+      {msg}
+    </div>
+  )
+})()}
       </div>
       {panel.rows.length > 0 ? (
         <ResponsiveContainer width="100%" height={270}>
