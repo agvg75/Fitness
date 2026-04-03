@@ -5673,15 +5673,16 @@ function estimateDynamicCalorieTarget({
   const CALIBRATED_BMR = 1520
   const CALIBRATED_MAINTENANCE = 2100
   const CALIBRATED_FAT_LOSS_TARGET = 1700
-  if (Number.isFinite(Number(currentWeight)) && Number(currentWeight) >= 140 && Number(currentWeight) <= 180) {
+  // Fire for weights ≤180 lb (covers 0/"not loaded yet" so target never falls back to formula-derived 2925)
+  if (Number(currentWeight) <= 180) {
     const w = Number(currentWeight)
     return {
       estimatedMaintenance: CALIBRATED_MAINTENANCE,
       targetCalories: CALIBRATED_FAT_LOSS_TARGET,
       deficit: CALIBRATED_MAINTENANCE - CALIBRATED_FAT_LOSS_TARGET,
-      phase: w <= 145 ? "at_target" : "fat_loss",
-      distanceTo150: w - 150,
-      distanceTo145: w - 145,
+      phase: w > 0 && w <= 145 ? "at_target" : "fat_loss",
+      distanceTo150: w > 0 ? w - 150 : null,
+      distanceTo145: w > 0 ? w - 145 : null,
       bmr: CALIBRATED_BMR
     }
   }
@@ -6166,6 +6167,8 @@ const overviewWeightDomain = useMemo(() => {
 
   const nutritionSeries = useMemo(() => {
     const staticDays = [...nutrition]
+      .filter(row => (row.calories ?? row.kcal ?? row.energy_kcal ?? row.Calories) != null
+                  || (row.protein_g ?? row.protein) != null)  // skip placeholder rows with all-null macros
       .map((row, idx) => {
         const date = row.date ?? row.Date ?? `row-${idx + 1}`
         return {
