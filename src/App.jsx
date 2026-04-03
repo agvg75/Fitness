@@ -6899,9 +6899,10 @@ const tsbV2Panel = useMemo(() => {
   rows.forEach(r => { r.strengthNorm = sMax > sMin ? Number((((r.strengthLoad-sMin)/(sMax-sMin))*100).toFixed(1)) : 0 })
   const cur = rows[rows.length-1] || {}
   const tsbNow = cur.overallTsb ?? 0
-  const risk = tsbNow < -25 ? 'red' : tsbNow < -15 ? 'orange' : tsbNow < -8 ? 'yellow' : 'green'
-  return { rows, alerts: [], readinessRiskLabel: risk, readinessDetail: { score: Math.round(50 + tsbNow) } }
-}, [normalizedActiveWorkouts, schedLog, ocItems])
+  const riskFromScore = readinessScore >= 75 ? 'green' : readinessScore >= 50 ? 'yellow' : readinessScore >= 25 ? 'orange' : 'red'
+  const risk = readinessScore != null ? riskFromScore : (tsbNow < -25 ? 'red' : tsbNow < -15 ? 'orange' : tsbNow < -8 ? 'yellow' : 'green')
+  return { rows, alerts: [], readinessRiskLabel: risk, readinessDetail: { score: readinessScore ?? Math.round(50 + tsbNow) } }
+}, [normalizedActiveWorkouts, schedLog, ocItems, readinessScore])
 
 const operationalCapacityData = useMemo(() => {
   const items = Array.isArray(ocItems) ? ocItems : []
@@ -7510,8 +7511,7 @@ return (
       </div>
     </div>
 
-    <div style={{ display: "grid", gridTemplateColumns: window.innerWidth < 768 ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: "16px", marginBottom: "20px", alignItems: "start" }}>
-      <div style={{ ...cardStyle(), minWidth: "0" }}>
+    <div style={{ ...cardStyle(), minWidth: 0, marginBottom: 16 }}>
 {(() => {
   const riskPalette = {
     green: { fill: 'rgba(34,197,94,0.10)', accent: '#4ade80', label: 'Green' },
@@ -7524,7 +7524,7 @@ return (
   return (
     <>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10, marginBottom:10 }}>
-        <div style={{ fontWeight:'bold', minHeight:'20px' }}>Training Readiness (TSB v2)</div>
+        <div style={{ fontWeight:'bold', minHeight:'20px' }}>Training Readiness</div>
         <div style={{ background:'rgba(10,12,22,0.9)', border:`1px solid ${badge.accent}`, borderRadius:10, padding:'6px 10px', textAlign:'right', minWidth:106 }}>
           <div style={{ fontSize:10, opacity:0.7 }}>Readiness</div>
           <div style={{ fontSize:18, fontWeight:800, color:badge.accent }}>{panel.readinessDetail?.score ?? 'NA'}</div>
@@ -7549,11 +7549,23 @@ return (
       ) : (
         <div style={{ color:'#666', fontSize:12, padding:'20px 0' }}>CTL {computedTSB?.global?.ctl?.toFixed(1) ?? '—'} · ATL {computedTSB?.global?.atl?.toFixed(1) ?? '—'} · TSB {computedTSB?.global?.tsb?.toFixed(1) ?? '—'} (computed from workouts)</div>
       )}
+      <div style={{ marginTop: 6 }}>
+        <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 4 }}>Strength load (normalized)</div>
+        <ResponsiveContainer width="100%" height={56}>
+          <BarChart data={panel.rows} margin={{ top: 0, right: 8, left: 8, bottom: 0 }}>
+            <XAxis dataKey="label" hide />
+            <YAxis hide domain={[0, 100]} />
+            <Tooltip formatter={v => [`${Number(v).toFixed(0)}`, "Strength load"]} />
+            <Bar dataKey="strengthNorm" name="Strength load" fill="#7c3aed" fillOpacity={0.45} radius={[2, 2, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
     </>
   )
 })()}
 </div>
 
+    <div style={{ display: "grid", gridTemplateColumns: window.innerWidth < 768 ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: "16px", marginBottom: "20px", alignItems: "start" }}>
       <div style={{ ...cardStyle(), minWidth: "0" }}>
   <div style={{ fontWeight: "bold", marginBottom: "12px", minHeight: "20px" }}>
     Performance Readiness
@@ -7656,6 +7668,9 @@ return (
 
       <div style={{ ...cardStyle(), minWidth: "0" }}>
         <div style={{ fontWeight: "bold", marginBottom: "12px" }}>Calories Trend ({rangeOptions.find(r => r.key === rangeKey)?.label ?? rangeKey})</div>
+        {calorieChartData.length === 0 ? (
+          <div style={{ color: '#555', padding: '40px 0', textAlign: 'center', fontSize: 12 }}>No nutrition data logged for this period.</div>
+        ) : (
         <ResponsiveContainer width="100%" height={320}>
           <LineChart
   data={calorieChartData}
@@ -7664,6 +7679,8 @@ return (
             <CartesianGrid stroke="#1a1b2e" />
             <XAxis
   dataKey="label"
+  interval="preserveStartEnd"
+  tickCount={6}
   label={{
     value: "Date",
     position: "bottom",
@@ -7710,6 +7727,7 @@ return (
             />
           </LineChart>
         </ResponsiveContainer>
+        )}
       </div>
     </div>
 
