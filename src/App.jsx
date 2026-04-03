@@ -5863,6 +5863,9 @@ const [authMsg, setAuthMsg] = useState("")
     return { Breakfast: 'b1', Lunch: 'l1', Dinner: 'd1', Snacks: null }
   }
 })
+const dailyNutritionSummary = useMemo(() => {
+  return summarizeDailyNutrition(mealEntries)
+}, [mealEntries])
   const templateTotals = useMemo(() => {
   let calories = 0, protein_g = 0, carbs_g = 0, fat_g = 0
   Object.entries(dailyTemplate).forEach(([slot, id]) => {
