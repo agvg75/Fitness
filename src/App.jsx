@@ -8305,7 +8305,6 @@ return (
           <div style={{ ...cardStyle(), marginBottom: "16px", maxWidth: "1000px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", flexWrap: "wrap", gap: 8 }}>
               <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                 <div style={{ display:"flex", alignItems:"center", gap:10 }}>
                 <div style={{ fontWeight: "bold" }}>Daily Template</div>
                 <button onClick={() => setShowAddPreset(s => !s)} style={{ ...buttonStyle(false), fontSize:10, padding:"3px 8px" }}>+ Add to presets</button>
               </div>
