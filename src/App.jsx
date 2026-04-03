@@ -169,19 +169,24 @@ const rangeOptions = [
 
 const defaultMealPresets = {
   Breakfast: [
-    { id: "b1", name: "Greek yogurt + banana + granola + honey", calories: 420, protein_g: 22, carbs_g: 58, fat_g: 8, fiber_g: 4 },
-    { id: "b2", name: "Bagel + cream cheese + 2 eggs + ham", calories: 520, protein_g: 30, carbs_g: 42, fat_g: 24, fiber_g: 2 },
-    { id: "b3", name: "3 eggs + 4 ham slices", calories: 320, protein_g: 31, carbs_g: 2, fat_g: 20, fiber_g: 0 }
+    { id: "b1", name: "Cottage cheese bowl + banana + coffee (M-Sa)", calories: 311, protein_g: 20, carbs_g: 48, fat_g: 4, fiber_g: 3 },
+    { id: "b2", name: "Sunday pancakes (3) + maple syrup + coffee", calories: 345, protein_g: 9, carbs_g: 72, fat_g: 8, fiber_g: 2 },
+    { id: "b3", name: "Greek yogurt + banana + granola + honey", calories: 420, protein_g: 22, carbs_g: 58, fat_g: 8, fiber_g: 4 },
+    { id: "b4", name: "Bagel + cream cheese + 2 eggs + ham", calories: 520, protein_g: 30, carbs_g: 42, fat_g: 24, fiber_g: 2 },
+    { id: "b5", name: "3 eggs + 4 ham slices", calories: 320, protein_g: 31, carbs_g: 2, fat_g: 20, fiber_g: 0 }
   ],
   Lunch: [
-    { id: "l1", name: "Protein bar + 2 yogurts", calories: 350, protein_g: 37, carbs_g: 28, fat_g: 9, fiber_g: 2 },
-    { id: "l2", name: "Sandwich + yogurt", calories: 500, protein_g: 30, carbs_g: 45, fat_g: 18, fiber_g: 3 },
-    { id: "l3", name: "Ham and eggs", calories: 350, protein_g: 32, carbs_g: 3, fat_g: 22, fiber_g: 0 }
+    { id: "l1", name: "Protein bar + 2 yogurts (weekday)", calories: 350, protein_g: 37, carbs_g: 28, fat_g: 9, fiber_g: 2 },
+    { id: "l2", name: "Ham/cheese sandwich + corn chips (Saturday)", calories: 585, protein_g: 28, carbs_g: 45, fat_g: 28, fiber_g: 2 },
+    { id: "l3", name: "Light sandwich or bagel + eggs (Sunday)", calories: 390, protein_g: 20, carbs_g: 42, fat_g: 10, fiber_g: 2 },
+    { id: "l4", name: "Sandwich + yogurt", calories: 500, protein_g: 30, carbs_g: 45, fat_g: 18, fiber_g: 3 },
+    { id: "l5", name: "Ham and eggs", calories: 350, protein_g: 32, carbs_g: 3, fat_g: 22, fiber_g: 0 }
   ],
   Dinner: [
-    { id: "d1", name: "Fish + vegetables + yogurt", calories: 420, protein_g: 32, carbs_g: 28, fat_g: 16, fiber_g: 5 },
-    { id: "d2", name: "Bagel + eggs + ham", calories: 520, protein_g: 30, carbs_g: 42, fat_g: 24, fiber_g: 2 },
-    { id: "d3", name: "Broccoli + peas/carrots + protein add on", calories: 360, protein_g: 26, carbs_g: 30, fat_g: 12, fiber_g: 6 }
+    { id: "d1", name: "Lean meat + starch + vegetables + tea", calories: 440, protein_g: 36, carbs_g: 52, fat_g: 8, fiber_g: 5 },
+    { id: "d2", name: "Lean meat + starch + vegetables + IPA", calories: 650, protein_g: 36, carbs_g: 67, fat_g: 8, fiber_g: 5 },
+    { id: "d3", name: "Fish + vegetables + yogurt", calories: 420, protein_g: 32, carbs_g: 28, fat_g: 16, fiber_g: 5 },
+    { id: "d4", name: "Broccoli + peas/carrots + protein", calories: 360, protein_g: 26, carbs_g: 30, fat_g: 12, fiber_g: 6 }
   ],
   Snacks: [
     { id: "s1", name: "Protein bar", calories: 190, protein_g: 20, carbs_g: 19, fat_g: 6, fiber_g: 2 },
@@ -5763,8 +5768,8 @@ function estimateDynamicCalorieTarget({
     targetCalories,
     deficit,
     phase,
-    distanceTo150: Math.round(distanceTo150 * 10) / 10,
-    distanceTo145: Math.round(distanceTo145 * 10) / 10
+    distanceTo150: Math.round(distanceTo150),
+    distanceTo145: Math.round(distanceTo145)
   }
 }
 
@@ -5880,6 +5885,9 @@ const dailyNutritionSummary = useMemo(() => {
   return { calories, protein_g, carbs_g, fat_g }
 }, [dailyTemplate, mealPresets])
 const [showMealDialog, setShowMealDialog] = useState(false)
+const [showAddPreset, setShowAddPreset] = useState(false)
+const [newPresetSlot, setNewPresetSlot] = useState("Breakfast")
+const [newPreset, setNewPreset] = useState({ name:"", calories:"", protein_g:"", carbs_g:"", fat_g:"" })
   const [mealDate, setMealDate] = useState(todayISO())
   const [mealTab, setMealTab] = useState("Breakfast")
   const [customMealName, setCustomMealName] = useState("")
@@ -8296,7 +8304,17 @@ return (
           {/* Daily Template */}
           <div style={{ ...cardStyle(), marginBottom: "16px", maxWidth: "1000px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", flexWrap: "wrap", gap: 8 }}>
-              <div style={{ fontWeight: "bold" }}>Daily Template</div>
+              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                 <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                <div style={{ fontWeight: "bold" }}>Daily Template</div>
+                <button onClick={() => setShowAddPreset(s => !s)} style={{ ...buttonStyle(false), fontSize:10, padding:"3px 8px" }}>+ Add meal</button>
+              </div>
+                <button
+                  onClick={() => setShowAddPreset(s => !s)}
+                  style={{ ...buttonStyle(false), fontSize:10, padding:"3px 8px" }}>
+                  + Add meal
+                </button>
+              </div>
               <div style={{ fontSize: 11, opacity: 0.6 }}>
                 {templateTotals.calories > 0
                   ? `${templateTotals.calories} kcal / ${templateTotals.protein_g}g protein default. Fills chart on unlogged days.`
@@ -8333,7 +8351,38 @@ return (
               })}
             </div>
           </div>
-
+{showAddPreset && (
+  <div style={{ marginTop:12, background:"#14152a", border:"1px solid #1a1b2e", borderRadius:8, padding:10 }}>
+    <div style={{ fontSize:11, fontWeight:"bold", marginBottom:8 }}>Add meal to presets</div>
+    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:8 }}>
+      <select value={newPresetSlot} onChange={e => setNewPresetSlot(e.target.value)}
+        style={{ background:"#07080e", color:"#ced2f0", border:"1px solid #1a1b2e", borderRadius:6, padding:"4px 6px", fontSize:11 }}>
+        {["Breakfast","Lunch","Dinner","Snacks"].map(s => <option key={s}>{s}</option>)}
+      </select>
+      <input placeholder="Meal name" value={newPreset.name}
+        onChange={e => setNewPreset(p => ({...p, name:e.target.value}))} style={{...inputStyle(), fontSize:11, padding:"4px 8px"}} />
+      <input placeholder="Calories" value={newPreset.calories}
+        onChange={e => setNewPreset(p => ({...p, calories:e.target.value}))} style={{...inputStyle(), fontSize:11, padding:"4px 8px"}} />
+      <input placeholder="Protein g" value={newPreset.protein_g}
+        onChange={e => setNewPreset(p => ({...p, protein_g:e.target.value}))} style={{...inputStyle(), fontSize:11, padding:"4px 8px"}} />
+      <input placeholder="Carbs g" value={newPreset.carbs_g}
+        onChange={e => setNewPreset(p => ({...p, carbs_g:e.target.value}))} style={{...inputStyle(), fontSize:11, padding:"4px 8px"}} />
+      <input placeholder="Fat g" value={newPreset.fat_g}
+        onChange={e => setNewPreset(p => ({...p, fat_g:e.target.value}))} style={{...inputStyle(), fontSize:11, padding:"4px 8px"}} />
+    </div>
+    <button style={buttonStyle(true)} onClick={() => {
+      if (!newPreset.name || !newPreset.calories) return
+      const id = newPresetSlot.slice(0,1).toLowerCase() + Date.now()
+      const entry = { id, name: newPreset.name, calories: Number(newPreset.calories),
+        protein_g: Number(newPreset.protein_g||0), carbs_g: Number(newPreset.carbs_g||0), fat_g: Number(newPreset.fat_g||0) }
+      const next = { ...mealPresets, [newPresetSlot]: [...(mealPresets[newPresetSlot]||[]), entry] }
+      setMealPresets(next)
+      store.set("ufd-meal-presets", next).catch(() => {})
+      setNewPreset({ name:"", calories:"", protein_g:"", carbs_g:"", fat_g:"" })
+      setShowAddPreset(false)
+    }}>Save to {newPresetSlot} presets</button>
+  </div>
+)}
           <div style={{ ...cardStyle(), marginBottom: "20px", maxWidth: "1000px" }}>
             <div style={{ fontWeight: "bold", marginBottom: "12px" }}>Calories Trend ({rangeKey})</div>
            <ResponsiveContainer width="100%" height={260}>
