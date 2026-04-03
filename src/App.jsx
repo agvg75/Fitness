@@ -5855,9 +5855,25 @@ const [authMsg, setAuthMsg] = useState("")
 
   const [mealEntries, setMealEntries] = useState([])
   const [mealPresets, setMealPresets] = useState(defaultMealPresets)
-const dailyNutritionSummary = useMemo(() => {
+const [dailyTemplate, setDailyTemplate] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('lift-daily-template') || 'null') } catch { return null }
+  } || { Breakfast: 'b1', Lunch: 'l1', Dinner: 'd1', Snacks: null })
+  const dailyNutritionSummary = useMemo(() => {
   return summarizeDailyNutrition(mealEntries)
 }, [mealEntries])
+const templateTotals = useMemo(() => {
+  let calories = 0, protein_g = 0, carbs_g = 0, fat_g = 0
+  Object.entries(dailyTemplate).forEach(([slot, id]) => {
+    if (!id) return
+    const preset = (mealPresets[slot] || []).find(p => p.id === id)
+    if (!preset) return
+    calories  += preset.calories  || 0
+    protein_g += preset.protein_g || 0
+    carbs_g   += preset.carbs_g   || 0
+    fat_g     += preset.fat_g     || 0
+  })
+  return { calories, protein_g, carbs_g, fat_g }
+}, [dailyTemplate, mealPresets])
   const [showMealDialog, setShowMealDialog] = useState(false)
   const [mealDate, setMealDate] = useState(todayISO())
   const [mealTab, setMealTab] = useState("Breakfast")
@@ -7454,11 +7470,25 @@ const calorieDelta = useMemo(() => {
 }, [nutritionSummary, calorieTarget])
 
 const calorieChartData = useMemo(() => {
-  return filteredNutrition.map(row => ({
-    ...row,
-    target: calorieTarget.targetCalories
-  }))
-}, [filteredNutrition, calorieTarget])
+  const now = new Date()
+  const days = selectedRangePoints ?? 90
+  const actualByDate = {}
+  filteredNutrition.forEach(r => { const d = String(r.date || '').slice(0,10); if (d) actualByDate[d] = r })
+  const rows = []
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(now); d.setDate(d.getDate() - i)
+    const dateStr = d.toISOString().slice(0,10)
+    const actual = actualByDate[dateStr]
+    if (actual) {
+      rows.push({ ...actual, label: dateStr.slice(5), target: calorieTarget.targetCalories, isTemplate: false })
+    } else if (templateTotals.calories > 0) {
+      rows.push({ date: dateStr, label: dateStr.slice(5), calories: templateTotals.calories,
+        protein_g: templateTotals.protein_g, carbs_g: templateTotals.carbs_g, fat_g: templateTotals.fat_g,
+        target: calorieTarget.targetCalories, isTemplate: true })
+    }
+  }
+  return rows
+}, [filteredNutrition, calorieTarget, templateTotals, selectedRangePoints])
 
 const tsbOverviewData = useMemo(() => {
   const arr = Array.isArray(healthFitDaily) ? healthFitDaily : []
@@ -8256,6 +8286,47 @@ return (
     To 150: {calorieTarget.distanceTo150 ?? "NA"} lb, to 145: {calorieTarget.distanceTo145 ?? "NA"} lb
   </div>
 </div>
+          </div>
+
+          {/* Daily Template */}
+          <div style={{ ...cardStyle(), marginBottom: "16px", maxWidth: "1000px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", flexWrap: "wrap", gap: 8 }}>
+              <div style={{ fontWeight: "bold" }}>Daily Template</div>
+              <div style={{ fontSize: 11, opacity: 0.6 }}>
+                {templateTotals.calories > 0
+                  ? `${templateTotals.calories} kcal / ${templateTotals.protein_g}g protein default. Fills chart on unlogged days.`
+                  : "Set defaults below. Chart fills these automatically on unlogged days."}
+              </div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))", gap: "10px" }}>
+              {["Breakfast", "Lunch", "Dinner", "Snacks"].map(slot => {
+                const activeId = dailyTemplate[slot]
+                const active = activeId ? (mealPresets[slot] || []).find(p => p.id === activeId) : null
+                return (
+                  <div key={slot} style={{ background: "#14152a", border: "1px solid #1a1b2e", borderRadius: "8px", padding: "10px" }}>
+                    <div style={{ fontSize: 11, opacity: 0.55, marginBottom: 3, textTransform: "uppercase", letterSpacing: "0.08em" }}>{slot}</div>
+                    <div style={{ fontSize: 12, fontWeight: "bold", marginBottom: 2, minHeight: 16 }}>{active ? active.name : "None"}</div>
+                    <div style={{ fontSize: 11, opacity: 0.65, marginBottom: 8 }}>
+                      {active ? `${active.calories} kcal · ${active.protein_g}g prot` : "Not set"}
+                    </div>
+                    <select
+                      value={activeId || ""}
+                      onChange={e => {
+                        const next = { ...dailyTemplate, [slot]: e.target.value || null }
+                        setDailyTemplate(next)
+                        try { localStorage.setItem('lift-daily-template', JSON.stringify(next)) } catch {}
+                      }}
+                      style={{ background: "#07080e", color: "#ced2f0", border: "1px solid #1a1b2e", borderRadius: "6px", padding: "4px 6px", width: "100%", fontSize: 11 }}
+                    >
+                      <option value="">None</option>
+                      {(mealPresets[slot] || []).map(p => (
+                        <option key={p.id} value={p.id}>{p.name} ({p.calories} kcal)</option>
+                      ))}
+                    </select>
+                  </div>
+                )
+              })}
+            </div>
           </div>
 
           <div style={{ ...cardStyle(), marginBottom: "20px", maxWidth: "1000px" }}>
