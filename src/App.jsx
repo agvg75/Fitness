@@ -5853,14 +5853,14 @@ const [email, setEmail] = useState("avidal@ilstu.edu")
 const [authMsg, setAuthMsg] = useState("")
   const [hydrated, setHydrated] = useState(false)
 
-  const [mealEntries, setMealEntries] = useState([])
-  const [mealPresets, setMealPresets] = useState(defaultMealPresets)
-const [dailyTemplate, setDailyTemplate] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('lift-daily-template') || 'null') } catch { return null }
-  } || { Breakfast: 'b1', Lunch: 'l1', Dinner: 'd1', Snacks: null })
-  const dailyNutritionSummary = useMemo(() => {
-  return summarizeDailyNutrition(mealEntries)
-}, [mealEntries])
+  const [dailyTemplate, setDailyTemplate] = useState(() => {
+  try {
+    const stored = JSON.parse(localStorage.getItem('lift-daily-template') || 'null')
+    return stored || { Breakfast: 'b1', Lunch: 'l1', Dinner: 'd1', Snacks: null }
+  } catch {
+    return { Breakfast: 'b1', Lunch: 'l1', Dinner: 'd1', Snacks: null }
+  }
+})
 const templateTotals = useMemo(() => {
   let calories = 0, protein_g = 0, carbs_g = 0, fat_g = 0
   Object.entries(dailyTemplate).forEach(([slot, id]) => {
