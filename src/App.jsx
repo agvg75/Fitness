@@ -1889,24 +1889,44 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
             const day = activeDay
             const prog = getProgDay(day)
             const allExs = [
-              ...(prog.exercises || []).map(ex => ({ id: ex.id, name: ex.n })),
-              ...getCustomExercises(day).map(e => ({ id: e.id, name: e.n }))
+              ...(prog.exercises || []).map(ex => ({ id: ex.id, name: ex.n, venue: ex.venue || null })),
+              ...getCustomExercises(day).map(e => ({ id: e.id, name: e.n, venue: null }))
             ]
+            const hasVenueTags = allExs.some(ex => ex.venue != null)
+            const ymcaExs = allExs.filter(ex => ex.venue === "YMCA" || ex.venue == null && !hasVenueTags)
+            const knrExs  = allExs.filter(ex => ex.venue === "KNR")
+            const untagged = allExs.filter(ex => ex.venue == null && hasVenueTags)
+            const grouped = hasVenueTags
+              ? [
+                  ...(ymcaExs.length ? [{ groupLabel: "YMCA (5:30–7:00)", color: "#d97706", items: ymcaExs }] : []),
+                  ...(knrExs.length  ? [{ groupLabel: "KNR (9:35–10:45)",  color: "#3b82f6", items: knrExs  }] : []),
+                  ...(untagged.length ? [{ groupLabel: "Other", color: "#666", items: untagged }] : []),
+                ]
+              : [{ groupLabel: null, items: allExs }]
             return (
-              <div key={venue} style={{ marginBottom: 10, padding: "14px", border: `0.5px solid ${venue === "knr" ? "#0F6E56" : "#185FA5"}`, borderRadius: 8, background: "#0a0a0a" }}>
+              <div key={venue} style={{ marginBottom: 10, padding: "14px", border: `0.5px solid ${venue === "knr" ? "#3b82f6" : "#d97706"}`, borderRadius: 8, background: "#0a0a0a" }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: "#ced2f0", marginBottom: 10 }}>
-                  {label} — select exercises to log
+                  Logging: {VENUE_LABELS[venue]}
                 </div>
-                {allExs.map(ex => (
-                  <label key={ex.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0", cursor: "pointer", fontSize: 13, color: "#ccc" }}>
-                    <input
-                      type="checkbox"
-                      checked={pendingChecked[ex.id] ?? true}
-                      onChange={e => setPendingChecked(prev => ({ ...prev, [ex.id]: e.target.checked }))}
-                      style={{ accentColor: "#4a9ee8", width: 14, height: 14, cursor: "pointer" }}
-                    />
-                    {ex.name}
-                  </label>
+                {grouped.map(group => (
+                  <div key={group.groupLabel || "all"}>
+                    {group.groupLabel && (
+                      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", color: group.color, marginTop: 8, marginBottom: 4 }}>
+                        {group.groupLabel}
+                      </div>
+                    )}
+                    {group.items.map(ex => (
+                      <label key={ex.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0", cursor: "pointer", fontSize: 13, color: "#ccc" }}>
+                        <input
+                          type="checkbox"
+                          checked={pendingChecked[ex.id] ?? true}
+                          onChange={e => setPendingChecked(prev => ({ ...prev, [ex.id]: e.target.checked }))}
+                          style={{ accentColor: "#4a9ee8", width: 14, height: 14, cursor: "pointer" }}
+                        />
+                        {ex.name}
+                      </label>
+                    ))}
+                  </div>
                 ))}
                 <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
                   <button onClick={() => setPendingVenue(null)}
@@ -1931,10 +1951,14 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
               const day = activeDay
               const prog = getProgDay(day)
               const allExs = [
-                ...(prog.exercises || []).map(ex => ({ id: ex.id })),
-                ...getCustomExercises(day).map(e => ({ id: e.id }))
+                ...(prog.exercises || []).map(ex => ({ id: ex.id, venue: ex.venue || null })),
+                ...getCustomExercises(day).map(e => ({ id: e.id, venue: null }))
               ]
-              setPendingChecked(Object.fromEntries(allExs.map(ex => [ex.id, true])))
+              const isYmca = venue === "ymca"
+              setPendingChecked(Object.fromEntries(allExs.map(ex => [
+                ex.id,
+                ex.venue == null || (isYmca ? ex.venue === "YMCA" : ex.venue === "KNR")
+              ])))
               setPendingVenue(venue)
             }}
               style={{ width: "100%", padding: 13, background: venue === "knr" ? "#0F6E56" : "#185FA5", color: "#fff", border: "none", borderRadius: 7, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", marginBottom: 8 }}>
@@ -7165,8 +7189,16 @@ const eventThresholds = {
   tri: 88
 }
 
-  const logisticPct = (month, monthThreshold, k = 0.3) =>
-    Number((100 / (1 + Math.exp(-k * (month - monthThreshold)))).toFixed(1))
+  const logisticPct = (month, threshold, k, offset) =>
+    Number((100 / (1 + Math.exp(-k * (month + offset - threshold)))).toFixed(1))
+
+  const baseR = Math.min(99, Math.max(1, rNow))
+  const offsets = {
+    fiveK: 4  - Math.log(100/baseR - 1) / 0.30,
+    tenK:  8  - Math.log(100/baseR - 1) / 0.24,
+    half:  14 - Math.log(100/baseR - 1) / 0.20,
+    tri:   20 - Math.log(100/baseR - 1) / 0.18,
+  }
 
   const maxMonth = 24
   const series = []
@@ -7175,10 +7207,10 @@ const eventThresholds = {
     series.push({
       month,
       label: month === 0 ? "Now" : `${month}M`,
-      fiveK: logisticPct(month, 4,  0.30),
-      tenK:  logisticPct(month, 8,  0.24),
-      half:  logisticPct(month, 14, 0.20),
-      tri:   logisticPct(month, 20, 0.18),
+      fiveK: logisticPct(month, 4,  0.30, offsets.fiveK),
+      tenK:  logisticPct(month, 8,  0.24, offsets.tenK),
+      half:  logisticPct(month, 14, 0.20, offsets.half),
+      tri:   logisticPct(month, 20, 0.18, offsets.tri),
     })
   }
 
