@@ -826,7 +826,7 @@ function BodySilhouetteSVG() {
   return <BodySilhouetteImg side="front" />
 }
 
-function computeReadinessDetail(ocItems, sleepRecords, healthFitDaily) {
+function computeReadinessDetail(ocItems, sleepRecords, healthFitDaily, tsbFallback = null) {
   // ── Injury penalty (existing formula) ──────────────────────────
   const active = (ocItems || []).filter(i => i.currentScore > 0)
   const regional = active.filter(i => OC_KEY_META[i.key]?.scope === "regional").map(i => i.currentScore)
@@ -851,9 +851,15 @@ function computeReadinessDetail(ocItems, sleepRecords, healthFitDaily) {
     : 0
 
   // ── Training load penalty — most recent TSB ────────────────────
-  const latestTsb = (Array.isArray(healthFitDaily) ? healthFitDaily : [])
+  // healthFitDaily takes precedence when fresh (last entry ≤7 days old)
+  const sortedHF = (Array.isArray(healthFitDaily) ? healthFitDaily : [])
     .filter(r => r.tsb != null)
-    .sort((a, b) => b.date.localeCompare(a.date))[0]?.tsb ?? null
+    .sort((a, b) => b.date.localeCompare(a.date))
+  const latestHFEntry = sortedHF[0] ?? null
+  const hfIsStale = !latestHFEntry ||
+    (Date.now() - new Date(latestHFEntry.date).getTime()) > 7 * 24 * 3600000
+  const latestTsb = (!hfIsStale && latestHFEntry) ? latestHFEntry.tsb
+    : tsbFallback ?? (latestHFEntry?.tsb ?? null)
   const tsbPenalty = latestTsb == null ? 0
     : latestTsb < -30 ? 20
     : latestTsb < -20 ? 10
@@ -2179,7 +2185,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   return (
     <div style={{ color: "#d8d8d8", position: "relative" }}>
       <input ref={importRef} type="file" accept=".json" style={{ display: "none" }} onChange={importLog} />
-      <DailyReadinessPanel readinessScore={readinessScore} latestHealthFit={latestHealthFit} ocItems={ocItems} computedTSB={computedTSB} />
+      <DailyReadinessPanel readinessScore={readinessScore} latestHealthFit={latestHealthFit} ocItems={ocItems} computedTSB={computedTSBFromSessions ?? computedTSB} />
       {/* Day navigation */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
         <div style={{ display: "flex", gap: 3, background: "#0a0a0a", borderRadius: 8, padding: 4, border: "1px solid #1a1a1a", flexWrap: "wrap" }}>
@@ -6829,6 +6835,58 @@ const strengthFromSchedule = useMemo(() => {
     })
 }, [schedLog])
 
+// ── Banister TSB from canonical sessions + schedule strength ─────────────
+// tau1=27 (fitness/CTL), tau2=18 (fatigue/ATL), TRIMP-based
+// Merges canonicalSessions with strengthFromSchedule so the model
+// reflects all training load even when no HealthFit CSV has been imported.
+const computedTSBFromSessions = useMemo(() => {
+  const tau1 = 27, tau2 = 18
+  const raw = [
+    ...(Array.isArray(canonicalSessions) ? canonicalSessions : []).map(s => {
+      const durMin = s.dur_min || s.duration_min ||
+        (Number(s.duration_sec) > 0 ? s.duration_sec / 60 : 0)
+      const avgHr = Number(s.avg_hr) || 0
+      const trimp = s.trimp != null
+        ? Number(s.trimp)
+        : durMin * (avgHr > 0 ? (avgHr / 180) * 1.2 : 0.5)
+      return { date: (s.start_date || s.dateTime || s.date || "").slice(0, 10), trimp }
+    }),
+    ...(Array.isArray(strengthFromSchedule) ? strengthFromSchedule : []).map(s => ({
+      date: String(s.date || "").slice(0, 10),
+      trimp: Number(s.trimp) || 40,
+    })),
+  ]
+  // Sum TRIMP by calendar date
+  const dailyTrimp = {}
+  raw.forEach(({ date, trimp }) => {
+    if (!date || !Number.isFinite(trimp) || trimp <= 0) return
+    dailyTrimp[date] = (dailyTrimp[date] || 0) + trimp
+  })
+  const days = Object.keys(dailyTrimp).sort()
+  if (!days.length) return null
+  let ctl = 0, atl = 0, prevCtl = 0, prevAtl = 0
+  let prev = days[0]
+  days.forEach(d => {
+    const gap = Math.max(0, Math.round((new Date(d) - new Date(prev)) / 86400000))
+    // Fill zero-TRIMP days between sessions
+    for (let i = 0; i < gap - 1; i++) {
+      prevCtl = ctl; prevAtl = atl
+      ctl = ctl + (0 - ctl) / tau1
+      atl = atl + (0 - atl) / tau2
+    }
+    prevCtl = ctl; prevAtl = atl
+    const t = dailyTrimp[d] || 0
+    ctl = ctl + (t - ctl) / tau1
+    atl = atl + (t - atl) / tau2
+    prev = d
+  })
+  // TSB(t) = CTL(t-1) - ATL(t-1) per Banister definition
+  const tsb = +(prevCtl - prevAtl).toFixed(1)
+  const out = { ctl: +ctl.toFixed(1), atl: +atl.toFixed(1), tsb }
+  out.global = out
+  return out
+}, [canonicalSessions, strengthFromSchedule])
+
 const trainingSummary = useMemo(() => {
   return buildTrainingSummary([...operationalWorkouts, ...strengthFromSchedule])
 }, [operationalWorkouts, strengthFromSchedule])
@@ -7214,8 +7272,8 @@ const operationalScore = useMemo(() => {
 }, [injuryPenalties])
 
 const readinessScore = useMemo(
-  () => computeReadinessDetail(ocItems, sleepRecords, healthFitDaily).score,
-  [ocItems, sleepRecords, healthFitDaily]
+  () => computeReadinessDetail(ocItems, sleepRecords, healthFitDaily, computedTSBFromSessions?.tsb ?? null).score,
+  [ocItems, sleepRecords, healthFitDaily, computedTSBFromSessions]
 )
 
 const latestHealthFit = useMemo(() => {
@@ -9092,7 +9150,7 @@ return (
     readinessScore={readinessScore}
     latestHealthFit={latestHealthFit}
     ocItems={ocItems}
-    computedTSB={computedTSB}
+    computedTSB={computedTSBFromSessions ?? computedTSB}
   />
 )}
 
