@@ -1635,13 +1635,12 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
 
   // ── Cardio entries ─────────────────────────────────────────────────────
   const getCardioEntries = (day) => {
-  if (cardioEntries[day]?.length) return cardioEntries[day]
-  const cd = CARDIO[day]
-  if (!cd) return [{ modality: "run", duration: "", notes: "" }]
-  const sessions = cd.sessions || []
-  if (sessions.length > 0) return sessions.map(s => ({ modality: s.mod, duration: `${s.dMin}-${s.dMax}`, notes: "" }))
-  return [{ modality: cd.mod || "run", duration: "", notes: "" }]
-}
+    if (cardioEntries[day]?.length) return cardioEntries[day]
+    const cd = CARDIO[day]
+    const sessions = cd.sessions || []
+    if (sessions.length > 0) return sessions.map(s => ({ modality: s.mod, duration: `${s.dMin}-${s.dMax}`, notes: "" }))
+    return [{ modality: cd.mod || "run", duration: "", notes: "" }]
+  }
 
   const setCardioEntryF = (day, idx, fKey, val) => {
     setCardioEntries(prev => {
@@ -2244,7 +2243,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   return (
     <div style={{ color: "#d8d8d8", position: "relative" }}>
       <input ref={importRef} type="file" accept=".json" style={{ display: "none" }} onChange={importLog} />
-      <DailyReadinessPanel readinessScore={readinessScore} latestHealthFit={latestHealthFit} ocItems={ocItems} computedTSB={computedTSB} />
+      <DailyReadinessPanel readinessScore={readinessScore} latestHealthFit={latestHealthFit} ocItems={ocItems} computedTSB={computedTSBFromSessions ?? computedTSB} />
       {/* Day navigation */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
         <div style={{ display: "flex", gap: 3, background: "#0a0a0a", borderRadius: 8, padding: 4, border: "1px solid #1a1a1a", flexWrap: "wrap" }}>
@@ -5745,6 +5744,36 @@ class ErrorBoundary extends React.Component {
 }
 
 export default function App() {
+
+  // ── LIFT Calibration Config ─────────────────────────────────────────────
+  // Update these after each DEXA scan. All derived constants read from here.
+  // Last updated: January 2026 DEXA anchor. Next update: April 2026 scan.
+  const LIFT_CONFIG = {
+    // Banister model constants — fitted via grid search on 466 days, R²=0.887
+    tau1: 27,          // fitness decay (days) — HealthFit default is 42
+    tau2: 18,          // fatigue decay (days) — HealthFit default is 7
+
+    // Body composition — update after each DEXA scan
+    ffm_lb: 113.1,             // fat-free mass, January 2026 DEXA
+    scale_bias_pp: 2.7,        // home scale reads this many pp LOW vs DEXA
+    protein_target_g: 140,     // g/day — ~2.7 g/kg lean mass
+    dexa_anchor_date: "2026-01-16",  // date of last DEXA scan
+    next_dexa_date:   "2026-04-01",  // next planned scan
+
+    // Calorie targets — empirically calibrated, scale-derived, April 2026
+    bmr: 1520,
+    tdee: 2100,
+    fat_loss_target: 1700,
+
+    // Half marathon build
+    hm_race_date:    "2026-09-01",
+    hm_taper_start:  "2026-08-11",
+    hm_peak_mi_week: 22,
+    hm_taper_factor: 0.80,
+    hm_weekly_build: 1.10,
+  }
+  // ────────────────────────────────────────────────────────────────────────
+
   const [tab, setTab] = useState("Overview")
   const [rangeKey, setRangeKey] = useState("180D")
   const [workouts, setWorkouts] = useState([])
@@ -6055,11 +6084,11 @@ function estimateDynamicCalorieTarget({
   lowerGoal = 145,
   minimumCalories = 1200
 }) {
-  // Empirically calibrated constants — BMR ~1520, TDEE ~2100 (scale-derived, April 2026)
-  // Update after each DEXA scan or if sustained weight exits 140–180 lb range
-  const CALIBRATED_BMR = 1520
-  const CALIBRATED_MAINTENANCE = 2100
-  const CALIBRATED_FAT_LOSS_TARGET = 1700
+  // Empirically calibrated constants — read from LIFT_CONFIG
+  // Update LIFT_CONFIG after each DEXA scan, not here
+  const CALIBRATED_BMR = LIFT_CONFIG.bmr
+  const CALIBRATED_MAINTENANCE = LIFT_CONFIG.tdee
+  const CALIBRATED_FAT_LOSS_TARGET = LIFT_CONFIG.fat_loss_target
   // Fire for weights ≤180 lb (covers 0/"not loaded yet" so target never falls back to formula-derived 2925)
   if (Number(currentWeight) <= 180) {
     const w = Number(currentWeight)
@@ -6918,7 +6947,7 @@ const strengthFromSchedule = useMemo(() => {
 // Merges canonicalSessions with strengthFromSchedule so the model
 // reflects all training load even when no HealthFit CSV has been imported.
 const computedTSBFromSessions = useMemo(() => {
-  const tau1 = 27, tau2 = 18
+  const tau1 = LIFT_CONFIG.tau1, tau2 = LIFT_CONFIG.tau2
   const raw = [
     ...(Array.isArray(canonicalSessions) ? canonicalSessions : []).map(s => {
       const durMin = s.dur_min || s.duration_min ||
@@ -7402,7 +7431,7 @@ const computedTSB = useMemo(() => {
 }, [canonicalSessions])
 
 const tsbV2Panel = useMemo(() => {
-  const tau1 = 27, tau2 = 18, lookbackDays = selectedRangePoints ?? 90, warmupDays = 42
+  const tau1 = LIFT_CONFIG.tau1, tau2 = LIFT_CONFIG.tau2, lookbackDays = selectedRangePoints ?? 90, warmupDays = 42
   const now = new Date(); now.setHours(0,0,0,0)
   const start = new Date(now); start.setDate(start.getDate() - (lookbackDays + warmupDays - 1))
   const dayKeys = []
@@ -7425,13 +7454,23 @@ const tsbV2Panel = useMemo(() => {
     if (cat === 'Swimming') dailyLoads[date].swimming += load
     if (cat === 'Strength') dailyLoads[date].strength += load
   })
-  const acute = {overall:0,running:0,cycling:0,swimming:0}
-  const chronic = {overall:0,running:0,cycling:0,swimming:0}
+  const acute = {overall:0,running:0,cycling:0,swimming:0,strength:0}
+  const chronic = {overall:0,running:0,cycling:0,swimming:0,strength:0}
   const aA = 1 - Math.exp(-1/tau2), aC = 1 - Math.exp(-1/tau1)
+
+  // Merge strengthFromSchedule into daily loads
+  ;(Array.isArray(strengthFromSchedule) ? strengthFromSchedule : []).forEach(s => {
+    const date = String(s.date || '').slice(0,10)
+    if (!dailyLoads[date]) return
+    const load = Number(s.trimp) || 40
+    dailyLoads[date].overall += load
+    dailyLoads[date].strength += load
+  })
+
   const allRows = dayKeys.map(date => {
     const load = dailyLoads[date]
     const row = { date }
-    ;['overall','running','cycling','swimming'].forEach(k => {
+    ;['overall','running','cycling','swimming','strength'].forEach(k => {
       acute[k] += aA * (load[k] - acute[k])
       chronic[k] += aC * (load[k] - chronic[k])
       row[`${k}Tsb`] = Number((chronic[k] - acute[k]).toFixed(2))
@@ -7451,7 +7490,7 @@ const tsbV2Panel = useMemo(() => {
     : null
   const risk = riskFromOC ?? (tsbNow < -25 ? 'red' : tsbNow < -15 ? 'orange' : tsbNow < -8 ? 'yellow' : 'green')
   return { rows, alerts: [], readinessRiskLabel: risk, readinessDetail: { score: readinessScore ?? Math.round(50 + tsbNow) } }
-}, [normalizedActiveWorkouts, schedLog, ocItems, readinessScore, selectedRangePoints])
+}, [normalizedActiveWorkouts, strengthFromSchedule, schedLog, ocItems, readinessScore, selectedRangePoints])
 
 const operationalCapacityData = useMemo(() => {
   const items = Array.isArray(ocItems) ? ocItems : []
@@ -8196,10 +8235,16 @@ return (
 
       // Check the last 8 days for missed training days
       const alerts = []
+      const toLocalISO = (date) => {
+        const yr = date.getFullYear()
+        const mo = String(date.getMonth() + 1).padStart(2, "0")
+        const dy = String(date.getDate()).padStart(2, "0")
+        return `${yr}-${mo}-${dy}`
+      }
       for (let daysBack = 1; daysBack <= 8; daysBack++) {
         const d = new Date(today)
         d.setDate(d.getDate() - daysBack)
-        const iso = d.toISOString().slice(0, 10)
+        const iso = toLocalISO(d)              // local date — no UTC shift
         const dow = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getDay()]
         const meta = TRAINING_DAYS[dow]
         if (!meta) continue
@@ -8229,7 +8274,7 @@ return (
                 No session logged in {daysSinceLog} days
               </div>
               <div style={{ fontSize: "11px", color: "#9ca3af", lineHeight: 1.5 }}>
-                Last activity: {lastLogDate ? fmtShortDate(lastLogDate) : "unknown"}.
+                Last activity: {lastLogDate ? fmtShortDate(lastLogDate + "T12:00:00") : "unknown"}.
                 A multi-day gap increases discontinuation risk and compresses your September half marathon build window.
                 Any session counts — even a 20-min easy bike.
               </div>
@@ -8239,7 +8284,7 @@ return (
             <div key={a.iso} style={{ padding: "10px 16px", background: "rgba(249,115,22,0.08)", border: "1px solid rgba(249,115,22,0.25)", borderLeft: "3px solid #f97316", borderRadius: "8px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
               <div>
                 <div style={{ fontSize: "12px", fontWeight: "600", color: "#f97316" }}>
-                  {a.label} ({fmtShortDate(a.iso)}) not logged
+                  {a.label} ({fmtShortDate(a.iso + "T12:00:00")}) not logged
                 </div>
                 <div style={{ fontSize: "11px", color: "#9ca3af", marginTop: "2px" }}>
                   Planned: {a.theme} · {a.daysBack} day{a.daysBack !== 1 ? "s" : ""} ago
@@ -8271,6 +8316,10 @@ return (
     <>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10, marginBottom:10 }}>
         <div style={{ fontWeight:'bold', minHeight:'20px' }}>Training Readiness</div>
+        <div style={{ fontSize:'10px', color:'#445', textAlign:'right', lineHeight:1.5 }}>
+          tau1={LIFT_CONFIG.tau1}d (fitness) · tau2={LIFT_CONFIG.tau2}d (fatigue) · DEXA anchor {LIFT_CONFIG.dexa_anchor_date}
+        </div>
+      </div>
 {(() => {
   const tsb = panel.readinessDetail?.score ?? 0
   let borderColor = '#4ade80', msg = ''
@@ -8288,7 +8337,6 @@ return (
     </div>
   )
 })()}
-      </div>
       {panel.rows.length > 0 ? (
         <ResponsiveContainer width="100%" height={270}>
           <ComposedChart data={panel.rows} margin={{ top:12, right:16, left:45, bottom:20 }}>
@@ -8298,10 +8346,11 @@ return (
             <ReferenceLine y={0} stroke="#444" strokeDasharray="3 3" />
             <Tooltip formatter={(v,n) => [Number(v).toFixed(2), n]} />
             <Legend verticalAlign="top" height={28} />
-            <Line type="monotone" dataKey="overallTsb" name="Overall TSB" stroke="#e5e7eb" strokeWidth={2.2} dot={false} connectNulls />
-            <Line type="monotone" dataKey="runningTsb" name="Running TSB" stroke="#ef4444" strokeWidth={1.8} dot={false} connectNulls />
-            <Line type="monotone" dataKey="cyclingTsb" name="Cycling TSB" stroke="#22d3ee" strokeWidth={1.8} dot={false} connectNulls />
+            <Line type="monotone" dataKey="overallTsb"  name="Overall TSB"  stroke="#e5e7eb" strokeWidth={2.2} dot={false} connectNulls />
+            <Line type="monotone" dataKey="runningTsb"  name="Running TSB"  stroke="#ef4444" strokeWidth={1.8} dot={false} connectNulls />
+            <Line type="monotone" dataKey="cyclingTsb"  name="Cycling TSB"  stroke="#22d3ee" strokeWidth={1.8} dot={false} connectNulls />
             <Line type="monotone" dataKey="swimmingTsb" name="Swimming TSB" stroke="#a78bfa" strokeWidth={1.8} dot={false} connectNulls />
+            <Line type="monotone" dataKey="strengthTsb" name="Strength TSB" stroke="#ffd166" strokeWidth={1.8} dot={false} connectNulls strokeDasharray="4 2" />
           </ComposedChart>
         </ResponsiveContainer>
       ) : (
@@ -8772,7 +8821,7 @@ return (
 
             {/* DEXA bias correction card */}
             {(() => {
-              const SCALE_BIAS_PP = 2.7
+              const SCALE_BIAS_PP = LIFT_CONFIG.scale_bias_pp
               const currentScaleWeight = weightSmoothed.length
                 ? weightSmoothed[weightSmoothed.length - 1].avg
                 : null
@@ -9051,7 +9100,7 @@ return (
 
           <div style={{ ...cardStyle(), maxWidth: "1000px", marginBottom: "16px" }}>
             {(() => {
-              const PROTEIN_TARGET = 140
+              const PROTEIN_TARGET = LIFT_CONFIG.protein_target_g
               const todayProtein = todayMeals.reduce((s, r) => s + toNum(r.protein_g), 0)
               const todayCalories = todayMeals.reduce((s, r) => s + toNum(r.calories), 0)
               const proteinPct = Math.min(100, Math.round((todayProtein / PROTEIN_TARGET) * 100))
@@ -9065,7 +9114,7 @@ return (
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", flexWrap: "wrap", gap: 8 }}>
                     <div style={{ fontWeight: "bold" }}>Today ({mealDate})</div>
                     <div style={{ fontSize: "11px", color: "#555" }}>
-                      FFM 113.1 lb · target 2.7 g/kg lean mass · Phase 1 cut
+                      FFM {LIFT_CONFIG.ffm_lb} lb · target {(LIFT_CONFIG.protein_target_g / (LIFT_CONFIG.ffm_lb / 2.20462)).toFixed(1)} g/kg lean mass · Phase 1 cut
                     </div>
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
@@ -9228,7 +9277,7 @@ return (
     readinessScore={readinessScore}
     latestHealthFit={latestHealthFit}
     ocItems={ocItems}
-    computedTSB={computedTSB}
+    computedTSB={computedTSBFromSessions ?? computedTSB}
   />
 )}
 
@@ -9513,10 +9562,10 @@ return (
 
           // Build planned curve: 10% per week from current, cap at 22 mi/wk,
           // taper from Aug 11 (3 weeks out), race Sep 1 2026
-          const RACE_DATE    = new Date("2026-09-01")
-          const TAPER_START  = new Date("2026-08-11")
-          const PEAK_MI      = 22
-          const TAPER_FACTOR = 0.80
+          const RACE_DATE    = new Date(LIFT_CONFIG.hm_race_date)
+          const TAPER_START  = new Date(LIFT_CONFIG.hm_taper_start)
+          const PEAK_MI      = LIFT_CONFIG.hm_peak_mi_week
+          const TAPER_FACTOR = LIFT_CONFIG.hm_taper_factor
 
           const planByLabel = {}
           const baseDate = weeklyTrainingBuckets?.length
