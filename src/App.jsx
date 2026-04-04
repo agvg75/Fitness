@@ -694,13 +694,30 @@ function ScheduleLogView({ log, expanded, setExpanded, onDelete, onEdit }) {
 
     {allExercises.length === 0 && <div style={{ fontSize: "12px", color: "#333" }}>No exercise data recorded.</div>}
 
-    {programExs.map(ex => (
-      <div key={ex.exercise_id} style={{ display: "flex", alignItems: "baseline", gap: "12px", padding: "3px 0", borderBottom: "1px solid #121212" }}>
-        <span style={{ fontSize: "13px", fontWeight: "600", color: "#a0a0a0", minWidth: "190px" }}>{ex.exercise_name}</span>
-        <span style={{ fontSize: "11px", color: "#888" }}>{fmtActual(ex)}</span>
-        {ex.notes && <span style={{ fontSize: "10px", color: "#3a3a3a", fontStyle: "italic" }}>{ex.notes}</span>}
-      </div>
-    ))}
+    {programExs.map(ex => {
+      // Prefer per-set data from entry.data when it has multiple sets (Fix 3 writes full _def arrays)
+      const setData = entry.data?.[ex.exercise_id]
+      const multiSet = Array.isArray(setData) && setData.length > 1
+      return (
+        <div key={ex.exercise_id} style={{ display: "flex", alignItems: "baseline", gap: "12px", padding: "3px 0", borderBottom: "1px solid #121212", flexWrap: "wrap" }}>
+          <span style={{ fontSize: "13px", fontWeight: "600", color: "#a0a0a0", minWidth: "190px" }}>{ex.exercise_name}</span>
+          {multiSet
+            ? <span style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 11, color: "#444" }}>
+                {setData.map((s, i) => (
+                  <span key={i}>
+                    {i > 0 && <span style={{ color: "#2a2a2a" }}> · </span>}
+                    <span style={{ color: "#c0c0c0" }}>{s.r}</span>
+                    <span style={{ color: "#333" }}>@</span>
+                    <span style={{ color: "#888" }}>{s.w}</span>
+                  </span>
+                ))}
+              </span>
+            : <span style={{ fontSize: "11px", color: "#888" }}>{fmtActual(ex)}</span>
+          }
+          {ex.notes && <span style={{ fontSize: "10px", color: "#3a3a3a", fontStyle: "italic" }}>{ex.notes}</span>}
+        </div>
+      )
+    })}
 
     {programExs.length > 0 && customExs.length > 0 && (
       <div style={{ borderTop: "1px solid #1a1a1a", margin: "6px 0" }} />
