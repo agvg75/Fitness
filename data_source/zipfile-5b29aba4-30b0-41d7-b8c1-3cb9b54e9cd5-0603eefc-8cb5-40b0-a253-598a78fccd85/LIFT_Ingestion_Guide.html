@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>L.I.F.T. Data Ingestion Guide</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; font-size: 11pt; background: #0d0d0d; color: #d0d0d0; line-height: 1.6; }
+  .page { max-width: 860px; margin: 0 auto; padding: 32px 24px 64px; }
+
+  h1 { font-size: 22px; font-weight: 800; color: #e8e8e8; border-bottom: 2px solid #3b82f6; padding-bottom: 10px; margin-bottom: 8px; }
+  .subtitle { font-size: 11px; color: #555; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 32px; }
+
+  h2 { font-size: 15px; font-weight: 700; color: #a0b4f0; letter-spacing: 0.08em; text-transform: uppercase; margin: 32px 0 12px; padding-left: 10px; border-left: 3px solid #3b82f6; }
+  h3 { font-size: 13px; font-weight: 700; color: #c0c0c0; margin: 20px 0 8px; }
+
+  p { margin-bottom: 10px; color: #b0b0b0; }
+  p.note { background: #1a1200; border-left: 3px solid #d97706; padding: 8px 12px; border-radius: 0 6px 6px 0; color: #c08a30; font-size: 11px; margin: 10px 0; }
+  p.warn { background: #1a0a0a; border-left: 3px solid #ef4444; padding: 8px 12px; border-radius: 0 6px 6px 0; color: #f87171; font-size: 11px; margin: 10px 0; }
+  p.ok { background: #0a1a0a; border-left: 3px solid #22c55e; padding: 8px 12px; border-radius: 0 6px 6px 0; color: #86efac; font-size: 11px; margin: 10px 0; }
+
+  .step-grid { display: grid; gap: 10px; margin: 12px 0; }
+  .step { background: #111; border: 1px solid #1e1e1e; border-radius: 8px; padding: 14px 16px; display: grid; grid-template-columns: 28px 1fr; gap: 10px; align-items: start; }
+  .step-num { width: 28px; height: 28px; background: #1a2a4a; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; color: #3b82f6; flex-shrink: 0; margin-top: 1px; }
+  .step-body { min-width: 0; }
+  .step-body strong { color: #e0e0e0; font-size: 13px; display: block; margin-bottom: 4px; }
+  .step-body span { color: #888; font-size: 11px; }
+
+  code { font-family: "Courier New", monospace; font-size: 10.5px; background: #0a0a0a; border: 1px solid #1e1e1e; border-radius: 4px; padding: 2px 6px; color: #a0c0ff; }
+  pre { background: #080808; border: 1px solid #1e1e1e; border-radius: 8px; padding: 14px 16px; margin: 10px 0; overflow-x: auto; }
+  pre code { background: none; border: none; padding: 0; color: #a0c0ff; font-size: 10.5px; line-height: 1.7; }
+  .comment { color: #3a5a3a; }
+
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 11px; }
+  th { background: #111; color: #888; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; padding: 8px 10px; border-bottom: 1px solid #1e1e1e; text-align: left; }
+  td { padding: 7px 10px; border-bottom: 1px solid #141414; color: #aaa; vertical-align: top; }
+  td:first-child { color: #d0d0d0; font-weight: 600; white-space: nowrap; }
+  tr:last-child td { border-bottom: none; }
+
+  .badge { display: inline-block; font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; padding: 2px 7px; border-radius: 3px; }
+  .badge-blue { background: #0d1f38; color: #3b82f6; }
+  .badge-amber { background: #1e1200; color: #d97706; }
+  .badge-green { background: #0a1a0a; color: #22c55e; }
+  .badge-red { background: #1a0a0a; color: #ef4444; }
+
+  .toc { background: #0f0f0f; border: 1px solid #1e1e1e; border-radius: 8px; padding: 16px 20px; margin-bottom: 28px; }
+  .toc-title { font-size: 10px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: #444; margin-bottom: 10px; }
+  .toc a { display: block; font-size: 12px; color: #4a6a9a; text-decoration: none; padding: 2px 0; }
+  .toc a:hover { color: #3b82f6; }
+
+  .divider { border: none; border-top: 1px solid #181818; margin: 28px 0; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 12px 0; }
+  @media (max-width: 600px) { .two-col { grid-template-columns: 1fr; } }
+
+  .source-card { background: #111; border: 1px solid #1e1e1e; border-radius: 8px; padding: 14px; }
+  .source-card h4 { font-size: 12px; font-weight: 700; color: #e0e0e0; margin-bottom: 6px; }
+  .source-card p { font-size: 11px; color: #777; margin-bottom: 0; }
+
+  .cmd-block { position: relative; }
+  .cmd-label { font-size: 9px; letter-spacing: 0.15em; text-transform: uppercase; color: #3a3a3a; margin-bottom: 4px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <h1>L.I.F.T. Data Ingestion Guide</h1>
+  <div class="subtitle">Reference for updating Apple Health, Technogym, and deploying to Vercel</div>
+
+  <div class="toc">
+    <div class="toc-title">Contents</div>
+    <a href="#overview">1. Source overview and precedence</a>
+    <a href="#apple">2. Apple Health export and import</a>
+    <a href="#technogym">3. Technogym export and import</a>
+    <a href="#pipeline">4. Running the full pipeline</a>
+    <a href="#deploy">5. Deploying to Vercel</a>
+    <a href="#schedule">6. Recommended cadence</a>
+    <a href="#troubleshoot">7. Troubleshooting</a>
+    <a href="#pipeline-fix">8. One-time pipeline fix (Technogym classification)</a>
+  </div>
+
+  <!-- SECTION 1 -->
+  <h2 id="overview">1. Source Overview and Precedence</h2>
+
+  <div class="two-col">
+    <div class="source-card">
+      <h4><span class="badge badge-blue">Primary</span> Apple Health</h4>
+      <p>GPS runs, swim sessions, walks, resting HR, HRV, sleep. Most complete for cardio with GPS. Must be manually exported from iPhone. Stops updating until re-exported.</p>
+    </div>
+    <div class="source-card">
+      <h4><span class="badge badge-blue">Primary</span> Technogym</h4>
+      <p>Indoor cycling power, cadence, calories. Machine strength sessions. Coverage starts Oct 2025. Re-export monthly via GDPR download.</p>
+    </div>
+    <div class="source-card">
+      <h4><span class="badge badge-amber">Supplement</span> Schedule Tab</h4>
+      <p>Manual session logs entered directly in the app. Tagged <code>ManualSchedule</code>. Stored in Supabase. Never double-counts against imported data.</p>
+    </div>
+    <div class="source-card">
+      <h4><span class="badge badge-green">Derived</span> Canonical JSON</h4>
+      <p>Output of the pipeline. Apple and Technogym sessions matched by time overlap, deduplicated, merged. This is what the app reads.</p>
+    </div>
+  </div>
+
+  <p class="note">Conflict rule: when Apple Health and Technogym both recorded the same session, Technogym wins for power and cadence; Apple Health wins for HR and GPS distance.</p>
+
+  <hr class="divider">
+
+  <!-- SECTION 2 -->
+  <h2 id="apple">2. Apple Health Export and Import</h2>
+
+  <h3>Export from iPhone</h3>
+  <div class="step-grid">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body"><strong>Open the Health app</strong><span>Tap your profile photo in the top-right corner</span></div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body"><strong>Export All Health Data</strong><span>Scroll to the bottom of the profile screen and tap "Export All Health Data". Confirm. This takes 1 to 3 minutes.</span></div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body"><strong>Share the ZIP</strong><span>AirDrop to your Mac, or save to iCloud Drive / Files. The file is named <code>export.zip</code> (~50 to 200 MB).</span></div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body"><strong>Extract export.xml</strong><span>Unzip. Inside is <code>apple_health_export/export.xml</code>. This is the file the script reads.</span></div>
+    </div>
+  </div>
+
+  <h3>Run the import script</h3>
+  <p class="warn">The PowerShell extraction script runs on Windows. If you are on a Mac, a Node.js alternative may be needed. Check <code>scripts/</code> for a Mac-compatible version.</p>
+
+  <div class="cmd-label">In your Codespace terminal</div>
+  <pre><code><span class="comment"># 1. Upload export.xml to your Codespace (drag into file explorer or use scp)</span>
+<span class="comment">#    Place it at: /workspaces/Fitness/data_source/export.xml</span>
+
+<span class="comment"># 2. Run the Apple Health import</span>
+cd /workspaces/Fitness
+node scripts/import_apple_workouts.mjs
+
+<span class="comment"># 3. Verify output</span>
+node -e "
+const d = require('./public/data/apple_workouts.json')
+console.log('Apple sessions:', d.length)
+const m = {}; d.forEach(s => { const k = (s.start_date||'').slice(0,7); if(k) m[k]=(m[k]||0)+1 })
+Object.keys(m).sort().slice(-6).forEach(k => console.log(k, m[k]))
+"</code></pre>
+
+  <p class="ok">Each re-import is safe. The pipeline deduplicates by session overlap, so re-importing older data does not create duplicate sessions.</p>
+
+  <hr class="divider">
+
+  <!-- SECTION 3 -->
+  <h2 id="technogym">3. Technogym Export and Import</h2>
+
+  <h3>Export from Technogym</h3>
+  <div class="step-grid">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body"><strong>Log in to my.technogym.com</strong><span>Or use the Technogym app: Account, then Privacy, then Export Data.</span></div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body"><strong>Request GDPR export</strong><span>The export is usually ready within minutes. You will receive a download link by email.</span></div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body"><strong>Download the ZIP</strong><span>It contains four JSON files: <code>masterdata.json</code>, <code>biometrics.json</code>, <code>indooractivities.json</code> (the key file), and <code>outdooractivities.json</code>.</span></div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body"><strong>Upload the ZIP to Codespace</strong><span>Drag into the file explorer. Place at <code>/workspaces/Fitness/data_source/technogym_export.zip</code> (or whatever path the script expects — check the first 20 lines of <code>import_technogym.mjs</code>).</span></div>
+    </div>
+  </div>
+
+  <h3>Run the import script</h3>
+  <pre><code>cd /workspaces/Fitness
+node scripts/import_technogym.mjs
+
+<span class="comment"># Verify output</span>
+node -e "
+const d = require('./public/data/technogym_workouts.json')
+const sessions = Array.isArray(d) ? d : d.sessions || []
+console.log('Technogym sessions:', sessions.length)
+const m = {}; sessions.forEach(s => { const k = String(s.start_date||s.date||s.on||'').slice(0,7); if(k) m[k]=(m[k]||0)+1 })
+Object.keys(m).sort().slice(-6).forEach(k => console.log(k, m[k]))
+"</code></pre>
+
+  <hr class="divider">
+
+  <!-- SECTION 4 -->
+  <h2 id="pipeline">4. Running the Full Pipeline</h2>
+
+  <p>After importing either or both sources, always run the full three-step pipeline to rebuild the canonical session file that the app reads.</p>
+
+  <pre><code>cd /workspaces/Fitness
+
+<span class="comment"># Step 1: Find sessions that overlap between Apple and Technogym</span>
+node scripts/find_workout_overlaps.mjs
+
+<span class="comment"># Step 2: Build the canonical merged session list</span>
+node scripts/build_canonical_sessions.mjs
+
+<span class="comment"># Step 3: Verify counts</span>
+node -e "
+const d = require('./public/data/workout_sessions_canonical.json')
+const s = d.all_sessions || d
+console.log('Total canonical sessions:', s.length)
+const m = {}; s.forEach(x => { const k = (x.start_date||'').slice(0,7); if(k) m[k]=(m[k]||0)+1 })
+Object.keys(m).sort().slice(-6).forEach(k => console.log(k, m[k]))
+const t = {}; s.forEach(x => { const c = x.canonical_type||'?'; t[c]=(t[c]||0)+1 })
+Object.entries(t).sort((a,b)=>b[1]-a[1]).forEach(([c,n]) => console.log(n, c))
+"</code></pre>
+
+  <p class="note">Expected canonical count is approximately Apple sessions + Technogym sessions, minus sessions matched by overlap (those merge into one record). Currently ~494 total.</p>
+
+  <hr class="divider">
+
+  <!-- SECTION 5 -->
+  <h2 id="deploy">5. Deploying to Vercel</h2>
+
+  <p class="warn">Vercel only deploys from Git commits. Changes visible in the Codespace dev preview but not yet committed will NOT appear on the live site.</p>
+
+  <h3>After any pipeline run or App.jsx update</h3>
+  <pre><code>cd /workspaces/Fitness
+
+<span class="comment"># Stage both the data files and any app code changes</span>
+git add public/data/ src/App.jsx
+
+<span class="comment"># Commit with a descriptive message</span>
+git commit -m "data: re-ingest Apple Health + Technogym, rebuild canonical"
+
+<span class="comment"># Push — Vercel auto-deploys within ~90 seconds</span>
+git push
+
+<span class="comment"># Confirm line count if you updated App.jsx</span>
+wc -l /workspaces/Fitness/src/App.jsx</code></pre>
+
+  <h3>Confirm the deploy</h3>
+  <div class="step-grid">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body"><strong>Check GitHub</strong><span>github.com/agvg75/Fitness — confirm your commit appears on the main branch.</span></div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body"><strong>Check Vercel dashboard</strong><span>vercel.com/dashboard — the deployment should show "Building" then "Ready" within 90 seconds of the push.</span></div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body"><strong>Hard refresh the live site</strong><span>Press Cmd+Shift+R (Mac) or Ctrl+Shift+R (Windows) to bypass the browser cache.</span></div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- SECTION 6 -->
+  <h2 id="schedule">6. Recommended Cadence</h2>
+
+  <table>
+    <thead>
+      <tr><th>Source</th><th>Frequency</th><th>Trigger</th><th>Time cost</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Apple Health export</td>
+        <td>Weekly</td>
+        <td>Sunday evening, or any time you notice the charts are stale</td>
+        <td>~5 min</td>
+      </tr>
+      <tr>
+        <td>Technogym GDPR export</td>
+        <td>Monthly</td>
+        <td>First of each month, or after a significant block of gym sessions</td>
+        <td>~5 min</td>
+      </tr>
+      <tr>
+        <td>Full pipeline rebuild</td>
+        <td>Each time either source is updated</td>
+        <td>After any import completes</td>
+        <td>~1 min</td>
+      </tr>
+      <tr>
+        <td>Git push to Vercel</td>
+        <td>Each time pipeline is rebuilt</td>
+        <td>After pipeline completes</td>
+        <td>~2 min</td>
+      </tr>
+      <tr>
+        <td>Schedule tab logging</td>
+        <td>Every session</td>
+        <td>Immediately after completing a workout</td>
+        <td>~1 min</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p class="ok">Minimum viable cadence: Technogym monthly, Apple Health weekly. Everything else is automatic once those two sources are current.</p>
+
+  <hr class="divider">
+
+  <!-- SECTION 7 -->
+  <h2 id="troubleshoot">7. Troubleshooting</h2>
+
+  <table>
+    <thead>
+      <tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Charts empty for recent months</td>
+        <td>Apple Health export is stale</td>
+        <td>Re-export from iPhone, re-import, rebuild pipeline, push</td>
+      </tr>
+      <tr>
+        <td>Cycling bars missing in Training</td>
+        <td>Technogym MachineWorkout sessions have <code>rpm_avg: null</code>, preventing reclassification</td>
+        <td>Apply the pipeline fix in Section 8</td>
+      </tr>
+      <tr>
+        <td>Vercel shows old data after push</td>
+        <td>Browser cache</td>
+        <td>Hard refresh (Cmd+Shift+R). If still stale, check Vercel dashboard for build errors.</td>
+      </tr>
+      <tr>
+        <td>Codespace shows new data, Vercel does not</td>
+        <td>Changes not committed</td>
+        <td>Run <code>git status</code>. If files show as modified, commit and push.</td>
+      </tr>
+      <tr>
+        <td>Session count lower than expected</td>
+        <td>Wrong date field name in canonical JSON</td>
+        <td>Run the type/count diagnostic node command from Section 4</td>
+      </tr>
+      <tr>
+        <td>Strength sessions missing from November to February</td>
+        <td>Technogym "Free Training" sessions not importing</td>
+        <td>Check <code>import_technogym.mjs</code> — confirm it reads <code>outdooractivities.json</code> and <code>indooractivities.json</code> both. Free Training sessions may be in a different array.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Quick diagnostic (run any time something looks wrong)</h3>
+  <pre><code>node -e "
+const d = require('./public/data/workout_sessions_canonical.json')
+const s = d.all_sessions || d
+const m = {}; s.forEach(x => { const k=(x.start_date||'').slice(0,7); if(k) m[k]=(m[k]||0)+1 })
+const t = {}; s.forEach(x => { const c=x.canonical_type||'?'; t[c]=(t[c]||0)+1 })
+console.log('Total:', s.length)
+console.log('\nBy month (last 8):')
+Object.keys(m).sort().slice(-8).forEach(k => console.log(' ', k, m[k]))
+console.log('\nBy type:')
+Object.entries(t).sort((a,b)=>b[1]-a[1]).forEach(([c,n]) => console.log(' ', n, c))
+"</code></pre>
+
+  <hr class="divider">
+
+  <!-- SECTION 8 -->
+  <h2 id="pipeline-fix">8. One-Time Pipeline Fix (Technogym Classification)</h2>
+
+  <p>Currently all Technogym sessions come through as <code>MachineWorkout</code> with <code>canonical_type: Machine Cardio</code>. The app-level fix (using <code>rpm_avg</code> as a bike signal) catches some sessions, but the permanent fix belongs in <code>import_technogym.mjs</code>.</p>
+
+  <p class="note">Find the section in <code>import_technogym.mjs</code> that assigns <code>type</code> or <code>canonical_type</code> to a session. Apply the following classification logic there, replacing or augmenting whatever is currently used.</p>
+
+  <pre><code><span class="comment">// Classification logic to add/replace in import_technogym.mjs</span>
+<span class="comment">// 'session' is one record from indooractivities.json</span>
+
+function classifyTechnogymSession(session) {
+  const raw = session.performedData || {}
+
+  <span class="comment">// Extract key metrics (field names from Technogym schema)</span>
+  const rpmAvg  = raw.pr?.find(p => p.n === "AvgSpeedRpm")?.v ?? null
+  const powerAvg = raw.pr?.find(p => p.n === "AvgPower")?.v ?? null
+  const distance = raw.pr?.find(p => p.n === "HDistance")?.v ?? null
+
+  <span class="comment">// Bike: rpm_avg present means cadence was measured = stationary bike</span>
+  if (rpmAvg !== null && rpmAvg !== undefined) return "Cycling"
+
+  <span class="comment">// Power without rpm could also be a bike (some sessions only log power)</span>
+  if (powerAvg !== null && powerAvg > 0) return "Cycling"
+
+  <span class="comment">// If distance is very high relative to duration, likely a bike</span>
+  const dur = raw.pr?.find(p => p.n === "Duration")?.v ?? 0
+  if (distance && dur && (distance / dur) > 50) return "Cycling" <span class="comment">// >50m/min = bike pace</span>
+
+  <span class="comment">// Fallback: check the raw activity type string from Technogym</span>
+  const rawType = String(session.activityType || session.type || "").toLowerCase()
+  if (rawType.includes("cycl") || rawType.includes("bike")) return "Cycling"
+  if (rawType.includes("run") || rawType.includes("tread")) return "Running"
+  if (rawType.includes("row")) return "Rowing"
+  if (rawType.includes("swim")) return "Swimming"
+  if (rawType.includes("strength") || rawType.includes("free") || rawType.includes("weight")) {
+    return "Traditional Strength Training"
+  }
+
+  return "Machine Cardio" <span class="comment">// genuine fallback</span>
+}</code></pre>
+
+  <p class="warn">After editing <code>import_technogym.mjs</code>, re-run the full pipeline (Section 4) and push (Section 5). The Cycling volume charts should then show bars for all months with Technogym sessions.</p>
+
+  <h3>Finding "Free Training" strength sessions</h3>
+  <p>Your YMCA strength sessions logged in Technogym are likely stored as "Free Training" or similar. Run this to check what arrays exist in the raw Technogym JSON:</p>
+
+  <pre><code><span class="comment"># From your Codespace — substitute the actual ZIP filename</span>
+cd /workspaces/Fitness
+node -e "
+const fs = require('fs')
+const path = require('path')
+
+<span class="comment">// Check what arrays are at the top level of each JSON file in the export</span>
+const files = fs.readdirSync('./data_source').filter(f => f.endsWith('.json'))
+files.forEach(f => {
+  const d = JSON.parse(fs.readFileSync('./data_source/' + f, 'utf8'))
+  if (Array.isArray(d)) console.log(f, ':', d.length, 'records')
+  else console.log(f, ': keys =', Object.keys(d).slice(0,8).join(', '))
+})
+"</code></pre>
+
+  <div style="margin-top: 40px; padding-top: 16px; border-top: 1px solid #1a1a1a; font-size: 10px; color: #333; text-align: right;">
+    L.I.F.T. Fitness Dashboard &nbsp;·&nbsp; Last updated March 2026
+  </div>
+
+</div>
+</body>
+</html>

@@ -112,22 +112,22 @@ export const PROG = {
       { n: "Towel scrunches (L)", d: "5 sets — intrinsic foot activation" },
     ],
     exercises: [
-      { id: "hip_thrust_smith", n: "Hip thrust (Smith machine)", fi: "toe", variants: {
+      { id: "hip_thrust_smith", n: "Hip thrust (Smith machine)", fi: "toe", venue: "KNR", variants: {
         machine: { n: "Smith machine hip thrust", sets: "4", reps: "10", load: "Set 1: 115 lb | Sets 2-4: 155 lb", note: "Pause at top, ribs down, chin tucked. Drive through heels." },
         db:      { n: "DB glute bridge (floor)", sets: "4", reps: "10–12", load: "TBD", note: "DB on hip crease, same pause-at-top cue" },
         friendly:{ n: "Single-leg glute bridge (floor)", sets: "3", reps: "10", load: "BW", note: "No additional ankle or foot load" },
       }},
-      { id: "leg_press", n: "Leg press", fi: "toe", variants: {
+      { id: "leg_press", n: "Leg press", fi: "toe", venue: "KNR", variants: {
         machine: { n: "Technogym leg press", sets: "3", reps: "10", load: "200 lb", note: "Heels down, do not lock knees at top" },
         db:      { n: "Goblet squat", sets: "3", reps: "10–12", load: "25 lb", note: "Elbows inside knees, heels down" },
         friendly:{ n: "Leg press (high foot, reduced depth)", sets: "3", reps: "10", load: "150–175 lb", note: "High foot position reduces MTP dorsiflexion demand" },
       }},
-      { id: "leg_curl", n: "Leg curl machine", fi: "toe", variants: {
+      { id: "leg_curl", n: "Leg curl machine", fi: "toe", venue: "KNR", variants: {
         machine: { n: "Seated / lying leg curl", sets: "3", reps: "8", load: "100 lb", note: "Slow eccentric — 3 sec down" },
         db:      { n: "Swiss ball hamstring curl", sets: "3", reps: "8–10", load: "BW", note: "Bridge up, curl ball in, extend slowly" },
         friendly:{ n: "Seated leg curl (machine)", sets: "3", reps: "8–10", load: "80–90 lb", note: "Seated version reduces ankle dorsiflexion demand vs lying" },
       }},
-      { id: "leg_ext", n: "Leg extension machine", fi: "toe", variants: {
+      { id: "leg_ext", n: "Leg extension machine", fi: "toe", venue: "KNR", variants: {
         machine: { n: "Technogym leg extension", sets: "3", reps: "8", load: "100 lb", note: "Control at top, do not slam. Reduce load if MTP symptomatic at catch position." },
         db:      { n: "Terminal knee extension (band)", sets: "3", reps: "12–15", load: "Light band", note: "VMO focus with minimal ankle demand" },
         friendly:{ n: "Short-arc quad (SAQ)", sets: "3", reps: "12–15", load: "Light", note: "Last 30° of extension only — avoids full dorsiflexion position" },
@@ -168,27 +168,27 @@ export const PROG = {
       { n: "Pull aparts w/ band", d: "2×10 — arms straight, squeeze at end range" },
     ],
     exercises: [
-      { id: "cable_row", n: "Cable row (mid)", fi: "shoulder", variants: {
+      { id: "cable_row", n: "Cable row (mid)", fi: "shoulder", venue: "KNR", variants: {
         machine: { n: "Technogym seated row", sets: "3", reps: "6", load: "100 lb", note: "Scapula toward back pockets — retract before pulling" },
         db:      { n: "Chest-supported DB row", sets: "3", reps: "8–12", load: "TBD", note: "Chest on incline bench, neutral grip" },
         friendly:{ n: "Single-arm cable row (low)", sets: "3", reps: "10–12", load: "Light", note: "Lower pulley, neutral grip, controlled rotation" },
       }},
-      { id: "lat_pull", n: "Lat pulldown", fi: "shoulder", variants: {
+      { id: "lat_pull", n: "Lat pulldown", fi: "shoulder", venue: "KNR", variants: {
         machine: { n: "Technogym lat pulldown", sets: "3", reps: "6", load: "100 lb", note: "Chest up, elbows to ribs — do not shrug" },
         db:      { n: "Single-arm cable pulldown", sets: "3", reps: "8–12", load: "TBD", note: "Unilateral — better scapular control" },
         friendly:{ n: "Straight-arm pulldown", sets: "3", reps: "10–12", load: "40 lb", note: "Arms straight, drive elbow toward hip — less shoulder impingement" },
       }},
-      { id: "bicep_db", n: "Bicep curls (DB / BB)", fi: "shoulder", variants: {
+      { id: "bicep_db", n: "Bicep curls (DB / BB)", fi: "shoulder", venue: "KNR", variants: {
         machine: { n: "BB curl (palms up)", sets: "3", reps: "8", load: "50 lb", note: "No sway, full elbow extension at bottom" },
         db:      { n: "DB curl (alternating)", sets: "3", reps: "8–12", load: "25 lb", note: "Supinate at top" },
         friendly:{ n: "Cable curl (low pulley)", sets: "3", reps: "10–12", load: "Light", note: "Constant tension, elbows stable at sides" },
       }},
-      { id: "cable_d2", n: "Cable D2 flexion", fi: "shoulder", variants: {
+      { id: "cable_d2", n: "Cable D2 flexion", fi: "shoulder", venue: "KNR", variants: {
         machine: { n: "Cable D2 (unsheathing sword)", sets: "3", reps: "8", load: "TBD", note: "Hip to opposite shoulder diagonal — rotator cuff and scapular health" },
         db:      { n: "DB D2 diagonal pattern", sets: "3", reps: "10", load: "Light", note: "Same diagonal without cable" },
         friendly:{ n: "Band D2 flexion", sets: "3", reps: "10", load: "Light band", note: "Lightest load option if shoulder irritated" },
       }},
-      { id: "bicep_rope", n: "Bicep curls — cable / rope (neutral grip)", fi: "shoulder", variants: {
+      { id: "bicep_rope", n: "Bicep curls — cable / rope (neutral grip)", fi: "shoulder", venue: "KNR", variants: {
         machine: { n: "Cable curl w/ rope (neutral)", sets: "3", reps: "8", load: "35 lb", note: "Hammer-style — targets brachialis and brachioradialis" },
         db:      { n: "Hammer curl (DB)", sets: "3", reps: "10–12", load: "TBD", note: "Same neutral grip pattern" },
         friendly:{ n: "Band hammer curl", sets: "3", reps: "12–15", load: "Light band", note: "" },

@@ -25,16 +25,6 @@ const supabase = SUPABASE_URL && SUPABASE_ANON_KEY
   ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
   : null
 
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  if (process.env.NODE_ENV === "development") {
-    console.warn(
-      "[LIFT] Supabase env vars missing. " +
-      "Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env file. " +
-      "App will run in offline/localStorage-only mode."
-    )
-  }
-}
-
 let STORE_USER_ID = null
 const setStoreUser = userId => {
   STORE_USER_ID = userId || null
@@ -61,6 +51,9 @@ const store = {
           .maybeSingle()
 
         if (!error && data && data.value != null) {
+          try {
+            localStorage.setItem(key, JSON.stringify(data.value))
+          } catch {}
           return data.value
         }
       }
@@ -676,14 +669,6 @@ function ScheduleLogView({ log, expanded, setExpanded, onDelete, onEdit }) {
 
 {open && (
   <div style={{ padding: "10px 14px 14px", borderTop: "1px solid #161616" }}>
-    {entry.rpe != null && (
-      <div style={{ marginBottom: "8px", fontSize: "11px", color: "#667" }}>
-        Session RPE: <strong style={{ color: "#ced2f0" }}>{entry.rpe}/10</strong>
-        <span style={{ marginLeft: 8, color: "#445" }}>
-          {entry.rpe <= 3 ? "Very easy" : entry.rpe <= 5 ? "Moderate" : entry.rpe <= 7 ? "Hard" : entry.rpe <= 9 ? "Very hard" : "Max effort"}
-        </span>
-      </div>
-    )}
     {Array.isArray(entry.cardio) && entry.cardio.filter(c => c.modality || c.duration).map((c, i) => (
       <div key={i} style={{ marginBottom: "6px", padding: "8px 10px", background: "#101622", border: "1px solid #1a2a44", borderRadius: "6px", fontSize: "11px", color: "#9ec5ff" }}>
         <strong style={{ textTransform: "capitalize" }}>{c.modality || "Cardio"}</strong>
@@ -883,7 +868,7 @@ function computeOcRecoveryDate(item) {
 }
 
 // ─── TabOperationalCapacity ────────────────────────────────────────────────────
-function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapacityData, healthFitDaily, sleepRecords, runSessions = [] }) {
+function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapacityData, healthFitDaily, sleepRecords }) {
   const [selectedId, setSelectedId] = useState(null)
   const [addForm, setAddForm] = useState({ key: "muscleStatus", location: "Quad L", currentScore: 1, halfLifeHours: null })
 
@@ -1032,115 +1017,6 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
           </div>
         </div>
       </div>
-
-      {/* ── MTP Progression Counter ───────────────────────────────── */}
-      {(() => {
-        const mtpItem = ocItems.find(i =>
-          (i.location || "").toLowerCase().includes("toe") &&
-          i.key === "jointStatus"
-        )
-        const sortedRuns = [...runSessions]
-          .filter(w => w.date)
-          .sort((a, b) => String(b.date).localeCompare(String(a.date)))
-          .slice(0, 20)
-
-        if (!mtpItem && sortedRuns.length === 0) return null
-
-        const currentScore = mtpItem?.currentScore ?? 0
-        const isActive = currentScore > 0
-        const chronicity = mtpItem?.chronicity || "acute"
-
-        // Consecutive score-0 sessions: count runs logged since the OC score
-        // last dropped to 0 (proxy: since startDate if score==0, else 0 streak)
-        let streak = 0
-        let recentMax = 0
-        if (!isActive && sortedRuns.length > 0) {
-          const resolvedDate = mtpItem?.lastResolvedDate
-            ? new Date(mtpItem.lastResolvedDate)
-            : null
-          for (const run of sortedRuns) {
-            const runDate = new Date(String(run.date).slice(0, 10) + "T12:00:00")
-            if (resolvedDate && runDate < resolvedDate) break
-            streak++
-            if ((run.distance || 0) > recentMax) recentMax = run.distance || 0
-          }
-        } else if (sortedRuns.length > 0) {
-          recentMax = sortedRuns[0].distance || 0
-        }
-
-        const PROGRESSION_THRESHOLD = 3
-        const progressPct = Math.min(100, Math.round((streak / PROGRESSION_THRESHOLD) * 100))
-        const nextMilestone = recentMax > 0 ? (recentMax * 1.1).toFixed(2) : null
-        const barColor = isActive ? "#ef4444" : streak >= PROGRESSION_THRESHOLD ? "#4ade80" : "#fbbf24"
-
-        return (
-          <div style={{ ...cardStyle(), marginBottom: "16px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "8px", marginBottom: "10px" }}>
-              <div>
-                <div style={{ fontSize: "10px", letterSpacing: "0.15em", textTransform: "uppercase", color: "#555", marginBottom: "2px" }}>
-                  MTP Joint Progression
-                  {chronicity === "chronic" && <span style={{ marginLeft: "8px", color: "#f59e0b", fontSize: "9px" }}>CHRONIC</span>}
-                </div>
-                <div style={{ fontSize: "12px", color: "#667" }}>
-                  Right MTP · jointStatus · 120h half-life
-                </div>
-              </div>
-              <div style={{ textAlign: "right" }}>
-                {isActive ? (
-                  <div style={{ fontSize: "12px", color: "#ef4444", fontWeight: "600" }}>
-                    Score {currentScore}/5 — progression paused
-                  </div>
-                ) : (
-                  <div style={{ fontSize: "12px", color: "#4ade80", fontWeight: "600" }}>
-                    Score 0 — progression tracking
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: "10px", marginBottom: "12px" }}>
-              <div style={{ background: "#07080e", border: "1px solid #1a1b2e", borderRadius: "8px", padding: "10px", textAlign: "center" }}>
-                <div style={{ fontSize: "10px", color: "#555", marginBottom: "3px" }}>Score-0 streak</div>
-                <div style={{ fontSize: "28px", fontWeight: "800", color: barColor, lineHeight: 1 }}>{streak}</div>
-                <div style={{ fontSize: "10px", color: "#555" }}>of {PROGRESSION_THRESHOLD} needed</div>
-              </div>
-              <div style={{ background: "#07080e", border: "1px solid #1a1b2e", borderRadius: "8px", padding: "10px", textAlign: "center" }}>
-                <div style={{ fontSize: "10px", color: "#555", marginBottom: "3px" }}>Current ceiling</div>
-                <div style={{ fontSize: "24px", fontWeight: "800", color: "#ced2f0", lineHeight: 1 }}>
-                  {recentMax > 0 ? recentMax.toFixed(2) : "—"}
-                </div>
-                <div style={{ fontSize: "10px", color: "#555" }}>mi</div>
-              </div>
-              <div style={{ background: "#07080e", border: "1px solid #1a1b2e", borderRadius: "8px", padding: "10px", textAlign: "center" }}>
-                <div style={{ fontSize: "10px", color: "#555", marginBottom: "3px" }}>Next milestone</div>
-                <div style={{ fontSize: "24px", fontWeight: "800", color: streak >= PROGRESSION_THRESHOLD ? "#4ade80" : "#667", lineHeight: 1 }}>
-                  {nextMilestone || "—"}
-                </div>
-                <div style={{ fontSize: "10px", color: "#555" }}>mi (+10%)</div>
-              </div>
-              <div style={{ background: "#07080e", border: "1px solid #1a1b2e", borderRadius: "8px", padding: "10px", textAlign: "center" }}>
-                <div style={{ fontSize: "10px", color: "#555", marginBottom: "3px" }}>Last run</div>
-                <div style={{ fontSize: "14px", fontWeight: "700", color: "#ced2f0", lineHeight: 1.3 }}>
-                  {sortedRuns[0] ? fmtShortDate(sortedRuns[0].date) : "—"}
-                </div>
-                <div style={{ fontSize: "10px", color: "#555" }}>{sortedRuns[0] ? `${sortedRuns[0].distance?.toFixed(2)} mi` : ""}</div>
-              </div>
-            </div>
-
-            <div style={{ height: "6px", background: "#1a1b2e", borderRadius: "3px", overflow: "hidden", marginBottom: "6px" }}>
-              <div style={{ height: "100%", width: `${progressPct}%`, background: barColor, transition: "width 0.4s" }} />
-            </div>
-            <div style={{ fontSize: "11px", color: "#445" }}>
-              {isActive
-                ? `Resolve MTP to score 0 before resuming progression. ${sortedRuns.length > 0 ? `Last run: ${fmtShortDate(sortedRuns[0]?.date)}.` : ""}`
-                : streak >= PROGRESSION_THRESHOLD
-                  ? `Threshold met. Advance from ${recentMax.toFixed(2)} mi to ${nextMilestone} mi on next run.`
-                  : `${PROGRESSION_THRESHOLD - streak} more score-0 run${PROGRESSION_THRESHOLD - streak === 1 ? "" : "s"} required before advancing to ${nextMilestone} mi.`
-              }
-            </div>
-          </div>
-        )
-      })()}
 
      {/* ── Two-column: left controls / right silhouettes ─────────── */}
       <div style={{ display: "grid", gridTemplateColumns: window.innerWidth < 700 ? "1fr" : "1fr 380px", gap: "20px", marginBottom: "16px", alignItems: "start" }}>
@@ -1376,12 +1252,6 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const [sessionDate, setSessionDate] = useState(todayISO())
   const [pendingVenue, setPendingVenue] = useState(null)   // venue awaiting exercise selection
   const [pendingChecked, setPendingChecked] = useState({}) // { [exercise_id]: bool }
-  const [sessionRPE, setSessionRPE] = useState({})         // { day_venue: 1-10 }
-  const [inlineItemForm, setInlineItemForm] = useState(null) // { day, section } | null
-  const [inlineItemName, setInlineItemName] = useState("")
-  const [inlineItemDetail, setInlineItemDetail] = useState("")
-  const [inlineExForm, setInlineExForm] = useState(null)   // day | null
-  const [inlineExName, setInlineExName] = useState("")
 
   const SPLIT_DAYS = ["Tue", "Thu"]
   const isSplitDay = SPLIT_DAYS.includes(activeDay)
@@ -1396,7 +1266,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       { user_id: session.user.id, key, value, updated_at: new Date().toISOString() },
       { onConflict: "user_id,key" }
     )
-    if (error) { if (process.env.NODE_ENV === "development") console.error(`Failed to sync ${key}:`, error) }
+    if (error) console.error(`Failed to sync ${key}:`, error)
   }
 
   // ── Load from storage ──────────────────────────────────────────────────
@@ -1411,7 +1281,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
         try {
           const { data } = await supabase.from("user_kv").select("value").eq("key", "wt-log")
           const sbLg = data?.[0]?.value
-          if (process.env.NODE_ENV === "development") console.log("wt-log from Supabase:", Array.isArray(sbLg) ? sbLg.length + " entries" : "not array", data)
+          console.log("wt-log from Supabase:", Array.isArray(sbLg) ? sbLg.length + " entries" : "not array", data)
           if (Array.isArray(sbLg)) {
             const local = Array.isArray(lg) ? lg : []
             const merged = Object.values(
@@ -1521,20 +1391,12 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const getCustomItems = (day, section) => customItems[customKey(day, section)] || []
 
   const addCustomItem = (day, section) => {
-    setInlineItemForm({ day, section })
-    setInlineItemName("")
-    setInlineItemDetail("")
-  }
-
-  const commitCustomItem = () => {
-    if (!inlineItemForm || !inlineItemName.trim()) return
-    const { day, section } = inlineItemForm
-    const updated = { ...customItems, [customKey(day, section)]: [...getCustomItems(day, section), { n: inlineItemName.trim(), d: inlineItemDetail.trim() }] }
+    const name = prompt(`Add item to ${section}:`)
+    if (!name?.trim()) return
+    const detail = prompt("Description (optional):") || ""
+    const updated = { ...customItems, [customKey(day, section)]: [...getCustomItems(day, section), { n: name.trim(), d: detail.trim() }] }
     setCustomItems(updated)
     saveScheduleKey("wt-custom-items", updated)
-    setInlineItemForm(null)
-    setInlineItemName("")
-    setInlineItemDetail("")
   }
 
   const removeCustomItem = (day, section, idx) => {
@@ -1548,19 +1410,12 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const getCustomExercises = (day) => customExercises[day] || []
 
   const addCustomExercise = (day) => {
-    setInlineExForm(day)
-    setInlineExName("")
-  }
-
-  const commitCustomExercise = () => {
-    if (!inlineExForm || !inlineExName.trim()) return
-    const day = inlineExForm
-    const newEx = { id: `custom_${Date.now()}`, n: inlineExName.trim(), sets: "3", reps: "10", load: "", notes: "" }
+    const name = prompt("Exercise name:")
+    if (!name?.trim()) return
+    const newEx = { id: `custom_${Date.now()}`, n: name.trim(), sets: "3", reps: "10", load: "", notes: "" }
     const updated = { ...customExercises, [day]: [...getCustomExercises(day), newEx] }
     setCustomExercises(updated)
     saveScheduleKey("wt-custom-exercises", updated)
-    setInlineExForm(null)
-    setInlineExName("")
   }
 
   const removeCustomExercise = (day, exId) => {
@@ -1657,7 +1512,6 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       venue: venue || "ymca",
       venue_label: VENUE_LABELS[venue] || "",
       program: "Kinesiology (primary)",
-      rpe: sessionRPE[`${day}_${venue}`] ?? null,
       exercises: [...filteredExercises, ...filteredCustomExs],
       cardio: getCardioEntries(day),
       stretch_completed: checkedStretch,
@@ -1775,44 +1629,12 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     </div>
   )
 
-  const addBtn = (onClick, day, section) => {
-    const isOpen = inlineItemForm?.day === day && inlineItemForm?.section === section
-    if (isOpen) return (
-      <div style={{ marginTop: 8, padding: "8px", background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: 6 }}>
-        <input
-          autoFocus
-          value={inlineItemName}
-          onChange={e => setInlineItemName(e.target.value)}
-          onKeyDown={e => { if (e.key === "Enter") commitCustomItem(); if (e.key === "Escape") setInlineItemForm(null) }}
-          placeholder={`Add item to ${section}...`}
-          style={{ ...inputStyle(), marginBottom: 6, fontSize: 12, padding: "6px 8px" }}
-        />
-        <input
-          value={inlineItemDetail}
-          onChange={e => setInlineItemDetail(e.target.value)}
-          onKeyDown={e => { if (e.key === "Enter") commitCustomItem(); if (e.key === "Escape") setInlineItemForm(null) }}
-          placeholder="Description (optional)"
-          style={{ ...inputStyle(), marginBottom: 8, fontSize: 12, padding: "6px 8px" }}
-        />
-        <div style={{ display: "flex", gap: 6 }}>
-          <button onClick={commitCustomItem}
-            style={{ flex: 1, padding: "5px 0", background: "#185FA5", border: "none", borderRadius: 5, color: "#fff", fontSize: 12, cursor: "pointer" }}>
-            Add
-          </button>
-          <button onClick={() => setInlineItemForm(null)}
-            style={{ padding: "5px 10px", background: "transparent", border: "0.5px solid #333", borderRadius: 5, color: "#555", fontSize: 12, cursor: "pointer" }}>
-            Cancel
-          </button>
-        </div>
-      </div>
-    )
-    return (
-      <button onClick={onClick}
-        style={{ width: "100%", marginTop: 8, padding: "6px", border: "0.5px dashed #333", borderRadius: 5, background: "transparent", color: "#555", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>
-        + Add item
-      </button>
-    )
-  }
+  const addBtn = (onClick) => (
+    <button onClick={onClick}
+      style={{ width: "100%", marginTop: 8, padding: "6px", border: "0.5px dashed #333", borderRadius: 5, background: "transparent", color: "#555", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>
+      + Add item
+    </button>
+  )
 
   // ── Checklist section (stretch / warmup / core) ───────────────────────
   const checklistSection = (day, section, items, dot, label, meta) => {
@@ -1846,7 +1668,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
               </div>
             )
           })}
-          {addBtn(() => addCustomItem(day, section), day, section)}
+          {addBtn(() => addCustomItem(day, section))}
         </div>
       </div>
     )
@@ -2053,11 +1875,6 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
                       Cardio: {entry.cardio.map(c => `${c.duration}min ${c.modality}`).join(" + ")}
                     </div>
                   )}
-                  {entry.rpe != null && (
-                    <div style={{ fontSize: 10, color: "#667", marginTop: 3 }}>
-                      RPE {entry.rpe}/10 — {entry.rpe <= 3 ? "Very easy" : entry.rpe <= 5 ? "Moderate" : entry.rpe <= 7 ? "Hard" : entry.rpe <= 9 ? "Very hard" : "Max effort"}
-                    </div>
-                  )}
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
                   <button onClick={() => undoSession(venue)}
@@ -2116,21 +1933,6 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
                     ))}
                   </div>
                 ))}
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8, padding: "8px 0" }}>
-                  <div style={{ fontSize: 12, color: "#888", minWidth: 100, flexShrink: 0 }}>
-                    Session RPE: <strong style={{ color: "#ced2f0" }}>{sessionRPE[`${activeDay}_${venue}`] ?? "—"}/10</strong>
-                  </div>
-                  <input type="range" min={1} max={10} step={1}
-                    value={sessionRPE[`${activeDay}_${venue}`] ?? 6}
-                    onChange={e => setSessionRPE(prev => ({ ...prev, [`${activeDay}_${venue}`]: Number(e.target.value) }))}
-                    style={{ flex: 1, accentColor: "#4a9ee8" }} />
-                  <div style={{ fontSize: 10, color: "#555", minWidth: 80, flexShrink: 0 }}>
-                    {(() => {
-                      const r = sessionRPE[`${activeDay}_${venue}`] ?? 6
-                      return r <= 3 ? "Very easy" : r <= 5 ? "Moderate" : r <= 7 ? "Hard" : r <= 9 ? "Very hard" : "Max effort"
-                    })()}
-                  </div>
-                </div>
                 <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
                   <button onClick={() => setPendingVenue(null)}
                     style={{ flex: 1, padding: 10, background: "transparent", color: "#888", border: "0.5px solid #333", borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
@@ -2242,33 +2044,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
                   ? prog.exercises.map(ex => exCard(ex, activeDay))
                   : <div style={{ textAlign: "center", padding: 16, color: "#444", fontSize: 13 }}>Active recovery — no resistance training today.</div>}
                 {getCustomExercises(activeDay).map(ex => exCard(ex, activeDay, true))}
-                {inlineExForm === activeDay ? (
-                  <div style={{ marginTop: 8, padding: "8px", background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: 6 }}>
-                    <input
-                      autoFocus
-                      value={inlineExName}
-                      onChange={e => setInlineExName(e.target.value)}
-                      onKeyDown={e => { if (e.key === "Enter") commitCustomExercise(); if (e.key === "Escape") setInlineExForm(null) }}
-                      placeholder="Exercise name..."
-                      style={{ ...inputStyle(), marginBottom: 8, fontSize: 12, padding: "6px 8px" }}
-                    />
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <button onClick={commitCustomExercise}
-                        style={{ flex: 1, padding: "5px 0", background: "#185FA5", border: "none", borderRadius: 5, color: "#fff", fontSize: 12, cursor: "pointer" }}>
-                        Add exercise
-                      </button>
-                      <button onClick={() => setInlineExForm(null)}
-                        style={{ padding: "5px 10px", background: "transparent", border: "0.5px solid #333", borderRadius: 5, color: "#555", fontSize: 12, cursor: "pointer" }}>
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <button onClick={() => addCustomExercise(activeDay)}
-                    style={{ width: "100%", marginTop: 8, padding: "6px", border: "0.5px dashed #333", borderRadius: 5, background: "transparent", color: "#555", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>
-                    + Add exercise
-                  </button>
-                )}
+                {addBtn(() => addCustomExercise(activeDay))}
               </div>
             )}
           </div>
@@ -5054,7 +4830,7 @@ function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily,
         if (supabase && STORE_USER_ID) {
           const withUser = sessions.map(s => ({ ...s, user_id: STORE_USER_ID }))
           const { error } = await supabase.from("canonical_sessions").upsert(withUser, { onConflict: "session_id" })
-          if (error) { if (process.env.NODE_ENV === "development") console.warn("Supabase write failed:", error.message) }
+          if (error) console.warn("Supabase write failed:", error.message)
         }
       }
       // Commit nutrition to user_kv (feeds Calories tab)
@@ -5600,66 +5376,6 @@ function SchLogView({ log, expanded, setExpanded, onDelete, onExport, onImport }
   );
 }
 
-// ─── Error Boundary ───────────────────────────────────────────────────────────
-class ErrorBoundary extends React.Component {
-  constructor(props) {
-    super(props)
-    this.state = { hasError: false, error: null, info: null }
-  }
-
-  static getDerivedStateFromError(error) {
-    return { hasError: true, error }
-  }
-
-  componentDidCatch(error, info) {
-    this.setState({ info })
-    if (process.env.NODE_ENV === "development") {
-      console.error("[LIFT ErrorBoundary]", error, info)
-    }
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div style={{
-          padding: "40px 32px", minHeight: "100vh",
-          background: "#07080e", color: "#ced2f0",
-          fontFamily: "Arial, sans-serif"
-        }}>
-          <div style={{ fontSize: "28px", fontWeight: "800", color: "#ef4444", marginBottom: "12px" }}>
-            L.I.F.T. — Render Error
-          </div>
-          <div style={{ fontSize: "13px", color: "#aaa", marginBottom: "20px", lineHeight: 1.6 }}>
-            The app encountered an unexpected error. Your data has not been affected.
-          </div>
-          <pre style={{
-            fontSize: "11px", color: "#667", background: "#0d0e1c",
-            border: "1px solid #1a1b2e", borderRadius: "8px",
-            padding: "14px", whiteSpace: "pre-wrap", marginBottom: "20px",
-            maxWidth: "700px"
-          }}>
-            {this.state.error?.message || "Unknown error"}
-            {this.state.info?.componentStack
-              ? "\n\nComponent stack:" + this.state.info.componentStack
-              : ""}
-          </pre>
-          <button
-            onClick={() => this.setState({ hasError: false, error: null, info: null })}
-            style={{
-              padding: "10px 20px", background: "#4a9ee8", border: "none",
-              borderRadius: "8px", color: "#fff", cursor: "pointer",
-              fontSize: "13px", fontWeight: "600"
-            }}
-          >
-            Try again
-          </button>
-        </div>
-      )
-    }
-    return this.props.children
-  }
-}
-
 export default function App() {
   const [tab, setTab] = useState("Overview")
   const [rangeKey, setRangeKey] = useState("180D")
@@ -5903,6 +5619,13 @@ function normalizeDistanceToMiles(workout) {
   ) {
     return value / 1609.34
   }
+  if (
+    unit === "m" ||
+    unit === "meter" ||
+    unit === "meters"
+  ) {
+    return value / 1609.34
+  }
 
   if (
     unit === "yd" ||
@@ -5912,6 +5635,9 @@ function normalizeDistanceToMiles(workout) {
     return value / 1760
   }
 
+  if (workout?.source === "ManualSchedule") {
+    return value
+  }
   if (workout?.source === "ManualSchedule") {
     return value
   }
@@ -6168,9 +5894,9 @@ const [newPreset, setNewPreset] = useState({ name:"", calories:"", protein_g:"",
   const [customMeal, setCustomMeal] = useState({ calories: "", protein_g: "", carbs_g: "", fat_g: "", fiber_g: "" })
   const [saveAsPreset, setSaveAsPreset] = useState(false)
   const [rawNutrition, setRawNutrition] = useState({ breakfast: "", lunch: "", dinner: "", snacks: "" })
-if (process.env.NODE_ENV === "development") console.log("canonical sessions loaded:", canonicalSessions.length)
+console.log("canonical sessions loaded:", canonicalSessions.length)
 useEffect(() => {
-  if (process.env.NODE_ENV === "development") console.log(
+  console.log(
     "types:",
     [...new Set(normalizedActiveWorkouts.map(w => w.type))].sort()
   )
@@ -6225,7 +5951,7 @@ useEffect(() => {
         setWorkouts(Array.isArray(w) ? w : [])
         setCanonicalSessions(Array.isArray(cs?.all_sessions) ? cs.all_sessions : [])
       } catch (err) {
-        if (process.env.NODE_ENV === "development") console.log(err)
+        console.log(err)
         setError(String(err))
       }
     }
@@ -6248,13 +5974,13 @@ useEffect(() => {
       const localMeals = JSON.parse(localStorage.getItem("ufd-meal-entries") || "[]")
 
       if (localMeals.length > 0) {
-        if (process.env.NODE_ENV === "development") console.log("Migrating local meals to Supabase...")
+        console.log("Migrating local meals to Supabase...")
 
         try {
           await syncMealsToSupabase(localMeals, sess.user.id)
           localStorage.removeItem("ufd-meal-entries")
         } catch (err) {
-          if (process.env.NODE_ENV === "development") console.error("Meal migration failed:", err)
+          console.error("Meal migration failed:", err)
         }
       }
     }
@@ -6294,7 +6020,7 @@ useEffect(() => {
           .in("key", ["ufd-workouts", "wt-log", "oc-items", "healthfit-daily", "wt-sessions"])
         if (data) {
           const sbWo = data.find(r => r.key === "ufd-workouts")?.value
-          if (process.env.NODE_ENV === "development") console.log("Supabase user_kv fetch:", { sbWo_count: Array.isArray(sbWo)?sbWo.length:0 })
+          console.log("Supabase user_kv fetch:", { sbWo_count: Array.isArray(sbWo)?sbWo.length:0 })
           // Merge ufd-workouts: union by id, prefer Supabase if newer
           if (Array.isArray(sbWo)) {
             const local = Array.isArray(wo) ? wo : []
@@ -6344,7 +6070,7 @@ useEffect(() => {
           }
         }
       } catch (err) {
-        if (process.env.NODE_ENV === "development") console.warn("Supabase sync fetch failed:", err.message)
+        console.warn("Supabase sync fetch failed:", err.message)
         if (Array.isArray(wo)) setStoredWorkouts(wo)
       }
     } else {
@@ -6363,7 +6089,7 @@ useEffect(() => {
       await loadMealsFromSupabase(session.user.id)
     } catch (err) {
       const msg = err?.message || "Unknown sync error"
-      if (process.env.NODE_ENV === "development") console.error("Initial meal load failed:", err)
+      console.error("Initial meal load failed:", err)
       // load error, no user message needed
     }
   })()
@@ -6642,7 +6368,7 @@ async function syncMealsToSupabase(entries, currentUserId) {
   if (!supabase || !currentUserId) return
 
   const rows = (entries || []).map(m => ({
-    id: m.id || crypto.randomUUID(),
+    id: crypto.randomUUID(),
     user_id: currentUserId,
     logged_at: m.created_at || new Date().toISOString(),
     meal_date: m.date,
@@ -6656,15 +6382,28 @@ async function syncMealsToSupabase(entries, currentUserId) {
     source: "app"
   }))
 
-  if (rows.length === 0) return
-
-  const { error: upsertError } = await supabase
+  const { error: deleteError } = await supabase
     .from("meals")
-    .upsert(rows, { onConflict: "id" })
+    .delete()
+    .eq("user_id", currentUserId)
 
-  if (upsertError) {
-    if (process.env.NODE_ENV === "development") console.error("Meal sync upsert error:", upsertError)
-    throw upsertError
+  if (deleteError) {
+    console.error("Meal sync delete error:", deleteError)
+    throw deleteError
+  }
+
+  if (rows.length > 0) {
+    const { data, error: insertError } = await supabase
+      .from("meals")
+      .insert(rows)
+      .select()
+
+    if (insertError) {
+      console.error("Meal sync insert error:", insertError)
+      throw insertError
+    }
+
+    console.log("Meals synced:", data)
   }
 }
 async function loadMealsFromSupabase(userId) {
@@ -6677,7 +6416,7 @@ async function loadMealsFromSupabase(userId) {
     .order("meal_date", { ascending: true })
 
   if (error) {
-    if (process.env.NODE_ENV === "development") console.error("Meal load error:", error)
+    console.error("Meal load error:", error)
     return
   }
 
@@ -6702,9 +6441,9 @@ async function persistMealEntries(nextEntries, currentUserId) {
   await store.set("ufd-meal-entries", nextEntries)
 
   // currentUserId passed as parameter
-  if (process.env.NODE_ENV === "development") console.log("persistMealEntries called, userId:", currentUserId)
+  console.log("persistMealEntries called, userId:", currentUserId)
   if (!currentUserId) {
-    if (process.env.NODE_ENV === "development") console.log("No active session, meals saved locally only.")
+    console.log("No active session, meals saved locally only.")
     return
   }
 
@@ -6712,7 +6451,7 @@ async function persistMealEntries(nextEntries, currentUserId) {
     await syncMealsToSupabase(nextEntries, currentUserId)
   } catch (err) {
     const msg = err?.message || "Unknown sync error"
-    if (process.env.NODE_ENV === "development") console.error("Meal sync failed:", err)
+    console.error("Meal sync failed:", err)
     // load error, no user message needed
   }
 }
@@ -6837,10 +6576,10 @@ const weeklyTrainingBuckets = useMemo(() => {
   return buildWeeklyTrainingBuckets([...operationalWorkouts, ...strengthFromSchedule])
 }, [operationalWorkouts, strengthFromSchedule])
 useEffect(() => {
-  if (process.env.NODE_ENV === "development") console.log("LIFT ingestion check")
-  if (process.env.NODE_ENV === "development") console.log("operationalWorkouts count:", operationalWorkouts?.length ?? 0)
-  if (process.env.NODE_ENV === "development") console.log("trainingSummary:", trainingSummary)
-  if (process.env.NODE_ENV === "development") console.log("weeklyTrainingBuckets last 6:", weeklyTrainingBuckets?.slice?.(-6) ?? [])
+  console.log("LIFT ingestion check")
+  console.log("operationalWorkouts count:", operationalWorkouts?.length ?? 0)
+  console.log("trainingSummary:", trainingSummary)
+  console.log("weeklyTrainingBuckets last 6:", weeklyTrainingBuckets?.slice?.(-6) ?? [])
 }, [operationalWorkouts, trainingSummary, weeklyTrainingBuckets])
 const trainingLoadChartData = useMemo(() => {
   if (!weeklyTrainingBuckets?.length) return []
@@ -7046,14 +6785,14 @@ useEffect(() => {
     return distanceMiles > 0 && durationMin > 0
   })
 
-  if (process.env.NODE_ENV === "development") console.log("VO2 proxy check")
-  if (process.env.NODE_ENV === "development") console.log("operationalWorkouts count:", operationalWorkouts?.length ?? 0)
-  if (process.env.NODE_ENV === "development") console.log("run-like count:", runLike.length)
-  if (process.env.NODE_ENV === "development") console.log("run-like with distance+dur count:", runLikeWithDistance.length)
-  if (process.env.NODE_ENV === "development") console.log("vo2ProxyData count:", vo2ProxyData?.length ?? 0)
-  if (process.env.NODE_ENV === "development") console.log("vo2ProxySummary:", vo2ProxySummary)
-  if (process.env.NODE_ENV === "development") console.log("vo2ProxyData first 5:", vo2ProxyData?.slice?.(0, 5) ?? [])
-  if (process.env.NODE_ENV === "development") console.log("vo2ProxySmoothed last 5:", vo2ProxySmoothed?.slice?.(-5) ?? [])
+  console.log("VO2 proxy check")
+  console.log("operationalWorkouts count:", operationalWorkouts?.length ?? 0)
+  console.log("run-like count:", runLike.length)
+  console.log("run-like with distance+dur count:", runLikeWithDistance.length)
+  console.log("vo2ProxyData count:", vo2ProxyData?.length ?? 0)
+  console.log("vo2ProxySummary:", vo2ProxySummary)
+  console.log("vo2ProxyData first 5:", vo2ProxyData?.slice?.(0, 5) ?? [])
+  console.log("vo2ProxySmoothed last 5:", vo2ProxySmoothed?.slice?.(-5) ?? [])
 }, [operationalWorkouts, vo2ProxyData, vo2ProxySmoothed, vo2ProxySummary])
 
 useEffect(() => {
@@ -7115,7 +6854,7 @@ useEffect(() => {
     extracted_duration_min: extractDurationMin(w)
   }))
 
-  if (process.env.NODE_ENV === "development") console.log("VO2 run distance audit summary:", {
+  console.log("VO2 run distance audit summary:", {
     total_runs: runDistanceAudit.length,
     runs_with_existing_distance_field: runDistanceAudit.filter(r =>
       Number.isFinite(Number(r.distance)) && Number(r.distance) > 0
@@ -7138,7 +6877,7 @@ useEffect(() => {
     ).length
   })
 
-  if (process.env.NODE_ENV === "development") console.log("VO2 run distance audit first 10:", runDistanceAudit.slice(0, 10))
+  console.log("VO2 run distance audit first 10:", runDistanceAudit.slice(0, 10))
 }, [operationalWorkouts])
 
 
@@ -7784,7 +7523,6 @@ const tsbOverviewData = useMemo(() => {
     }))
 }, [healthFitDaily, selectedRangePoints])
 return (
-  <ErrorBoundary>
   <div
     style={{
       background: "#07080e",
@@ -7957,169 +7695,6 @@ return (
         </div>
       </div>
     </div>
-
-    {/* ── Sleep Quality Panel ───────────────────────────────────── */}
-    {(() => {
-      const sevenDaysAgo = Date.now() - 7 * 24 * 3600000
-      const recentSleep = (Array.isArray(sleepRecords) ? sleepRecords : [])
-        .filter(r => r.date && new Date(r.date).getTime() >= sevenDaysAgo && r.duration_min != null)
-        .sort((a, b) => String(b.date).localeCompare(String(a.date)))
-        .slice(0, 7)
-
-      if (recentSleep.length === 0) return null
-
-      const avgHours = recentSleep.reduce((s, r) => s + (r.duration_min || 0), 0) / recentSleep.length / 60
-      const lastNight = recentSleep[0]
-      const lastHours = lastNight ? (lastNight.duration_min || 0) / 60 : null
-      const TARGET_HOURS = 7.5
-      const avgPct = Math.min(100, Math.round((avgHours / TARGET_HOURS) * 100))
-      const avgColor = avgHours >= 7 ? "#4ade80" : avgHours >= 6 ? "#fbbf24" : "#ef4444"
-      const lastColor = lastHours == null ? "#667" : lastHours >= 7 ? "#4ade80" : lastHours >= 6 ? "#fbbf24" : "#ef4444"
-
-      return (
-        <div style={{ ...cardStyle(), marginBottom: "16px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px", flexWrap: "wrap", gap: 8 }}>
-            <div style={{ fontWeight: "bold" }}>Sleep (last 7 nights)</div>
-            <div style={{ fontSize: "11px", color: "#555" }}>target 7.5h · {recentSleep.length} nights logged</div>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: "10px", marginBottom: "10px" }}>
-            <div style={{ background: "#07080e", border: "1px solid #1a1b2e", borderRadius: "8px", padding: "10px", textAlign: "center" }}>
-              <div style={{ fontSize: "10px", color: "#555", marginBottom: "3px" }}>7-day avg</div>
-              <div style={{ fontSize: "26px", fontWeight: "800", color: avgColor, lineHeight: 1 }}>{avgHours.toFixed(1)}</div>
-              <div style={{ fontSize: "10px", color: "#555" }}>hours</div>
-            </div>
-            <div style={{ background: "#07080e", border: "1px solid #1a1b2e", borderRadius: "8px", padding: "10px", textAlign: "center" }}>
-              <div style={{ fontSize: "10px", color: "#555", marginBottom: "3px" }}>Last night</div>
-              <div style={{ fontSize: "26px", fontWeight: "800", color: lastColor, lineHeight: 1 }}>
-                {lastHours != null ? lastHours.toFixed(1) : "—"}
-              </div>
-              <div style={{ fontSize: "10px", color: "#555" }}>{lastNight?.date ? fmtShortDate(lastNight.date) : ""}</div>
-            </div>
-            <div style={{ background: "#07080e", border: "1px solid #1a1b2e", borderRadius: "8px", padding: "10px", textAlign: "center" }}>
-              <div style={{ fontSize: "10px", color: "#555", marginBottom: "3px" }}>Nights at target</div>
-              <div style={{ fontSize: "26px", fontWeight: "800", color: "#ced2f0", lineHeight: 1 }}>
-                {recentSleep.filter(r => (r.duration_min || 0) / 60 >= 7).length}
-              </div>
-              <div style={{ fontSize: "10px", color: "#555" }}>of {recentSleep.length}</div>
-            </div>
-            <div style={{ background: "#07080e", border: "1px solid #1a1b2e", borderRadius: "8px", padding: "10px", textAlign: "center" }}>
-              <div style={{ fontSize: "10px", color: "#555", marginBottom: "3px" }}>Readiness impact</div>
-              <div style={{ fontSize: "26px", fontWeight: "800", color: avgHours < 5.5 ? "#ef4444" : avgHours < 6 ? "#fbbf24" : "#4ade80", lineHeight: 1 }}>
-                {avgHours < 5.5 ? "−20" : avgHours < 6 ? "−10" : "0"}
-              </div>
-              <div style={{ fontSize: "10px", color: "#555" }}>pts penalty</div>
-            </div>
-          </div>
-          <div style={{ display: "flex", gap: "3px", alignItems: "flex-end", height: "36px" }}>
-            {[...recentSleep].reverse().map((r, i) => {
-              const h = (r.duration_min || 0) / 60
-              const heightPct = Math.min(100, Math.round((h / 9) * 100))
-              const col = h >= 7 ? "#4ade80" : h >= 6 ? "#fbbf24" : "#ef4444"
-              return (
-                <div key={i} title={`${fmtShortDate(r.date)}: ${h.toFixed(1)}h`}
-                  style={{ flex: 1, height: `${heightPct}%`, background: col, borderRadius: "2px 2px 0 0", opacity: 0.8 }} />
-              )
-            })}
-          </div>
-          <div style={{ fontSize: "10px", color: "#445", marginTop: "6px" }}>
-            {avgHours >= 7
-              ? "Sleep adequate. No penalty applied to readiness."
-              : avgHours >= 6
-              ? "Sleep marginally low. 10-point readiness penalty active."
-              : "Sleep significantly low. 20-point readiness penalty active. Prioritize recovery."}
-          </div>
-        </div>
-      )
-    })()}
-
-    {/* ── Missed Session Alert Banner ──────────────────────────── */}
-    {(() => {
-      const today = new Date()
-      const todayISO8601 = today.toISOString().slice(0, 10)
-      const todayDow = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][today.getDay()]
-
-      // Training days with expected activity (exclude pure recovery days)
-      const TRAINING_DAYS = {
-        Mon: { label: "Monday", theme: "Upper Push + Bike", tolerance: 2 },
-        Tue: { label: "Tuesday", theme: "KNR Legs + Swim", tolerance: 1 },
-        Wed: { label: "Wednesday", theme: "Swim + Row", tolerance: 2 },
-        Thu: { label: "Thursday", theme: "KNR Upper + Bike", tolerance: 1 },
-        Fri: { label: "Friday", theme: "Hips / Core + Long Bike", tolerance: 2 },
-        Sat: { label: "Saturday", theme: "Long Run", tolerance: 1 },
-      }
-
-      // Build a set of logged dates from schedLog
-      const loggedDates = new Set(
-        (Array.isArray(schedLog) ? schedLog : []).map(e => String(e.date || "").slice(0, 10))
-      )
-      // Also include dates from operationalWorkouts (Apple Health imports)
-      ;(Array.isArray(operationalWorkouts) ? operationalWorkouts : []).forEach(w => {
-        const d = String(w.date || w.dateTime || "").slice(0, 10)
-        if (d) loggedDates.add(d)
-      })
-
-      // Check the last 8 days for missed training days
-      const alerts = []
-      for (let daysBack = 1; daysBack <= 8; daysBack++) {
-        const d = new Date(today)
-        d.setDate(d.getDate() - daysBack)
-        const iso = d.toISOString().slice(0, 10)
-        const dow = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getDay()]
-        const meta = TRAINING_DAYS[dow]
-        if (!meta) continue
-        if (loggedDates.has(iso)) continue
-        // Only alert if past the tolerance window
-        if (daysBack <= meta.tolerance) continue
-        alerts.push({ iso, dow, label: meta.label, theme: meta.theme, daysBack })
-      }
-
-      // Find the most recent logged session
-      const allLogDates = [...loggedDates].sort((a, b) => b.localeCompare(a))
-      const lastLogDate = allLogDates[0] || null
-      const daysSinceLog = lastLogDate
-        ? Math.round((today - new Date(lastLogDate + "T12:00:00")) / 86400000)
-        : null
-
-      // Gap alert: 6+ days with no log at all
-      const gapAlert = daysSinceLog != null && daysSinceLog >= 6
-
-      if (alerts.length === 0 && !gapAlert) return null
-
-      return (
-        <div style={{ marginBottom: "16px", display: "grid", gap: "8px" }}>
-          {gapAlert && (
-            <div style={{ padding: "12px 16px", background: "rgba(239,68,68,0.10)", border: "1px solid rgba(239,68,68,0.35)", borderLeft: "3px solid #ef4444", borderRadius: "8px" }}>
-              <div style={{ fontSize: "12px", fontWeight: "700", color: "#ef4444", marginBottom: "4px" }}>
-                No session logged in {daysSinceLog} days
-              </div>
-              <div style={{ fontSize: "11px", color: "#9ca3af", lineHeight: 1.5 }}>
-                Last activity: {lastLogDate ? fmtShortDate(lastLogDate) : "unknown"}.
-                A multi-day gap increases discontinuation risk and compresses your September half marathon build window.
-                Any session counts — even a 20-min easy bike.
-              </div>
-            </div>
-          )}
-          {!gapAlert && alerts.slice(0, 3).map(a => (
-            <div key={a.iso} style={{ padding: "10px 16px", background: "rgba(249,115,22,0.08)", border: "1px solid rgba(249,115,22,0.25)", borderLeft: "3px solid #f97316", borderRadius: "8px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-              <div>
-                <div style={{ fontSize: "12px", fontWeight: "600", color: "#f97316" }}>
-                  {a.label} ({fmtShortDate(a.iso)}) not logged
-                </div>
-                <div style={{ fontSize: "11px", color: "#9ca3af", marginTop: "2px" }}>
-                  Planned: {a.theme} · {a.daysBack} day{a.daysBack !== 1 ? "s" : ""} ago
-                </div>
-              </div>
-              <button
-                onClick={() => { setTab("Schedule") }}
-                style={{ fontSize: "11px", padding: "5px 12px", background: "rgba(249,115,22,0.15)", border: "1px solid rgba(249,115,22,0.35)", borderRadius: "6px", color: "#f97316", cursor: "pointer" }}
-              >
-                Log now
-              </button>
-            </div>
-          ))}
-        </div>
-      )
-    })()}
 
     <div style={{ ...cardStyle(), minWidth: 0, marginBottom: 16 }}>
 {(() => {
@@ -8633,37 +8208,6 @@ return (
               <div style={{ fontSize: "30px", fontWeight: "bold" }}>{estimatedCurrentBF != null ? `${f1(estimatedCurrentBF)}%` : "NA"}</div>
               <div style={{ fontSize: "12px", opacity: 0.7, marginTop: "8px" }}>from current weight and latest lean anchor</div>
             </div>
-
-            {/* DEXA bias correction card */}
-            {(() => {
-              const SCALE_BIAS_PP = 2.7
-              const currentScaleWeight = weightSmoothed.length
-                ? weightSmoothed[weightSmoothed.length - 1].avg
-                : null
-              const latestLean = latestDexa?.lean_lb ?? latestLeanAnchor
-              const correctedBF = (currentScaleWeight != null && latestLean != null && currentScaleWeight > 0)
-                ? ((currentScaleWeight - latestLean) / currentScaleWeight) * 100 + SCALE_BIAS_PP
-                : null
-              const rawScaleBF = (currentScaleWeight != null && latestLean != null && currentScaleWeight > 0)
-                ? ((currentScaleWeight - latestLean) / currentScaleWeight) * 100
-                : null
-              return (
-                <div style={{ ...cardStyle(), borderColor: "#2a1f00" }}>
-                  <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "4px" }}>Scale-Corrected BF%</div>
-                  <div style={{ fontSize: "30px", fontWeight: "bold", color: "#ffd166" }}>
-                    {correctedBF != null ? `${f1(correctedBF)}%` : "NA"}
-                  </div>
-                  <div style={{ fontSize: "11px", color: "#667", marginTop: "6px", lineHeight: 1.5 }}>
-                    Raw scale estimate: {rawScaleBF != null ? `${f1(rawScaleBF)}%` : "NA"}
-                    <br />
-                    +{SCALE_BIAS_PP} pp DEXA correction applied
-                  </div>
-                  <div style={{ fontSize: "10px", color: "#445", marginTop: "4px" }}>
-                    Bias quantified vs Jan 2026 DEXA anchor. Update after April 2026 scan.
-                  </div>
-                </div>
-              )
-            })()}
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "20px" }}>
@@ -8913,69 +8457,8 @@ return (
             </ResponsiveContainer>
           </div>
 
-          <div style={{ ...cardStyle(), maxWidth: "1000px", marginBottom: "16px" }}>
-            {(() => {
-              const PROTEIN_TARGET = 140
-              const todayProtein = todayMeals.reduce((s, r) => s + toNum(r.protein_g), 0)
-              const todayCalories = todayMeals.reduce((s, r) => s + toNum(r.calories), 0)
-              const proteinPct = Math.min(100, Math.round((todayProtein / PROTEIN_TARGET) * 100))
-              const remaining = Math.max(0, PROTEIN_TARGET - todayProtein)
-              const barColor = proteinPct >= 100 ? "#4ade80" : proteinPct >= 70 ? "#fbbf24" : "#ef4444"
-              const calTarget = calorieTarget?.targetCalories || 1700
-              const calPct = Math.min(100, Math.round((todayCalories / calTarget) * 100))
-              const calBarColor = calPct > 110 ? "#ef4444" : calPct >= 90 ? "#4ade80" : calPct >= 60 ? "#fbbf24" : "#667"
-              return (
-                <>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", flexWrap: "wrap", gap: 8 }}>
-                    <div style={{ fontWeight: "bold" }}>Today ({mealDate})</div>
-                    <div style={{ fontSize: "11px", color: "#555" }}>
-                      FFM 113.1 lb · target 2.7 g/kg lean mass · Phase 1 cut
-                    </div>
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-                    <div>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "4px" }}>
-                        <div style={{ fontSize: "12px", color: "#888" }}>Protein</div>
-                        <div style={{ fontSize: "20px", fontWeight: "800", color: barColor }}>
-                          {Math.round(todayProtein)}
-                          <span style={{ fontSize: "12px", fontWeight: "400", color: "#555" }}> / {PROTEIN_TARGET} g</span>
-                        </div>
-                      </div>
-                      <div style={{ height: "6px", background: "#1a1b2e", borderRadius: "3px", overflow: "hidden", marginBottom: "4px" }}>
-                        <div style={{ height: "100%", width: `${proteinPct}%`, background: barColor, transition: "width 0.4s" }} />
-                      </div>
-                      <div style={{ fontSize: "11px", color: "#445" }}>
-                        {proteinPct >= 100 ? "Target met." : `${Math.round(remaining)} g remaining.`}
-                        {remaining > 0 && remaining <= 40 && " Close — one more protein source."}
-                        {remaining > 40 && remaining <= 80 && " One more high-protein meal recommended."}
-                        {remaining > 80 && " Significantly below target — prioritize protein at next two meals."}
-                      </div>
-                    </div>
-                    <div>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "4px" }}>
-                        <div style={{ fontSize: "12px", color: "#888" }}>Calories</div>
-                        <div style={{ fontSize: "20px", fontWeight: "800", color: calBarColor }}>
-                          {Math.round(todayCalories)}
-                          <span style={{ fontSize: "12px", fontWeight: "400", color: "#555" }}> / {Math.round(calTarget)}</span>
-                        </div>
-                      </div>
-                      <div style={{ height: "6px", background: "#1a1b2e", borderRadius: "3px", overflow: "hidden", marginBottom: "4px" }}>
-                        <div style={{ height: "100%", width: `${calPct}%`, background: calBarColor, transition: "width 0.4s" }} />
-                      </div>
-                      <div style={{ fontSize: "11px", color: "#445" }}>
-                        {calPct > 110 ? `${Math.round(todayCalories - calTarget)} kcal over target.`
-                          : calPct >= 90 ? "On track."
-                          : `${Math.round(calTarget - todayCalories)} kcal remaining.`}
-                      </div>
-                    </div>
-                  </div>
-                </>
-              )
-            })()}
-          </div>
-
           <div style={{ ...cardStyle(), maxWidth: "1000px" }}>
-            <div style={{ fontWeight: "bold", marginBottom: "12px" }}>Meal Log ({mealDate})</div>
+            <div style={{ fontWeight: "bold", marginBottom: "12px" }}>Recent Meal Entries ({mealDate})</div>
             {!todayMeals.length ? (
               <div>No synced meal entries for this date.</div>
             ) : (
@@ -9112,7 +8595,6 @@ return (
     operationalCapacityData={operationalCapacityData}
     healthFitDaily={healthFitDaily}
     sleepRecords={sleepRecords}
-    runSessions={operationalWorkouts.filter(w => w.category === "Running" && w.distance > 0)}
   />
 )}
 {tab === "_InjuryLegacy" && (
@@ -9263,7 +8745,12 @@ return (
         </div>
       ))}
     </div>
-
+<div style={{ marginTop: "24px" }}>
+  <h4>Recent weekly buckets</h4>
+  <pre style={{ whiteSpace: "pre-wrap", fontSize: "12px" }}>
+    {JSON.stringify(weeklyTrainingBuckets, null, 2)}
+  </pre>
+</div>
   </div>
 )}
 {tab === "Forecast" && (
@@ -9369,90 +8856,10 @@ return (
     {/* ── Per-modality volume charts ───────────────────────────── */}
     {trainingForecast && (
       <div style={{ display: "grid", gridTemplateColumns: window.innerWidth < 768 ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: "16px" }}>
-
-        {/* ── Running Volume with half marathon build curve ── */}
-        {(() => {
-          const color = "#ef4444"
-          const eta = `ETA 20 mi/wk: ${trainingForecast.eta20Run || "not on trend"} · ETA 30 mi/wk: ${trainingForecast.eta30Run || "not on trend"}`
-
-          // Build planned curve: 10% per week from current, cap at 22 mi/wk,
-          // taper from Aug 11 (3 weeks out), race Sep 1 2026
-          const RACE_DATE    = new Date("2026-09-01")
-          const TAPER_START  = new Date("2026-08-11")
-          const PEAK_MI      = 22
-          const TAPER_FACTOR = 0.80
-
-          const planByLabel = {}
-          const baseDate = weeklyTrainingBuckets?.length
-            ? new Date(weeklyTrainingBuckets[weeklyTrainingBuckets.length - 1].weekStart)
-            : new Date()
-          const startMi = Math.max(
-            Number(trainingForecast?.runningCurrent || 0),
-            weeklyTrainingBuckets?.slice(-4).reduce((mx, w) => Math.max(mx, w.running || 0), 0) || 3
-          )
-
-          let mi = startMi
-          for (let w = 1; w <= 28; w++) {
-            const d = new Date(baseDate)
-            d.setDate(d.getDate() + w * 7)
-            if (d > RACE_DATE) break
-            const label = formatBucketLabel(d, "monthly")
-            if (d >= TAPER_START) {
-              mi = mi * TAPER_FACTOR
-            } else {
-              mi = Math.min(PEAK_MI, mi * 1.10)
-            }
-            // Keep highest planned value per label (last week of month wins)
-            planByLabel[label] = Number(mi.toFixed(2))
-          }
-
-          const data = runningForecastChart.map(pt => ({
-            ...pt,
-            plan: planByLabel[pt.label] ?? null
-          }))
-
-          // Find the September label — labels are in dd/mm format
-          const sepLabel = Object.keys(planByLabel).find(l => l.endsWith("/09")) ||
-            formatBucketLabel(new Date("2026-09-01"), "monthly")
-
-          return (
-            <div style={{ ...cardStyle(), gridColumn: "1 / -1" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8, marginBottom: "10px" }}>
-                <div style={{ fontWeight: "bold", fontSize: "13px" }}>Running Volume (mi/week)</div>
-                <div style={{ fontSize: "11px", color: "#667", textAlign: "right" }}>
-                  Half marathon build · 10% weekly · peak 22 mi · 3-week taper · race Sep 1 2026
-                </div>
-              </div>
-              <ResponsiveContainer width="100%" height={260}>
-                <ComposedChart data={data} margin={{ top: 5, right: 10, left: 40, bottom: 15 }}>
-                  <CartesianGrid stroke="#1a1b2e" />
-                  <XAxis dataKey="label" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
-                  <YAxis tick={{ fontSize: 10 }} domain={[0, "dataMax + 3"]} />
-                  <Tooltip formatter={(v, n) => [
-                    v != null ? Number(v).toFixed(2) : "—",
-                    n === "actual" ? "Actual" : n === "forecast" ? "Projected" : "HM Plan"
-                  ]} />
-                  <Legend verticalAlign="top" height={28} wrapperStyle={{ fontSize: "11px" }} />
-                  <ReferenceLine y={20} stroke="#ffd166" strokeDasharray="4 3"
-                    label={{ value: "HM readiness", fill: "#ffd166", fontSize: 10, position: "insideTopRight" }} />
-                  {sepLabel && (
-                    <ReferenceLine x={sepLabel} stroke="#4ade80" strokeDasharray="4 3"
-                      label={{ value: "Race", fill: "#4ade80", fontSize: 10, position: "insideTopLeft" }} />
-                  )}
-                  <Bar  dataKey="actual"   name="Actual"    fill={color} opacity={0.7} />
-                  <Line dataKey="forecast" name="Projected" stroke={color} strokeWidth={2} strokeDasharray="5 3" dot={{ r: 4 }} connectNulls={false} />
-                  <Line dataKey="plan"     name="HM Plan"   stroke="#ffd166" strokeWidth={1.5} strokeDasharray="3 2" dot={false} connectNulls />
-                </ComposedChart>
-              </ResponsiveContainer>
-              <div style={{ fontSize: "11px", opacity: 0.6, marginTop: "6px" }}>{eta}</div>
-            </div>
-          )
-        })()}
-
-        {/* ── Remaining modality charts ── */}
         {[
-          { title: "Cycling Volume (mi/week)",     data: cyclingForecastChart,  color: "#4acfe8", eta: `ETA 25 mi/wk: ${trainingForecast.eta25Bike || "not on trend"} · ETA 50 mi/wk: ${trainingForecast.eta50Bike || "not on trend"}` },
-          { title: "Swimming Volume (mi/week)",    data: swimmingForecastChart, color: "#a78bfa", eta: `ETA 2 mi/wk: ${trainingForecast.eta2Swim || "not on trend"} · ETA 5 mi/wk: ${trainingForecast.eta5Swim || "not on trend"}` },
+          { title: "Running Volume (mi/week)",   data: runningForecastChart,  color: "#ef4444", eta: `ETA 20 mi/wk: ${trainingForecast.eta20Run || "not on trend"} · ETA 30 mi/wk: ${trainingForecast.eta30Run || "not on trend"}` },
+          { title: "Cycling Volume (mi/week)",   data: cyclingForecastChart,  color: "#4acfe8", eta: `ETA 25 mi/wk: ${trainingForecast.eta25Bike || "not on trend"} · ETA 50 mi/wk: ${trainingForecast.eta50Bike || "not on trend"}` },
+          { title: "Swimming Volume (mi/week)",  data: swimmingForecastChart, color: "#a78bfa", eta: `ETA 2 mi/wk: ${trainingForecast.eta2Swim || "not on trend"} · ETA 5 mi/wk: ${trainingForecast.eta5Swim || "not on trend"}` },
           { title: "Strength Sessions (per week)", data: strengthForecastChart, color: "#ffd166", eta: `ETA 3/wk: ${trainingForecast.eta3Strength || "not on trend"} · ETA 4/wk: ${trainingForecast.eta4Strength || "not on trend"}` }
         ].map(({ title, data, color, eta }) => (
           <div key={title} style={{ ...cardStyle() }}>
@@ -9493,6 +8900,5 @@ return (
   </div>
 )}
     </div>
-  </ErrorBoundary>
   )
 }
