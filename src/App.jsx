@@ -632,7 +632,7 @@ function ScheduleLogView({ log, expanded, setExpanded, onDelete, onEdit }) {
       </div>
 
       {log.map(entry => {
-        const m = SMETA[entry.day]
+        const m = SCH_META[entry.day] || SMETA[entry.day] || { color: "#666", venue: "?" }
         const allExercises = entry.exercises || []
         const programExs = allExercises.filter(ex => ex.variant !== "custom")
         const customExs  = allExercises.filter(ex => ex.variant === "custom")
@@ -1477,7 +1477,39 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     </div>
   ) : null
 
-  const getProgDay = (day) => PROG[day] || { stretch: [], warmup: [], exercises: [], core: [] }
+  // ── Data source: SCH_PLAN (primary) with PROG as fallback ─────────────
+  const getProgDay = (day) => {
+    const schDay = SCH_PLAN[day]
+    if (schDay) {
+      const warmup = (schDay.warmup || []).map(s =>
+        typeof s === "string" ? { n: s, d: "" } : { n: s.n || "", d: s.d || "" }
+      )
+      const exercises = (schDay.sections || []).flatMap(sec =>
+        (sec.ex || []).map(ex => {
+          const def = ex.def || []
+          return {
+            id: ex.id,
+            n: ex.name,
+            fi: null,
+            _def: def,
+            _sectionH: sec.h,
+            variants: {
+              machine: {
+                n: ex.sub || ex.name,
+                sets: String(def.length || 3),
+                reps: def[0]?.r ?? "—",
+                load: def[0]?.w ?? "—",
+                note: ex.note || "",
+              },
+            },
+          }
+        })
+      )
+      return { stretch: [], warmup, exercises, core: [], _topNote: schDay.topNote }
+    }
+    // Fallback to PROG for any day not in SCH_PLAN
+    return PROG[day] || { stretch: [], warmup: [], exercises: [], core: [] }
+  }
   const getVariant = (exId) => variants[exId] || "machine"
 
   const getF = (day, exId) => {
@@ -1659,7 +1691,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       id: Date.now(),
       session_id: ts.replace(/\D/g, "").slice(0, 17),
       logged_at: ts, date: sessionDate,
-      day, dayLabel: SMETA[day]?.label || day,
+      day, dayLabel: SCH_META[day]?.label || SMETA[day]?.label || day,
       venue: venue || "ymca",
       venue_label: VENUE_LABELS[venue] || "",
       program: "Kinesiology (primary)",
@@ -1669,7 +1701,15 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       stretch_completed: checkedStretch,
       warmup_completed: checkedWarmup,
       source: "LIFT Schedule Tab", apple_watch_sync_pending: true,
-      data: Object.fromEntries(filteredExercises.map(ex => [ex.exercise_id, [{ r: ex.actual.reps, w: ex.actual.load }]])),
+      data: Object.fromEntries(filteredExercises.map(ex => {
+        // If the program exercise has a full def array (_def), use it as the per-set record
+        // so SchLogView can display each set. Fall back to a single {r,w} pair.
+        const progEx = prog.exercises?.find(e => e.id === ex.exercise_id)
+        const sets = progEx?._def?.length
+          ? progEx._def.map((s, i) => ({ r: i === 0 ? (ex.actual.reps ?? s.r) : s.r, w: i === 0 ? (ex.actual.load ?? s.w) : s.w }))
+          : [{ r: ex.actual.reps, w: ex.actual.load }]
+        return [ex.exercise_id, sets]
+      })),
     }
 
     const newLog = [entry, ...schedLog]
@@ -1686,7 +1726,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
         id: entry.id + i, date: sessionDate, time: VENUE_TIMES[venue] || "", dateTime: ts,
         type: c.modality === "run" ? "Running" : c.modality === "bike" ? "Cycling" : c.modality === "swim" ? "Swimming" : "Other",
         dur: parseInt(c.duration) || 0, hr: null, distance: null, calories: null,
-        notes: `from Schedule , ${SMETA[day]?.theme || day}${c.notes ? " , " + c.notes : ""}`,
+        notes: `from Schedule , ${SCH_META[day]?.theme || SMETA[day]?.theme || day}${c.notes ? " , " + c.notes : ""}`,
         _scheduleId: entry.id,
       }))
       const existing = await store.get("ufd-workouts") || storedWorkouts
@@ -1906,7 +1946,8 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
             })()}
           </div>
           <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-            {!isCustom && ["machine", "db", "friendly"].map(k => {
+            {!isCustom && Object.keys(ex.variants || {}).length > 1 && ["machine", "db", "friendly"].map(k => {
+              if (!ex.variants[k]) return null
               const lbl = k === "machine" ? "Machine" : k === "db" ? "DB" : fl
               const active = vk === k
               return (
@@ -2180,7 +2221,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   }
 
   const prog = getProgDay(activeDay)
-  const meta = SMETA[activeDay] || {}
+  const meta = SCH_META[activeDay] || SMETA[activeDay] || {}
 
   return (
     <div style={{ color: "#d8d8d8", position: "relative" }}>
@@ -2190,7 +2231,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
         <div style={{ display: "flex", gap: 3, background: "#0a0a0a", borderRadius: 8, padding: 4, border: "1px solid #1a1a1a", flexWrap: "wrap" }}>
           {SDAYS.map(d => {
-            const m = SMETA[d] || {}
+            const m = SCH_META[d] || SMETA[d] || {}
             const active = d === activeDay && schedView === "schedule"
             const isSplit = SPLIT_DAYS.includes(d)
             return (
@@ -2239,13 +2280,32 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
           {/* Warmup */}
           {prog.warmup?.length > 0 && checklistSection(activeDay, "warmup", prog.warmup, "#BA7517", "Warm-up", "")}
 
+          {/* topNote banner (SCH_PLAN) */}
+          {prog._topNote && (
+            <div style={{ marginBottom: 10, padding: "7px 12px", background: "rgba(59,130,246,0.07)", border: "0.5px solid rgba(59,130,246,0.2)", borderRadius: 6, fontSize: 11, color: "#6a9adf" }}>
+              {prog._topNote}
+            </div>
+          )}
+
           {/* Main program */}
           <div style={{ border: "0.5px solid #1a1a1a", borderRadius: 8, marginBottom: 10, overflow: "hidden" }}>
             {secHdr("main", "Main program", "#185FA5", "")}
             {openSections.main && (
               <div style={{ padding: "4px 14px 12px" }}>
                 {prog.exercises?.length > 0
-                  ? prog.exercises.map(ex => exCard(ex, activeDay))
+                  ? (() => {
+                    let lastSH = null
+                    return prog.exercises.map(ex => {
+                      const showSH = ex._sectionH && ex._sectionH !== lastSH
+                      lastSH = ex._sectionH || lastSH
+                      return (
+                        <React.Fragment key={ex.id}>
+                          {showSH && <div style={{ fontSize: 9, color: "#444", textTransform: "uppercase", letterSpacing: "0.12em", margin: "10px 0 3px", fontFamily: "'Barlow Condensed',sans-serif" }}>{ex._sectionH}</div>}
+                          {exCard(ex, activeDay)}
+                        </React.Fragment>
+                      )
+                    })
+                  })()
                   : <div style={{ textAlign: "center", padding: 16, color: "#444", fontSize: 13 }}>Active recovery — no resistance training today.</div>}
                 {getCustomExercises(activeDay).map(ex => exCard(ex, activeDay, true))}
                 {inlineExForm === activeDay ? (
