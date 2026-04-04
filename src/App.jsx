@@ -2243,7 +2243,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   return (
     <div style={{ color: "#d8d8d8", position: "relative" }}>
       <input ref={importRef} type="file" accept=".json" style={{ display: "none" }} onChange={importLog} />
-      <DailyReadinessPanel readinessScore={readinessScore} latestHealthFit={latestHealthFit} ocItems={ocItems} computedTSB={computedTSBFromSessions ?? computedTSB} />
+      <DailyReadinessPanel readinessScore={readinessScore} latestHealthFit={latestHealthFit} ocItems={ocItems} computedTSB={computedTSB} />
       {/* Day navigation */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
         <div style={{ display: "flex", gap: 3, background: "#0a0a0a", borderRadius: 8, padding: 4, border: "1px solid #1a1a1a", flexWrap: "wrap" }}>
