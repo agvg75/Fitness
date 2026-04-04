@@ -1635,12 +1635,13 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
 
   // ── Cardio entries ─────────────────────────────────────────────────────
   const getCardioEntries = (day) => {
-    if (cardioEntries[day]?.length) return cardioEntries[day]
-    const cd = CARDIO[day]
-    const sessions = cd.sessions || []
-    if (sessions.length > 0) return sessions.map(s => ({ modality: s.mod, duration: `${s.dMin}-${s.dMax}`, notes: "" }))
-    return [{ modality: cd.mod || "run", duration: "", notes: "" }]
-  }
+  if (cardioEntries[day]?.length) return cardioEntries[day]
+  const cd = CARDIO[day]
+  if (!cd) return [{ modality: "run", duration: "", notes: "" }]
+  const sessions = cd.sessions || []
+  if (sessions.length > 0) return sessions.map(s => ({ modality: s.mod, duration: `${s.dMin}-${s.dMax}`, notes: "" }))
+  return [{ modality: cd.mod || "run", duration: "", notes: "" }]
+}
 
   const setCardioEntryF = (day, idx, fKey, val) => {
     setCardioEntries(prev => {
@@ -2243,7 +2244,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   return (
     <div style={{ color: "#d8d8d8", position: "relative" }}>
       <input ref={importRef} type="file" accept=".json" style={{ display: "none" }} onChange={importLog} />
-      <DailyReadinessPanel readinessScore={readinessScore} latestHealthFit={latestHealthFit} ocItems={ocItems} computedTSB={computedTSBFromSessions ?? computedTSB} />
+      <DailyReadinessPanel readinessScore={readinessScore} latestHealthFit={latestHealthFit} ocItems={ocItems} computedTSB={computedTSB} />
       {/* Day navigation */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
         <div style={{ display: "flex", gap: 3, background: "#0a0a0a", borderRadius: 8, padding: 4, border: "1px solid #1a1a1a", flexWrap: "wrap" }}>
@@ -9227,7 +9228,7 @@ return (
     readinessScore={readinessScore}
     latestHealthFit={latestHealthFit}
     ocItems={ocItems}
-    computedTSB={computedTSBFromSessions ?? computedTSB}
+    computedTSB={computedTSB}
   />
 )}
 
