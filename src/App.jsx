@@ -1738,7 +1738,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
 
     const types = SDAY_TYPES[day] || []
     const allCardio = getCardioEntries(day)
-    if (types.length > 0 && allCardio.some(c => c.duration)) {
+    if (allCardio.some(c => c.duration)) {
       const summaryEntries = allCardio.filter(c => c.duration).map((c, i) => ({
         id: entry.id + i, date: sessionDate, time: VENUE_TIMES[venue] || "", dateTime: ts,
         type: c.modality === "run" ? "Running" : c.modality === "bike" ? "Cycling" : c.modality === "swim" ? "Swimming" : "Other",
