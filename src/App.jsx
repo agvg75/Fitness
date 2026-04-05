@@ -688,6 +688,9 @@ function ScheduleLogView({ log, expanded, setExpanded, onDelete, onEdit }) {
       <div key={i} style={{ marginBottom: "6px", padding: "8px 10px", background: "#101622", border: "1px solid #1a2a44", borderRadius: "6px", fontSize: "11px", color: "#9ec5ff" }}>
         <strong style={{ textTransform: "capitalize" }}>{c.modality || "Cardio"}</strong>
         {c.duration && <> , {c.duration} min</>}
+        {c.distance && <> , {parseFloat(c.distance).toFixed(2)} mi</>}
+        {c.calories && <> , {c.calories} kcal</>}
+        {c.hr && <> , {c.hr} bpm avg</>}
         {c.notes && <div style={{ marginTop: "4px", color: "#7f93b8" }}>{c.notes}</div>}
       </div>
     ))}
@@ -1638,8 +1641,8 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     if (cardioEntries[day]?.length) return cardioEntries[day]
     const cd = CARDIO[day]
     const sessions = cd.sessions || []
-    if (sessions.length > 0) return sessions.map(s => ({ modality: s.mod, duration: `${s.dMin}-${s.dMax}`, notes: "" }))
-    return [{ modality: cd.mod || "run", duration: "", notes: "" }]
+    if (sessions.length > 0) return sessions.map(s => ({ modality: s.mod, duration: `${s.dMin}-${s.dMax}`, distance: "", calories: "", hr: "", notes: "" }))
+    return [{ modality: cd.mod || "run", duration: "", distance: "", calories: "", hr: "", notes: "" }]
   }
 
   const setCardioEntryF = (day, idx, fKey, val) => {
@@ -1736,13 +1739,15 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     await saveScheduleKey("wt-log", newLog)
     await saveScheduleKey("wt-sessions", buildSessionsStore())
 
-    const types = SDAY_TYPES[day] || []
     const allCardio = getCardioEntries(day)
     if (allCardio.some(c => c.duration)) {
       const summaryEntries = allCardio.filter(c => c.duration).map((c, i) => ({
         id: entry.id + i, date: sessionDate, time: VENUE_TIMES[venue] || "", dateTime: ts,
-        type: c.modality === "run" ? "Running" : c.modality === "bike" ? "Cycling" : c.modality === "swim" ? "Swimming" : "Other",
-        dur: parseInt(c.duration) || 0, hr: null, distance: null, calories: null,
+        type: c.modality === "run" ? "Running" : c.modality === "bike" ? "Cycling" : c.modality === "swim" ? "Swimming" : c.modality === "row" ? "Rowing" : "Other",
+        dur: parseInt(c.duration) || 0,
+        hr: parseFloat(c.hr) > 0 ? parseFloat(c.hr) : null,
+        distance: parseFloat(c.distance) > 0 ? parseFloat(c.distance) : null,
+        calories: parseInt(c.calories) > 0 ? parseInt(c.calories) : null,
         notes: `from Schedule , ${SCH_META[day]?.theme || SMETA[day]?.theme || day}${c.notes ? " , " + c.notes : ""}`,
         _scheduleId: entry.id,
       }))
@@ -2059,9 +2064,27 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
                   {idx === 0 && <div style={{ fontSize: 9, color: "#444", marginTop: 2 }}>Target: {cd.dMin}–{cd.dMax} min</div>}
                 </div>
                 <div>
-                  <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Distance / notes</div>
+                  <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Distance (mi)</div>
+                  <input type="text" inputMode="decimal" value={entry.distance || ""} onChange={e => setCardioEntryF(day, idx, "distance", e.target.value)}
+                    placeholder={idx === 0 ? (cd.dist || "miles") : "miles"}
+                    style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Calories (kcal)</div>
+                  <input type="text" inputMode="numeric" value={entry.calories || ""} onChange={e => setCardioEntryF(day, idx, "calories", e.target.value)}
+                    placeholder="from watch"
+                    style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Avg HR (bpm)</div>
+                  <input type="text" inputMode="numeric" value={entry.hr || ""} onChange={e => setCardioEntryF(day, idx, "hr", e.target.value)}
+                    placeholder="from watch"
+                    style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
+                </div>
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Notes</div>
                   <input type="text" value={entry.notes} onChange={e => setCardioEntryF(day, idx, "notes", e.target.value)}
-                    placeholder={idx === 0 ? cd.dist : "e.g. 2 miles"}
+                    placeholder="optional notes"
                     style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
                 </div>
               </div>
