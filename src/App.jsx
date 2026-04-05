@@ -909,12 +909,12 @@ function computeOcRecoveryDate(item) {
 }
 
 // ─── TabOperationalCapacity ────────────────────────────────────────────────────
-function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapacityData, healthFitDaily, sleepRecords, runSessions = [] }) {
+function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapacityData, healthFitDaily, sleepRecords, runSessions = [], computedTSB = null }) {
   const [selectedId, setSelectedId] = useState(null)
   const [addForm, setAddForm] = useState({ key: "muscleStatus", location: "Quad L", currentScore: 1, halfLifeHours: null })
 
   const selectedItem = ocItems.find(i => i.id === selectedId) || null
-  const rd = computeReadinessDetail(ocItems, sleepRecords, healthFitDaily)
+  const rd = computeReadinessDetail(ocItems, sleepRecords, healthFitDaily, computedTSB?.global?.tsb ?? null)
   const readiness = rd.score
   const readinessColor = readiness >= 80 ? "#4ade80" : readiness >= 60 ? "#fbbf24" : readiness >= 40 ? "#f97316" : "#ef4444"
   const active = rd.active
@@ -4801,7 +4801,9 @@ function parseSleepCycleCSV(text) {
   const lines = text.split(/\r?\n/).filter(l => l.trim())
   if (!lines.length) return { workouts: [], sleep: [], rejected: [] }
 
-  const headers = lines[0].split(",").map(h => h.trim().replace(/^"|"$/g, "").toLowerCase())
+  const delim = (lines[0].split(";").length > lines[0].split(",").length) ? ";" : ","
+  const splitRow = row => row.split(delim).map(c => c.trim().replace(/^"|"$/g, ""))
+  const headers = splitRow(lines[0]).map(h => h.toLowerCase())
   const sleep = []
   const rejected = []
 
@@ -4817,7 +4819,7 @@ function parseSleepCycleCSV(text) {
 
   for (let i = 1; i < lines.length; i++) {
     const raw = lines[i]
-    const cells = raw.split(",").map(c => c.trim().replace(/^"|"$/g, ""))
+    const cells = splitRow(raw)
     if (cells.length < 2) continue
 
     const dateRaw = iDate >= 0 ? cells[iDate] : null
@@ -9474,6 +9476,7 @@ return (
     healthFitDaily={healthFitDaily}
     sleepRecords={sleepRecords}
     runSessions={operationalWorkouts.filter(w => w.category === "Running" && w.distance > 0)}
+    computedTSB={computedTSB}
   />
 )}
 {tab === "_InjuryLegacy" && (
