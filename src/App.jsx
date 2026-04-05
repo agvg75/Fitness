@@ -4285,12 +4285,15 @@ function findOverlapCandidates(appleWorkouts, technoWorkouts) {
   const technogym = technoWorkouts.filter(isUsefulWorkout);
   const candidates = [];
 
-  for (let ai = 0; ai < apple.length; ai += 1) {
+  const overlapStart = Date.now();
+  outer: for (let ai = 0; ai < apple.length; ai += 1) {
+    if (Date.now() - overlapStart > 30000) break;
     const a = apple[ai];
     const aStart = toMs(a.start_date);
     const aEnd = toMs(a.end_date);
     const aDur = minutesBetween(a.start_date, a.end_date);
     for (let ti = 0; ti < technogym.length; ti += 1) {
+      if (Date.now() - overlapStart > 30000) break outer;
       const t = technogym[ti];
       const tStart = toMs(t.start_date);
       const tEnd = toMs(t.end_date);
