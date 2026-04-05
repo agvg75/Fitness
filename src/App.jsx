@@ -4810,7 +4810,11 @@ function parseSleepCycleCSV(text) {
   const col = name => headers.findIndex(h => h.includes(name))
   const iDate    = Math.max(col("date"), col("start"))
   const iQual    = Math.max(col("sleep quality"), col("quality"), col("score"))
-  const iDur     = Math.max(col("time in bed"), col("duration"), col("sleep time"))
+  // Prefer "time asleep" over "time in bed"; both are in seconds in Sleep Cycle exports
+  const iAsleep  = col("time asleep")
+  const iInBed   = col("time in bed")
+  const iDur     = iAsleep >= 0 ? iAsleep : Math.max(iInBed, col("duration"), col("sleep time"))
+  const iDurIsSeconds = iDur >= 0 && headers[iDur].includes("second")
   const iStart   = Math.max(col("bedtime"), col("sleep start"), col("start time"))
   const iEnd     = Math.max(col("wake up time"), col("wake up"), col("end time"))
   const iHR      = Math.max(col("heart rate"), col("avg hr"))
@@ -4839,7 +4843,11 @@ function parseSleepCycleCSV(text) {
       const hms = durRaw.match(/(\d+)h[^\d]*(\d+)m/i)
       if (hm) durationMin = parseInt(hm[1]) * 60 + parseInt(hm[2])
       else if (hms) durationMin = parseInt(hms[1]) * 60 + parseInt(hms[2])
-      else durationMin = n(durRaw)
+      else {
+        const raw = n(durRaw)
+        // Sleep Cycle stores durations in seconds — convert to minutes
+        durationMin = raw != null && iDurIsSeconds ? Number((raw / 60).toFixed(1)) : raw
+      }
     }
 
     // Parse quality — "85%" or "0.85" or "85"
