@@ -5875,38 +5875,7 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-export default function App() {
-
-  // ── LIFT Calibration Config ─────────────────────────────────────────────
-  // Update these after each DEXA scan. All derived constants read from here.
-  // Last updated: January 2026 DEXA anchor. Next update: April 2026 scan.
-  const LIFT_CONFIG = {
-    // Banister model constants — fitted via grid search on 466 days, R²=0.887
-    tau1: 27,          // fitness decay (days) — HealthFit default is 42
-    tau2: 18,          // fatigue decay (days) — HealthFit default is 7
-
-    // Body composition — update after each DEXA scan
-    ffm_lb: 113.1,             // fat-free mass, January 2026 DEXA
-    scale_bias_pp: 2.7,        // home scale reads this many pp LOW vs DEXA
-    protein_target_g: 140,     // g/day — ~2.7 g/kg lean mass
-    dexa_anchor_date: "2026-01-16",  // date of last DEXA scan
-    next_dexa_date:   "2026-04-01",  // next planned scan
-
-    // Calorie targets — empirically calibrated, scale-derived, April 2026
-    bmr: 1520,
-    tdee: 2100,
-    fat_loss_target: 1700,
-
-    // Half marathon build
-    hm_race_date:    "2026-09-19",
-    hm_taper_start:  "2026-08-31",
-    hm_peak_mi_week: 9,
-    hm_taper_factor: 0.90,
-    hm_weekly_build: 1.10,
-  }
-  // ────────────────────────────────────────────────────────────────────────
-
-  // ── Half Marathon Race Calendar ─────────────────────────────────────────
+// ── Half Marathon Race Calendar ─────────────────────────────────────────
   const RACE_CALENDAR = [
     { date: "2026-04-11", name: "SOAR Miles of Smiles",        city: "Bloomington",  dist_mi: 3.1,  recommended: true,  note: "First race back. Easy effort, not a time trial." },
     { date: "2026-04-18", name: "Easterseals Community Rally", city: "Tipton Park",  dist_mi: 3.1,  recommended: true,  note: "Second 5K week. Confirm MTP score 0 before." },
@@ -5941,6 +5910,37 @@ export default function App() {
     "2026-08-24": 9.0,  "2026-08-31": 4.0,
     "2026-09-07": 8.0,  "2026-09-14": 4.0,
   }
+
+export default function App() {
+
+  // ── LIFT Calibration Config ─────────────────────────────────────────────
+  // Update these after each DEXA scan. All derived constants read from here.
+  // Last updated: January 2026 DEXA anchor. Next update: April 2026 scan.
+  const LIFT_CONFIG = {
+    // Banister model constants — fitted via grid search on 466 days, R²=0.887
+    tau1: 27,          // fitness decay (days) — HealthFit default is 42
+    tau2: 18,          // fatigue decay (days) — HealthFit default is 7
+
+    // Body composition — update after each DEXA scan
+    ffm_lb: 113.1,             // fat-free mass, January 2026 DEXA
+    scale_bias_pp: 2.7,        // home scale reads this many pp LOW vs DEXA
+    protein_target_g: 140,     // g/day — ~2.7 g/kg lean mass
+    dexa_anchor_date: "2026-01-16",  // date of last DEXA scan
+    next_dexa_date:   "2026-04-01",  // next planned scan
+
+    // Calorie targets — empirically calibrated, scale-derived, April 2026
+    bmr: 1520,
+    tdee: 2100,
+    fat_loss_target: 1700,
+
+    // Half marathon build
+    hm_race_date:    "2026-09-19",
+    hm_taper_start:  "2026-08-31",
+    hm_peak_mi_week: 9,
+    hm_taper_factor: 0.90,
+    hm_weekly_build: 1.10,
+  }
+  // ────────────────────────────────────────────────────────────────────────
 
   const [tab, setTab] = useState("Overview")
   const [rangeKey, setRangeKey] = useState("180D")
