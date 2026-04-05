@@ -1408,6 +1408,8 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const [inlineItemDetail, setInlineItemDetail] = useState("")
   const [inlineExForm, setInlineExForm] = useState(null)   // day | null
   const [inlineExName, setInlineExName] = useState("")
+  const [raceResult, setRaceResult] = useState({})  // { [date]: { finishTime, distance, hr, calories } }
+  const [raceSaved, setRaceSaved] = useState({})    // { [date]: entry }
 
   const SPLIT_DAYS = ["Tue", "Thu"]
   const isSplitDay = SPLIT_DAYS.includes(activeDay)
@@ -1777,6 +1779,43 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     showToast("Session removed")
   }
 
+  const saveRaceResult = async () => {
+    const race = RACE_CALENDAR.find(r => r.date === sessionDate)
+    if (!race) return
+    const r = raceResult[sessionDate] || {}
+    const finMins = (() => {
+      const t = (r.finishTime || "").trim()
+      if (!t) return 0
+      const parts = t.split(":").map(Number)
+      if (parts.length === 3) return parts[0] * 60 + parts[1] + parts[2] / 60
+      if (parts.length === 2) return parts[0] + parts[1] / 60
+      return 0
+    })()
+    const dist = parseFloat(r.distance || race.dist_mi) > 0 ? parseFloat(r.distance || race.dist_mi) : null
+    const entry = {
+      id: Date.now(),
+      date: sessionDate,
+      time: "09:00",
+      dateTime: new Date(`${sessionDate}T09:00:00`).toISOString(),
+      type: "Running",
+      dur: Math.round(finMins),
+      hr: parseFloat(r.hr) > 0 ? parseFloat(r.hr) : null,
+      distance: dist,
+      calories: parseInt(r.calories) > 0 ? parseInt(r.calories) : null,
+      notes: `Race: ${race.name}, ${race.city}`,
+      _raceResult: true,
+    }
+    setRaceSaved(prev => ({ ...prev, [sessionDate]: entry }))
+    const existing = await store.get("ufd-workouts") || storedWorkouts
+    const merged = [
+      ...(Array.isArray(existing) ? existing.filter(w => !(w._raceResult && w.date === sessionDate)) : []),
+      entry
+    ].sort((a, b) => String(a.dateTime || a.date || "").localeCompare(String(b.dateTime || b.date || "")))
+    setStoredWorkouts(merged)
+    await saveScheduleKey("ufd-workouts", merged)
+    showToast(`Race result logged: ${race.name}`)
+  }
+
   const deleteEntry = async id => {
     const newLog = schedLog.filter(e => e.id !== id)
     setSchedLog(newLog)
@@ -2038,61 +2077,125 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
           </div>
         ))}
 
-        <div style={{ fontSize: 10, fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", margin: "10px 0 6px" }}>Log actual</div>
-        {entries.map((entry, idx) => {
-          const mc = modColor[entry.modality] || "#888"
-          return (
-            <div key={idx} style={{ marginBottom: 10, padding: "10px 12px", border: `0.5px solid #1e1e1e`, borderRadius: 7, background: "#0a0a0a" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                <select value={entry.modality} onChange={e => setCardioEntryF(day, idx, "modality", e.target.value)}
-                  style={{ padding: "4px 8px", borderRadius: 20, fontSize: 11, fontWeight: 700, background: `${mc}22`, color: mc, border: `0.5px solid ${mc}`, outline: "none", cursor: "pointer", fontFamily: "inherit" }}>
-                  {["run", "bike", "swim", "walk", "row"].map(m => <option key={m} value={m}>{modLabel[m]}</option>)}
-                </select>
-                {idx === 0 && <span style={{ fontSize: 11, color: "#555" }}>{cd.type} · {cd.intensity}</span>}
-                {idx > 0 && <span style={{ fontSize: 10, color: "#444" }}>Additional session</span>}
-                {idx > 0 && (
-                  <button onClick={() => removeCardioEntry(day, idx)}
-                    style={{ marginLeft: "auto", background: "transparent", border: "none", color: "#444", cursor: "pointer", fontSize: 12 }}>✕</button>
+        {(() => {
+          const raceEntry = RACE_CALENDAR.find(r => r.date === sessionDate)
+          if (raceEntry) {
+            const rf = raceResult[sessionDate] || {}
+            const saved = raceSaved[sessionDate]
+            return (
+              <div style={{ marginTop: 10 }}>
+                <div style={{ padding: "10px 12px", background: "rgba(239,68,68,0.08)", border: "0.5px solid #ef4444", borderRadius: 7, marginBottom: 10 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "#ef4444", marginBottom: 2 }}>{raceEntry.name}</div>
+                  <div style={{ fontSize: 11, color: "#aaa" }}>{raceEntry.city} · {raceEntry.dist_mi} mi</div>
+                  <div style={{ fontSize: 10, color: "#666", marginTop: 4, fontStyle: "italic" }}>{raceEntry.note}</div>
+                </div>
+                {saved ? (
+                  <div style={{ padding: "10px 12px", background: "rgba(15,110,86,0.15)", border: "0.5px solid #0F6E56", borderRadius: 7 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: "#10b981" }}>Race result logged</div>
+                    <div style={{ fontSize: 10, color: "#555", marginTop: 2 }}>
+                      {saved.dur > 0 ? `${Math.floor(saved.dur)}:${String(Math.round((saved.dur % 1) * 60)).padStart(2,"0")} finish` : ""}
+                      {saved.distance ? ` · ${saved.distance} mi` : ""}
+                      {saved.hr ? ` · ${saved.hr} bpm` : ""}
+                      {saved.calories ? ` · ${saved.calories} kcal` : ""}
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ padding: "10px 12px", border: "0.5px solid #1e1e1e", borderRadius: 7, background: "#0a0a0a" }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Log race result</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                      <div>
+                        <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Finish time (mm:ss or h:mm:ss)</div>
+                        <input type="text" value={rf.finishTime || ""} onChange={e => setRaceResult(prev => ({ ...prev, [sessionDate]: { ...(prev[sessionDate] || {}), finishTime: e.target.value } }))}
+                          placeholder="28:30"
+                          style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Distance (mi)</div>
+                        <input type="text" inputMode="decimal" value={rf.distance || raceEntry.dist_mi} onChange={e => setRaceResult(prev => ({ ...prev, [sessionDate]: { ...(prev[sessionDate] || {}), distance: e.target.value } }))}
+                          style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Avg HR (bpm)</div>
+                        <input type="text" inputMode="numeric" value={rf.hr || ""} onChange={e => setRaceResult(prev => ({ ...prev, [sessionDate]: { ...(prev[sessionDate] || {}), hr: e.target.value } }))}
+                          placeholder="from watch"
+                          style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Calories (kcal)</div>
+                        <input type="text" inputMode="numeric" value={rf.calories || ""} onChange={e => setRaceResult(prev => ({ ...prev, [sessionDate]: { ...(prev[sessionDate] || {}), calories: e.target.value } }))}
+                          placeholder="from watch"
+                          style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
+                      </div>
+                    </div>
+                    <button onClick={saveRaceResult}
+                      style={{ width: "100%", marginTop: 10, padding: "9px 0", background: "#ef4444", color: "#fff", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+                      Log race result
+                    </button>
+                  </div>
                 )}
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                <div>
-                  <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Duration (min)</div>
-                  <input type="text" value={entry.duration} onChange={e => setCardioEntryF(day, idx, "duration", e.target.value)}
-                    placeholder={idx === 0 ? `${cd.dMin}–${cd.dMax} min` : "minutes"}
-                    style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
-                  {idx === 0 && <div style={{ fontSize: 9, color: "#444", marginTop: 2 }}>Target: {cd.dMin}–{cd.dMax} min</div>}
-                </div>
-                <div>
-                  <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Distance (mi)</div>
-                  <input type="text" inputMode="decimal" value={entry.distance || ""} onChange={e => setCardioEntryF(day, idx, "distance", e.target.value)}
-                    placeholder={idx === 0 ? (cd.dist || "miles") : "miles"}
-                    style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
-                </div>
-                <div>
-                  <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Calories (kcal)</div>
-                  <input type="text" inputMode="numeric" value={entry.calories || ""} onChange={e => setCardioEntryF(day, idx, "calories", e.target.value)}
-                    placeholder="from watch"
-                    style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
-                </div>
-                <div>
-                  <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Avg HR (bpm)</div>
-                  <input type="text" inputMode="numeric" value={entry.hr || ""} onChange={e => setCardioEntryF(day, idx, "hr", e.target.value)}
-                    placeholder="from watch"
-                    style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
-                </div>
-                <div style={{ gridColumn: "1 / -1" }}>
-                  <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Notes</div>
-                  <input type="text" value={entry.notes} onChange={e => setCardioEntryF(day, idx, "notes", e.target.value)}
-                    placeholder="optional notes"
-                    style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
-                </div>
-              </div>
-            </div>
+            )
+          }
+          return (
+            <>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", margin: "10px 0 6px" }}>Log actual</div>
+              {entries.map((entry, idx) => {
+                const mc = modColor[entry.modality] || "#888"
+                return (
+                  <div key={idx} style={{ marginBottom: 10, padding: "10px 12px", border: `0.5px solid #1e1e1e`, borderRadius: 7, background: "#0a0a0a" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                      <select value={entry.modality} onChange={e => setCardioEntryF(day, idx, "modality", e.target.value)}
+                        style={{ padding: "4px 8px", borderRadius: 20, fontSize: 11, fontWeight: 700, background: `${mc}22`, color: mc, border: `0.5px solid ${mc}`, outline: "none", cursor: "pointer", fontFamily: "inherit" }}>
+                        {["run", "bike", "swim", "walk", "row"].map(m => <option key={m} value={m}>{modLabel[m]}</option>)}
+                      </select>
+                      {idx === 0 && <span style={{ fontSize: 11, color: "#555" }}>{cd.type} · {cd.intensity}</span>}
+                      {idx > 0 && <span style={{ fontSize: 10, color: "#444" }}>Additional session</span>}
+                      {idx > 0 && (
+                        <button onClick={() => removeCardioEntry(day, idx)}
+                          style={{ marginLeft: "auto", background: "transparent", border: "none", color: "#444", cursor: "pointer", fontSize: 12 }}>✕</button>
+                      )}
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                      <div>
+                        <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Duration (min)</div>
+                        <input type="text" value={entry.duration} onChange={e => setCardioEntryF(day, idx, "duration", e.target.value)}
+                          placeholder={idx === 0 ? `${cd.dMin}–${cd.dMax} min` : "minutes"}
+                          style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
+                        {idx === 0 && <div style={{ fontSize: 9, color: "#444", marginTop: 2 }}>Target: {cd.dMin}–{cd.dMax} min</div>}
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Distance (mi)</div>
+                        <input type="text" inputMode="decimal" value={entry.distance || ""} onChange={e => setCardioEntryF(day, idx, "distance", e.target.value)}
+                          placeholder={idx === 0 ? (cd.dist || "miles") : "miles"}
+                          style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Calories (kcal)</div>
+                        <input type="text" inputMode="numeric" value={entry.calories || ""} onChange={e => setCardioEntryF(day, idx, "calories", e.target.value)}
+                          placeholder="from watch"
+                          style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Avg HR (bpm)</div>
+                        <input type="text" inputMode="numeric" value={entry.hr || ""} onChange={e => setCardioEntryF(day, idx, "hr", e.target.value)}
+                          placeholder="from watch"
+                          style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
+                      </div>
+                      <div style={{ gridColumn: "1 / -1" }}>
+                        <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Notes</div>
+                        <input type="text" value={entry.notes} onChange={e => setCardioEntryF(day, idx, "notes", e.target.value)}
+                          placeholder="optional notes"
+                          style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+              {addBtn(() => addCardioEntry(day))}
+              {cd.cnote && <div style={{ fontSize: 10, color: "#555", lineHeight: 1.4, marginTop: 8 }}>{cd.cnote}</div>}
+            </>
           )
-        })}
-        {addBtn(() => addCardioEntry(day))}
-        {cd.cnote && <div style={{ fontSize: 10, color: "#555", lineHeight: 1.4, marginTop: 8 }}>{cd.cnote}</div>}
+        })()}
       </div>
     )
   }
@@ -3429,6 +3532,8 @@ const baseReadinessRaw =
     0,
     Math.min(100, Math.round(baseReadinessRaw * runPenalty))
   )
+  // Readiness without injury penalty — used to taper penalty contribution in projections
+  const readinessNoPenalty = Math.max(0, Math.min(100, Math.round(baseReadinessRaw)))
 
   // Slope: compare total cardio-equivalent miles over the last 28 days
   // versus the prior 28 days (days 29-56). This reflects training trajectory,
@@ -3446,8 +3551,12 @@ const baseReadinessRaw =
   const rawSlopePerMonth = (recentEquiv - priorEquiv) * 3
   const readinessSlopePerMonth = Math.max(-4, Math.min(4, rawSlopePerMonth))
 
+  // Injury penalty fades linearly to zero at 3 months (90 days).
+  // Beyond that, current injury load is not assumed permanent.
+  const penaltyLift = readinessNoPenalty - readinessNow  // ≥0 when penalty < 1
   const projectReadiness = months => {
-    const projected = readinessNow + readinessSlopePerMonth * months
+    const penaltyFraction = Math.max(0, 1 - months / 3)
+    const projected = readinessNow + penaltyLift * (1 - penaltyFraction) + readinessSlopePerMonth * months
     return Math.max(0, Math.min(100, Math.round(projected)))
   }
 
@@ -7535,6 +7644,7 @@ const tsbV2Panel = useMemo(() => {
       row[`${k}Tsb`] = Number((chronic[k] - acute[k]).toFixed(2))
     })
     row.strengthLoad = Number((load.strength || 0).toFixed(2))
+    row.acwr = chronic.overall > 0 ? Number((acute.overall / chronic.overall).toFixed(2)) : null
     return row
   })
   const rows = allRows.slice(-lookbackDays).map(r => ({ ...r, label: String(r.date).slice(5) }))
@@ -8398,18 +8508,22 @@ return (
 })()}
       {panel.rows.length > 0 ? (
         <ResponsiveContainer width="100%" height={270}>
-          <ComposedChart data={panel.rows} margin={{ top:12, right:16, left:45, bottom:20 }}>
+          <ComposedChart data={panel.rows} margin={{ top:12, right:40, left:45, bottom:20 }}>
             <CartesianGrid stroke="#1a1b2e" />
             <XAxis dataKey="label" tick={{ fontSize:10 }} interval={Math.max(1, Math.floor((panel.rows.length||1)/12)-1)} />
-            <YAxis domain={['auto','auto']} label={{ value:'TSB', angle:-90, position:'insideLeft', fill:'#9ca3af', style:{ textAnchor:'middle' } }} />
-            <ReferenceLine y={0} stroke="#444" strokeDasharray="3 3" />
+            <YAxis yAxisId="left" domain={['auto','auto']} label={{ value:'TSB', angle:-90, position:'insideLeft', fill:'#9ca3af', style:{ textAnchor:'middle' } }} />
+            <YAxis yAxisId="right" orientation="right" domain={[0, 2.5]} tick={{ fontSize:9 }} label={{ value:'ACWR', angle:90, position:'insideRight', fill:'#9ca3af', style:{ textAnchor:'middle' } }} />
+            <ReferenceLine yAxisId="left" y={0} stroke="#444" strokeDasharray="3 3" />
+            <ReferenceLine yAxisId="right" y={1.3} stroke="#f59e0b" strokeDasharray="3 3" label={{ value:'1.3', fill:'#f59e0b', fontSize:9, position:'insideTopRight' }} />
+            <ReferenceLine yAxisId="right" y={1.5} stroke="#ef4444" strokeDasharray="3 3" label={{ value:'1.5', fill:'#ef4444', fontSize:9, position:'insideTopRight' }} />
             <Tooltip formatter={(v,n) => [Number(v).toFixed(2), n]} />
             <Legend verticalAlign="top" height={28} />
-            <Line type="monotone" dataKey="overallTsb"  name="Overall TSB"  stroke="#e5e7eb" strokeWidth={2.2} dot={false} connectNulls />
-            <Line type="monotone" dataKey="runningTsb"  name="Running TSB"  stroke="#ef4444" strokeWidth={1.8} dot={false} connectNulls />
-            <Line type="monotone" dataKey="cyclingTsb"  name="Cycling TSB"  stroke="#22d3ee" strokeWidth={1.8} dot={false} connectNulls />
-            <Line type="monotone" dataKey="swimmingTsb" name="Swimming TSB" stroke="#a78bfa" strokeWidth={1.8} dot={false} connectNulls />
-            <Line type="monotone" dataKey="strengthTsb" name="Strength TSB" stroke="#ffd166" strokeWidth={1.8} dot={false} connectNulls strokeDasharray="4 2" />
+            <Line yAxisId="left"  type="monotone" dataKey="overallTsb"  name="Overall TSB"  stroke="#e5e7eb" strokeWidth={2.2} dot={false} connectNulls />
+            <Line yAxisId="left"  type="monotone" dataKey="runningTsb"  name="Running TSB"  stroke="#ef4444" strokeWidth={1.8} dot={false} connectNulls />
+            <Line yAxisId="left"  type="monotone" dataKey="cyclingTsb"  name="Cycling TSB"  stroke="#22d3ee" strokeWidth={1.8} dot={false} connectNulls />
+            <Line yAxisId="left"  type="monotone" dataKey="swimmingTsb" name="Swimming TSB" stroke="#a78bfa" strokeWidth={1.8} dot={false} connectNulls />
+            <Line yAxisId="left"  type="monotone" dataKey="strengthTsb" name="Strength TSB" stroke="#ffd166" strokeWidth={1.8} dot={false} connectNulls strokeDasharray="4 2" />
+            <Line yAxisId="right" type="monotone" dataKey="acwr"        name="ACWR"         stroke="#fb923c" strokeWidth={1.5} dot={false} connectNulls strokeDasharray="5 3" />
           </ComposedChart>
         </ResponsiveContainer>
       ) : (
