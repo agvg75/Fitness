@@ -5789,13 +5789,49 @@ export default function App() {
     fat_loss_target: 1700,
 
     // Half marathon build
-    hm_race_date:    "2026-09-01",
-    hm_taper_start:  "2026-08-11",
-    hm_peak_mi_week: 22,
-    hm_taper_factor: 0.80,
+    hm_race_date:    "2026-09-19",
+    hm_taper_start:  "2026-08-31",
+    hm_peak_mi_week: 9,
+    hm_taper_factor: 0.90,
     hm_weekly_build: 1.10,
   }
   // ────────────────────────────────────────────────────────────────────────
+
+  // ── Half Marathon Race Calendar ─────────────────────────────────────────
+  const RACE_CALENDAR = [
+    { date: "2026-04-11", name: "SOAR Miles of Smiles",        city: "Bloomington",  dist_mi: 3.1,  recommended: true,  note: "First race back. Easy effort, not a time trial." },
+    { date: "2026-04-18", name: "Easterseals Community Rally", city: "Tipton Park",  dist_mi: 3.1,  recommended: true,  note: "Second 5K week. Confirm MTP score 0 before." },
+    { date: "2026-05-02", name: "Lake Run 7K",                 city: "Lake Bloomington", dist_mi: 4.35, recommended: true,  note: "First race above 5K. Use as long run substitute." },
+    { date: "2026-05-03", name: "Unit 5 Foundation 5K",        city: "Normal",       dist_mi: 3.1,  recommended: false, note: "Day after Lake Run — too close. Skip." },
+    { date: "2026-05-09", name: "Rivian 5K",                   city: "Normal",       dist_mi: 3.1,  recommended: true,  note: "Easy 5K training run. No racing." },
+    { date: "2026-05-17", name: "Donut Run",                   city: "Bloomington",  dist_mi: 3.0,  recommended: true,  note: "Low-key 3-mile option. Good tempo effort." },
+    { date: "2026-06-06", name: "Steamboat Classic 4 Mile",    city: "Peoria",       dist_mi: 4.0,  recommended: true,  note: "Choose the 4-mile, not 15K. Use as long run." },
+    { date: "2026-06-14", name: "Mackinaw Valley Wine Run",    city: "Mackinaw",     dist_mi: 3.1,  recommended: true,  note: "Easy 5K. Good aerobic session mid-build." },
+    { date: "2026-07-04", name: "Park 2 Park",                 city: "Normal",       dist_mi: 5.0,  recommended: true,  note: "Ideal long run substitute at this phase." },
+    { date: "2026-07-04", name: "Major Reid Memorial 5K",      city: "Hopedale",     dist_mi: 3.1,  recommended: false, note: "Same day as Park 2 Park — choose one." },
+    { date: "2026-07-11", name: "Dog Days 5K",                 city: "Lake Bloomington", dist_mi: 3.1, recommended: true, note: "Easy effort. Watch heat — morning start." },
+    { date: "2026-08-02", name: "Dawson Lake Dash",            city: "Moraine View SP", dist_mi: 3.5, recommended: true, note: "Short race in peak build. Run easy, not hard." },
+    { date: "2026-08-22", name: "Route 66 (6.6)",              city: "McLean",       dist_mi: 4.1,  recommended: true,  note: "Good 4-mile effort 4 weeks out. No heroics." },
+    { date: "2026-09-07", name: "Bridge to Bridge Run",        city: "Peoria",       dist_mi: 4.0,  recommended: true,  note: "Taper window. Easy effort only." },
+    { date: "2026-09-19", name: "St. Jude Half Marathon",      city: "Bloomington",  dist_mi: 13.1, recommended: true,  note: "Goal race. Finish comfortable, injury-free." },
+  ]
+
+  // ── ChatGPT Plan: weekly long run targets (week-start Monday → miles) ───
+  const HM_PLAN_LONG_RUN = {
+    "2026-03-23": 3.5,  "2026-03-30": 4.0,
+    "2026-04-06": 3.1,  "2026-04-13": 3.1,
+    "2026-04-20": 4.5,  "2026-04-27": 4.35,
+    "2026-05-04": 3.1,  "2026-05-11": 3.1,
+    "2026-05-18": 5.0,  "2026-05-25": 5.5,
+    "2026-06-01": 4.0,  "2026-06-08": 3.1,
+    "2026-06-15": 6.0,  "2026-06-22": 6.5,
+    "2026-06-29": 5.0,  "2026-07-06": 3.1,
+    "2026-07-13": 7.0,  "2026-07-20": 7.5,
+    "2026-07-27": 3.5,  "2026-08-03": 8.0,
+    "2026-08-10": 8.5,  "2026-08-17": 4.1,
+    "2026-08-24": 9.0,  "2026-08-31": 4.0,
+    "2026-09-07": 8.0,  "2026-09-14": 4.0,
+  }
 
   const [tab, setTab] = useState("Overview")
   const [rangeKey, setRangeKey] = useState("180D")
@@ -9583,52 +9619,35 @@ return (
           const color = "#ef4444"
           const eta = `ETA 20 mi/wk: ${trainingForecast.eta20Run || "not on trend"} · ETA 30 mi/wk: ${trainingForecast.eta30Run || "not on trend"}`
 
-          // Build planned curve: 10% per week from current, cap at 22 mi/wk,
-          // taper from Aug 11 (3 weeks out), race Sep 1 2026
-          const RACE_DATE    = new Date(LIFT_CONFIG.hm_race_date)
-          const TAPER_START  = new Date(LIFT_CONFIG.hm_taper_start)
-          const PEAK_MI      = LIFT_CONFIG.hm_peak_mi_week
-          const TAPER_FACTOR = LIFT_CONFIG.hm_taper_factor
+          // Build planned curve from HM_PLAN_LONG_RUN (ChatGPT plan, week-start keyed)
+          // Maps each week's Monday ISO date → planned long run miles
+          const RACE_DATE = new Date(LIFT_CONFIG.hm_race_date)
 
+          // Convert HM_PLAN_LONG_RUN week keys to chart labels
           const planByLabel = {}
-          const baseDate = weeklyTrainingBuckets?.length
-            ? new Date(weeklyTrainingBuckets[weeklyTrainingBuckets.length - 1].weekStart)
-            : new Date()
-          const startMi = Math.max(
-            Number(trainingForecast?.runningCurrent || 0),
-            weeklyTrainingBuckets?.slice(-4).reduce((mx, w) => Math.max(mx, w.running || 0), 0) || 3
-          )
-
-          let mi = startMi
-          for (let w = 1; w <= 28; w++) {
-            const d = new Date(baseDate)
-            d.setDate(d.getDate() + w * 7)
-            if (d > RACE_DATE) break
-            const label = formatBucketLabel(d, "monthly")
-            if (d >= TAPER_START) {
-              mi = mi * TAPER_FACTOR
-            } else {
-              mi = Math.min(PEAK_MI, mi * 1.10)
+          Object.entries(HM_PLAN_LONG_RUN).forEach(([weekKey, mi]) => {
+            const d = new Date(weekKey + "T12:00:00")
+            if (d <= RACE_DATE) {
+              const label = formatBucketLabel(d, "monthly")
+              planByLabel[label] = Number(mi.toFixed(2))
             }
-            // Keep highest planned value per label (last week of month wins)
-            planByLabel[label] = Number(mi.toFixed(2))
-          }
+          })
 
           const data = runningForecastChart.map(pt => ({
             ...pt,
             plan: planByLabel[pt.label] ?? null
           }))
 
-          // Find the September label — labels are in dd/mm format
+          // Find the September race week label
           const sepLabel = Object.keys(planByLabel).find(l => l.endsWith("/09")) ||
-            formatBucketLabel(new Date("2026-09-01"), "monthly")
+            formatBucketLabel(new Date("2026-09-19"), "monthly")
 
           return (
             <div style={{ ...cardStyle(), gridColumn: "1 / -1" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8, marginBottom: "10px" }}>
                 <div style={{ fontWeight: "bold", fontSize: "13px" }}>Running Volume (mi/week)</div>
                 <div style={{ fontSize: "11px", color: "#667", textAlign: "right" }}>
-                  Half marathon build · 10% weekly · peak 22 mi · 3-week taper · race Sep 1 2026
+                  ChatGPT build plan · peak 9 mi long run · taper Aug 31 · St. Jude 9/19/26
                 </div>
               </div>
               <ResponsiveContainer width="100%" height={260}>
@@ -9641,8 +9660,8 @@ return (
                     n === "actual" ? "Actual" : n === "forecast" ? "Projected" : "HM Plan"
                   ]} />
                   <Legend verticalAlign="top" height={28} wrapperStyle={{ fontSize: "11px" }} />
-                  <ReferenceLine y={20} stroke="#ffd166" strokeDasharray="4 3"
-                    label={{ value: "HM readiness", fill: "#ffd166", fontSize: 10, position: "insideTopRight" }} />
+                  <ReferenceLine y={9} stroke="#ffd166" strokeDasharray="4 3"
+                    label={{ value: "Plan peak", fill: "#ffd166", fontSize: 10, position: "insideTopRight" }} />
                   {sepLabel && (
                     <ReferenceLine x={sepLabel} stroke="#4ade80" strokeDasharray="4 3"
                       label={{ value: "Race", fill: "#4ade80", fontSize: 10, position: "insideTopLeft" }} />
@@ -9681,6 +9700,114 @@ return (
         ))}
       </div>
     )}
+
+    {/* ── Race Calendar ─────────────────────────────────────────── */}
+    {(() => {
+      const today = new Date()
+      const upcoming = RACE_CALENDAR.filter(r => new Date(r.date + "T12:00:00") >= today)
+
+      // Current long run capacity: max distance of runs in last 6 weeks
+      const sixWeeksAgo = new Date(today)
+      sixWeeksAgo.setDate(sixWeeksAgo.getDate() - 42)
+      const recentRuns = operationalWorkouts.filter(w =>
+        (w.category === "Running" || w.type === "Running") &&
+        w.distance > 0 &&
+        new Date(String(w.date || w.dateTime || "").slice(0, 10) + "T12:00:00") >= sixWeeksAgo
+      )
+      const currentLongRun = recentRuns.length
+        ? Math.max(...recentRuns.map(w => w.distance || 0))
+        : 3.0
+
+      // Projected long run at a future date using HM_PLAN_LONG_RUN
+      const getProjectedLongRun = (raceDateStr) => {
+        const raceDate = new Date(raceDateStr + "T12:00:00")
+        // Find the Monday of race week
+        const dayOfWeek = raceDate.getDay()
+        const daysToMon = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
+        const weekStart = new Date(raceDate)
+        weekStart.setDate(weekStart.getDate() + daysToMon)
+        const weekKey = weekStart.toISOString().slice(0, 10)
+        return HM_PLAN_LONG_RUN[weekKey] ?? null
+      }
+
+      const assess = (race) => {
+        const projected = getProjectedLongRun(race.date)
+        const capacity = projected ?? currentLongRun
+        const ratio = race.dist_mi / capacity
+        if (!race.recommended) return { color: "#667", label: "Skip", bg: "rgba(100,100,100,0.08)", border: "#333" }
+        if (ratio <= 0.85) return { color: "#4ade80", label: "Ready", bg: "rgba(34,197,94,0.08)", border: "rgba(34,197,94,0.3)" }
+        if (ratio <= 1.05) return { color: "#fbbf24", label: "On target", bg: "rgba(251,191,36,0.08)", border: "rgba(251,191,36,0.3)" }
+        if (ratio <= 1.25) return { color: "#f97316", label: "Stretch", bg: "rgba(249,115,22,0.08)", border: "rgba(249,115,22,0.3)" }
+        return { color: "#ef4444", label: "Too soon", bg: "rgba(239,68,68,0.08)", border: "rgba(239,68,68,0.3)" }
+      }
+
+      const weeksBetween = (dateStr) =>
+        Math.round((new Date(dateStr + "T12:00:00") - today) / (7 * 86400000))
+
+      return (
+        <div style={{ ...cardStyle(), marginBottom: "20px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
+            <div style={{ fontWeight: "bold" }}>Race Calendar — St. Jude Half Marathon Build</div>
+            <div style={{ fontSize: "11px", color: "#555" }}>
+              Current long run capacity: <strong style={{ color: "#ced2f0" }}>{currentLongRun.toFixed(2)} mi</strong>
+            </div>
+          </div>
+
+          {upcoming.length === 0 && (
+            <div style={{ fontSize: 12, color: "#445", padding: "16px 0" }}>No upcoming races.</div>
+          )}
+
+          <div style={{ display: "grid", gap: "8px" }}>
+            {upcoming.map(race => {
+              const a = assess(race)
+              const projected = getProjectedLongRun(race.date)
+              const weeksOut = weeksBetween(race.date)
+              const isGoalRace = race.dist_mi >= 13
+              return (
+                <div key={race.date + race.name} style={{
+                  padding: "10px 14px",
+                  background: a.bg,
+                  border: `1px solid ${a.border}`,
+                  borderLeft: `3px solid ${a.color}`,
+                  borderRadius: "8px",
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: 14,
+                  flexWrap: "wrap"
+                }}>
+                  <div style={{ minWidth: 60, textAlign: "center", flexShrink: 0 }}>
+                    <div style={{ fontSize: 10, color: "#555" }}>
+                      {new Date(race.date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    </div>
+                    <div style={{ fontSize: 11, color: "#667" }}>{weeksOut}w</div>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 2 }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: isGoalRace ? "#ffd166" : "#e0e0e0" }}>
+                        {race.name} {isGoalRace ? "★" : ""}
+                      </span>
+                      <span style={{ fontSize: 10, color: "#555" }}>{race.city}</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: "#667" }}>{race.note}</div>
+                  </div>
+                  <div style={{ textAlign: "right", flexShrink: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: a.color }}>{a.label}</div>
+                    <div style={{ fontSize: 10, color: "#555" }}>
+                      {race.dist_mi.toFixed(1)} mi
+                      {projected != null ? ` · plan ${projected.toFixed(1)} mi` : ""}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          <div style={{ marginTop: 12, fontSize: "10px", color: "#445", lineHeight: 1.6 }}>
+            Ready = race distance ≤ 85% of planned long run · On target = within 5% · Stretch = up to 25% above · Skip = not recommended
+          </div>
+        </div>
+      )
+    })()}
 
   </div>
 )}
