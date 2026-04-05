@@ -909,12 +909,12 @@ function computeOcRecoveryDate(item) {
 }
 
 // ─── TabOperationalCapacity ────────────────────────────────────────────────────
-function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapacityData, healthFitDaily, sleepRecords, runSessions = [], computedTSB = null }) {
+function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapacityData, healthFitDaily, sleepRecords, runSessions = [] }) {
   const [selectedId, setSelectedId] = useState(null)
   const [addForm, setAddForm] = useState({ key: "muscleStatus", location: "Quad L", currentScore: 1, halfLifeHours: null })
 
   const selectedItem = ocItems.find(i => i.id === selectedId) || null
-  const rd = computeReadinessDetail(ocItems, sleepRecords, healthFitDaily, computedTSB?.global?.tsb ?? null)
+  const rd = computeReadinessDetail(ocItems, sleepRecords, healthFitDaily)
   const readiness = rd.score
   const readinessColor = readiness >= 80 ? "#4ade80" : readiness >= 60 ? "#fbbf24" : readiness >= 40 ? "#f97316" : "#ef4444"
   const active = rd.active
@@ -1408,8 +1408,6 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const [inlineItemDetail, setInlineItemDetail] = useState("")
   const [inlineExForm, setInlineExForm] = useState(null)   // day | null
   const [inlineExName, setInlineExName] = useState("")
-  const [raceResult, setRaceResult] = useState({})  // { [date]: { finishTime, distance, hr, calories } }
-  const [raceSaved, setRaceSaved] = useState({})    // { [date]: entry }
 
   const SPLIT_DAYS = ["Tue", "Thu"]
   const isSplitDay = SPLIT_DAYS.includes(activeDay)
@@ -1779,43 +1777,6 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     showToast("Session removed")
   }
 
-  const saveRaceResult = async () => {
-    const race = RACE_CALENDAR.find(r => r.date === sessionDate)
-    if (!race) return
-    const r = raceResult[sessionDate] || {}
-    const finMins = (() => {
-      const t = (r.finishTime || "").trim()
-      if (!t) return 0
-      const parts = t.split(":").map(Number)
-      if (parts.length === 3) return parts[0] * 60 + parts[1] + parts[2] / 60
-      if (parts.length === 2) return parts[0] + parts[1] / 60
-      return 0
-    })()
-    const dist = parseFloat(r.distance || race.dist_mi) > 0 ? parseFloat(r.distance || race.dist_mi) : null
-    const entry = {
-      id: Date.now(),
-      date: sessionDate,
-      time: "09:00",
-      dateTime: new Date(`${sessionDate}T09:00:00`).toISOString(),
-      type: "Running",
-      dur: Math.round(finMins),
-      hr: parseFloat(r.hr) > 0 ? parseFloat(r.hr) : null,
-      distance: dist,
-      calories: parseInt(r.calories) > 0 ? parseInt(r.calories) : null,
-      notes: `Race: ${race.name}, ${race.city}`,
-      _raceResult: true,
-    }
-    setRaceSaved(prev => ({ ...prev, [sessionDate]: entry }))
-    const existing = await store.get("ufd-workouts") || storedWorkouts
-    const merged = [
-      ...(Array.isArray(existing) ? existing.filter(w => !(w._raceResult && w.date === sessionDate)) : []),
-      entry
-    ].sort((a, b) => String(a.dateTime || a.date || "").localeCompare(String(b.dateTime || b.date || "")))
-    setStoredWorkouts(merged)
-    await saveScheduleKey("ufd-workouts", merged)
-    showToast(`Race result logged: ${race.name}`)
-  }
-
   const deleteEntry = async id => {
     const newLog = schedLog.filter(e => e.id !== id)
     setSchedLog(newLog)
@@ -2077,125 +2038,61 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
           </div>
         ))}
 
-        {(() => {
-          const raceEntry = RACE_CALENDAR.find(r => r.date === sessionDate)
-          if (raceEntry) {
-            const rf = raceResult[sessionDate] || {}
-            const saved = raceSaved[sessionDate]
-            return (
-              <div style={{ marginTop: 10 }}>
-                <div style={{ padding: "10px 12px", background: "rgba(239,68,68,0.08)", border: "0.5px solid #ef4444", borderRadius: 7, marginBottom: 10 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: "#ef4444", marginBottom: 2 }}>{raceEntry.name}</div>
-                  <div style={{ fontSize: 11, color: "#aaa" }}>{raceEntry.city} · {raceEntry.dist_mi} mi</div>
-                  <div style={{ fontSize: 10, color: "#666", marginTop: 4, fontStyle: "italic" }}>{raceEntry.note}</div>
-                </div>
-                {saved ? (
-                  <div style={{ padding: "10px 12px", background: "rgba(15,110,86,0.15)", border: "0.5px solid #0F6E56", borderRadius: 7 }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: "#10b981" }}>Race result logged</div>
-                    <div style={{ fontSize: 10, color: "#555", marginTop: 2 }}>
-                      {saved.dur > 0 ? `${Math.floor(saved.dur)}:${String(Math.round((saved.dur % 1) * 60)).padStart(2,"0")} finish` : ""}
-                      {saved.distance ? ` · ${saved.distance} mi` : ""}
-                      {saved.hr ? ` · ${saved.hr} bpm` : ""}
-                      {saved.calories ? ` · ${saved.calories} kcal` : ""}
-                    </div>
-                  </div>
-                ) : (
-                  <div style={{ padding: "10px 12px", border: "0.5px solid #1e1e1e", borderRadius: 7, background: "#0a0a0a" }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Log race result</div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                      <div>
-                        <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Finish time (mm:ss or h:mm:ss)</div>
-                        <input type="text" value={rf.finishTime || ""} onChange={e => setRaceResult(prev => ({ ...prev, [sessionDate]: { ...(prev[sessionDate] || {}), finishTime: e.target.value } }))}
-                          placeholder="28:30"
-                          style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Distance (mi)</div>
-                        <input type="text" inputMode="decimal" value={rf.distance || raceEntry.dist_mi} onChange={e => setRaceResult(prev => ({ ...prev, [sessionDate]: { ...(prev[sessionDate] || {}), distance: e.target.value } }))}
-                          style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Avg HR (bpm)</div>
-                        <input type="text" inputMode="numeric" value={rf.hr || ""} onChange={e => setRaceResult(prev => ({ ...prev, [sessionDate]: { ...(prev[sessionDate] || {}), hr: e.target.value } }))}
-                          placeholder="from watch"
-                          style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Calories (kcal)</div>
-                        <input type="text" inputMode="numeric" value={rf.calories || ""} onChange={e => setRaceResult(prev => ({ ...prev, [sessionDate]: { ...(prev[sessionDate] || {}), calories: e.target.value } }))}
-                          placeholder="from watch"
-                          style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
-                      </div>
-                    </div>
-                    <button onClick={saveRaceResult}
-                      style={{ width: "100%", marginTop: 10, padding: "9px 0", background: "#ef4444", color: "#fff", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
-                      Log race result
-                    </button>
-                  </div>
+        <div style={{ fontSize: 10, fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", margin: "10px 0 6px" }}>Log actual</div>
+        {entries.map((entry, idx) => {
+          const mc = modColor[entry.modality] || "#888"
+          return (
+            <div key={idx} style={{ marginBottom: 10, padding: "10px 12px", border: `0.5px solid #1e1e1e`, borderRadius: 7, background: "#0a0a0a" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                <select value={entry.modality} onChange={e => setCardioEntryF(day, idx, "modality", e.target.value)}
+                  style={{ padding: "4px 8px", borderRadius: 20, fontSize: 11, fontWeight: 700, background: `${mc}22`, color: mc, border: `0.5px solid ${mc}`, outline: "none", cursor: "pointer", fontFamily: "inherit" }}>
+                  {["run", "bike", "swim", "walk", "row"].map(m => <option key={m} value={m}>{modLabel[m]}</option>)}
+                </select>
+                {idx === 0 && <span style={{ fontSize: 11, color: "#555" }}>{cd.type} · {cd.intensity}</span>}
+                {idx > 0 && <span style={{ fontSize: 10, color: "#444" }}>Additional session</span>}
+                {idx > 0 && (
+                  <button onClick={() => removeCardioEntry(day, idx)}
+                    style={{ marginLeft: "auto", background: "transparent", border: "none", color: "#444", cursor: "pointer", fontSize: 12 }}>✕</button>
                 )}
               </div>
-            )
-          }
-          return (
-            <>
-              <div style={{ fontSize: 10, fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", margin: "10px 0 6px" }}>Log actual</div>
-              {entries.map((entry, idx) => {
-                const mc = modColor[entry.modality] || "#888"
-                return (
-                  <div key={idx} style={{ marginBottom: 10, padding: "10px 12px", border: `0.5px solid #1e1e1e`, borderRadius: 7, background: "#0a0a0a" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                      <select value={entry.modality} onChange={e => setCardioEntryF(day, idx, "modality", e.target.value)}
-                        style={{ padding: "4px 8px", borderRadius: 20, fontSize: 11, fontWeight: 700, background: `${mc}22`, color: mc, border: `0.5px solid ${mc}`, outline: "none", cursor: "pointer", fontFamily: "inherit" }}>
-                        {["run", "bike", "swim", "walk", "row"].map(m => <option key={m} value={m}>{modLabel[m]}</option>)}
-                      </select>
-                      {idx === 0 && <span style={{ fontSize: 11, color: "#555" }}>{cd.type} · {cd.intensity}</span>}
-                      {idx > 0 && <span style={{ fontSize: 10, color: "#444" }}>Additional session</span>}
-                      {idx > 0 && (
-                        <button onClick={() => removeCardioEntry(day, idx)}
-                          style={{ marginLeft: "auto", background: "transparent", border: "none", color: "#444", cursor: "pointer", fontSize: 12 }}>✕</button>
-                      )}
-                    </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                      <div>
-                        <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Duration (min)</div>
-                        <input type="text" value={entry.duration} onChange={e => setCardioEntryF(day, idx, "duration", e.target.value)}
-                          placeholder={idx === 0 ? `${cd.dMin}–${cd.dMax} min` : "minutes"}
-                          style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
-                        {idx === 0 && <div style={{ fontSize: 9, color: "#444", marginTop: 2 }}>Target: {cd.dMin}–{cd.dMax} min</div>}
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Distance (mi)</div>
-                        <input type="text" inputMode="decimal" value={entry.distance || ""} onChange={e => setCardioEntryF(day, idx, "distance", e.target.value)}
-                          placeholder={idx === 0 ? (cd.dist || "miles") : "miles"}
-                          style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Calories (kcal)</div>
-                        <input type="text" inputMode="numeric" value={entry.calories || ""} onChange={e => setCardioEntryF(day, idx, "calories", e.target.value)}
-                          placeholder="from watch"
-                          style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Avg HR (bpm)</div>
-                        <input type="text" inputMode="numeric" value={entry.hr || ""} onChange={e => setCardioEntryF(day, idx, "hr", e.target.value)}
-                          placeholder="from watch"
-                          style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
-                      </div>
-                      <div style={{ gridColumn: "1 / -1" }}>
-                        <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Notes</div>
-                        <input type="text" value={entry.notes} onChange={e => setCardioEntryF(day, idx, "notes", e.target.value)}
-                          placeholder="optional notes"
-                          style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-              {addBtn(() => addCardioEntry(day))}
-              {cd.cnote && <div style={{ fontSize: 10, color: "#555", lineHeight: 1.4, marginTop: 8 }}>{cd.cnote}</div>}
-            </>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                <div>
+                  <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Duration (min)</div>
+                  <input type="text" value={entry.duration} onChange={e => setCardioEntryF(day, idx, "duration", e.target.value)}
+                    placeholder={idx === 0 ? `${cd.dMin}–${cd.dMax} min` : "minutes"}
+                    style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
+                  {idx === 0 && <div style={{ fontSize: 9, color: "#444", marginTop: 2 }}>Target: {cd.dMin}–{cd.dMax} min</div>}
+                </div>
+                <div>
+                  <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Distance (mi)</div>
+                  <input type="text" inputMode="decimal" value={entry.distance || ""} onChange={e => setCardioEntryF(day, idx, "distance", e.target.value)}
+                    placeholder={idx === 0 ? (cd.dist || "miles") : "miles"}
+                    style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Calories (kcal)</div>
+                  <input type="text" inputMode="numeric" value={entry.calories || ""} onChange={e => setCardioEntryF(day, idx, "calories", e.target.value)}
+                    placeholder="from watch"
+                    style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Avg HR (bpm)</div>
+                  <input type="text" inputMode="numeric" value={entry.hr || ""} onChange={e => setCardioEntryF(day, idx, "hr", e.target.value)}
+                    placeholder="from watch"
+                    style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
+                </div>
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Notes</div>
+                  <input type="text" value={entry.notes} onChange={e => setCardioEntryF(day, idx, "notes", e.target.value)}
+                    placeholder="optional notes"
+                    style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
+                </div>
+              </div>
+            </div>
           )
-        })()}
+        })}
+        {addBtn(() => addCardioEntry(day))}
+        {cd.cnote && <div style={{ fontSize: 10, color: "#555", lineHeight: 1.4, marginTop: 8 }}>{cd.cnote}</div>}
       </div>
     )
   }
@@ -3532,8 +3429,6 @@ const baseReadinessRaw =
     0,
     Math.min(100, Math.round(baseReadinessRaw * runPenalty))
   )
-  // Readiness without injury penalty — used to taper penalty contribution in projections
-  const readinessNoPenalty = Math.max(0, Math.min(100, Math.round(baseReadinessRaw)))
 
   // Slope: compare total cardio-equivalent miles over the last 28 days
   // versus the prior 28 days (days 29-56). This reflects training trajectory,
@@ -3551,12 +3446,8 @@ const baseReadinessRaw =
   const rawSlopePerMonth = (recentEquiv - priorEquiv) * 3
   const readinessSlopePerMonth = Math.max(-4, Math.min(4, rawSlopePerMonth))
 
-  // Injury penalty fades linearly to zero at 3 months (90 days).
-  // Beyond that, current injury load is not assumed permanent.
-  const penaltyLift = readinessNoPenalty - readinessNow  // ≥0 when penalty < 1
   const projectReadiness = months => {
-    const penaltyFraction = Math.max(0, 1 - months / 3)
-    const projected = readinessNow + penaltyLift * (1 - penaltyFraction) + readinessSlopePerMonth * months
+    const projected = readinessNow + readinessSlopePerMonth * months
     return Math.max(0, Math.min(100, Math.round(projected)))
   }
 
@@ -4285,15 +4176,12 @@ function findOverlapCandidates(appleWorkouts, technoWorkouts) {
   const technogym = technoWorkouts.filter(isUsefulWorkout);
   const candidates = [];
 
-  const overlapStart = Date.now();
-  outer: for (let ai = 0; ai < apple.length; ai += 1) {
-    if (Date.now() - overlapStart > 30000) break;
+  for (let ai = 0; ai < apple.length; ai += 1) {
     const a = apple[ai];
     const aStart = toMs(a.start_date);
     const aEnd = toMs(a.end_date);
     const aDur = minutesBetween(a.start_date, a.end_date);
     for (let ti = 0; ti < technogym.length; ti += 1) {
-      if (Date.now() - overlapStart > 30000) break outer;
       const t = technogym[ti];
       const tStart = toMs(t.start_date);
       const tEnd = toMs(t.end_date);
@@ -4801,8 +4689,11 @@ function parseSleepCycleCSV(text) {
   const lines = text.split(/\r?\n/).filter(l => l.trim())
   if (!lines.length) return { workouts: [], sleep: [], rejected: [] }
 
-  const delim = (lines[0].split(";").length > lines[0].split(",").length) ? ";" : ","
+  // Detect delimiter — Sleep Cycle exports use semicolons, most others use commas
+  const firstLine = lines[0]
+  const delim = (firstLine.split(";").length > firstLine.split(",").length) ? ";" : ","
   const splitRow = row => row.split(delim).map(c => c.trim().replace(/^"|"$/g, ""))
+
   const headers = splitRow(lines[0]).map(h => h.toLowerCase())
   const sleep = []
   const rejected = []
@@ -4810,11 +4701,7 @@ function parseSleepCycleCSV(text) {
   const col = name => headers.findIndex(h => h.includes(name))
   const iDate    = Math.max(col("date"), col("start"))
   const iQual    = Math.max(col("sleep quality"), col("quality"), col("score"))
-  // Prefer "time asleep" over "time in bed"; both are in seconds in Sleep Cycle exports
-  const iAsleep  = col("time asleep")
-  const iInBed   = col("time in bed")
-  const iDur     = iAsleep >= 0 ? iAsleep : Math.max(iInBed, col("duration"), col("sleep time"))
-  const iDurIsSeconds = iDur >= 0 && headers[iDur].includes("second")
+  const iDur     = Math.max(col("time in bed"), col("duration"), col("sleep time"))
   const iStart   = Math.max(col("bedtime"), col("sleep start"), col("start time"))
   const iEnd     = Math.max(col("wake up time"), col("wake up"), col("end time"))
   const iHR      = Math.max(col("heart rate"), col("avg hr"))
@@ -4843,11 +4730,7 @@ function parseSleepCycleCSV(text) {
       const hms = durRaw.match(/(\d+)h[^\d]*(\d+)m/i)
       if (hm) durationMin = parseInt(hm[1]) * 60 + parseInt(hm[2])
       else if (hms) durationMin = parseInt(hms[1]) * 60 + parseInt(hms[2])
-      else {
-        const raw = n(durRaw)
-        // Sleep Cycle stores durations in seconds — convert to minutes
-        durationMin = raw != null && iDurIsSeconds ? Number((raw / 60).toFixed(1)) : raw
-      }
+      else durationMin = n(durRaw)
     }
 
     // Parse quality — "85%" or "0.85" or "85"
@@ -5888,7 +5771,38 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-// ── Half Marathon Race Calendar ─────────────────────────────────────────
+export default function App() {
+
+  // ── LIFT Calibration Config ─────────────────────────────────────────────
+  // Update these after each DEXA scan. All derived constants read from here.
+  // Last updated: January 2026 DEXA anchor. Next update: April 2026 scan.
+  const LIFT_CONFIG = {
+    // Banister model constants — fitted via grid search on 466 days, R²=0.887
+    tau1: 27,          // fitness decay (days) — HealthFit default is 42
+    tau2: 18,          // fatigue decay (days) — HealthFit default is 7
+
+    // Body composition — update after each DEXA scan
+    ffm_lb: 113.1,             // fat-free mass, January 2026 DEXA
+    scale_bias_pp: 2.7,        // home scale reads this many pp LOW vs DEXA
+    protein_target_g: 140,     // g/day — ~2.7 g/kg lean mass
+    dexa_anchor_date: "2026-01-16",  // date of last DEXA scan
+    next_dexa_date:   "2026-04-01",  // next planned scan
+
+    // Calorie targets — empirically calibrated, scale-derived, April 2026
+    bmr: 1520,
+    tdee: 2100,
+    fat_loss_target: 1700,
+
+    // Half marathon build
+    hm_race_date:    "2026-09-19",
+    hm_taper_start:  "2026-08-31",
+    hm_peak_mi_week: 9,
+    hm_taper_factor: 0.90,
+    hm_weekly_build: 1.10,
+  }
+  // ────────────────────────────────────────────────────────────────────────
+
+  // ── Half Marathon Race Calendar ─────────────────────────────────────────
   const RACE_CALENDAR = [
     { date: "2026-04-11", name: "SOAR Miles of Smiles",        city: "Bloomington",  dist_mi: 3.1,  recommended: true,  note: "First race back. Easy effort, not a time trial." },
     { date: "2026-04-18", name: "Easterseals Community Rally", city: "Tipton Park",  dist_mi: 3.1,  recommended: true,  note: "Second 5K week. Confirm MTP score 0 before." },
@@ -5923,37 +5837,6 @@ class ErrorBoundary extends React.Component {
     "2026-08-24": 9.0,  "2026-08-31": 4.0,
     "2026-09-07": 8.0,  "2026-09-14": 4.0,
   }
-
-export default function App() {
-
-  // ── LIFT Calibration Config ─────────────────────────────────────────────
-  // Update these after each DEXA scan. All derived constants read from here.
-  // Last updated: January 2026 DEXA anchor. Next update: April 2026 scan.
-  const LIFT_CONFIG = {
-    // Banister model constants — fitted via grid search on 466 days, R²=0.887
-    tau1: 27,          // fitness decay (days) — HealthFit default is 42
-    tau2: 18,          // fatigue decay (days) — HealthFit default is 7
-
-    // Body composition — update after each DEXA scan
-    ffm_lb: 113.1,             // fat-free mass, January 2026 DEXA
-    scale_bias_pp: 2.7,        // home scale reads this many pp LOW vs DEXA
-    protein_target_g: 140,     // g/day — ~2.7 g/kg lean mass
-    dexa_anchor_date: "2026-01-16",  // date of last DEXA scan
-    next_dexa_date:   "2026-04-01",  // next planned scan
-
-    // Calorie targets — empirically calibrated, scale-derived, April 2026
-    bmr: 1520,
-    tdee: 2100,
-    fat_loss_target: 1700,
-
-    // Half marathon build
-    hm_race_date:    "2026-09-19",
-    hm_taper_start:  "2026-08-31",
-    hm_peak_mi_week: 9,
-    hm_taper_factor: 0.90,
-    hm_weekly_build: 1.10,
-  }
-  // ────────────────────────────────────────────────────────────────────────
 
   const [tab, setTab] = useState("Overview")
   const [rangeKey, setRangeKey] = useState("180D")
@@ -7217,16 +7100,17 @@ const trainingLoadChartData = useMemo(() => {
 
   if (!visibleBuckets.length) return []
 
-const maxLoadVisible = Math.max(
-  ...visibleBuckets.map(w =>
-    (w.running || 0) +
-    (w.swimming || 0) +
-    (w.cycling || 0) * 0.4 +
-    (w.strength || 0) * 2 +
-    (w.cardioMinutes || 0) * 0.08
-  ),
-  1
-)
+  // Normalize against ALL-TIME max so short windows don't compress the scale
+  const maxLoadAllTime = Math.max(
+    ...weeklyTrainingBuckets.map(w =>
+      (w.running || 0) +
+      (w.swimming || 0) +
+      (w.cycling || 0) * 0.4 +
+      (w.strength || 0) * 2 +
+      (w.cardioMinutes || 0) * 0.08
+    ),
+    1
+  )
 
   return visibleBuckets.map((w, i) => ({
     label: fmtShortDate(w.weekStart),
@@ -7234,14 +7118,14 @@ const maxLoadVisible = Math.max(
     swimming: w.swimming ?? 0,
     cycling: w.cycling ?? 0,
     strength: w.strength ?? 0,
-trainingLoadPct: Math.round(((
-  (w.running || 0) +
-  (w.swimming || 0) +
-  (w.cycling || 0) * 0.4 +
-  (w.strength || 0) * 2 +
-  (w.cardioMinutes || 0) * 0.08
-) / maxLoadVisible) * 100),
-
+    cardioMin: w.cardioMinutes ?? 0,
+    trainingLoadPct: Math.round(((
+      (w.running || 0) +
+      (w.swimming || 0) +
+      (w.cycling || 0) * 0.4 +
+      (w.strength || 0) * 2 +
+      (w.cardioMinutes || 0) * 0.08
+    ) / maxLoadAllTime) * 100),
   }))
 }, [weeklyTrainingBuckets, rangeKey])
 const vo2ProxyData = useMemo(() => {
@@ -7657,7 +7541,6 @@ const tsbV2Panel = useMemo(() => {
       row[`${k}Tsb`] = Number((chronic[k] - acute[k]).toFixed(2))
     })
     row.strengthLoad = Number((load.strength || 0).toFixed(2))
-    row.acwr = chronic.overall > 0 ? Number((acute.overall / chronic.overall).toFixed(2)) : null
     return row
   })
   const rows = allRows.slice(-lookbackDays).map(r => ({ ...r, label: String(r.date).slice(5) }))
@@ -8520,25 +8403,40 @@ return (
   )
 })()}
       {panel.rows.length > 0 ? (
+        <>
+        {/* Icon legend row */}
+        <div style={{ display:'flex', gap:14, alignItems:'center', marginBottom:6, flexWrap:'wrap' }}>
+          {[
+            { label:'Overall', color:'#e5e7eb', icon: <svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5" stroke="#e5e7eb" strokeWidth="2" fill="none"/></svg> },
+            { label:'Run', color:'#ef4444', icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="#ef4444"><path d="M13.5 5.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM9.9 8.4l-3.4 3.5 1.4 1.4 2.3-2.4.9 2.1-2.5 2.5V20h2v-4l2.4-2.3 2.1 5.3H17l-3.1-7.8L16 9h-2.4l-2 2-1.5-3.5-.2.9z"/></svg> },
+            { label:'Cycle', color:'#22d3ee', icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="#22d3ee"><path d="M15.5 5.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM5 12.5A4.5 4.5 0 109.5 17 4.5 4.5 0 005 12.5zm14 0a4.5 4.5 0 10-4.5 4.5 4.5 4.5 0 004.5-4.5zM12 9.8l-1.5 2.7H14l-1.5-2.7z"/></svg> },
+            { label:'Swim', color:'#a78bfa', icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="#a78bfa"><path d="M2 15.5C3.5 17 5 17 6.5 15.5S9.5 14 11 15.5 13.5 17 15 15.5 17.5 14 19 15.5 21.5 17 23 15.5V13c-1.5 1.5-3 1.5-4.5 0S16 11.5 14.5 13 12 14.5 10.5 13 8 11.5 6.5 13 4 14.5 2.5 13V15.5zm0-5C3.5 12 5 12 6.5 10.5S9.5 9 11 10.5 13.5 12 15 10.5 17.5 9 19 10.5 21.5 12 23 10.5V8c-1.5 1.5-3 1.5-4.5 0S16 6.5 14.5 8 12 9.5 10.5 8 8 6.5 6.5 8 4 9.5 2.5 8V10.5zM11.5 3a1.5 1.5 0 101.5 1.5A1.5 1.5 0 0011.5 3z"/></svg> },
+            { label:'Strength', color:'#ffd166', dash:true, icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="#ffd166"><path d="M20.57 14.86L22 13.43 20.57 12 17 15.57 8.43 7 12 3.43 10.57 2 9.14 3.43 7.71 2 5.57 4.14 4.14 2.71 2.71 4.14l1.43 1.43L2 7.71l1.43 1.43L2 10.57 3.43 12 7 8.43 15.57 17 12 20.57 13.43 22l1.43-1.43L16.29 22l2.14-2.14 1.43 1.43 1.43-1.43-1.43-1.43L22 16.29l-1.43-1.43z"/></svg> },
+          ].map(({ label, color, icon, dash }) => (
+            <div key={label} style={{ display:'flex', alignItems:'center', gap:4, fontSize:10, color:'#999' }}>
+              {icon}
+              <span style={{ color }}>{label}</span>
+              {dash && <span style={{ fontSize:8, color:'#555', marginLeft:-2 }}>- -</span>}
+            </div>
+          ))}
+        </div>
         <ResponsiveContainer width="100%" height={270}>
-          <ComposedChart data={panel.rows} margin={{ top:12, right:40, left:45, bottom:20 }}>
+          <ComposedChart data={panel.rows} margin={{ top:12, right:16, left:45, bottom:20 }}>
             <CartesianGrid stroke="#1a1b2e" />
             <XAxis dataKey="label" tick={{ fontSize:10 }} interval={Math.max(1, Math.floor((panel.rows.length||1)/12)-1)} />
-            <YAxis yAxisId="left" domain={['auto','auto']} label={{ value:'TSB', angle:-90, position:'insideLeft', fill:'#9ca3af', style:{ textAnchor:'middle' } }} />
-            <YAxis yAxisId="right" orientation="right" domain={[0, 2.5]} tick={{ fontSize:9 }} label={{ value:'ACWR', angle:90, position:'insideRight', fill:'#9ca3af', style:{ textAnchor:'middle' } }} />
-            <ReferenceLine yAxisId="left" y={0} stroke="#444" strokeDasharray="3 3" />
-            <ReferenceLine yAxisId="right" y={1.3} stroke="#f59e0b" strokeDasharray="3 3" label={{ value:'1.3', fill:'#f59e0b', fontSize:9, position:'insideTopRight' }} />
-            <ReferenceLine yAxisId="right" y={1.5} stroke="#ef4444" strokeDasharray="3 3" label={{ value:'1.5', fill:'#ef4444', fontSize:9, position:'insideTopRight' }} />
+            <YAxis domain={['auto','auto']} label={{ value:'TSB', angle:-90, position:'insideLeft', fill:'#9ca3af', style:{ textAnchor:'middle' } }} />
+            <ReferenceLine y={0} stroke="#444" strokeDasharray="3 3" />
             <Tooltip formatter={(v,n) => [Number(v).toFixed(2), n]} />
-            <Legend verticalAlign="top" height={28} />
-            <Line yAxisId="left"  type="monotone" dataKey="overallTsb"  name="Overall TSB"  stroke="#e5e7eb" strokeWidth={2.2} dot={false} connectNulls />
-            <Line yAxisId="left"  type="monotone" dataKey="runningTsb"  name="Running TSB"  stroke="#ef4444" strokeWidth={1.8} dot={false} connectNulls />
-            <Line yAxisId="left"  type="monotone" dataKey="cyclingTsb"  name="Cycling TSB"  stroke="#22d3ee" strokeWidth={1.8} dot={false} connectNulls />
-            <Line yAxisId="left"  type="monotone" dataKey="swimmingTsb" name="Swimming TSB" stroke="#a78bfa" strokeWidth={1.8} dot={false} connectNulls />
-            <Line yAxisId="left"  type="monotone" dataKey="strengthTsb" name="Strength TSB" stroke="#ffd166" strokeWidth={1.8} dot={false} connectNulls strokeDasharray="4 2" />
-            <Line yAxisId="right" type="monotone" dataKey="acwr"        name="ACWR"         stroke="#fb923c" strokeWidth={1.5} dot={false} connectNulls strokeDasharray="5 3" />
+            {/* Icon legend — replaces Recharts Legend */}
+            <Legend verticalAlign="top" height={0} content={() => null} />
+            <Line type="monotone" dataKey="overallTsb"  name="Overall TSB"  stroke="#e5e7eb" strokeWidth={2.2} dot={false} connectNulls />
+            <Line type="monotone" dataKey="runningTsb"  name="Running TSB"  stroke="#ef4444" strokeWidth={1.8} dot={false} connectNulls />
+            <Line type="monotone" dataKey="cyclingTsb"  name="Cycling TSB"  stroke="#22d3ee" strokeWidth={1.8} dot={false} connectNulls />
+            <Line type="monotone" dataKey="swimmingTsb" name="Swimming TSB" stroke="#a78bfa" strokeWidth={1.8} dot={false} connectNulls />
+            <Line type="monotone" dataKey="strengthTsb" name="Strength TSB" stroke="#ffd166" strokeWidth={1.8} dot={false} connectNulls strokeDasharray="4 2" />
           </ComposedChart>
         </ResponsiveContainer>
+        </>
       ) : (
         <div style={{ color:'#666', fontSize:12, padding:'20px 0' }}>CTL {computedTSB?.global?.ctl?.toFixed(1) ?? '—'} · ATL {computedTSB?.global?.atl?.toFixed(1) ?? '—'} · TSB {computedTSB?.global?.tsb?.toFixed(1) ?? '—'} (computed from workouts)</div>
       )}
@@ -8782,11 +8680,26 @@ return (
       </div>
 
       <div style={{ ...cardStyle(), minWidth: "0" }}>
-        <div style={{ fontWeight: "bold", marginBottom: "12px" }}>
+        <div style={{ fontWeight: "bold", marginBottom: "6px" }}>
           Training Load
         </div>
+        {/* Icon legend */}
+        <div style={{ display:'flex', gap:14, alignItems:'center', marginBottom:8, flexWrap:'wrap' }}>
+          {[
+            { label:'Run mi',  color:'#ef4444', icon:<svg width="13" height="13" viewBox="0 0 24 24" fill="#ef4444"><path d="M13.5 5.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM9.9 8.4l-3.4 3.5 1.4 1.4 2.3-2.4.9 2.1-2.5 2.5V20h2v-4l2.4-2.3 2.1 5.3H17l-3.1-7.8L16 9h-2.4l-2 2-1.5-3.5-.2.9z"/></svg> },
+            { label:'Swim mi', color:'#22c55e', icon:<svg width="13" height="13" viewBox="0 0 24 24" fill="#22c55e"><path d="M2 15.5C3.5 17 5 17 6.5 15.5S9.5 14 11 15.5 13.5 17 15 15.5 17.5 14 19 15.5 21.5 17 23 15.5V13c-1.5 1.5-3 1.5-4.5 0S16 11.5 14.5 13 12 14.5 10.5 13 8 11.5 6.5 13 4 14.5 2.5 13V15.5zM11.5 3a1.5 1.5 0 101.5 1.5A1.5 1.5 0 0011.5 3z"/></svg> },
+            { label:'Cycle mi',color:'#facc15', icon:<svg width="13" height="13" viewBox="0 0 24 24" fill="#facc15"><path d="M15.5 5.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM5 12.5A4.5 4.5 0 109.5 17 4.5 4.5 0 005 12.5zm14 0a4.5 4.5 0 10-4.5 4.5 4.5 4.5 0 004.5-4.5zM12 9.8l-1.5 2.7H14l-1.5-2.7z"/></svg> },
+            { label:'Strength',color:'#a78bfa', dash:true, icon:<svg width="13" height="13" viewBox="0 0 24 24" fill="#a78bfa"><path d="M20.57 14.86L22 13.43 20.57 12 17 15.57 8.43 7 12 3.43 10.57 2 9.14 3.43 7.71 2 5.57 4.14 4.14 2.71 2.71 4.14l1.43 1.43L2 7.71l1.43 1.43L2 10.57 3.43 12 7 8.43 15.57 17 12 20.57 13.43 22l1.43-1.43L16.29 22l2.14-2.14 1.43 1.43 1.43-1.43-1.43-1.43L22 16.29l-1.43-1.43z"/></svg> },
+            { label:'Load %',  color:'#6b7280', area:true },
+          ].map(({ label, color, icon, dash, area }) => (
+            <div key={label} style={{ display:'flex', alignItems:'center', gap:4, fontSize:10, color:'#999' }}>
+              {area ? <div style={{ width:13, height:8, background:color, opacity:0.4, borderRadius:2 }}/> : icon}
+              <span style={{ color }}>{label}{dash ? ' - -' : ''}</span>
+            </div>
+          ))}
+        </div>
 
-        <ResponsiveContainer width="100%" height={320}>
+        <ResponsiveContainer width="100%" height={300}>
           <ComposedChart
   data={trainingLoadChartData}
   margin={{ top: 20, right: 20, left: 55, bottom: 35 }}
@@ -8804,8 +8717,9 @@ return (
             <YAxis
               yAxisId="distance"
               orientation="left"
+              domain={[0, trainingLoadDistanceMax]}
               label={{
-  value: "Training load (%)",
+  value: "Miles / sessions",
   angle: -90,
   position: "insideLeft",
   offset: 15,
@@ -8814,23 +8728,24 @@ return (
 }}
             />
             <YAxis
-              yAxisId="strength"
+              yAxisId="loadpct"
               orientation="right"
+              domain={[0, 100]}
               label={{
-  value: "Miles per week",
+  value: "Load %",
   angle: 90,
   position: "insideRight",
   offset: -15,
-  fill: "#a78bfa",
+  fill: "#6b7280",
   style: { textAnchor: "middle" }
 }}
               allowDecimals={false}
             />
             <Tooltip />
-            <Legend verticalAlign="top" height={36} />
+            <Legend verticalAlign="top" height={0} content={() => null} />
 
             <Area
-              yAxisId="strength"
+              yAxisId="loadpct"
               type="monotone"
               dataKey="trainingLoadPct"
               stroke="none"
@@ -8840,7 +8755,7 @@ return (
             />
 
             <Line
-              yAxisId="strength"
+              yAxisId="distance"
               type="monotone"
               dataKey="running"
               stroke="#ef4444"
@@ -8850,7 +8765,7 @@ return (
             />
 
             <Line
-              yAxisId="strength"
+              yAxisId="distance"
               type="monotone"
               dataKey="swimming"
               stroke="#22c55e"
@@ -8870,7 +8785,7 @@ return (
             />
 
             <Line
-              yAxisId="strength"
+              yAxisId="distance"
               type="monotone"
               dataKey="strength"
               stroke="#a78bfa"
@@ -9484,7 +9399,6 @@ return (
     healthFitDaily={healthFitDaily}
     sleepRecords={sleepRecords}
     runSessions={operationalWorkouts.filter(w => w.category === "Running" && w.distance > 0)}
-    computedTSB={computedTSB}
   />
 )}
 {tab === "_InjuryLegacy" && (
