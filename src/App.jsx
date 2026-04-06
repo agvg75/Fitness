@@ -5559,16 +5559,6 @@ function dedupeCanonicalSessions(sessions) {
   }).sort((a, b) => String(a?.start_date || "").localeCompare(String(b?.start_date || "")))
 }
 
-function toMsForScheduleSeeds(value) {
-  if (!value) return null
-  const raw = String(value).trim()
-  const normalized = raw
-    .replace(/^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}) ([+-]\d{2}:\d{2})$/, "$1T$2$3")
-    .replace(/^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}) ([+-])(\d{2})(\d{2})$/, "$1T$2$3$4:$5")
-  const ms = Date.parse(normalized)
-  return Number.isFinite(ms) ? ms : null
-}
-
 function estimateScheduleStrengthTrimp(entry) {
   const exList = Array.isArray(entry?.exercises) ? entry.exercises : []
   const strengthEx = exList.filter(ex => ex?.variant !== "cardio")
@@ -5587,7 +5577,7 @@ function makeCanonicalSessionFromScheduleLog(entry) {
     entry?.logged_at ||
     (entry?.date ? `${String(entry.date).slice(0, 10)}T12:00:00` : null)
   const durationMin = 60
-  const startMs = toMsForScheduleSeeds(startDate)
+  const startMs = toMs(startDate)
   const endDate = Number.isFinite(startMs)
     ? new Date(startMs + durationMin * 60000).toISOString()
     : null
@@ -5632,7 +5622,7 @@ function makeCanonicalCardioSeedsFromScheduleLog(entry) {
   const startDate =
     entry?.logged_at ||
     (entry?.date ? `${String(entry.date).slice(0, 10)}T12:00:00` : null)
-  const startMs = toMsForScheduleSeeds(startDate)
+  const startMs = toMs(startDate)
   const cardioEntries = Array.isArray(entry?.cardio) ? entry.cardio : []
 
   return cardioEntries
@@ -5694,8 +5684,8 @@ function isObviousScheduleCanonicalDuplicate(canonical, scheduleSeed) {
   const scheduleDate = String(scheduleSeed?.start_date || scheduleSeed?.dateTime || scheduleSeed?.date || "").slice(0, 10)
   if (!canonicalDate || canonicalDate !== scheduleDate) return false
 
-  const canonicalMs = toMsForScheduleSeeds(canonical?.start_date || canonical?.dateTime || canonical?.date)
-  const scheduleMs = toMsForScheduleSeeds(scheduleSeed?.start_date || scheduleSeed?.dateTime || scheduleSeed?.date)
+  const canonicalMs = toMs(canonical?.start_date || canonical?.dateTime || canonical?.date)
+  const scheduleMs = toMs(scheduleSeed?.start_date || scheduleSeed?.dateTime || scheduleSeed?.date)
   const timeToleranceMs = scheduleType === "Strength" ? 3 * 60 * 60 * 1000 : 90 * 60 * 1000
   if (Number.isFinite(canonicalMs) && Number.isFinite(scheduleMs) && Math.abs(canonicalMs - scheduleMs) > timeToleranceMs) {
     return false
