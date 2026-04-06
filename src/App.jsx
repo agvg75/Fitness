@@ -5609,76 +5609,10 @@ function makeCanonicalSessionFromScheduleLog(entry) {
   }
 }
 
-function scheduleCardioType(cardio) {
-  const modality = String(cardio?.modality || "").toLowerCase()
-  if (modality === "run") return "Running"
-  if (modality === "bike") return "Cycling"
-  if (modality === "swim") return "Swimming"
-  if (modality === "row") return "Rowing"
-  return "Other"
-}
-
-function makeCanonicalCardioSeedsFromScheduleLog(entry) {
-  const startDate =
-    entry?.logged_at ||
-    (entry?.date ? `${String(entry.date).slice(0, 10)}T12:00:00` : null)
-  const startMs = toMs(startDate)
-  const cardioEntries = Array.isArray(entry?.cardio) ? entry.cardio : []
-
-  return cardioEntries
-    .map((cardio, idx) => {
-      const durationMin = Number(cardio?.duration || 0) || 0
-      if (durationMin <= 0) return null
-
-      const endDate = Number.isFinite(startMs)
-        ? new Date(startMs + durationMin * 60000).toISOString()
-        : null
-      const hr = Number(cardio?.hr || 0) || null
-      const calories = Number(cardio?.calories || 0) || null
-      const distance = Number(cardio?.distance || 0) || null
-      const type = scheduleCardioType(cardio)
-      const distanceUnit =
-        type === "Swimming" ? "mi" :
-        type === "Running" || type === "Cycling" || type === "Walking" ? "mi" :
-        null
-
-      return {
-        session_id: `schedule_cardio_${entry?.session_id || entry?.id || "unknown"}_${idx}`,
-        match_confidence: "single_source",
-        relationship: "schedule_only",
-        canonical_type: type,
-        start_date: startDate,
-        end_date: endDate,
-        duration_min: durationMin,
-        overlap_summary: null,
-        trimp: null,
-        sources: {
-          apple: null,
-          technogym: null,
-          schedule: safeClone({
-            ...entry,
-            cardio_entry: safeClone(cardio),
-            cardio_entry_index: idx
-          })
-        },
-        preferred_metrics: {
-          hr: { value: hr, source: hr != null ? "Schedule" : null },
-          calories: { value: calories, source: calories != null ? "Schedule" : null },
-          distance: { value: distance, source: distance != null ? "Schedule" : null, rationale: distance != null ? "Schedule cardio entry" : null, unit: distanceUnit },
-          power_avg: { value: null, source: null },
-          level: { value: null, source: null },
-          rpm_avg: { value: null, source: null },
-          vo2: { value: null, source: null, note: null }
-        }
-      }
-    })
-    .filter(Boolean)
-}
-
 function isObviousScheduleCanonicalDuplicate(canonical, scheduleSeed) {
   const canonicalType = normalizeWorkoutType(canonical?.canonical_type || canonical?.type, canonical)
   const scheduleType = normalizeWorkoutType(scheduleSeed?.canonical_type || scheduleSeed?.type, scheduleSeed)
-  if (!canonicalType || canonicalType !== scheduleType) return false
+  if (canonicalType !== "Strength" || scheduleType !== "Strength") return false
 
   const canonicalDate = String(canonical?.start_date || canonical?.dateTime || canonical?.date || "").slice(0, 10)
   const scheduleDate = String(scheduleSeed?.start_date || scheduleSeed?.dateTime || scheduleSeed?.date || "").slice(0, 10)
@@ -5686,53 +5620,15 @@ function isObviousScheduleCanonicalDuplicate(canonical, scheduleSeed) {
 
   const canonicalMs = toMs(canonical?.start_date || canonical?.dateTime || canonical?.date)
   const scheduleMs = toMs(scheduleSeed?.start_date || scheduleSeed?.dateTime || scheduleSeed?.date)
-  const timeToleranceMs = scheduleType === "Strength" ? 3 * 60 * 60 * 1000 : 90 * 60 * 1000
-  if (Number.isFinite(canonicalMs) && Number.isFinite(scheduleMs) && Math.abs(canonicalMs - scheduleMs) > timeToleranceMs) {
+  if (Number.isFinite(canonicalMs) && Number.isFinite(scheduleMs) && Math.abs(canonicalMs - scheduleMs) > 3 * 60 * 60 * 1000) {
     return false
   }
 
   const canonicalDur = Number(canonical?.duration_min ?? canonical?.dur_min ?? canonical?.dur ?? 0) || 0
   const scheduleDur = Number(scheduleSeed?.duration_min ?? scheduleSeed?.dur_min ?? scheduleSeed?.dur ?? 0) || 0
-  const durationToleranceMin = scheduleType === "Strength" ? 90 : 45
-  if (canonicalDur > 0 && scheduleDur > 0 && Math.abs(canonicalDur - scheduleDur) > durationToleranceMin) return false
+  if (canonicalDur > 0 && scheduleDur > 0 && Math.abs(canonicalDur - scheduleDur) > 90) return false
 
   return true
-}
-
-function mergeImportedMetricsIntoScheduleSeed(canonical, scheduleSeed) {
-  const importedMetrics = canonical?.preferred_metrics || {}
-  const scheduleMetrics = scheduleSeed?.preferred_metrics || {}
-  const pickMetric = key => {
-    const imported = importedMetrics?.[key]
-    if (imported && imported.value != null) return imported
-    return scheduleMetrics?.[key] || { value: null, source: null }
-  }
-
-  return {
-    ...scheduleSeed,
-    session_id: canonical?.session_id || scheduleSeed?.session_id,
-    match_confidence: canonical?.match_confidence || scheduleSeed?.match_confidence,
-    relationship: canonical?.relationship || scheduleSeed?.relationship,
-    canonical_type: canonical?.canonical_type || scheduleSeed?.canonical_type,
-    start_date: canonical?.start_date || scheduleSeed?.start_date,
-    end_date: canonical?.end_date || scheduleSeed?.end_date,
-    duration_min: canonical?.duration_min ?? scheduleSeed?.duration_min,
-    overlap_summary: canonical?.overlap_summary ?? scheduleSeed?.overlap_summary ?? null,
-    trimp: canonical?.trimp ?? scheduleSeed?.trimp ?? null,
-    sources: {
-      ...(canonical?.sources || {}),
-      schedule: scheduleSeed?.sources?.schedule || null
-    },
-    preferred_metrics: {
-      hr: pickMetric("hr"),
-      calories: pickMetric("calories"),
-      distance: pickMetric("distance"),
-      power_avg: pickMetric("power_avg"),
-      level: pickMetric("level"),
-      rpm_avg: pickMetric("rpm_avg"),
-      vo2: pickMetric("vo2")
-    }
-  }
 }
 
 function mergeCanonicalSessionsWithScheduleSeeds(canonicalSessions, scheduleSeeds) {
@@ -5745,7 +5641,13 @@ function mergeCanonicalSessionsWithScheduleSeeds(canonicalSessions, scheduleSeed
     const matchIdx = merged.findIndex(session => isObviousScheduleCanonicalDuplicate(session, seed))
     if (matchIdx >= 0) {
       const existing = merged[matchIdx]
-      merged[matchIdx] = mergeImportedMetricsIntoScheduleSeed(existing, seed)
+      merged[matchIdx] = {
+        ...existing,
+        sources: {
+          ...(existing?.sources || {}),
+          schedule: seed?.sources?.schedule || null
+        }
+      }
       return
     }
     merged.push(seed)
@@ -6194,14 +6096,12 @@ const [schedLog, setSchedLog] = useState(() => { try { return JSON.parse(localSt
 const [ocItems, setOcItems] = useState(() => { try { return JSON.parse(localStorage.getItem('oc-items') || '[]') } catch { return [] } })
 
 const scheduleCanonicalSeeds = useMemo(() => {
-  return (Array.isArray(schedLog) ? schedLog : []).flatMap(entry => {
-    const seeds = []
-    const hasStrength =
-      (entry.exercises || []).some(ex => ex.variant !== "cardio") ||
-      (entry.data && Object.keys(entry.data).length > 0)
-    if (hasStrength) seeds.push(makeCanonicalSessionFromScheduleLog(entry))
-    return [...seeds, ...makeCanonicalCardioSeedsFromScheduleLog(entry)]
-  })
+  return (Array.isArray(schedLog) ? schedLog : [])
+    .filter(e =>
+      (e.exercises || []).some(ex => ex.variant !== "cardio") ||
+      (e.data && Object.keys(e.data).length > 0)
+    )
+    .map(makeCanonicalSessionFromScheduleLog)
 }, [schedLog])
 
 const unifiedCanonicalSessions = useMemo(() => {
@@ -6630,9 +6530,7 @@ function closeEnough(a, b, tol = 10) {
   return Math.abs(Number(a || 0) - Number(b || 0)) <= tol
 }
 const normalizedStoredWorkouts = useMemo(() => {
-  return (Array.isArray(storedWorkouts) ? storedWorkouts : [])
-    .filter(w => !w?._scheduleId)
-    .map(w => {
+  return (Array.isArray(storedWorkouts) ? storedWorkouts : []).map(w => {
     const rawType = w.type || "Other"
     const category = normalizeWorkoutType(rawType, w)
 
