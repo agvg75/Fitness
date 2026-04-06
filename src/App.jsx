@@ -3839,7 +3839,7 @@ function num(value) {
 }
 
 function getAttr(line, key) {
-  const escaped = key.replace(/[.*+?^\${}()|[\]\\]/g, '\\export default function App()');
+  const escaped = key.replace(/[.*+?^\${}()|[\\]\\\\]/g, '\\\\$&');
   const m = line.match(new RegExp(escaped + '="([^"]*)"'));
   return m ? m[1] : null;
 }
