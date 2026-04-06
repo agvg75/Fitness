@@ -4701,12 +4701,17 @@ function parseSleepCycleCSV(text) {
   const col = name => headers.findIndex(h => h.includes(name))
   const iDate    = Math.max(col("date"), col("start"))
   const iQual    = Math.max(col("sleep quality"), col("quality"), col("score"))
-  const iDur     = Math.max(col("time in bed"), col("duration"), col("sleep time"))
-  const iStart   = Math.max(col("bedtime"), col("sleep start"), col("start time"))
-  const iEnd     = Math.max(col("wake up time"), col("wake up"), col("end time"))
+  // Prefer "time asleep" over "time in bed"; Sleep Cycle exports often label these as seconds.
+  const iAsleep  = col("time asleep")
+  const iInBed   = col("time in bed")
+  const iDur     = iAsleep >= 0 ? iAsleep : Math.max(iInBed, col("duration"), col("sleep time"))
+  const iStart   = Math.max(col("bedtime"), col("sleep start"), col("start time"), col("start"))
+  const iEnd     = Math.max(col("wake up time"), col("wake up"), col("end time"), col("end"))
   const iHR      = Math.max(col("heart rate"), col("avg hr"))
   const iSteps   = col("steps")
   const iNotes   = Math.max(col("sleep notes"), col("note"))
+  const durHeader = iDur >= 0 ? headers[iDur] : ""
+  const durationIsSeconds = /\(seconds\)/.test(durHeader)
 
   for (let i = 1; i < lines.length; i++) {
     const raw = lines[i]
@@ -4730,7 +4735,10 @@ function parseSleepCycleCSV(text) {
       const hms = durRaw.match(/(\d+)h[^\d]*(\d+)m/i)
       if (hm) durationMin = parseInt(hm[1]) * 60 + parseInt(hm[2])
       else if (hms) durationMin = parseInt(hms[1]) * 60 + parseInt(hms[2])
-      else durationMin = n(durRaw)
+      else {
+        const rawDuration = n(durRaw)
+        durationMin = rawDuration == null ? null : (durationIsSeconds ? rawDuration / 60 : rawDuration)
+      }
     }
 
     // Parse quality — "85%" or "0.85" or "85"
@@ -4835,6 +4843,68 @@ function parseIHealthCSV(text) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// APPLE HEALTH DAILY METRICS CSV PARSER
+// Preserves daily nonworkout aggregates without sending them into workout logic.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function parseAppleHealthDailyMetricsCSV(text) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim())
+  if (!lines.length) return { workouts: [], biometrics: [], rejected: [] }
+
+  const headers = lines[0].split(",").map(h => h.trim().replace(/^"|"$/g, "").toLowerCase())
+  const biometrics = []
+  const rejected = []
+
+  const col = name => headers.findIndex(h => h.includes(name.toLowerCase()))
+  const exactCol = name => headers.findIndex(h => h === name.toLowerCase())
+  const iDate     = col("date")
+  const iActive   = col("active energy")
+  const iRestingE = col("resting energy")
+  const iResting  = exactCol("resting")
+  const iHRV      = col("hrv")
+  const iSteps    = col("steps")
+  const iVo2      = Math.max(col("vo2 max"), col("vo₂ max"))
+  const iExercise = col("exercise minutes")
+  const iStand    = col("stand hours")
+
+  const n = v => {
+    const p = parseFloat(String(v || "").replace(/,/g, "").replace(/[^\d.-]/g, ""))
+    return Number.isFinite(p) ? p : null
+  }
+
+  for (let i = 1; i < lines.length; i++) {
+    const raw = lines[i]
+    const cells = raw.split(",").map(c => c.trim().replace(/^"|"$/g, ""))
+    if (cells.length < 2) continue
+
+    const dateRaw = iDate >= 0 ? cells[iDate] : ""
+    if (!dateRaw) { rejected.push({ source: "AppleHealthCSV", reason: "Missing date", raw: raw.slice(0, 200) }); continue }
+
+    let date = null
+    try {
+      const d = new Date(dateRaw)
+      if (!Number.isNaN(d.getTime())) date = d.toISOString().slice(0, 10)
+    } catch {}
+    if (!date) { rejected.push({ source: "AppleHealthCSV", reason: "Bad date: " + dateRaw, raw: raw.slice(0, 200) }); continue }
+
+    biometrics.push({
+      source: "AppleHealthCSV_DailyMetrics",
+      date,
+      active_energy_cal: n(iActive >= 0 ? cells[iActive] : null),
+      resting_energy_cal: n(iRestingE >= 0 ? cells[iRestingE] : null),
+      resting_hr_bpm: n(iResting >= 0 ? cells[iResting] : null),
+      hrv: n(iHRV >= 0 ? cells[iHRV] : null),
+      steps: n(iSteps >= 0 ? cells[iSteps] : null),
+      vo2_max: n(iVo2 >= 0 ? cells[iVo2] : null),
+      exercise_minutes: n(iExercise >= 0 ? cells[iExercise] : null),
+      stand_hours: n(iStand >= 0 ? cells[iStand] : null),
+    })
+  }
+
+  return { workouts: [], biometrics, rejected }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // HEALTHFIT CSV PARSER  (CTL/ATL/TSB/ACWR export)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -4902,6 +4972,21 @@ const SOURCE_LABELS = {
   unknown:            { label: "Unknown",               color: "#888" },
 }
 
+function makeImportFileReviewRow(fileInfo, reason) {
+  const src = fileInfo?.detected?.source || "unknown"
+  const confidence = fileInfo?.detected?.confidence || "low"
+  return {
+    review_id: `file_${stableHash(`${fileInfo?.file?.name || "unknown"}|${fileInfo?.file?.size || 0}|${src}|${reason || ""}`)}`,
+    review_kind: "file_review",
+    confidence,
+    source: src,
+    file_name: fileInfo?.file?.name || "Unknown file",
+    file_size: fileInfo?.file?.size || 0,
+    first_chunk: fileInfo?.firstChunk || "",
+    reasons: [reason || `File held for manual review (${src}, ${confidence} confidence).`],
+  }
+}
+
 function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily, setSleepRecords }) {
   const [queuedFiles, setQueuedFiles] = useState([])  // [{file, detected, firstChunk}]
   const [status, setStatus] = useState("Drop files to import")
@@ -4917,6 +5002,7 @@ function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily,
   const [healthFitResult, setHealthFitResult] = useState([])
 
   const worker = useMemo(() => createInlineImportWorker(), [])
+  const pendingFileReviewRowsRef = useRef([])
   useEffect(() => () => worker.terminate(), [worker])
 
   // Read first chunk of a file to detect source
@@ -4965,9 +5051,20 @@ function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily,
     if (payload.type === "error") { setStatus(`Error: ${payload.error}`); setImporting(false); return }
     if (payload.type === "done") {
       const next = payload.result || null
-      setResult(next)
-      setReviewRows(Array.isArray(next?.review) ? next.review : [])
+      const fileReviewRows = Array.isArray(pendingFileReviewRowsRef.current) ? pendingFileReviewRowsRef.current : []
+      const mergedReviewRows = [...(Array.isArray(next?.review) ? next.review : []), ...fileReviewRows]
+      const nextResult = next ? {
+        ...next,
+        review: mergedReviewRows,
+        summary: {
+          ...(next.summary || {}),
+          review: mergedReviewRows.length
+        }
+      } : null
+      setResult(nextResult)
+      setReviewRows(mergedReviewRows)
       setSelectedReviewIds([])
+      pendingFileReviewRowsRef.current = []
       if (Array.isArray(next?.appleSleep) && next.appleSleep.length) {
         setSleepResult(prev => {
           const byDate = {}
@@ -4993,9 +5090,11 @@ function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily,
     setBiometricResult([])
     setHealthFitResult([])
     setStatus("Reading files...")
+    pendingFileReviewRowsRef.current = []
 
     let appleFile = null, technogymFile = null
     const allNutrition = [], allSleep = [], allBiometrics = [], allHealthFit = [], allRejected = []
+    const pendingReviewRows = []
 
     for (const q of queuedFiles) {
       const src = q.detected.source
@@ -5013,7 +5112,7 @@ function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily,
       }).catch(() => null)
       if (!text) { allRejected.push({ source: src, reason: "File read failed", file: q.file.name }); continue }
 
-      if (src === "fitnessview" || src === "apple_health_csv") {
+      if (src === "fitnessview") {
         const parsed = parseFitnessViewCSV(text)
         allRejected.push(...(parsed.rejected || []))
         // FitnessView workouts feed into the overlap engine as additional Apple-side records
@@ -5047,14 +5146,24 @@ function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily,
                   rpm_avg: { value: null, source: null }, vo2: { value: null, source: null }
                 }
               }))
-              setResult({ accepted, all_sessions: accepted, review: [], rejected: allRejected,
-                summary: { accepted: accepted.length, review: 0, rejected: allRejected.length, total: accepted.length } })
+              const mergedReviewRows = pendingReviewRows.slice()
+              setResult({ accepted, all_sessions: accepted, review: mergedReviewRows, rejected: allRejected,
+                summary: { accepted: accepted.length, review: mergedReviewRows.length, rejected: allRejected.length, total: accepted.length } })
+              setReviewRows(mergedReviewRows)
               setImporting(false)
               setStatus(`FitnessView: ${accepted.length} sessions imported directly`)
               return
             }
           }
         }
+        continue
+      }
+
+      if (src === "apple_health_csv") {
+        const parsed = parseAppleHealthDailyMetricsCSV(text)
+        allBiometrics.push(...(parsed.biometrics || []))
+        allRejected.push(...(parsed.rejected || []))
+        setStatus(`Apple Health CSV: ${parsed.biometrics.length} daily metric rows parsed`)
         continue
       }
 
@@ -5098,12 +5207,14 @@ function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily,
         continue
       }
 
-      // Unknown or low-confidence — flag for review, never drop
-      allRejected.push({
-        source: src, reason: `Auto-detection returned '${src}' (confidence: ${q.detected.confidence}). File held for manual review.`,
-        file: q.file.name, firstChunk: q.firstChunk
-      })
+      pendingReviewRows.push(makeImportFileReviewRow(
+        q,
+        `Auto-detection returned '${src}' (${q.detected.confidence} confidence). File held for manual review instead of being rejected.`
+      ))
     }
+
+    pendingFileReviewRowsRef.current = pendingReviewRows
+    setReviewRows(pendingReviewRows)
 
     // Store secondary results
     if (allNutrition.length) setNutritionResult(allNutrition)
@@ -5115,8 +5226,11 @@ function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily,
     if (appleFile || technogymFile) {
       setStatus("Running overlap pipeline...")
       worker.postMessage({ type: "process", appleFile, technogymFile })
-    } else if (allNutrition.length || allSleep.length || allBiometrics.length) {
+    } else if (allNutrition.length || allSleep.length || allBiometrics.length || allHealthFit.length) {
       setStatus("Non-workout files processed. Nutrition, sleep, and biometric data ready to commit.")
+      setImporting(false)
+    } else if (pendingReviewRows.length) {
+      setStatus("Files held for manual review. Override source if needed, then reprocess.")
       setImporting(false)
     } else {
       setStatus("No processable files found. Check the detected types below.")
@@ -5212,6 +5326,8 @@ function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily,
 
   const cs = SOURCE_LABELS
   const s = v => ({ padding: "4px 8px", border: "none", borderRadius: 4, fontSize: 11, cursor: "pointer", background: "#1a1b2e", color: "#aaa", fontFamily: "inherit", ...v })
+  const overlapReviewRows = reviewRows.filter(row => row?.review_kind !== "file_review")
+  const fileReviewRows = reviewRows.filter(row => row?.review_kind === "file_review")
 
   return (
     <div style={{ padding: "16px", display: "grid", gap: "16px" }}>
@@ -5312,41 +5428,70 @@ function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily,
             <div>
               <div style={{ fontWeight: "bold" }}>Review queue ({reviewRows.length})</div>
               <div style={{ fontSize: "12px", color: "#888", marginTop: 2 }}>
-                These sessions had ambiguous overlaps. Nothing is dropped — resolve each batch then commit.
+                Ambiguous session overlaps and held files are listed here for manual review. Nothing is dropped automatically.
               </div>
             </div>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", opacity: overlapReviewRows.length ? 1 : 0.55 }}>
               {[["same_session","Same session"],["different_sessions","Two sessions"],["ignore_apple","Drop Apple"],["ignore_technogym","Drop Technogym"],["reject","Reject"]].map(([action, label]) => (
                 <button key={action} onClick={() => applyBatchAction(action)} style={s({ fontSize: 12, padding: "5px 10px" })}
-                  disabled={!selectedReviewIds.length}>{label}</button>
+                  disabled={!selectedReviewIds.length || !overlapReviewRows.length}>{label}</button>
               ))}
             </div>
           </div>
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-              <thead>
-                <tr style={{ borderBottom: "1px solid #1a1b2e", textAlign: "left" }}>
-                  {["", "Date", "Apple type", "Technogym type", "Start Δ", "Overlap", "Confidence", "Flag"].map(h => (
-                    <th key={h} style={{ padding: "8px 6px", fontWeight: 600, color: "#888", whiteSpace: "nowrap" }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {reviewRows.map(row => (
-                  <tr key={row.review_id} style={{ borderBottom: "1px solid #111", verticalAlign: "top" }}>
-                    <td style={{ padding: "8px 6px" }}><input type="checkbox" checked={selectedReviewIds.includes(row.review_id)} onChange={() => toggleReviewSelection(row.review_id)} /></td>
-                    <td style={{ padding: "8px 6px", whiteSpace: "nowrap" }}>{fmtShortDate(row.source_a?.record?.start_date || row.source_b?.record?.start_date)}</td>
-                    <td style={{ padding: "8px 6px" }}>{row.source_a?.record?.type || "—"}</td>
-                    <td style={{ padding: "8px 6px" }}>{row.source_b?.record?.type || "—"}</td>
-                    <td style={{ padding: "8px 6px", whiteSpace: "nowrap" }}>{isFinite(+row.comparators?.start_diff_min) ? (+row.comparators.start_diff_min).toFixed(1) + " min" : "—"}</td>
-                    <td style={{ padding: "8px 6px", whiteSpace: "nowrap" }}>{isFinite(+row.comparators?.overlap_min) ? (+row.comparators.overlap_min).toFixed(1) + " min" : "—"}</td>
-                    <td style={{ padding: "8px 6px" }}>{isFinite(+row.confidence) ? Math.round(100 * +row.confidence) + "%" : "—"}</td>
-                    <td style={{ padding: "8px 6px", color: "#d97706", fontSize: 11 }}>{Array.isArray(row.reasons) ? row.reasons[0] : "review"}</td>
+          {overlapReviewRows.length > 0 && (
+            <div style={{ overflowX: "auto", marginBottom: fileReviewRows.length ? 16 : 0 }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid #1a1b2e", textAlign: "left" }}>
+                    {["", "Date", "Apple type", "Technogym type", "Start Δ", "Overlap", "Confidence", "Flag"].map(h => (
+                      <th key={h} style={{ padding: "8px 6px", fontWeight: 600, color: "#888", whiteSpace: "nowrap" }}>{h}</th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {overlapReviewRows.map(row => (
+                    <tr key={row.review_id} style={{ borderBottom: "1px solid #111", verticalAlign: "top" }}>
+                      <td style={{ padding: "8px 6px" }}><input type="checkbox" checked={selectedReviewIds.includes(row.review_id)} onChange={() => toggleReviewSelection(row.review_id)} /></td>
+                      <td style={{ padding: "8px 6px", whiteSpace: "nowrap" }}>{fmtShortDate(row.source_a?.record?.start_date || row.source_b?.record?.start_date)}</td>
+                      <td style={{ padding: "8px 6px" }}>{row.source_a?.record?.type || "—"}</td>
+                      <td style={{ padding: "8px 6px" }}>{row.source_b?.record?.type || "—"}</td>
+                      <td style={{ padding: "8px 6px", whiteSpace: "nowrap" }}>{isFinite(+row.comparators?.start_diff_min) ? (+row.comparators.start_diff_min).toFixed(1) + " min" : "—"}</td>
+                      <td style={{ padding: "8px 6px", whiteSpace: "nowrap" }}>{isFinite(+row.comparators?.overlap_min) ? (+row.comparators.overlap_min).toFixed(1) + " min" : "—"}</td>
+                      <td style={{ padding: "8px 6px" }}>{isFinite(+row.confidence) ? Math.round(100 * +row.confidence) + "%" : "—"}</td>
+                      <td style={{ padding: "8px 6px", color: "#d97706", fontSize: 11 }}>{Array.isArray(row.reasons) ? row.reasons[0] : "review"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {fileReviewRows.length > 0 && (
+            <div style={{ overflowX: "auto" }}>
+              <div style={{ fontSize: "12px", color: "#888", marginBottom: 8 }}>
+                Held files. Use the source override in the queued files list and re-run processing.
+              </div>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid #1a1b2e", textAlign: "left" }}>
+                    {["File", "Detected source", "Confidence", "Reason"].map(h => (
+                      <th key={h} style={{ padding: "8px 6px", fontWeight: 600, color: "#888", whiteSpace: "nowrap" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {fileReviewRows.map(row => (
+                    <tr key={row.review_id} style={{ borderBottom: "1px solid #111", verticalAlign: "top" }}>
+                      <td style={{ padding: "8px 6px" }}>{row.file_name || "—"}</td>
+                      <td style={{ padding: "8px 6px" }}>{cs[row.source]?.label || row.source || "Unknown"}</td>
+                      <td style={{ padding: "8px 6px", textTransform: "capitalize" }}>{row.confidence || "—"}</td>
+                      <td style={{ padding: "8px 6px", color: "#d97706", fontSize: 11 }}>{Array.isArray(row.reasons) ? row.reasons[0] : "review"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -5412,6 +5557,103 @@ function dedupeCanonicalSessions(sessions) {
     seen.add(key)
     return true
   }).sort((a, b) => String(a?.start_date || "").localeCompare(String(b?.start_date || "")))
+}
+
+function estimateScheduleStrengthTrimp(entry) {
+  const exList = Array.isArray(entry?.exercises) ? entry.exercises : []
+  const strengthEx = exList.filter(ex => ex?.variant !== "cardio")
+  if (!strengthEx.length) return 40
+  const totalSets = strengthEx.reduce((acc, ex) => {
+    const actualSets = ex?.actual?.sets
+    const prescribedSets = ex?.prescribed?.sets
+    const sets = Number(actualSets ?? prescribedSets ?? 0)
+    return acc + (Number.isFinite(sets) && sets > 0 ? sets : 3)
+  }, 0)
+  return Math.round(Math.min(80, 8 + totalSets * 3.5))
+}
+
+function makeCanonicalSessionFromScheduleLog(entry) {
+  const startDate =
+    entry?.logged_at ||
+    (entry?.date ? `${String(entry.date).slice(0, 10)}T12:00:00` : null)
+  const durationMin = 60
+  const startMs = toMs(startDate)
+  const endDate = Number.isFinite(startMs)
+    ? new Date(startMs + durationMin * 60000).toISOString()
+    : null
+
+  return {
+    session_id: `schedule_${entry?.session_id || entry?.id || stableHash(JSON.stringify(entry || {}))}`,
+    match_confidence: "single_source",
+    relationship: "schedule_only",
+    canonical_type: "Strength",
+    start_date: startDate,
+    end_date: endDate,
+    duration_min: durationMin,
+    overlap_summary: null,
+    trimp: estimateScheduleStrengthTrimp(entry),
+    sources: {
+      apple: null,
+      technogym: null,
+      schedule: safeClone(entry)
+    },
+    preferred_metrics: {
+      hr: { value: null, source: null },
+      calories: { value: null, source: null },
+      distance: { value: null, source: null, rationale: null, unit: null },
+      power_avg: { value: null, source: null },
+      level: { value: null, source: null },
+      rpm_avg: { value: null, source: null },
+      vo2: { value: null, source: null, note: null }
+    }
+  }
+}
+
+function isObviousScheduleCanonicalDuplicate(canonical, scheduleSeed) {
+  const canonicalType = normalizeWorkoutType(canonical?.canonical_type || canonical?.type, canonical)
+  const scheduleType = normalizeWorkoutType(scheduleSeed?.canonical_type || scheduleSeed?.type, scheduleSeed)
+  if (canonicalType !== "Strength" || scheduleType !== "Strength") return false
+
+  const canonicalDate = String(canonical?.start_date || canonical?.dateTime || canonical?.date || "").slice(0, 10)
+  const scheduleDate = String(scheduleSeed?.start_date || scheduleSeed?.dateTime || scheduleSeed?.date || "").slice(0, 10)
+  if (!canonicalDate || canonicalDate !== scheduleDate) return false
+
+  const canonicalMs = toMs(canonical?.start_date || canonical?.dateTime || canonical?.date)
+  const scheduleMs = toMs(scheduleSeed?.start_date || scheduleSeed?.dateTime || scheduleSeed?.date)
+  if (Number.isFinite(canonicalMs) && Number.isFinite(scheduleMs) && Math.abs(canonicalMs - scheduleMs) > 3 * 60 * 60 * 1000) {
+    return false
+  }
+
+  const canonicalDur = Number(canonical?.duration_min ?? canonical?.dur_min ?? canonical?.dur ?? 0) || 0
+  const scheduleDur = Number(scheduleSeed?.duration_min ?? scheduleSeed?.dur_min ?? scheduleSeed?.dur ?? 0) || 0
+  if (canonicalDur > 0 && scheduleDur > 0 && Math.abs(canonicalDur - scheduleDur) > 90) return false
+
+  return true
+}
+
+function mergeCanonicalSessionsWithScheduleSeeds(canonicalSessions, scheduleSeeds) {
+  const merged = (Array.isArray(canonicalSessions) ? canonicalSessions : []).map(session => ({
+    ...session,
+    sources: { ...(session?.sources || {}) }
+  }))
+
+  ;(Array.isArray(scheduleSeeds) ? scheduleSeeds : []).forEach(seed => {
+    const matchIdx = merged.findIndex(session => isObviousScheduleCanonicalDuplicate(session, seed))
+    if (matchIdx >= 0) {
+      const existing = merged[matchIdx]
+      merged[matchIdx] = {
+        ...existing,
+        sources: {
+          ...(existing?.sources || {}),
+          schedule: seed?.sources?.schedule || null
+        }
+      }
+      return
+    }
+    merged.push(seed)
+  })
+
+  return dedupeCanonicalSessions(merged)
 }
 
 const SCH_DAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
@@ -5852,9 +6094,23 @@ const [healthFitDaily, setHealthFitDaily] = useState([])
 const [sleepRecords, setSleepRecords] = useState(() => { try { return JSON.parse(localStorage.getItem("lift_sleep_records") || "[]") } catch { return [] } })
 const [schedLog, setSchedLog] = useState(() => { try { return JSON.parse(localStorage.getItem('wt-log') || '[]') } catch { return [] } })
 const [ocItems, setOcItems] = useState(() => { try { return JSON.parse(localStorage.getItem('oc-items') || '[]') } catch { return [] } })
+
+const scheduleCanonicalSeeds = useMemo(() => {
+  return (Array.isArray(schedLog) ? schedLog : [])
+    .filter(e =>
+      (e.exercises || []).some(ex => ex.variant !== "cardio") ||
+      (e.data && Object.keys(e.data).length > 0)
+    )
+    .map(makeCanonicalSessionFromScheduleLog)
+}, [schedLog])
+
+const unifiedCanonicalSessions = useMemo(() => {
+  return mergeCanonicalSessionsWithScheduleSeeds(canonicalSessions, scheduleCanonicalSeeds)
+}, [canonicalSessions, scheduleCanonicalSeeds])
+
   const activeWorkouts =
-    canonicalSessions && canonicalSessions.length > 0
-      ? canonicalSessions
+    unifiedCanonicalSessions && unifiedCanonicalSessions.length > 0
+      ? unifiedCanonicalSessions
       : workouts
 const fmt0 = n => Number.isFinite(Number(n)) ? Math.round(Number(n)).toLocaleString() : "0"
 const fmt1 = n => Number.isFinite(Number(n)) ? Number(n).toFixed(1) : "0.0"
@@ -6978,55 +7234,19 @@ async function persistMealEntries(nextEntries, currentUserId) {
     return Math.max(2500, ...filteredNutrition.map(r => toNum(r.calories) + 100))
 }, [filteredNutrition])
 
-const strengthFromSchedule = useMemo(() => {
-  return (Array.isArray(schedLog) ? schedLog : [])
-    .filter(e =>
-      (e.exercises || []).some(ex => ex.variant !== "cardio") ||
-      (e.data && Object.keys(e.data).length > 0)
-    )
-    .map(e => {
-      // Estimate TRIMP from logged sets/reps/weight if present, else use flat 40
-      const exList = e.exercises || []
-      const strengthEx = exList.filter(ex => ex.variant !== "cardio")
-      let trimp = 40 // default for a logged strength session
-      if (strengthEx.length > 0) {
-        const totalSets = strengthEx.reduce((acc, ex) => {
-          const sets = Array.isArray(ex.sets) ? ex.sets.length : (ex.sets || 3)
-          return acc + sets
-        }, 0)
-        trimp = Math.round(Math.min(80, 8 + totalSets * 3.5)) // ~40 for 9 sets, ~66 for 16 sets
-      }
-      return {
-        date: e.date,
-        dateTime: e.logged_at || e.date,
-        category: "Strength",
-        trimp,
-        duration: 3600
-      }
-    })
-}, [schedLog])
-
-// ── Banister TSB from canonical sessions + schedule strength ─────────────
+// ── Banister TSB from unified canonical sessions ──────────────────────────
 // tau1=27 (fitness/CTL), tau2=18 (fatigue/ATL), TRIMP-based
-// Merges canonicalSessions with strengthFromSchedule so the model
-// reflects all training load even when no HealthFit CSV has been imported.
 const computedTSBFromSessions = useMemo(() => {
   const tau1 = LIFT_CONFIG.tau1, tau2 = LIFT_CONFIG.tau2
-  const raw = [
-    ...(Array.isArray(canonicalSessions) ? canonicalSessions : []).map(s => {
-      const durMin = s.dur_min || s.duration_min ||
-        (Number(s.duration_sec) > 0 ? s.duration_sec / 60 : 0)
-      const avgHr = Number(s.avg_hr) || 0
-      const trimp = s.trimp != null
-        ? Number(s.trimp)
-        : durMin * (avgHr > 0 ? (avgHr / 180) * 1.2 : 0.5)
-      return { date: (s.start_date || s.dateTime || s.date || "").slice(0, 10), trimp }
-    }),
-    ...(Array.isArray(strengthFromSchedule) ? strengthFromSchedule : []).map(s => ({
-      date: String(s.date || "").slice(0, 10),
-      trimp: Number(s.trimp) || 40,
-    })),
-  ]
+  const raw = (Array.isArray(unifiedCanonicalSessions) ? unifiedCanonicalSessions : []).map(s => {
+    const durMin = s.dur_min || s.duration_min ||
+      (Number(s.duration_sec) > 0 ? s.duration_sec / 60 : 0)
+    const avgHr = Number(s.avg_hr) || 0
+    const trimp = s.trimp != null
+      ? Number(s.trimp)
+      : durMin * (avgHr > 0 ? (avgHr / 180) * 1.2 : 0.5)
+    return { date: (s.start_date || s.dateTime || s.date || "").slice(0, 10), trimp }
+  })
   // Sum TRIMP by calendar date
   const dailyTrimp = {}
   raw.forEach(({ date, trimp }) => {
@@ -7056,15 +7276,15 @@ const computedTSBFromSessions = useMemo(() => {
   const out = { ctl: +ctl.toFixed(1), atl: +atl.toFixed(1), tsb }
   out.global = out
   return out
-}, [canonicalSessions, strengthFromSchedule])
+}, [unifiedCanonicalSessions])
 
 const trainingSummary = useMemo(() => {
-  return buildTrainingSummary([...operationalWorkouts, ...strengthFromSchedule])
-}, [operationalWorkouts, strengthFromSchedule])
+  return buildTrainingSummary(operationalWorkouts)
+}, [operationalWorkouts])
 
 const weeklyTrainingBuckets = useMemo(() => {
-  return buildWeeklyTrainingBuckets([...operationalWorkouts, ...strengthFromSchedule])
-}, [operationalWorkouts, strengthFromSchedule])
+  return buildWeeklyTrainingBuckets(operationalWorkouts)
+}, [operationalWorkouts])
 useEffect(() => {
   if (process.env.NODE_ENV === "development") console.log("LIFT ingestion check")
   if (process.env.NODE_ENV === "development") console.log("operationalWorkouts count:", operationalWorkouts?.length ?? 0)
@@ -7523,15 +7743,6 @@ const tsbV2Panel = useMemo(() => {
   const chronic = {overall:0,running:0,cycling:0,swimming:0,strength:0}
   const aA = 1 - Math.exp(-1/tau2), aC = 1 - Math.exp(-1/tau1)
 
-  // Merge strengthFromSchedule into daily loads
-  ;(Array.isArray(strengthFromSchedule) ? strengthFromSchedule : []).forEach(s => {
-    const date = String(s.date || '').slice(0,10)
-    if (!dailyLoads[date]) return
-    const load = Number(s.trimp) || 40
-    dailyLoads[date].overall += load
-    dailyLoads[date].strength += load
-  })
-
   const allRows = dayKeys.map(date => {
     const load = dailyLoads[date]
     const row = { date }
@@ -7555,7 +7766,7 @@ const tsbV2Panel = useMemo(() => {
     : null
   const risk = riskFromOC ?? (tsbNow < -25 ? 'red' : tsbNow < -15 ? 'orange' : tsbNow < -8 ? 'yellow' : 'green')
   return { rows, alerts: [], readinessRiskLabel: risk, readinessDetail: { score: readinessScore ?? Math.round(50 + tsbNow) } }
-}, [normalizedActiveWorkouts, strengthFromSchedule, schedLog, ocItems, readinessScore, selectedRangePoints])
+}, [normalizedActiveWorkouts, schedLog, ocItems, readinessScore, selectedRangePoints])
 
 const operationalCapacityData = useMemo(() => {
   const items = Array.isArray(ocItems) ? ocItems : []
@@ -8201,6 +8412,11 @@ return (
     {/* ── Sleep Quality Panel ───────────────────────────────────── */}
     {(() => {
       const sevenDaysAgo = Date.now() - 7 * 24 * 3600000
+      const sleepMinutes = record => {
+        const raw = Number(record?.duration_min || 0) || 0
+        // Defensive normalization for older/stale records that may still be stored in seconds.
+        return raw > 24 * 60 ? raw / 60 : raw
+      }
       const recentSleep = (Array.isArray(sleepRecords) ? sleepRecords : [])
         .filter(r => r.date && new Date(r.date).getTime() >= sevenDaysAgo && r.duration_min != null)
         .sort((a, b) => String(b.date).localeCompare(String(a.date)))
@@ -8208,10 +8424,10 @@ return (
 
       if (recentSleep.length === 0) return null
 
-      const avgHours = recentSleep.reduce((s, r) => s + (r.duration_min || 0), 0) / recentSleep.length / 60
+      const avgHours = recentSleep.reduce((s, r) => s + sleepMinutes(r), 0) / recentSleep.length / 60
       const lastNight = recentSleep[0]
-      const lastHours = lastNight ? (lastNight.duration_min || 0) / 60 : null
-      const TARGET_HOURS = 7.5
+      const lastHours = lastNight ? sleepMinutes(lastNight) / 60 : null
+      const TARGET_HOURS = 7.0
       const avgPct = Math.min(100, Math.round((avgHours / TARGET_HOURS) * 100))
       const avgColor = avgHours >= 7 ? "#4ade80" : avgHours >= 6 ? "#fbbf24" : "#ef4444"
       const lastColor = lastHours == null ? "#667" : lastHours >= 7 ? "#4ade80" : lastHours >= 6 ? "#fbbf24" : "#ef4444"
@@ -8238,7 +8454,7 @@ return (
             <div style={{ background: "#07080e", border: "1px solid #1a1b2e", borderRadius: "8px", padding: "10px", textAlign: "center" }}>
               <div style={{ fontSize: "10px", color: "#555", marginBottom: "3px" }}>Nights at target</div>
               <div style={{ fontSize: "26px", fontWeight: "800", color: "#ced2f0", lineHeight: 1 }}>
-                {recentSleep.filter(r => (r.duration_min || 0) / 60 >= 7).length}
+                {recentSleep.filter(r => sleepMinutes(r) / 60 >= TARGET_HOURS).length}
               </div>
               <div style={{ fontSize: "10px", color: "#555" }}>of {recentSleep.length}</div>
             </div>
@@ -8252,7 +8468,7 @@ return (
           </div>
           <div style={{ display: "flex", gap: "3px", alignItems: "flex-end", height: "36px" }}>
             {[...recentSleep].reverse().map((r, i) => {
-              const h = (r.duration_min || 0) / 60
+              const h = sleepMinutes(r) / 60
               const heightPct = Math.min(100, Math.round((h / 9) * 100))
               const col = h >= 7 ? "#4ade80" : h >= 6 ? "#fbbf24" : "#ef4444"
               return (
@@ -9384,7 +9600,7 @@ return (
 
 {tab === "Training" && (
   <TrainingDashboard
-    workouts={[...operationalWorkouts, ...strengthFromSchedule]}
+    workouts={operationalWorkouts}
     recentNutrition={recentNutrition}
     healthFitDaily={healthFitDaily}
     schedLog={schedLog}
