@@ -5636,6 +5636,20 @@ function scheduleCardioType(cardio) {
   return "Other"
 }
 
+function normalizeWorkoutTypeForScheduleSeeds(type) {
+  const t = String(type || "").toLowerCase()
+  if (t.includes("traditional strength")) return "Strength"
+  if (t.includes("functional strength")) return "Strength"
+  if (t.includes("core")) return "Strength"
+  if (t.includes("strength")) return "Strength"
+  if (t.includes("running")) return "Running"
+  if (t.includes("walking")) return "Walking"
+  if (t.includes("cycling")) return "Cycling"
+  if (t.includes("swimming")) return "Swimming"
+  if (t.includes("rowing")) return "Rowing"
+  return "Other"
+}
+
 function makeCanonicalCardioSeedsFromScheduleLog(entry) {
   const startDate =
     entry?.logged_at ||
@@ -5694,8 +5708,8 @@ function makeCanonicalCardioSeedsFromScheduleLog(entry) {
 }
 
 function isObviousScheduleCanonicalDuplicate(canonical, scheduleSeed) {
-  const canonicalType = normalizeWorkoutType(canonical?.canonical_type || canonical?.type, canonical)
-  const scheduleType = normalizeWorkoutType(scheduleSeed?.canonical_type || scheduleSeed?.type, scheduleSeed)
+  const canonicalType = normalizeWorkoutTypeForScheduleSeeds(canonical?.canonical_type || canonical?.type)
+  const scheduleType = normalizeWorkoutTypeForScheduleSeeds(scheduleSeed?.canonical_type || scheduleSeed?.type)
   if (!canonicalType || canonicalType !== scheduleType) return false
 
   const canonicalDate = String(canonical?.start_date || canonical?.dateTime || canonical?.date || "").slice(0, 10)
