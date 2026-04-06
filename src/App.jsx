@@ -5569,6 +5569,14 @@ function toMsForScheduleSeeds(value) {
   return Number.isFinite(ms) ? ms : null
 }
 
+function safeCloneForScheduleSeeds(value) {
+  try {
+    return JSON.parse(JSON.stringify(value))
+  } catch {
+    return value ?? null
+  }
+}
+
 function estimateScheduleStrengthTrimp(entry) {
   const exList = Array.isArray(entry?.exercises) ? entry.exercises : []
   const strengthEx = exList.filter(ex => ex?.variant !== "cardio")
@@ -5605,7 +5613,7 @@ function makeCanonicalSessionFromScheduleLog(entry) {
     sources: {
       apple: null,
       technogym: null,
-      schedule: safeClone(entry)
+      schedule: safeCloneForScheduleSeeds(entry)
     },
     preferred_metrics: {
       hr: { value: null, source: null },
@@ -5665,9 +5673,9 @@ function makeCanonicalCardioSeedsFromScheduleLog(entry) {
         sources: {
           apple: null,
           technogym: null,
-          schedule: safeClone({
+          schedule: safeCloneForScheduleSeeds({
             ...entry,
-            cardio_entry: safeClone(cardio),
+            cardio_entry: safeCloneForScheduleSeeds(cardio),
             cardio_entry_index: idx
           })
         },
