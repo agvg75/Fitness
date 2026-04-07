@@ -1508,10 +1508,6 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
 
   const SPLIT_DAYS = ["Tue", "Thu"]
   const isSplitDay = SPLIT_DAYS.includes(activeDay)
-  const scheduleMismatchReport = useMemo(
-    () => buildScheduleDayDateMismatchReport(schedLog),
-    [schedLog]
-  )
 
   const VENUE_TIMES = { ymca: "05:30", knr: "09:35" }
   const VENUE_LABELS = { ymca: "YMCA (5:30–7:00)", knr: "KNR (9:35–10:45)" }
@@ -2384,6 +2380,10 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
 
   const prog = getProgDay(activeDay)
   const meta = SCH_META[activeDay] || SMETA[activeDay] || {}
+  const scheduleMismatchReport = useMemo(
+    () => buildScheduleDayDateMismatchReport(schedLog),
+    [schedLog]
+  )
 
   return (
     <div style={{ color: "#d8d8d8", position: "relative" }}>
