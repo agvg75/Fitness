@@ -12,16 +12,14 @@ export const PROGRAM_META = {
 export const CARDIO = {
   Mon: {
     sessions: [
-      { mod: "bike", type: "Warmup ride", dMin: 15, dMax: 15, intensity: "Easy (no resistance)", dist: "4 miles", rationale: "Leg flush before upper body strength. High cadence, minimal load.", cnote: "Do this before or after chest/tri session." },
-      { mod: "run",  type: "Short easy run", dMin: 20, dMax: 25, intensity: "Easy (Zone 2, conversational)", dist: "1.5 miles", rationale: "Light run day — upper body strength today so legs are fresh. Keep fully conversational.", cnote: "If toe speaks up before mile 1, substitute 20 min easy bike." },
+      { mod: "walk", type: "Walk/jog intervals", dMin: 0, dMax: 0, intensity: "KNR prescribed", dist: "2.5 mi total · (walk ½mi → jog ½mi → walk ¼mi) × 2", rationale: "Do AFTER strength", cnote: "" },
     ],
-    goal: "10K aerobic base — light day", wt: { run: 20, bike: 15 },
+    goal: "Walk/jog intervals · 2.5 mi total · (walk ½mi → jog ½mi → walk ¼mi) × 2 · KNR prescribed · Do AFTER strength", wt: { walk: 0 },
   },
   Tue: {
-    sessions: [
-      { mod: "swim", type: "Long swim", dMin: 30, dMax: 45, intensity: "Easy to easy-moderate", dist: "1000+ yards", rationale: "Tuesday is the long swim day. Non-compressive, complements back/bi pulling chain at KNR.", cnote: "Do at YMCA 5:30-7am. Drills first 200 yards, then continuous." },
-    ],
-    goal: "Triathlon swim — volume day", wt: { swim: 40 },
+    noCardio: true,
+    sessions: [],
+    goal: "", wt: {},
   },
   Wed: {
     sessions: [
@@ -30,11 +28,9 @@ export const CARDIO = {
     goal: "10K aerobic base — medium day", wt: { run: 30 },
   },
   Thu: {
-    sessions: [
-      { mod: "bike", type: "Warmup ride", dMin: 15, dMax: 20, intensity: "Easy (high cadence, no resistance)", dist: "Light", rationale: "YMCA before KNR. Loosens legs before the back/bi session. Keep effort minimal.", cnote: "YMCA 5:30-7am slot. Stop when you feel warm, not fatigued." },
-      { mod: "swim", type: "Short recovery swim", dMin: 20, dMax: 25, intensity: "Easy", dist: "300 yards", rationale: "Short swim pairs with back/bi KNR day. Pulling chain stimulus in a non-compressive environment.", cnote: "YMCA 5:30-7am slot. Drills only if time allows — otherwise straight easy freestyle." },
-    ],
-    goal: "Triathlon base — recovery cardio before KNR", wt: { bike: 15, swim: 20 },
+    noCardio: true,
+    sessions: [],
+    goal: "", wt: {},
   },
   Fri: {
     sessions: [

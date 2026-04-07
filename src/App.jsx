@@ -1742,6 +1742,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const getCardioEntries = (day) => {
     if (cardioEntries[day]?.length) return cardioEntries[day]
     const cd = CARDIO[day]
+    if (cd.noCardio) return []
     const sessions = cd.sessions || []
     if (sessions.length > 0) return sessions.map(s => ({ modality: s.mod, duration: `${s.dMin}-${s.dMax}`, distance: "", calories: "", hr: "", notes: "" }))
     return [{ modality: cd.mod || "run", duration: "", distance: "", calories: "", hr: "", notes: "" }]
@@ -2129,6 +2130,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   // ── Cardio block ───────────────────────────────────────────────────────
   const cardioBlock = (day) => {
     const cd = CARDIO[day]
+    if (cd.noCardio) return null
     const prescribedSessions = cd.sessions || []
     const entries = getCardioEntries(day)
     const modColor = { run: "#ef4444", bike: "#d97706", swim: "#0ea5e9", walk: "#22c55e", row: "#8b5cf6" }
@@ -2511,10 +2513,12 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
           {prog.core?.length > 0 && checklistSection(activeDay, "core", prog.core, "#3B6D11", "Core", "~5 min")}
 
           {/* Cardio */}
-          <div style={{ border: "0.5px solid #1a1a1a", borderRadius: 8, marginBottom: 16, overflow: "hidden" }}>
-            {secHdr("cardio", "Cardio prescription", "#993C1D", "")}
-            {openSections.cardio && cardioBlock(activeDay)}
-          </div>
+          {!CARDIO[activeDay]?.noCardio && (
+            <div style={{ border: "0.5px solid #1a1a1a", borderRadius: 8, marginBottom: 16, overflow: "hidden" }}>
+              {secHdr("cardio", "Cardio prescription", "#993C1D", "")}
+              {openSections.cardio && cardioBlock(activeDay)}
+            </div>
+          )}
 
           {logBar()}
         </>
