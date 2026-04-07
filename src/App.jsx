@@ -6,6 +6,12 @@ import {
   mergeCanonicalSessionsWithScheduleSeeds
 } from "./lib/canonicalSessions.js"
 import {
+  loadBiometricRecords,
+  loadCanonicalSessions,
+  loadHealthfitDaily,
+  loadSleepRecords
+} from "./lib/persistence.js"
+import {
   LineChart,
   Line,
   XAxis,
@@ -6112,9 +6118,11 @@ const [error, setError] = useState("")
 const [storedWorkouts, setStoredWorkouts] = useState([])
 const [canonicalSessions, setCanonicalSessions] = useState([])
 const [healthFitDaily, setHealthFitDaily] = useState([])
+const [, setBiometricRecords] = useState([])
 const [sleepRecords, setSleepRecords] = useState(() => { try { return JSON.parse(localStorage.getItem("lift_sleep_records") || "[]") } catch { return [] } })
 const [schedLog, setSchedLog] = useState(() => { try { return JSON.parse(localStorage.getItem('wt-log') || '[]') } catch { return [] } })
 const [ocItems, setOcItems] = useState(() => { try { return JSON.parse(localStorage.getItem('oc-items') || '[]') } catch { return [] } })
+const [baseDataLoaded, setBaseDataLoaded] = useState(false)
 
 const scheduleStrengthCanonicalSeeds = useMemo(() => {
   return (Array.isArray(schedLog) ? schedLog : [])
@@ -6681,11 +6689,45 @@ useEffect(() => {
       } catch (err) {
         if (process.env.NODE_ENV === "development") console.log(err)
         setError(String(err))
+      } finally {
+        setBaseDataLoaded(true)
       }
     }
 
     loadData()
-  }, [])
+}, [])
+
+useEffect(() => {
+  if (!baseDataLoaded || !supabase || !session?.user?.id) return
+  let cancelled = false
+
+  ;(async () => {
+    try {
+      const userId = session.user.id
+      const [
+        remoteCanonicalSessions,
+        remoteSleepRecords,
+        remoteHealthFitDaily,
+        remoteBiometricRecords
+      ] = await Promise.all([
+        loadCanonicalSessions(supabase, userId),
+        loadSleepRecords(supabase, userId),
+        loadHealthfitDaily(supabase, userId),
+        loadBiometricRecords(supabase, userId)
+      ])
+
+      if (cancelled) return
+      if (remoteCanonicalSessions.length) setCanonicalSessions(remoteCanonicalSessions)
+      if (remoteSleepRecords.length) setSleepRecords(remoteSleepRecords)
+      if (remoteHealthFitDaily.length) setHealthFitDaily(remoteHealthFitDaily)
+      if (remoteBiometricRecords.length) setBiometricRecords(remoteBiometricRecords)
+    } catch (err) {
+      if (process.env.NODE_ENV === "development") console.warn("Core imported data hydration failed:", err)
+    }
+  })()
+
+  return () => { cancelled = true }
+}, [baseDataLoaded, session?.user?.id, supabase])
 
 useEffect(() => {
   if (!supabase) return
