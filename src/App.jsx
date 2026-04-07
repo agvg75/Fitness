@@ -1487,7 +1487,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const [schedView, setSchedView] = useState("schedule")
   const [expandedLog, setExpandedLog] = useState({})
   const [toast, setToast] = useState(null)
-  const [openSections, setOpenSections] = useState({ stretch: true, warmup: true, main: true, core: true, cardio: true })
+  const [openSections, setOpenSections] = useState({ stretch: false, warmup: false, main: false, core: false, cardio: false })
   const [variants, setVariants] = useState({})
   const [fields, setFields] = useState({})
   const [cardioEntries, setCardioEntries] = useState({}) // { day: [{modality, duration, notes}] }
@@ -1574,6 +1574,11 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const showToast = useCallback((msg) => {
     setToast(msg)
     setTimeout(() => setToast(null), 2500)
+  }, [])
+
+  const switchScheduleDay = useCallback((day) => {
+    setActiveDay(day)
+    requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }))
   }, [])
 
   const CARDIO_INJURY_REGIONS = {
@@ -1891,7 +1896,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     if (!entry) return
     const mismatch = getScheduleEntryDayDateMismatch(entry)
     const entryDate = String(entry.date || entry.logged_at || "").slice(0, 10)
-    setActiveDay(mismatch?.dateDay || entry.day)
+    switchScheduleDay(mismatch?.dateDay || entry.day)
     if (/^\d{4}-\d{2}-\d{2}$/.test(entryDate)) setSessionDate(entryDate)
     setSchedView("schedule")
     showToast(mismatch
@@ -2220,7 +2225,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
             const nextDate = e.target.value
             setSessionDate(nextDate)
             const nextDay = dayKeyFromScheduleDate(nextDate)
-            if (nextDay) setActiveDay(nextDay)
+            if (nextDay) switchScheduleDay(nextDay)
           }}
             style={{ flex: 1, padding: "5px 8px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: sessionDate !== todayISO() ? "#d97706" : "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none", colorScheme: "dark" }} />
           {sessionDate !== todayISO() && (
@@ -2228,7 +2233,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
               const today = todayISO()
               setSessionDate(today)
               const todayDay = dayKeyFromScheduleDate(today)
-              if (todayDay) setActiveDay(todayDay)
+              if (todayDay) switchScheduleDay(todayDay)
             }}
               style={{ padding: "4px 10px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 11, color: "#666", background: "transparent", cursor: "pointer", fontFamily: "inherit" }}>Today</button>
           )}
@@ -2398,7 +2403,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
             const active = d === activeDay && schedView === "schedule"
             const isSplit = SPLIT_DAYS.includes(d)
             return (
-              <button key={d} onClick={() => { setActiveDay(d); setSchedView("schedule"); setSavedEntries(prev => ({ ...prev })) }}
+              <button key={d} onClick={() => { switchScheduleDay(d); setSchedView("schedule"); setSavedEntries(prev => ({ ...prev })) }}
                 style={{ padding: "6px 12px", border: "none", cursor: "pointer", background: active ? (m.color || "#185FA5") + "22" : "transparent", fontSize: 12, fontWeight: active ? 700 : 500, letterSpacing: "0.06em", textTransform: "uppercase", color: active ? (m.color || "#185FA5") : "#3a3a3a", borderRadius: 6, position: "relative" }}>
                 {d}
                 {isSplit && <div style={{ fontSize: 7, color: "#7F77DD", marginTop: 1 }}>split</div>}
