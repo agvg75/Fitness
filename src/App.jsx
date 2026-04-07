@@ -509,6 +509,37 @@ const getScheduleEntryDayDateMismatch = entry => {
   return { storedDay, dateDay, date }
 }
 
+const getScheduleEntryTrainingType = entry => {
+  const cardio = Array.isArray(entry?.cardio) && entry.cardio.some(c =>
+    c?.modality || c?.duration || c?.distance || c?.calories || c?.hr || c?.notes
+  )
+  const strength = Array.isArray(entry?.exercises)
+    ? entry.exercises.some(ex => ex?.variant !== "cardio")
+    : entry?.data && Object.keys(entry.data).length > 0
+  if (cardio && strength) return "both"
+  if (cardio) return "cardio"
+  if (strength) return "strength"
+  return "none"
+}
+
+const buildScheduleDayDateMismatchReport = entries => {
+  return (Array.isArray(entries) ? entries : [])
+    .map(entry => {
+      const mismatch = getScheduleEntryDayDateMismatch(entry)
+      if (!mismatch) return null
+      return {
+        id: entry?.id ?? entry?.session_id ?? "unknown",
+        storedDay: mismatch.storedDay,
+        storedDate: mismatch.date,
+        impliedWeekday: mismatch.dateDay,
+        loggedAt: entry?.logged_at || "",
+        venue: entry?.venue_label || entry?.venue || "",
+        trainingType: getScheduleEntryTrainingType(entry),
+      }
+    })
+    .filter(Boolean)
+}
+
 const SDAY_TYPES = {
   Mon: ["Running", "Traditional Strength Training"],
   Tue: ["Traditional Strength Training"],
@@ -783,6 +814,57 @@ function ScheduleLogView({ log, expanded, setExpanded, onDelete, onEdit }) {
           </div>
         )
       })}
+    </div>
+  )
+}
+
+function ScheduleMismatchDiagnostics({ report }) {
+  const rows = Array.isArray(report) ? report : []
+
+  return (
+    <div style={{ marginBottom: 12, padding: "10px 12px", background: "#0a0a0a", border: "1px solid #1a1a1a", borderRadius: 8 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", marginBottom: rows.length ? 10 : 0, flexWrap: "wrap" }}>
+        <div>
+          <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "#777", fontWeight: 700 }}>
+            Schedule day/date diagnostics
+          </div>
+          <div style={{ fontSize: 11, color: "#444", marginTop: 2 }}>
+            Read-only legacy wt-log check.
+          </div>
+        </div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: rows.length ? "#f59e0b" : "#22c55e" }}>
+          {rows.length} {rows.length === 1 ? "mismatch" : "mismatches"}
+        </div>
+      </div>
+
+      {!rows.length ? (
+        <div style={{ fontSize: 12, color: "#555" }}>No mismatches found.</div>
+      ) : (
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, color: "#aaa" }}>
+            <thead>
+              <tr style={{ color: "#555", textAlign: "left", borderBottom: "1px solid #181818" }}>
+                {["Entry id", "Stored day", "Stored date", "Date weekday", "Logged at", "Venue", "Type"].map(h => (
+                  <th key={h} style={{ padding: "5px 8px", fontWeight: 700, whiteSpace: "nowrap" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(row => (
+                <tr key={`${row.id}_${row.storedDate}`} style={{ borderBottom: "1px solid #121212" }}>
+                  <td style={{ padding: "5px 8px", fontFamily: "'IBM Plex Mono',monospace", color: "#777", whiteSpace: "nowrap" }}>{row.id}</td>
+                  <td style={{ padding: "5px 8px", color: "#f59e0b", fontWeight: 700 }}>{row.storedDay}</td>
+                  <td style={{ padding: "5px 8px", whiteSpace: "nowrap" }}>{row.storedDate}</td>
+                  <td style={{ padding: "5px 8px", color: "#f59e0b", fontWeight: 700 }}>{row.impliedWeekday}</td>
+                  <td style={{ padding: "5px 8px", whiteSpace: "nowrap" }}>{row.loggedAt || "NA"}</td>
+                  <td style={{ padding: "5px 8px", whiteSpace: "nowrap" }}>{row.venue || "NA"}</td>
+                  <td style={{ padding: "5px 8px", whiteSpace: "nowrap" }}>{row.trainingType}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }
@@ -1431,6 +1513,10 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
 
   const SPLIT_DAYS = ["Tue", "Thu"]
   const isSplitDay = SPLIT_DAYS.includes(activeDay)
+  const scheduleMismatchReport = useMemo(
+    () => buildScheduleDayDateMismatchReport(schedLog),
+    [schedLog]
+  )
 
   const VENUE_TIMES = { ymca: "05:30", knr: "09:35" }
   const VENUE_LABELS = { ymca: "YMCA (5:30–7:00)", knr: "KNR (9:35–10:45)" }
@@ -2308,6 +2394,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     <div style={{ color: "#d8d8d8", position: "relative" }}>
       <input ref={importRef} type="file" accept=".json" style={{ display: "none" }} onChange={importLog} />
       <DailyReadinessPanel readinessScore={readinessScore} latestHealthFit={latestHealthFit} ocItems={ocItems} computedTSB={computedTSB} />
+      <ScheduleMismatchDiagnostics report={scheduleMismatchReport} />
       {/* Day navigation */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
         <div style={{ display: "flex", gap: 3, background: "#0a0a0a", borderRadius: 8, padding: 4, border: "1px solid #1a1a1a", flexWrap: "wrap" }}>
