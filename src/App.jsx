@@ -9,7 +9,11 @@ import {
   loadBiometricRecords,
   loadCanonicalSessions,
   loadHealthfitDaily,
-  loadSleepRecords
+  loadSleepRecords,
+  migrateLocalBiometricRecords,
+  migrateLocalCanonicalSessions,
+  migrateLocalHealthfitDaily,
+  migrateLocalSleepRecords
 } from "./lib/persistence.js"
 import {
   LineChart,
@@ -6704,6 +6708,13 @@ useEffect(() => {
   ;(async () => {
     try {
       const userId = session.user.id
+      await Promise.all([
+        migrateLocalCanonicalSessions(supabase, userId, { removeLocal: false }),
+        migrateLocalSleepRecords(supabase, userId, { removeLocal: false }),
+        migrateLocalHealthfitDaily(supabase, userId, store, { removeLocal: false }),
+        migrateLocalBiometricRecords(supabase, userId, { removeLocal: false })
+      ])
+
       const [
         remoteCanonicalSessions,
         remoteSleepRecords,
