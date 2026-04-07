@@ -492,7 +492,22 @@ const defaultForDay = d => {
   return o
 }
 
-const todayDayKey = () => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][new Date().getDay()]
+const DAY_KEYS_BY_JS_DAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+const todayDayKey = () => DAY_KEYS_BY_JS_DAY[new Date().getDay()]
+const dayKeyFromScheduleDate = dateValue => {
+  const date = String(dateValue || "").slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null
+  const parsed = new Date(`${date}T12:00:00`)
+  return Number.isNaN(parsed.getTime()) ? null : DAY_KEYS_BY_JS_DAY[parsed.getDay()]
+}
+
+const getScheduleEntryDayDateMismatch = entry => {
+  const storedDay = String(entry?.day || "").slice(0, 3)
+  const date = String(entry?.date || entry?.logged_at || "").slice(0, 10)
+  const dateDay = dayKeyFromScheduleDate(date)
+  if (!storedDay || !dateDay || storedDay === dateDay) return null
+  return { storedDay, dateDay, date }
+}
 
 const SDAY_TYPES = {
   Mon: ["Running", "Traditional Strength Training"],
@@ -1684,6 +1699,11 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   // ── Log session ────────────────────────────────────────────────────────
   const logSession = async (venue, checkedIds = null) => {
     const day = activeDay
+    const dateDay = dayKeyFromScheduleDate(sessionDate)
+    if (dateDay && dateDay !== day) {
+      showToast(`Session date is ${dateDay}; switch from ${day} before saving`)
+      return
+    }
     const prog = getProgDay(day)
     const ts = new Date(`${sessionDate}T${VENUE_TIMES[venue] || "12:00"}:00`).toISOString()
 
@@ -1792,9 +1812,15 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const editEntry = id => {
     const entry = schedLog.find(e => e.id === id)
     if (!entry) return
-    setActiveDay(entry.day)
+    const mismatch = getScheduleEntryDayDateMismatch(entry)
+    const entryDate = String(entry.date || entry.logged_at || "").slice(0, 10)
+    setActiveDay(mismatch?.dateDay || entry.day)
+    if (/^\d{4}-\d{2}-\d{2}$/.test(entryDate)) setSessionDate(entryDate)
     setSchedView("schedule")
-    showToast(`Loaded ${entry.dayLabel} for editing`)
+    showToast(mismatch
+      ? `Existing log mismatch: ${mismatch.date} is ${mismatch.dateDay}, not ${mismatch.storedDay}`
+      : `Loaded ${entry.dayLabel} for editing`
+    )
   }
 
   const toggleSection = k => setOpenSections(prev => ({ ...prev, [k]: !prev[k] }))
@@ -2113,10 +2139,20 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
         {/* Date picker */}
         <div style={{ marginBottom: 10, padding: "10px 14px", border: "0.5px solid #1a1a1a", borderRadius: 8, background: "#0a0a0a", display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#555", whiteSpace: "nowrap" }}>Session date</div>
-          <input type="date" value={sessionDate} max={todayISO()} onChange={e => setSessionDate(e.target.value)}
+          <input type="date" value={sessionDate} max={todayISO()} onChange={e => {
+            const nextDate = e.target.value
+            setSessionDate(nextDate)
+            const nextDay = dayKeyFromScheduleDate(nextDate)
+            if (nextDay) setActiveDay(nextDay)
+          }}
             style={{ flex: 1, padding: "5px 8px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: sessionDate !== todayISO() ? "#d97706" : "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none", colorScheme: "dark" }} />
           {sessionDate !== todayISO() && (
-            <button onClick={() => setSessionDate(todayISO())}
+            <button onClick={() => {
+              const today = todayISO()
+              setSessionDate(today)
+              const todayDay = dayKeyFromScheduleDate(today)
+              if (todayDay) setActiveDay(todayDay)
+            }}
               style={{ padding: "4px 10px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 11, color: "#666", background: "transparent", cursor: "pointer", fontFamily: "inherit" }}>Today</button>
           )}
         </div>
