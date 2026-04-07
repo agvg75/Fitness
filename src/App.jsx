@@ -300,16 +300,16 @@ Mon: {
     topNote: null,
     sections: [
       { h: "A — Chest", ex: [
-        { id:"m1", name:"Chest Press",           sub:"Technogym / machine",          def:[schMk(6,110),schMk(6,110),schMk(6,110)],           note:"2-0-2 tempo · full ROM · KNR baseline 110 lb" },
-        { id:"m2", name:"Incline Chest Press",   sub:"Smith machine · low angle",    def:[schMk(6,90),schMk(6,90),schMk(6,90)],              note:"Low incline · shoulder-safe · KNR baseline 90 lb" },
-        { id:"m3", name:"Machine Flys",          sub:"Cable or pec deck",            def:[schMk(6,30),schMk(6,30),schMk(6,30)],              note:"Full stretch · controlled return · KNR baseline 30 lb" },
+        { id:"m1", name:"Chest Press",           sub:"Technogym / machine",          def:[mk(6,110),mk(6,110),mk(6,110)],           note:"2-0-2 tempo · full ROM · KNR baseline 110 lb" },
+        { id:"m2", name:"Incline Chest Press",   sub:"Smith machine · low angle",    def:[mk(6,90),mk(6,90),mk(6,90)],              note:"Low incline · shoulder-safe · KNR baseline 90 lb" },
+        { id:"m3", name:"Machine Flys",          sub:"Cable or pec deck",            def:[mk(6,30),mk(6,30),mk(6,30)],              note:"Full stretch · controlled return · KNR baseline 30 lb" },
       ]},
       { h: "B — Triceps", ex: [
-        { id:"m4", name:"Triceps Pulldown",      sub:"Cable pressdown",              def:[schMk(6,25),schMk(6,25),schMk(6,25)],              note:"Elbows fixed · full extension · KNR baseline 25 lb" },
+        { id:"m4", name:"Triceps Pulldown",      sub:"Cable pressdown",              def:[mk(6,25),mk(6,25),mk(6,25)],              note:"Elbows fixed · full extension · KNR baseline 25 lb" },
       ]},
       { h: "C — Core", ex: [
-        { id:"m5", name:"Pushup Plank w/ Shoulder Touch", sub:"Bodyweight · 2×10e", def:[schMk("10e","BW"),schMk("10e","BW")],              note:"Hips level · no rotation · controlled" },
-        { id:"m6", name:"Pallof Press",          sub:"Cable · split stance · 40 lb", def:[schMk("10e",40),schMk("10e",40)],                 note:"Brace · press slowly · zero rotation" },
+        { id:"m5", name:"Pushup Plank w/ Shoulder Touch", sub:"Bodyweight · 2×10e", def:[mk("10e","BW"),mk("10e","BW")],              note:"Hips level · no rotation · controlled" },
+        { id:"m6", name:"Pallof Press",          sub:"Cable · split stance · 40 lb", def:[mk("10e",40),mk("10e",40)],                 note:"Brace · press slowly · zero rotation" },
       ]},
     ],
   },
@@ -327,22 +327,22 @@ Mon: {
     topNote: "KNR Day 2 — Legs. Toe/ankle warm-up block is non-optional given MTP history. If kinesiologist skips it, confirm reason and log.",
     sections: [
       { h: "Glutes / Hips", ex: [
-        { id:"t1", name:"Hip Thrust",             sub:"Smith machine",                def:[schMk(10,115),schMk(10,145),schMk(10,155)],       note:"Full hip ext · pause at top · ribs down · working range 115–155 lb" },
+        { id:"t1", name:"Hip Thrust",             sub:"Smith machine",                def:[mk(10,115),mk(10,145),mk(10,155)],       note:"Full hip ext · pause at top · ribs down · working range 115–155 lb" },
       ]},
       { h: "Posterior Chain", ex: [
-        { id:"t2", name:"Leg Press — Heel Drive", sub:"Machine · endurance protocol", def:[schMk(15,160),schMk(15,160),schMk(15,160)],      note:"Heels high on plate · 15 reps · aerobic intent · not strength failure" },
-        { id:"t3", name:"TB DL / KB RDL",         sub:"KB 50 lb interim · TB DL when ready", def:[schMk(10,50),schMk(10,50),schMk(10,50)], note:"Hinge not squat · flat back · TB DL = trap bar deadlift progression" },
+        { id:"t2", name:"Leg Press — Heel Drive", sub:"Machine · endurance protocol", def:[mk(15,160),mk(15,160),mk(15,160)],      note:"Heels high on plate · 15 reps · aerobic intent · not strength failure" },
+        { id:"t3", name:"TB DL / KB RDL",         sub:"KB 50 lb interim · TB DL when ready", def:[mk(10,50),mk(10,50),mk(10,50)], note:"Hinge not squat · flat back · TB DL = trap bar deadlift progression" },
       ]},
       { h: "Hip Stability", ex: [
-        { id:"t4", name:"Lateral Band Walk",      sub:"Green band · 2 laps (~60 ft)", def:[schMk("2 laps","green"),schMk("2 laps","green")], note:"Band at ankles or above knees per KNR instruction · maintain tension" },
-        { id:"t5", name:"Hip Drive Marches",      sub:"Band · replaces leg curl in current protocol", def:[schMk("10e","grn"),schMk("10e","grn"),schMk("10e","grn")], note:"Pelvic neutral · controlled · per KNR 3/24 substitution" },
+        { id:"t4", name:"Lateral Band Walk",      sub:"Green band · 2 laps (~60 ft)", def:[mk("2 laps","green"),mk("2 laps","green")], note:"Band at ankles or above knees per KNR instruction · maintain tension" },
+        { id:"t5", name:"Hip Drive Marches",      sub:"Band · replaces leg curl in current protocol", def:[mk("10e","grn"),mk("10e","grn"),mk("10e","grn")], note:"Pelvic neutral · controlled · per KNR 3/24 substitution" },
       ]},
       { h: "Quads", ex: [
-        { id:"t6", name:"Leg Extension",          sub:"Machine",                      def:[schMk(12,80),schMk(12,80),schMk(12,80)],          note:"Full extension · controlled eccentric · 80 lb confirmed" },
+        { id:"t6", name:"Leg Extension",          sub:"Machine",                      def:[mk(12,80),mk(12,80),mk(12,80)],          note:"Full extension · controlled eccentric · 80 lb confirmed" },
       ]},
       { h: "Core", ex: [
-        { id:"t7", name:"Plank",                  sub:"3×60 sec",                     def:[schMk("60s","BW"),schMk("60s","BW"),schMk("60s","BW")], note:"Neutral spine · breathe · do not let hips sag" },
-        { id:"t8", name:"90/90 Deadbugs",         sub:"2×15 each side",               def:[schMk("15e","BW"),schMk("15e","BW")],             note:"Back flat on floor · slow · full extension" },
+        { id:"t7", name:"Plank",                  sub:"3×60 sec",                     def:[mk("60s","BW"),mk("60s","BW"),mk("60s","BW")], note:"Neutral spine · breathe · do not let hips sag" },
+        { id:"t8", name:"90/90 Deadbugs",         sub:"2×15 each side",               def:[mk("15e","BW"),mk("15e","BW")],             note:"Back flat on floor · slow · full extension" },
       ]},
     ],
   },
@@ -385,18 +385,18 @@ Mon: {
     topNote: "KNR Day 4 — Back / Biceps. Single-arm cable row weight (53–63 lb) reflects one-arm variant, not bilateral. Do not compare to bilateral archive baseline of 80–85 lb.",
     sections: [
       { h: "Back Primary", ex: [
-        { id:"th1", name:"Cable Row (mid) — Single Arm", sub:"Cable · mid-height · SA", def:[schMk("6e",53),schMk("6e",53),schMk("6e",63)],  note:"SLOW tempo · full retraction · working range 53–80 lb SA" },
-        { id:"th2", name:"Lat Pulldown",               sub:"Machine or cable",          def:[schMk(6,105),schMk(6,110),schMk(6,120)],         note:"Chest up · elbows to ribs · 2-1-2 · progressing 105→120 lb" },
+        { id:"th1", name:"Cable Row (mid) — Single Arm", sub:"Cable · mid-height · SA", def:[mk("6e",53),mk("6e",53),mk("6e",63)],  note:"SLOW tempo · full retraction · working range 53–80 lb SA" },
+        { id:"th2", name:"Lat Pulldown",               sub:"Machine or cable",          def:[mk(6,105),mk(6,110),mk(6,120)],         note:"Chest up · elbows to ribs · 2-1-2 · progressing 105→120 lb" },
       ]},
       { h: "Biceps", ex: [
-        { id:"th3", name:"Biceps Curl — DB/BB Palms Up", sub:"DB or barbell · palms up", def:[schMk(8,60),schMk(8,60),schMk(8,60)],          note:"No sway · full elbow extension · 2-0-2 · 60 lb confirmed" },
-        { id:"th4", name:"Cable D2 Flexion",             sub:"Cable · unsheathing sword motion", def:[schMk("8e",7),schMk("8e",7)],           note:"Rotator cuff + shoulder health · light load only · 7 lb · diagonal pattern" },
-        { id:"th5", name:"Biceps Curl — Cable Rope Neutral", sub:"Cable w/ rope · neutral grip", def:[schMk(8,47),schMk(8,57),schMk(8,57)],  note:"Neutral grip · full ROM · working range 43–57 lb" },
+        { id:"th3", name:"Biceps Curl — DB/BB Palms Up", sub:"DB or barbell · palms up", def:[mk(8,60),mk(8,60),mk(8,60)],          note:"No sway · full elbow extension · 2-0-2 · 60 lb confirmed" },
+        { id:"th4", name:"Cable D2 Flexion",             sub:"Cable · unsheathing sword motion", def:[mk("8e",7),mk("8e",7)],           note:"Rotator cuff + shoulder health · light load only · 7 lb · diagonal pattern" },
+        { id:"th5", name:"Biceps Curl — Cable Rope Neutral", sub:"Cable w/ rope · neutral grip", def:[mk(8,47),mk(8,57),mk(8,57)],  note:"Neutral grip · full ROM · working range 43–57 lb" },
       ]},
       { h: "Core", ex: [
-        { id:"th6", name:"Straight Arm Pulldowns",      sub:"Cable · Wolverines · 40 lb", def:[schMk(8,40),schMk(8,40),schMk(8,40)],         note:"3×8 · arms straight · lat engagement · shoulder health" },
-        { id:"th7", name:"Inverted Row",                sub:"TRX or bar · 3–4 sets",      def:[schMk(8,"BW"),schMk(8,"BW"),schMk(8,"BW")],   note:"Scapular retraction focus · horizontal pull · bodyweight" },
-        { id:"th8", name:"Suitcase Carry",              sub:"DB 60 lb · 2 laps each arm (1 lap ≈ 30 ft)", def:[schMk("2 laps",60),schMk("2 laps",60)], note:"Optional finisher · core anti-lateral-flexion · upright posture" },
+        { id:"th6", name:"Straight Arm Pulldowns",      sub:"Cable · Wolverines · 40 lb", def:[mk(8,40),mk(8,40),mk(8,40)],         note:"3×8 · arms straight · lat engagement · shoulder health" },
+        { id:"th7", name:"Inverted Row",                sub:"TRX or bar · 3–4 sets",      def:[mk(8,"BW"),mk(8,"BW"),mk(8,"BW")],   note:"Scapular retraction focus · horizontal pull · bodyweight" },
+        { id:"th8", name:"Suitcase Carry",              sub:"DB 60 lb · 2 laps each arm (1 lap ≈ 30 ft)", def:[mk("2 laps",60),mk("2 laps",60)], note:"Optional finisher · core anti-lateral-flexion · upright posture" },
       ]},
     ],
   },
@@ -1594,9 +1594,9 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     </div>
   ) : null
 
-  // ── Data source: SCH_PLAN (primary) with PROG as fallback ─────────────
+  // ── Data source: PLAN (primary) with PROG as fallback ─────────────
   const getProgDay = (day) => {
-    const schDay = SCH_PLAN[day]
+    const schDay = PLAN[day]
     if (schDay) {
       const warmup = (schDay.warmup || []).map(s =>
         typeof s === "string" ? { n: s, d: "" } : { n: s.n || "", d: s.d || "" }
@@ -1624,7 +1624,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       )
       return { stretch: [], warmup, exercises, core: [], _topNote: schDay.topNote }
     }
-    // Fallback to PROG for any day not in SCH_PLAN
+    // Fallback to PROG for any day not in PLAN
     return PROG[day] || { stretch: [], warmup: [], exercises: [], core: [] }
   }
   const getVariant = (exId) => variants[exId] || "machine"
