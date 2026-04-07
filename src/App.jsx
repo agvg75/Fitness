@@ -5993,7 +5993,7 @@ const [sleepRecords, setSleepRecords] = useState(() => { try { return JSON.parse
 const [schedLog, setSchedLog] = useState(() => { try { return JSON.parse(localStorage.getItem('wt-log') || '[]') } catch { return [] } })
 const [ocItems, setOcItems] = useState(() => { try { return JSON.parse(localStorage.getItem('oc-items') || '[]') } catch { return [] } })
 
-const scheduleCanonicalSeeds = useMemo(() => {
+const scheduleStrengthCanonicalSeeds = useMemo(() => {
   return (Array.isArray(schedLog) ? schedLog : [])
     .filter(e =>
       (e.exercises || []).some(ex => ex.variant !== "cardio") ||
@@ -6003,12 +6003,12 @@ const scheduleCanonicalSeeds = useMemo(() => {
 }, [schedLog])
 
 const unifiedCanonicalSessions = useMemo(() => {
-  return mergeCanonicalSessionsWithScheduleSeeds(canonicalSessions, scheduleCanonicalSeeds)
-}, [canonicalSessions, scheduleCanonicalSeeds])
+  return mergeCanonicalSessionsWithScheduleSeeds(canonicalSessions, scheduleStrengthCanonicalSeeds)
+}, [canonicalSessions, scheduleStrengthCanonicalSeeds])
 
   const activeWorkouts =
-    unifiedCanonicalSessions && unifiedCanonicalSessions.length > 0
-      ? unifiedCanonicalSessions
+    canonicalSessions && canonicalSessions.length > 0
+      ? canonicalSessions
       : workouts
 const fmt0 = n => Number.isFinite(Number(n)) ? Math.round(Number(n)).toLocaleString() : "0"
 const fmt1 = n => Number.isFinite(Number(n)) ? Number(n).toFixed(1) : "0.0"
