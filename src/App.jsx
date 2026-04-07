@@ -6708,12 +6708,23 @@ useEffect(() => {
   ;(async () => {
     try {
       const userId = session.user.id
-      await Promise.all([
+      const [
+        migratedCanonicalSessions,
+        migratedSleepRecords,
+        migratedHealthFitDaily,
+        migratedBiometricRecords
+      ] = await Promise.all([
         migrateLocalCanonicalSessions(supabase, userId, { removeLocal: false }),
         migrateLocalSleepRecords(supabase, userId, { removeLocal: false }),
         migrateLocalHealthfitDaily(supabase, userId, store, { removeLocal: false }),
         migrateLocalBiometricRecords(supabase, userId, { removeLocal: false })
       ])
+      console.log("Core imported data migration summary", {
+        canonicalSessions: migratedCanonicalSessions.length,
+        sleepRecords: migratedSleepRecords.length,
+        healthFitDaily: migratedHealthFitDaily.length,
+        biometricRecords: migratedBiometricRecords.length
+      })
 
       const [
         remoteCanonicalSessions,
@@ -6733,6 +6744,7 @@ useEffect(() => {
       if (remoteHealthFitDaily.length) setHealthFitDaily(remoteHealthFitDaily)
       if (remoteBiometricRecords.length) setBiometricRecords(remoteBiometricRecords)
     } catch (err) {
+      console.error("Core imported data migration/hydration failed:", err)
       if (process.env.NODE_ENV === "development") console.warn("Core imported data hydration failed:", err)
     }
   })()
