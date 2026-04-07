@@ -81,7 +81,6 @@ function canonicalSessionToRow(session, userId) {
     start_date: timestampOrNull(session?.start_date || session?.dateTime || session?.date),
     end_date: timestampOrNull(session?.end_date),
     duration_min: session?.duration_min ?? session?.dur ?? null,
-    trimp: session?.trimp ?? null,
     match_confidence: session?.match_confidence || null,
     relationship: session?.relationship || null,
     overlap_summary: session?.overlap_summary || null,
