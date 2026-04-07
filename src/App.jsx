@@ -6560,22 +6560,109 @@ useEffect(() => {
 }, [])
 
 useEffect(() => {
-  if (!baseDataLoaded || !supabase || !session?.user?.id) return
+  const readLocalImportDiagnostic = key => {
+    try {
+      const raw = localStorage.getItem(key)
+      if (raw == null) return { present: false, count: 0 }
+      const parsed = JSON.parse(raw)
+      return { present: true, count: Array.isArray(parsed) ? parsed.length : null }
+    } catch (err) {
+      return { present: true, count: null, error: err?.message || String(err) }
+    }
+  }
+
+  const migrationSummary = {
+    supabaseClientExists: Boolean(supabase),
+    signedInUserExists: Boolean(session?.user?.id),
+    userId: session?.user?.id || null,
+    baseDataLoaded: Boolean(baseDataLoaded),
+    localStorage: {
+      liftCanonicalSessions: readLocalImportDiagnostic("lift_canonical_sessions"),
+      liftSleepRecords: readLocalImportDiagnostic("lift_sleep_records"),
+      liftHealthfitDaily: readLocalImportDiagnostic("lift_healthfit_daily"),
+      healthfitDaily: readLocalImportDiagnostic("healthfit-daily"),
+      liftBiometricRecords: readLocalImportDiagnostic("lift_biometric_records")
+    },
+    attempts: {
+      canonical_sessions: 0,
+      sleep_records: 0,
+      healthfit_daily: 0,
+      biometric_records: 0
+    },
+    successes: {
+      canonical_sessions: 0,
+      sleep_records: 0,
+      healthfit_daily: 0,
+      biometric_records: 0
+    },
+    failures: {},
+    earlyExitReason: null
+  }
+
+  console.log("Core imported data migration entered", migrationSummary)
+
+  const earlyExitReasons = []
+  if (!baseDataLoaded) earlyExitReasons.push("baseDataLoaded is false")
+  if (!supabase) earlyExitReasons.push("Supabase client is missing")
+  if (!session?.user?.id) earlyExitReasons.push("signed-in user id is missing")
+
+  if (earlyExitReasons.length) {
+    migrationSummary.earlyExitReason = earlyExitReasons.join("; ")
+    console.warn("Core imported data migration exiting early", migrationSummary)
+    console.log("Core imported data migration final summary", migrationSummary)
+    return
+  }
+
   let cancelled = false
 
   ;(async () => {
     try {
       const userId = session.user.id
+      const storedHealthfitDaily = store?.get ? await store.get("healthfit-daily") : []
+      const healthfitDailyStoreCount = Array.isArray(storedHealthfitDaily) ? storedHealthfitDaily.length : 0
+      migrationSummary.store = {
+        healthfitDaily: {
+          present: Array.isArray(storedHealthfitDaily),
+          count: healthfitDailyStoreCount
+        }
+      }
+
+      const runMigration = async (tableName, attemptCount, migrate) => {
+        migrationSummary.attempts[tableName] = attemptCount
+        console.log("Core imported data migration table attempt", { tableName, attemptCount })
+        try {
+          const migrated = await migrate()
+          migrationSummary.successes[tableName] = Array.isArray(migrated) ? migrated.length : 0
+          console.log("Core imported data migration table success", {
+            tableName,
+            successCount: migrationSummary.successes[tableName]
+          })
+          return migrated
+        } catch (err) {
+          migrationSummary.failures[tableName] = err?.message || String(err)
+          console.error("Core imported data migration table failure", { tableName, error: err })
+          throw err
+        }
+      }
+
       const [
         migratedCanonicalSessions,
         migratedSleepRecords,
         migratedHealthFitDaily,
         migratedBiometricRecords
       ] = await Promise.all([
-        migrateLocalCanonicalSessions(supabase, userId, { removeLocal: false }),
-        migrateLocalSleepRecords(supabase, userId, { removeLocal: false }),
-        migrateLocalHealthfitDaily(supabase, userId, store, { removeLocal: false }),
-        migrateLocalBiometricRecords(supabase, userId, { removeLocal: false })
+        runMigration("canonical_sessions", migrationSummary.localStorage.liftCanonicalSessions.count || 0, () =>
+          migrateLocalCanonicalSessions(supabase, userId, { removeLocal: false })
+        ),
+        runMigration("sleep_records", migrationSummary.localStorage.liftSleepRecords.count || 0, () =>
+          migrateLocalSleepRecords(supabase, userId, { removeLocal: false })
+        ),
+        runMigration("healthfit_daily", (migrationSummary.localStorage.healthfitDaily.count || 0) + healthfitDailyStoreCount, () =>
+          migrateLocalHealthfitDaily(supabase, userId, store, { removeLocal: false })
+        ),
+        runMigration("biometric_records", migrationSummary.localStorage.liftBiometricRecords.count || 0, () =>
+          migrateLocalBiometricRecords(supabase, userId, { removeLocal: false })
+        )
       ])
       console.log("Core imported data migration summary", {
         canonicalSessions: migratedCanonicalSessions.length,
@@ -6604,6 +6691,8 @@ useEffect(() => {
     } catch (err) {
       console.error("Core imported data migration/hydration failed:", err)
       if (process.env.NODE_ENV === "development") console.warn("Core imported data hydration failed:", err)
+    } finally {
+      console.log("Core imported data migration final summary", migrationSummary)
     }
   })()
 
