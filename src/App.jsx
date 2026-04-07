@@ -2443,7 +2443,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
           {/* Warmup */}
           {prog.warmup?.length > 0 && checklistSection(activeDay, "warmup", prog.warmup, "#BA7517", "Warm-up", "")}
 
-          {/* topNote banner (SCH_PLAN) */}
+          {/* topNote banner (PLAN) */}
           {prog._topNote && (
             <div style={{ marginBottom: 10, padding: "7px 12px", background: "rgba(59,130,246,0.07)", border: "0.5px solid rgba(59,130,246,0.2)", borderRadius: 6, fontSize: 11, color: "#6a9adf" }}>
               {prog._topNote}
@@ -5683,136 +5683,9 @@ const SCH_META = {
   Sat: { label:"Saturday",  theme:"Long Run",                venue:"—",    color:"#444"    },
   Sun: { label:"Sunday",    theme:"Aerobic Recovery",        venue:"—",    color:"#444"    },
 };
-const schMk = (r, w) => ({ r: String(r), w: String(w) });
-const SCH_PLAN = {
-  Mon: {
-    cardio: "Easy bike · 30–40 min · Zone 2 · After strength · Technogym or YMCA bike",
-    warmup: [],
-    topNote: null,
-    sections: [
-      { h: "A — Push Primary", ex: [
-        { id:"m1", name:"Chest Press",      sub:"Technogym machine",             def:[schMk(6,110),schMk(6,110),schMk(6,110)],               note:"2-0-2 tempo · full ROM" },
-        { id:"m2", name:"Incline Press",    sub:"DB incline / Smith low angle",  def:[schMk("8-12","—"),schMk("8-12","—"),schMk("8-12","—")], note:"Low incline · shoulder-safe" },
-      ]},
-      { h: "B — Shoulder", ex: [
-        { id:"m3", name:"Face Pull / ER",   sub:"Cable or resistance band",      def:[schMk("12-15","—"),schMk("12-15","—"),schMk("12-15","—")], note:"Elbows high · rear delt + rotator cuff" },
-        { id:"m4", name:"Shoulder Press",   sub:"Technogym / DB",                def:[schMk("8-12","—"),schMk("8-12","—")],                     note:"Neutral grip if neck tight" },
-      ]},
-      { h: "C — Triceps", ex: [
-        { id:"m5", name:"Triceps Overhead", sub:"Cable / 30 lb DB",              def:[schMk("8-12",30),schMk("8-12",30)],                       note:"Full stretch at top · smooth lockout" },
-        { id:"m6", name:"Triceps Pushdown", sub:"Cable pressdown",               def:[schMk("10-15",35),schMk("10-15",35),schMk("10-15",35)],   note:"Elbows fixed · full extension" },
-      ]},
-    ],
-  },
-  Tue: {
-    cardio: "600 yd swim · After KNR · Easy aerobic pace · No backstroke · Pull buoy if toe irritated",
-    warmup: [
-      "Stationary bike 5–10 min (light → moderate)",
-      "Standing calf raises 2×8 off step",
-      "Bodyweight squat 2×8 · band around knees optional",
-      "Ankle (L) inversion + dorsiflexion 2×10 · band assisted",
-      "Towel scrunches (L) 5 sets",
-    ],
-    topNote: "KNR Day 2 — Legs. Confirm exact movements and loads with your kinesiologist and update accordingly.",
-    sections: [
-      { h: "Glutes / Hips", ex: [
-        { id:"t1", name:"Hip Thrust",             sub:"Machine or Smith bar",          def:[schMk(10,115),schMk(8,135),schMk(8,165)],   note:"Full hip ext · pause at top · ribs down" },
-      ]},
-      { h: "Quads / Posterior Chain", ex: [
-        { id:"t2", name:"Leg Press — Heel Drive", sub:"Endurance protocol · machine",  def:[schMk(15,160),schMk(15,160),schMk(15,160)], note:"Heels high · controlled · endurance mode" },
-        { id:"t3", name:"KB RDL",                 sub:"Kettlebell · form focus",        def:[schMk(10,50),schMk(10,50),schMk(10,50)],    note:"Hinge not squat · flat back" },
-        { id:"t6", name:"Leg Curl",               sub:"Machine",                        def:[schMk(8,100),schMk(8,100),schMk(8,100)],    note:"3-count eccentric · slow lower" },
-        { id:"t7", name:"Leg Extension",          sub:"Machine",                        def:[schMk(12,80),schMk(12,80),schMk(12,80)],    note:"Full extension · controlled" },
-      ]},
-      { h: "Hip Stability", ex: [
-        { id:"t4", name:"Lateral Band Walk", sub:"Green band · ~15 ft per lap", def:[schMk("2 laps","band"),schMk("2 laps","band")], note:"Maintain tension throughout" },
-        { id:"t5", name:"Monster Walk",      sub:"Green band",                  def:[schMk("2 laps","band"),schMk("2 laps","band")], note:"Forward/diagonal · band above knees" },
-      ]},
-      { h: "Core", ex: [
-        { id:"t8", name:"Marches w/ Band", sub:"3×10 each side", def:[schMk("10e","band"),schMk("10e","band"),schMk("10e","band")], note:"Pelvic neutral · don't let hip drop" },
-        { id:"t9", name:"90/90 Bicycle",   sub:"3×30 sec",       def:[schMk("30s","BW"),schMk("30s","BW"),schMk("30s","BW")],     note:"Slow · controlled · back flat" },
-      ]},
-    ],
-  },
-  Wed: {
-    cardio: "Swim 800–1200 yd · Zone 2 aerobic only · No intervals · Row 20 min easy after",
-    warmup: [],
-    topNote: "Recovery day. No strength work. Swim and row only. Keep heart rate conversational throughout.",
-    sections: [],
-  },
-  Thu: {
-    cardio: "Moderate bike · 40–50 min · Zone 2–3 · After KNR · Technogym or YMCA bike",
-    warmup: [
-      "Cable shoulder ER/IR 2×10 @ 10 lb",
-      "Banded X's 2×8 each side",
-      "Arm circles 2×30 sec each direction",
-    ],
-    topNote: "KNR Day 4 — Back / Bi. Confirm exact movements and loads with your kinesiologist and update accordingly.",
-    sections: [
-      { h: "Back Primary", ex: [
-        { id:"th1", name:"Lat Pulldown",        sub:"Machine or cable",      def:[schMk("8-12","—"),schMk("8-12","—"),schMk("8-12","—")],    note:"Chest up · elbows to ribs · 2-1-2" },
-        { id:"th2", name:"Seated Row",          sub:"Cable · close grip",    def:[schMk("8-12","—"),schMk("8-12","—"),schMk("8-12","—")],    note:"Scapula retraction · don't round at finish" },
-        { id:"th3", name:"Chest-Supported Row", sub:"Machine or incline DB", def:[schMk("10-12","—"),schMk("10-12","—"),schMk("10-12","—")], note:"Chest on pad · full ROM" },
-      ]},
-      { h: "Biceps", ex: [
-        { id:"th4", name:"Biceps Curl",  sub:"Cable EZ curl / DB curl", def:[schMk("8-12",25),schMk("8-12",25),schMk("8-12",25)], note:"No sway · full elbow extension · 2-0-2" },
-        { id:"th5", name:"Hammer Curl", sub:"DB alternating",           def:[schMk("10-12","—"),schMk("10-12","—")],               note:"Neutral grip · full ROM" },
-      ]},
-    ],
-  },
-  Fri: {
-    cardio: "Long bike · 45–75 min · Zone 2 · After strength · Technogym or outdoor",
-    warmup: [
-      "Cat/Cows 10 slow",
-      "Glute Bridges 2×10",
-      "Hip CARs 8e slow",
-      "Arm circles 2×30 sec each direction",
-    ],
-    topNote: null,
-    sections: [
-      { h: "Hip", ex: [
-        { id:"f1", name:"Hip Abduction", sub:"Abductor machine",             def:[schMk(10,100),schMk(10,100),schMk(10,100)], note:"Full ROM · controlled return" },
-        { id:"f2", name:"Hip Adduction", sub:"Adductor machine",             def:[schMk(10,60),schMk(10,60),schMk(10,60)],   note:"Pelvic control throughout" },
-        { id:"f3", name:"KB Swing",      sub:"Kettlebell · hip hinge drive", def:[schMk(8,25),schMk(8,25),schMk(8,25)],     note:"Power from glutes · not arms" },
-      ]},
-      { h: "Anti-rotation Core", ex: [
-        { id:"f4", name:"Pallof Press", sub:"Cable · split stance", def:[schMk("8e",30),schMk("8e",30),schMk("8e",30)], note:"Brace · press slowly · zero rotation" },
-      ]},
-      { h: "Shoulder Health", ex: [
-        { id:"f5", name:"Shoulder Clock w/ Band", sub:"Resistance band", def:[schMk("5e","band"),schMk("5e","band"),schMk("5e","band")], note:"Full range · light load only" },
-      ]},
-      { h: "Core", ex: [
-        { id:"f6", name:"Russian Twists", sub:"3×30 sec", def:[schMk("30s","BW"),schMk("30s","BW"),schMk("30s","BW")], note:"Feet elevated optional · controlled" },
-      ]},
-    ],
-  },
-  Sat: {
-    cardio: "Long easy run · 30–60 min · Zone 2 · Build weekly · Conversational pace throughout",
-    warmup: [
-      "Dynamic leg swings 10e forward + lateral",
-      "Walking lunges 2×8",
-      "Ankle circles 10e each direction",
-      "Easy 5 min walk before running pace",
-    ],
-    topNote: "Run first. Calf and tibialis work after. Keep post-run strength brief and low-load — this is run resilience maintenance, not a training stimulus.",
-    sections: [
-      { h: "Calf / Ankle — Run Resilience", ex: [
-        { id:"s1", name:"Seated Calf Raise",     sub:"Machine or seated DB", def:[schMk("10-15","—"),schMk("10-15","—"),schMk("10-15","—"),schMk("10-15","—")], note:"Soleus focus · 2-2-3 tempo · full stretch" },
-        { id:"s2", name:"Single-Leg Calf Raise", sub:"DB or bodyweight",     def:[schMk("8-10/leg","BW"),schMk("8-10/leg","BW"),schMk("8-10/leg","BW")],      note:"3-count lower · full range" },
-        { id:"s3", name:"Tibialis Raise",         sub:"Wall shin raises",     def:[schMk("15-25","BW"),schMk("15-25","BW"),schMk("15-25","BW")],               note:"Heels on ground · toes up · stop if sharp shin pain" },
-      ]},
-    ],
-  },
-  Sun: {
-    cardio: "Long swim 1000–1500 yd · or Easy bike 45–60 min · Zone 1–2 · Aerobic recovery only · No strength",
-    warmup: [],
-    topNote: "Recovery day. Aerobic only. Choose swim or bike based on what feels fresher. No strength work.",
-    sections: [],
-  },
-};
 const schDefaultForDay = day => {
   const data = {};
-  (SCH_PLAN[day]?.sections || []).forEach(sec =>
+  (PLAN[day]?.sections || []).forEach(sec =>
     sec.ex.forEach(ex => { data[ex.id] = ex.def.map(s => ({...s})); })
   );
   return data;
@@ -5912,7 +5785,7 @@ function SchLogView({ log, expanded, setExpanded, onDelete, onExport, onImport }
         // PATCHED: render plan exercises, then fall back to any imported slugs
         const allEx = [];
         const planIds = new Set();
-        (SCH_PLAN[entry.day]?.sections || []).forEach(sec =>
+        (PLAN[entry.day]?.sections || []).forEach(sec =>
           sec.ex.forEach(ex => {
             if (entry.data[ex.id]) { allEx.push({ ex, sets: entry.data[ex.id] }); planIds.add(ex.id); }
           })
