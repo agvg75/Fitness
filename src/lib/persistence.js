@@ -208,9 +208,45 @@ export async function loadSleepRecords(supabase, userId) {
 
 export async function upsertSleepRecords(supabase, userId, records) {
   requireSupabase(supabase, userId, "upsertSleepRecords")
-  const rows = (Array.isArray(records) ? records : [])
-    .map(record => sleepRecordToRow(record, userId))
-    .filter(row => row.sleep_id && row.sleep_date)
+  const inputRecords = Array.isArray(records) ? records : []
+  const normalizedRows = inputRecords.map(record => sleepRecordToRow(record, userId))
+  const rows = normalizedRows.filter(row => row.sleep_id && row.sleep_date)
+  const rejectedRows = normalizedRows
+    .map((row, index) => ({ row, record: inputRecords[index] }))
+    .filter(({ row }) => !row.sleep_id || !row.sleep_date)
+    .map(({ row, record }) => ({
+      sleep_date: record?.sleep_date,
+      date: record?.date,
+      start_time: record?.start_time,
+      end_time: record?.end_time,
+      start_at: record?.start_at,
+      end_at: record?.end_at,
+      source: record?.source,
+      derived: {
+        sleep_id: row.sleep_id,
+        sleep_date: row.sleep_date,
+      },
+      rejectionReason: !row.sleep_id && !row.sleep_date
+        ? "missing sleep_id and sleep_date"
+        : !row.sleep_id
+        ? "missing sleep_id"
+        : "missing sleep_date",
+    }))
+  const sampleRejectedRows = rejectedRows.slice(0, 3)
+  console.log("Sleep migration normalization summary", {
+    inputRecordCount: inputRecords.length,
+    normalizedRowCount: rows.length,
+    rejectedRecordCount: rejectedRows.length,
+    sampleRejectedRows,
+  })
+  if (inputRecords.length > 0 && rows.length === 0) {
+    console.warn("Sleep migration rejected all rows during normalization", {
+      inputRecordCount: inputRecords.length,
+      normalizedRowCount: rows.length,
+      rejectedRecordCount: rejectedRows.length,
+      sampleRejectedRows,
+    })
+  }
   if (!rows.length) return []
   const { data, error } = await supabase
     .from("sleep_records")
