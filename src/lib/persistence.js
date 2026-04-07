@@ -125,7 +125,7 @@ export async function upsertCanonicalSessions(supabase, userId, sessions) {
   if (!rows.length) return []
   const { data, error } = await supabase
     .from("canonical_sessions")
-    .upsert(rows, { onConflict: "user_id,session_id" })
+    .upsert(rows, { onConflict: "session_id" })
     .select()
   throwIfError(error, "upsertCanonicalSessions")
   return (data || []).map(rowToCanonicalSession)
