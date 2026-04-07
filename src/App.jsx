@@ -291,76 +291,61 @@ const mk = (r, w) => ({ r: String(r), w: String(w) })
 
 const PLAN = {
 Mon: {
-  cardio: "Speed run, 20 to 30 min, Zone 3 to 4, easy jog warm-up 5 min first",
-  warmup: [],
-  topNote: null,
-  sections: [
-    {
-      h: "A, Push Primary",
-      ex: [
-        { id: "m1", name: "Chest Press", sub: "Technogym machine", def: [mk(6,110), mk(6,110), mk(6,110)], note: "2-0-2 tempo, full ROM" },
-        { id: "m2", name: "Incline Press", sub: "DB incline / Smith low angle", def: [mk(10,"—"), mk(10,"—"), mk(10,"—")], note: "Low incline, shoulder-safe" }
-      ]
-    },
-    {
-      h: "B, Shoulder",
-      ex: [
-        { id: "m3", name: "Face Pull / ER", sub: "Cable or resistance band", def: [mk(12,"—"), mk(12,"—"), mk(12,"—")], note: "Rear delt and cuff" },
-        { id: "m4", name: "Shoulder Press", sub: "Technogym / DB", def: [mk(10,"—"), mk(10,"—")], note: "Neutral grip if neck tight" }
-      ]
-    },
-    {
-      h: "C, Triceps",
-      ex: [
-        { id: "m5", name: "Triceps Overhead", sub: "Cable / 30 lb DB", def: [mk(10,30), mk(10,30)], note: "Full stretch at top" },
-        { id: "m6", name: "Triceps Pushdown", sub: "Cable pressdown", def: [mk(10,35), mk(10,35), mk(10,35)], note: "Elbows fixed" }
-      ]
-    }
-  ]
-},
+    cardio: "Walk/jog intervals · 2.5 mi total · (walk ½mi → jog ½mi → walk ¼mi) × 2 · KNR prescribed · Do AFTER strength",
+    warmup: [
+      "Cable shoulder ER/IR  2×10 @ 10 lb",
+      "Banded X's  2×8 each side",
+      "Arm circles  2×30 sec each direction",
+    ],
+    topNote: null,
+    sections: [
+      { h: "A — Chest", ex: [
+        { id:"m1", name:"Chest Press",           sub:"Technogym / machine",          def:[schMk(6,110),schMk(6,110),schMk(6,110)],           note:"2-0-2 tempo · full ROM · KNR baseline 110 lb" },
+        { id:"m2", name:"Incline Chest Press",   sub:"Smith machine · low angle",    def:[schMk(6,90),schMk(6,90),schMk(6,90)],              note:"Low incline · shoulder-safe · KNR baseline 90 lb" },
+        { id:"m3", name:"Machine Flys",          sub:"Cable or pec deck",            def:[schMk(6,30),schMk(6,30),schMk(6,30)],              note:"Full stretch · controlled return · KNR baseline 30 lb" },
+      ]},
+      { h: "B — Triceps", ex: [
+        { id:"m4", name:"Triceps Pulldown",      sub:"Cable pressdown",              def:[schMk(6,25),schMk(6,25),schMk(6,25)],              note:"Elbows fixed · full extension · KNR baseline 25 lb" },
+      ]},
+      { h: "C — Core", ex: [
+        { id:"m5", name:"Pushup Plank w/ Shoulder Touch", sub:"Bodyweight · 2×10e", def:[schMk("10e","BW"),schMk("10e","BW")],              note:"Hips level · no rotation · controlled" },
+        { id:"m6", name:"Pallof Press",          sub:"Cable · split stance · 40 lb", def:[schMk("10e",40),schMk("10e",40)],                 note:"Brace · press slowly · zero rotation" },
+      ]},
+    ],
+  },
 
   Tue: {
-  cardio: null,
-  warmup: [
-    "Stationary bike 5 to 10 min",
-    "Standing calf raises 2x8 off step",
-    "Bodyweight squat 2x8",
-    "Ankle inversion and dorsiflexion 2x10",
-    "Towel scrunches 5 sets"
-  ],
-  topNote: null,
-  sections: [
-    {
-      h: "Glutes / Hips",
-      ex: [
-        { id: "t1", name: "Hip Thrust", sub: "Machine or Smith bar", def: [mk(10,115), mk(10,135), mk(10,165)], note: "Pause at top" }
-      ]
-    },
-    {
-      h: "Quads / Posterior Chain",
-      ex: [
-        { id: "t2", name: "Leg Press, Heel Drive", sub: "Machine", def: [mk(15,160), mk(15,160), mk(15,160)], note: "Endurance mode" },
-        { id: "t3", name: "KB RDL", sub: "Kettlebell", def: [mk(10,50), mk(10,50), mk(10,50)], note: "Hinge not squat" },
-        { id: "t6", name: "Leg Curl", sub: "Machine", def: [mk(10,100), mk(10,100), mk(10,100)], note: "Slow lower" },
-        { id: "t7", name: "Leg Extension", sub: "Machine", def: [mk(10,80), mk(10,80), mk(10,80)], note: "Controlled" }
-      ]
-    },
-    {
-      h: "Hip Stability",
-      ex: [
-        { id: "t4", name: "Lateral Band Walk", sub: "Green band", def: [mk("2 laps","band"), mk("2 laps","band")], note: "Maintain tension" },
-        { id: "t5", name: "Monster Walk", sub: "Green band", def: [mk("2 laps","band"), mk("2 laps","band")], note: "Forward / diagonal" }
-      ]
-    },
-    {
-      h: "Core",
-      ex: [
-        { id: "t8", name: "Marches w/ Band", sub: "3x10 each side", def: [mk("10e","band"), mk("10e","band"), mk("10e","band")], note: "Pelvic neutral" },
-        { id: "t9", name: "90/90 Bicycle", sub: "3x30 sec", def: [mk("30s","BW"), mk("30s","BW"), mk("30s","BW")], note: "Slow and controlled" }
-      ]
-    }
-  ]
-},
+    cardio: null,
+    warmup: [
+      "Stationary bike  5–10 min · light → moderate · get blood flowing",
+      "Standing calf raises  2×8 off plate/step · full stretch at bottom",
+      "Bodyweight squat  2×8 · band around knees if form OK",
+      "⚑ TOE/ANKLE BLOCK — do not skip · MTP protection",
+      "Ankle (L) inversion + dorsiflexion  2×10 · band assisted",
+      "Towel scrunches (L)  5 sets · intrinsic foot strength",
+    ],
+    topNote: "KNR Day 2 — Legs. Toe/ankle warm-up block is non-optional given MTP history. If kinesiologist skips it, confirm reason and log.",
+    sections: [
+      { h: "Glutes / Hips", ex: [
+        { id:"t1", name:"Hip Thrust",             sub:"Smith machine",                def:[schMk(10,115),schMk(10,145),schMk(10,155)],       note:"Full hip ext · pause at top · ribs down · working range 115–155 lb" },
+      ]},
+      { h: "Posterior Chain", ex: [
+        { id:"t2", name:"Leg Press — Heel Drive", sub:"Machine · endurance protocol", def:[schMk(15,160),schMk(15,160),schMk(15,160)],      note:"Heels high on plate · 15 reps · aerobic intent · not strength failure" },
+        { id:"t3", name:"TB DL / KB RDL",         sub:"KB 50 lb interim · TB DL when ready", def:[schMk(10,50),schMk(10,50),schMk(10,50)], note:"Hinge not squat · flat back · TB DL = trap bar deadlift progression" },
+      ]},
+      { h: "Hip Stability", ex: [
+        { id:"t4", name:"Lateral Band Walk",      sub:"Green band · 2 laps (~60 ft)", def:[schMk("2 laps","green"),schMk("2 laps","green")], note:"Band at ankles or above knees per KNR instruction · maintain tension" },
+        { id:"t5", name:"Hip Drive Marches",      sub:"Band · replaces leg curl in current protocol", def:[schMk("10e","grn"),schMk("10e","grn"),schMk("10e","grn")], note:"Pelvic neutral · controlled · per KNR 3/24 substitution" },
+      ]},
+      { h: "Quads", ex: [
+        { id:"t6", name:"Leg Extension",          sub:"Machine",                      def:[schMk(12,80),schMk(12,80),schMk(12,80)],          note:"Full extension · controlled eccentric · 80 lb confirmed" },
+      ]},
+      { h: "Core", ex: [
+        { id:"t7", name:"Plank",                  sub:"3×60 sec",                     def:[schMk("60s","BW"),schMk("60s","BW"),schMk("60s","BW")], note:"Neutral spine · breathe · do not let hips sag" },
+        { id:"t8", name:"90/90 Deadbugs",         sub:"2×15 each side",               def:[schMk("15e","BW"),schMk("15e","BW")],             note:"Back flat on floor · slow · full extension" },
+      ]},
+    ],
+  },
 
   Wed: {
   cardio: "Easy run, 30 min, Zone 2, conversational pace, run before lifting",
@@ -390,31 +375,31 @@ Mon: {
 },
 
   Thu: {
-  cardio: null,
-  warmup: [
-    "Cable shoulder ER/IR 2x10",
-    "Banded X's 2x8 each side",
-    "Arm circles 2x30 sec"
-  ],
-  topNote: "KNR Day 4, confirm exact movements and loads with your kinesiologist each session.",
-  sections: [
-    {
-      h: "Back Primary",
-      ex: [
-        { id: "th1", name: "Lat Pulldown", sub: "Machine or cable", def: [mk(10,"—"), mk(10,"—"), mk(10,"—")], note: "Elbows to ribs" },
-        { id: "th2", name: "Seated Row", sub: "Cable", def: [mk(10,"—"), mk(10,"—"), mk(10,"—")], note: "Scap retraction" },
-        { id: "th3", name: "Chest-Supported Row", sub: "Machine or incline DB", def: [mk(10,"—"), mk(10,"—"), mk(10,"—")], note: "Chest on pad" }
-      ]
-    },
-    {
-      h: "Biceps",
-      ex: [
-        { id: "th4", name: "Biceps Curl", sub: "Cable or DB", def: [mk(10,25), mk(10,25), mk(10,25)], note: "No sway" },
-        { id: "th5", name: "Hammer Curl", sub: "DB alternating", def: [mk(10,"—"), mk(10,"—")], note: "Neutral grip" }
-      ]
-    }
-  ]
-},
+    cardio: null,
+    warmup: [
+      "Wall slides  8e · pause at top · scapular upward rotation",
+      "Scap pushups  2×10 · on wall or bench · protraction/retraction",
+      "Face pulls w/ band  2×10 · light band",
+      "Pull aparts w/ band  2×10",
+    ],
+    topNote: "KNR Day 4 — Back / Biceps. Single-arm cable row weight (53–63 lb) reflects one-arm variant, not bilateral. Do not compare to bilateral archive baseline of 80–85 lb.",
+    sections: [
+      { h: "Back Primary", ex: [
+        { id:"th1", name:"Cable Row (mid) — Single Arm", sub:"Cable · mid-height · SA", def:[schMk("6e",53),schMk("6e",53),schMk("6e",63)],  note:"SLOW tempo · full retraction · working range 53–80 lb SA" },
+        { id:"th2", name:"Lat Pulldown",               sub:"Machine or cable",          def:[schMk(6,105),schMk(6,110),schMk(6,120)],         note:"Chest up · elbows to ribs · 2-1-2 · progressing 105→120 lb" },
+      ]},
+      { h: "Biceps", ex: [
+        { id:"th3", name:"Biceps Curl — DB/BB Palms Up", sub:"DB or barbell · palms up", def:[schMk(8,60),schMk(8,60),schMk(8,60)],          note:"No sway · full elbow extension · 2-0-2 · 60 lb confirmed" },
+        { id:"th4", name:"Cable D2 Flexion",             sub:"Cable · unsheathing sword motion", def:[schMk("8e",7),schMk("8e",7)],           note:"Rotator cuff + shoulder health · light load only · 7 lb · diagonal pattern" },
+        { id:"th5", name:"Biceps Curl — Cable Rope Neutral", sub:"Cable w/ rope · neutral grip", def:[schMk(8,47),schMk(8,57),schMk(8,57)],  note:"Neutral grip · full ROM · working range 43–57 lb" },
+      ]},
+      { h: "Core", ex: [
+        { id:"th6", name:"Straight Arm Pulldowns",      sub:"Cable · Wolverines · 40 lb", def:[schMk(8,40),schMk(8,40),schMk(8,40)],         note:"3×8 · arms straight · lat engagement · shoulder health" },
+        { id:"th7", name:"Inverted Row",                sub:"TRX or bar · 3–4 sets",      def:[schMk(8,"BW"),schMk(8,"BW"),schMk(8,"BW")],   note:"Scapular retraction focus · horizontal pull · bodyweight" },
+        { id:"th8", name:"Suitcase Carry",              sub:"DB 60 lb · 2 laps each arm (1 lap ≈ 30 ft)", def:[schMk("2 laps",60),schMk("2 laps",60)], note:"Optional finisher · core anti-lateral-flexion · upright posture" },
+      ]},
+    ],
+  },
 
 Fri: {
   cardio: "Swim, 1000 m, no backstroke, pull buoy or fins if toe irritated",
@@ -5863,7 +5848,7 @@ function SchWarmupRow({ text }) {
 }
 
 function SchExCard({ ex, setData, accent, onUpdate, onAdd, onRemove }) {
-  const [collapsed, setCollapsed] = React.useState(false);
+  const [collapsed, setCollapsed] = React.useState(true);
   return (
     <div style={{ background:"#111", border:"1px solid #1a1a1a", borderRadius:8, marginBottom:7, overflow:"hidden", "--ac": accent }}>
       <div onClick={() => setCollapsed(v => !v)} style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", padding:"10px 12px 8px", cursor:"pointer" }}>
