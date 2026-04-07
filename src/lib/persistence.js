@@ -87,7 +87,6 @@ function canonicalSessionToRow(session, userId) {
     overlap_summary: session?.overlap_summary || null,
     sources: session?.sources || {},
     preferred_metrics: session?.preferred_metrics || {},
-    raw: session || {},
   }
 }
 
