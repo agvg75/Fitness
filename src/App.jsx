@@ -3524,11 +3524,11 @@ const last28 = workouts.filter(w => new Date(w.dateTime || w.date) >= daysAgo(28
     }
 
     if (w.category === "Running" || w.category === "Walking") {
-      summary.runningDistance28 += Number(w.distance || 0)
+      summary.runningDistance28 += getWorkoutDistanceMiles(w)
     } else if (w.category === "Swimming") {
-      summary.swimmingDistance28 += Number(w.distance || 0)
+      summary.swimmingDistance28 += getWorkoutDistanceMiles(w)
     } else if (w.category === "Cycling") {
-      summary.cyclingDistance28 += Number(w.distance || 0)
+      summary.cyclingDistance28 += getWorkoutDistanceMiles(w)
     }
   })
 
@@ -4255,13 +4255,13 @@ const buckets = {}
     }
 
     if (w.category === "Running" || w.category === "Walking") {
-      buckets[key].running += Number(w.distance || 0)
+      buckets[key].running += getWorkoutDistanceMiles(w)
       buckets[key].cardioMinutes += Number(w.dur || 0)
     } else if (w.category === "Swimming") {
-      buckets[key].swimming += Number(w.distance || 0)
+      buckets[key].swimming += getWorkoutDistanceMiles(w)
       buckets[key].cardioMinutes += Number(w.dur || 0)
     } else if (w.category === "Cycling") {
-      buckets[key].cycling += Number(w.distance || 0)
+      buckets[key].cycling += getWorkoutDistanceMiles(w)
       buckets[key].cardioMinutes += Number(w.dur || 0)
     } else if (w.category === "Strength") {
       buckets[key].strength += 1
@@ -6950,6 +6950,16 @@ function normalizeDistanceToMiles(workout) {
   return value
 }
 
+function getWorkoutDistanceMiles(workout) {
+  const explicit = Number(workout?.distanceMiles ?? workout?.distance_miles)
+  if (Number.isFinite(explicit) && explicit > 0) return explicit
+
+  const normalized = Number(workout?.distance)
+  if (Number.isFinite(normalized) && normalized > 0) return normalized
+
+  return normalizeDistanceToMiles(workout)
+}
+
 function summarizeDailyNutrition(entries) {
   const grouped = {}
 
@@ -7103,6 +7113,8 @@ dateStr = Number.isFinite(d.getTime()) ? d.toISOString().slice(0, 10) + 'T12:00:
       type: rawType,
       category,
       distance,
+      distanceMiles: distance,
+      distance_miles: distance,
       calories: w.preferred_metrics?.calories?.value ?? w.calories ?? 0,
       hr: w.preferred_metrics?.hr?.value ?? w.hr ?? null,
       dur: extractDurationMin(w),
@@ -7170,6 +7182,8 @@ const normalizedStoredWorkouts = useMemo(() => {
       type: rawType,
       category,
       distance: normalizeDistanceToMiles(w),
+      distanceMiles: normalizeDistanceToMiles(w),
+      distance_miles: normalizeDistanceToMiles(w),
       calories: Number(w.calories || 0),
       hr: w.hr != null ? Number(w.hr) : null,
       dur: extractDurationMin(w)
