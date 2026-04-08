@@ -5253,6 +5253,20 @@ function normalizeDateString(value) {
   return Number.isFinite(t) ? new Date(t).toISOString() : null;
 }
 
+function toMs(value) {
+  const normalized = normalizeDateString(value)
+  if (!normalized) return null
+  const ms = Date.parse(normalized)
+  return Number.isFinite(ms) ? ms : null
+}
+
+function minutesBetween(start, end) {
+  const s = toMs(start)
+  const e = toMs(end)
+  if (!Number.isFinite(s) || !Number.isFinite(e) || e <= s) return null
+  return (e - s) / 60000
+}
+
 function normalizeTechnogymPayload(parsed) {
   function tgNum(value) {
     if (value == null || value === "") return null
