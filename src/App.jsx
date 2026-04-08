@@ -4173,9 +4173,8 @@ function buildEnduranceForecast({
   // Ceiling at 150 min/week (well above typical training load) to produce a 0-100 scale.
   const cardioScore = Math.min(100, Math.round((cardioMinutesWeekly / 150) * 100))
 
-  // Cycling contributes aerobic base. Apply a 0.35 run-equivalent factor
-  // (reflects typical energy cost ratio for steady-state cycling vs running).
-  const cyclingEquivMiles = cyclingMilesWeekly * 0.35
+  // Cycling contributes aerobic base, but only partially transfers to running readiness.
+  const cyclingEquivMiles = cyclingMilesWeekly * 0.2
   const aerobicVolumeScore = mileageToScore(
     inputs.weeklyRunMiles28 + cyclingEquivMiles
   )
@@ -4200,14 +4199,15 @@ function buildEnduranceForecast({
   // Running volume                20%
   // Cardio minutes consistency    15%
   const swimmingMilesWeekly = safeNum(trainingSummary?.swimmingDistanceWeekly)
-const swimScore = Math.min(100, Math.round((swimmingMilesWeekly / 2) * 100))
-const baseReadinessRaw =
+  const swimScore = Math.min(100, Math.round((swimmingMilesWeekly / 3) * 100))
+  const cyclingScore = Math.min(100, Math.round((cyclingMilesWeekly / 60) * 100))
+  const baseReadinessRaw =
     aerobicVolumeScore * 0.30 +
     runPaceScore       * 0.20 +
     runVolumeScore     * 0.15 +
     cardioScore        * 0.15 +
     swimScore          * 0.10 +
-    Math.min(100, Math.round((cyclingMilesWeekly / 40) * 100)) * 0.10
+    cyclingScore       * 0.10
 
   const readinessNow = Math.max(
     0,
@@ -4221,9 +4221,9 @@ const baseReadinessRaw =
     workouts,
     (() => { const d = new Date(); d.setDate(d.getDate() - 28); return d })()
   )
-  const recentEquiv = inputs.weeklyRunMiles28 + cyclingMilesWeekly * 0.35
+  const recentEquiv = inputs.weeklyRunMiles28 + cyclingEquivMiles
   const priorEquiv  = prior28Inputs.weeklyRunMiles28 +
-    safeNum(trainingSummary?.cyclingDistanceWeekly) * 0.35
+    cyclingEquivMiles
 
   // Scale slope: 1 equivalent mile/week improvement -> ~3 readiness points/month.
   // Cap at +/-4 points/month so the projection stays plausible.
@@ -9179,51 +9179,32 @@ const readinessProjectionData = useMemo(() => {
     return Math.max(0, Math.min(100, last.readiness + slope * (month - last.month)))
   }
 
-const eventThresholds = {
-  fiveK: 45,
-  tenK: 58,
-  half: 70,
-  tri: 88
-}
+  const clamp = (v, lo = 0, hi = 100) => Math.min(hi, Math.max(lo, v))
+  const eventAdjustments = {
+    fiveK: 6,
+    tenK: 0,
+    half: -8,
+    tri: -14
+  }
 
-  const logisticPct = (month, threshold, k, offset) =>
-    Number((100 / (1 + Math.exp(-k * (month + offset - threshold)))).toFixed(1))
-
-  // AFTER: activity-specific starting readiness from CTL
-const currentCTL = latestHealthFit?.ctl ?? computedTSBFromSessions?.global?.ctl ?? computedTSB?.global?.ctl ?? 30
-const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v))
-
-// CTL thresholds calibrated to tau1=27 fitted model
-// [minFeasible, optimalBase] for each activity
-const activityR = {
-  fiveK: clamp(Math.round(1 + 98 * (currentCTL - 15) / (35 - 15)), 1, 99),
-  tenK:  clamp(Math.round(1 + 98 * (currentCTL - 25) / (50 - 25)), 1, 99),
-  half:  clamp(Math.round(1 + 98 * (currentCTL - 35) / (65 - 35)), 1, 99),
-  tri:   clamp(Math.round(1 + 98 * (currentCTL - 40) / (75 - 40)), 1, 99),
-}
-const offsets = {
-  fiveK: 4  - Math.log(100/activityR.fiveK - 1) / 0.30,
-  tenK:  8  - Math.log(100/activityR.tenK  - 1) / 0.24,
-  half:  14 - Math.log(100/activityR.half  - 1) / 0.20,
-  tri:   20 - Math.log(100/activityR.tri   - 1) / 0.18,
-}
-
-  const maxMonth = 24
+  const maxMonth = 12
   const series = []
 
   for (let month = 0; month <= maxMonth; month += 1) {
+    const baseReadiness = Number(interpolateBaseReadiness(month).toFixed(1))
     series.push({
       month,
       label: month === 0 ? "Now" : `${month}M`,
-      fiveK: logisticPct(month, 4,  0.30, offsets.fiveK),
-      tenK:  logisticPct(month, 8,  0.24, offsets.tenK),
-      half:  logisticPct(month, 14, 0.20, offsets.half),
-      tri:   logisticPct(month, 20, 0.18, offsets.tri),
+      baseReadiness,
+      fiveK: Number(clamp(baseReadiness + eventAdjustments.fiveK).toFixed(1)),
+      tenK:  Number(clamp(baseReadiness + eventAdjustments.tenK).toFixed(1)),
+      half:  Number(clamp(baseReadiness + eventAdjustments.half).toFixed(1)),
+      tri:   Number(clamp(baseReadiness + eventAdjustments.tri).toFixed(1)),
     })
   }
 
   return series
-}, [enduranceForecast, latestHealthFit, computedTSBFromSessions, computedTSB])
+}, [enduranceForecast])
 const eventReadinessMarkers = useMemo(() => {
   if (!readinessProjectionData?.length) return []
 
