@@ -54,9 +54,32 @@ function explicitDateOnly(...values) {
   return null
 }
 
+function normalizeOffset(offset) {
+  if (!offset) return ""
+  if (/^[+-]\d{2}:\d{2}$/.test(offset)) return offset
+  if (/^[+-]\d{4}$/.test(offset)) return `${offset.slice(0, 3)}:${offset.slice(3)}`
+  return offset
+}
+
+function normalizeTimestampInput(value) {
+  const raw = String(value || "").trim()
+  if (!raw) return null
+  if (/^\d{4}-\d{2}-\d{2}T/.test(raw)) {
+    return raw
+      .replace(/(\.\d{3})\d+(?=Z|[+-]\d{2}:?\d{2}$)/, "$1")
+      .replace(/([+-]\d{2})(\d{2})$/, "$1:$2")
+  }
+  const match = raw.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})(?:\s*([+-]\d{2}:?\d{2}|Z))?$/)
+  if (match) {
+    const tz = match[3] === "Z" ? "Z" : normalizeOffset(match[3] || "")
+    return `${match[1]}T${match[2]}${tz}`
+  }
+  return raw
+}
+
 function timestampOrNull(value) {
   if (!value) return null
-  const date = new Date(value)
+  const date = new Date(normalizeTimestampInput(value))
   return Number.isNaN(date.getTime()) ? null : date.toISOString()
 }
 
