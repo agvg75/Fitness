@@ -6320,7 +6320,24 @@ function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily,
 
       try {
         const technogym = parseTechnogymText(technogymText)
-        const built = buildImportResult([], technogym.workouts, [], technogym.rejected || [])
+        const accepted = (Array.isArray(technogym.workouts) ? technogym.workouts : [])
+          .map(workout => makeSessionFromSingleSource("techno", null, workout))
+        const built = {
+          accepted,
+          review: [],
+          rejected: Array.isArray(technogym.rejected) ? technogym.rejected.slice() : [],
+          all_sessions: accepted.slice(),
+          generated_at: new Date().toISOString(),
+          summary: {
+            total: accepted.length,
+            accepted: accepted.length,
+            review: 0,
+            rejected: Array.isArray(technogym.rejected) ? technogym.rejected.length : 0,
+            linked: 0,
+            unmatched_apple: 0,
+            unmatched_technogym: accepted.length,
+          },
+        }
         built.diagnostics = {
           apple: { parsed_lines: 0 },
           technogym: technogym.diagnostics,
