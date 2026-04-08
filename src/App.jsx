@@ -1446,12 +1446,12 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
         </div>
       )}
 
-      {/* ── Operational Capacity history chart ───────────────────── */}
+      {/* ── Operational Capacity current projection chart ─────────── */}
       <div style={{ ...cardStyle(), minWidth: "0" }}>
-        <div style={{ fontSize: "12px", fontWeight: "700", marginBottom: "12px" }}>Operational Capacity History</div>
+        <div style={{ fontSize: "12px", fontWeight: "700", marginBottom: "12px" }}>Operational Capacity Projection</div>
         {(!operationalCapacityData || operationalCapacityData.length === 0) ? (
           <div style={{ fontSize: "12px", color: "#444", textAlign: "center", padding: "40px 0" }}>
-            No injury history — chart will populate once data is imported.
+            No current OC issues — true historical snapshots are not stored yet.
           </div>
         ) : (
           <ResponsiveContainer width="100%" height={280}>
@@ -6279,7 +6279,7 @@ const [error, setError] = useState("")
 const [storedWorkouts, setStoredWorkouts] = useState([])
 const [canonicalSessions, setCanonicalSessions] = useState([])
 const [healthFitDaily, setHealthFitDaily] = useState([])
-const [, setBiometricRecords] = useState([])
+const [biometricRecords, setBiometricRecords] = useState(() => { try { return JSON.parse(localStorage.getItem("lift_biometric_records") || "[]") } catch { return [] } })
 const [sleepRecords, setSleepRecords] = useState(() => { try { return JSON.parse(localStorage.getItem("lift_sleep_records") || "[]") } catch { return [] } })
 const [schedLog, setSchedLog] = useState(() => { try { return JSON.parse(localStorage.getItem('wt-log') || '[]') } catch { return [] } })
 const [ocItems, setOcItems] = useState(() => { try { return JSON.parse(localStorage.getItem('oc-items') || '[]') } catch { return [] } })
@@ -6299,8 +6299,8 @@ const unifiedCanonicalSessions = useMemo(() => {
 }, [canonicalSessions, scheduleStrengthCanonicalSeeds])
 
   const activeWorkouts =
-    canonicalSessions && canonicalSessions.length > 0
-      ? canonicalSessions
+    unifiedCanonicalSessions && unifiedCanonicalSessions.length > 0
+      ? unifiedCanonicalSessions
       : workouts
 const fmt0 = n => Number.isFinite(Number(n)) ? Math.round(Number(n)).toLocaleString() : "0"
 const fmt1 = n => Number.isFinite(Number(n)) ? Number(n).toFixed(1) : "0.0"
@@ -6719,6 +6719,44 @@ function sameDay(a, b) {
 function closeEnough(a, b, tol = 10) {
   return Math.abs(Number(a || 0) - Number(b || 0)) <= tol
 }
+function getWorkoutScheduleId(workout) {
+  return workout?._scheduleId ??
+    workout?.sources?.schedule?._scheduleId ??
+    workout?.sources?.schedule?.id ??
+    workout?.sources?.schedule_workout?._scheduleId ??
+    workout?.sources?.schedule_workout?.id ??
+    workout?.overlap_summary?.schedule_id ??
+    workout?.overlap_summary?.schedule_workout_id ??
+    null
+}
+function areDuplicateOperationalWorkouts(imported, manual) {
+  const importedScheduleId = getWorkoutScheduleId(imported)
+  const manualScheduleId = getWorkoutScheduleId(manual)
+
+  if (importedScheduleId != null && manualScheduleId != null) {
+    return String(importedScheduleId) === String(manualScheduleId)
+  }
+
+  const importedDate = String(imported?.dateTime || imported?.date || imported?.start_date || "").slice(0, 10)
+  const manualDate = String(manual?.dateTime || manual?.date || manual?.start_date || "").slice(0, 10)
+  if (!importedDate || importedDate !== manualDate) return false
+
+  const importedType = normalizeWorkoutType(imported?.type || imported?.canonical_type || imported?.category, imported)
+  const manualType = normalizeWorkoutType(manual?.type || manual?.canonical_type || manual?.category, manual)
+  if (importedType !== manualType) return false
+
+  const importedDuration = Number(imported?.dur ?? imported?.duration_min ?? 0)
+  const manualDuration = Number(manual?.dur ?? manual?.duration_min ?? 0)
+  if (!Number.isFinite(importedDuration) || !Number.isFinite(manualDuration) || !closeEnough(importedDuration, manualDuration, 15)) return false
+
+  const importedDistance = Number(imported?.distance ?? 0)
+  const manualDistance = Number(manual?.distance ?? 0)
+  if (importedDistance > 0 || manualDistance > 0) {
+    return closeEnough(importedDistance, manualDistance, 0.15)
+  }
+
+  return true
+}
 const normalizedStoredWorkouts = useMemo(() => {
   return (Array.isArray(storedWorkouts) ? storedWorkouts : []).map(w => {
     const rawType = w.type || "Other"
@@ -6743,8 +6781,11 @@ const normalizedStoredWorkouts = useMemo(() => {
 const operationalWorkouts = useMemo(() => {
   const imported = Array.isArray(normalizedActiveWorkouts) ? normalizedActiveWorkouts : []
   const manual = Array.isArray(normalizedStoredWorkouts) ? normalizedStoredWorkouts : []
+  const manualOnly = manual.filter(manualWorkout =>
+    !imported.some(importedWorkout => areDuplicateOperationalWorkouts(importedWorkout, manualWorkout))
+  )
 
-  return [...imported, ...manual].sort((a, b) =>
+  return [...imported, ...manualOnly].sort((a, b) =>
     String(a.dateTime || a.date || "").localeCompare(String(b.dateTime || b.date || ""))
   )
 }, [normalizedActiveWorkouts, normalizedStoredWorkouts])
@@ -7133,10 +7174,33 @@ useEffect(() => {
     }
   })()
 }, [hydrated, session?.user?.id])
+  const dailyWithBiometrics = useMemo(() => {
+    const byDate = {}
+
+    ;(Array.isArray(daily) ? daily : []).forEach(row => {
+      if (row?.date) byDate[row.date] = { ...row }
+    })
+
+    ;(Array.isArray(biometricRecords) ? biometricRecords : []).forEach(row => {
+      const date = String(row?.measured_date || row?.date || row?.measured_at || row?.timestamp || "").slice(0, 10)
+      const weight = Number(row?.weight_lb ?? row?.weight ?? row?.weight_lbs_mean)
+      if (!date || !Number.isFinite(weight) || weight <= 0) return
+
+      byDate[date] = {
+        ...(byDate[date] || { date }),
+        date,
+        weight_lb: weight,
+        weight_source: row?.source || "biometric_records"
+      }
+    })
+
+    return Object.values(byDate).sort((a, b) => String(a.date).localeCompare(String(b.date)))
+  }, [daily, biometricRecords])
+
   const latestWeight = useMemo(() => {
-    if (!daily.length) return null
-    return daily[daily.length - 1]
-  }, [daily])
+    if (!dailyWithBiometrics.length) return null
+    return dailyWithBiometrics[dailyWithBiometrics.length - 1]
+  }, [dailyWithBiometrics])
 
   const latestNutrition = useMemo(() => {
     if (!nutrition.length) return null
@@ -7154,20 +7218,20 @@ useEffect(() => {
   }, [rangeKey])
 
   const filteredDaily = useMemo(() => {
-  if (!daily.length) return []
-  if (selectedRangePoints == null) return daily
+  if (!dailyWithBiometrics.length) return []
+  if (selectedRangePoints == null) return dailyWithBiometrics
   const cutoff = new Date()
   cutoff.setDate(cutoff.getDate() - selectedRangePoints)
   cutoff.setHours(0, 0, 0, 0)
-  return daily.filter(row => {
+  return dailyWithBiometrics.filter(row => {
     const d = new Date(String(row.date || "").slice(0, 10) + "T12:00:00")
     return Number.isFinite(d.getTime()) && d >= cutoff
   })
-}, [daily, selectedRangePoints])
+}, [dailyWithBiometrics, selectedRangePoints])
 
   const mergedDailyWeights = useMemo(() => {
-    return [...daily].sort((a, b) => String(a.date).localeCompare(String(b.date)))
-  }, [daily])
+    return [...dailyWithBiometrics].sort((a, b) => String(a.date).localeCompare(String(b.date)))
+  }, [dailyWithBiometrics])
 
   const recentWeights = useMemo(() => {
     if (!filteredDaily.length) return []
@@ -7953,12 +8017,12 @@ const trainingLoadDistanceMax = useMemo(() => {
 }, [trainingLoadChartData])
 const bodyForecast = useMemo(() => {
   return buildBodyForecast({
-    daily,
+    daily: dailyWithBiometrics,
     nutritionRows: dailyNutritionSummary,
     recentCardioMinutes: trainingSummary?.cardioMinutesWeekly || 0,
     bmr: null
   })
-}, [daily, dailyNutritionSummary, trainingSummary])
+}, [dailyWithBiometrics, dailyNutritionSummary, trainingSummary])
 
 const injuryPenalties = useMemo(() => {
   return getInjuryPenalties()
@@ -8007,14 +8071,14 @@ const latestHealthFit = useMemo(() => {
 }, [healthFitDaily])
 
 const computedTSB = useMemo(() => {
-  if (!canonicalSessions?.length) return null;
+  if (!unifiedCanonicalSessions?.length) return null;
   const INTENSITY = {
     Running: 1.0, Cycling: 0.55, "Indoor Cycling": 0.6,
     Swimming: 1.1, "Traditional Strength Training": 0.7,
     "Functional Strength Training": 0.65, Walking: 0.3
   };
   const dailyLoad = { all: {}, Running: {}, Cycling: {}, Swimming: {} };
-  canonicalSessions.forEach(s => {
+  unifiedCanonicalSessions.forEach(s => {
     const d = (s.start_date || s.dateTime || "").slice(0, 10);
     if (!d) return;
     const dur = s.duration_min || (s.duration_sec / 60) || 0;
@@ -8045,7 +8109,7 @@ const computedTSB = useMemo(() => {
     cycling: calcTSB(dailyLoad.Cycling),
     swimming: calcTSB(dailyLoad.Swimming),
   };
-}, [canonicalSessions])
+}, [unifiedCanonicalSessions])
 
 const tsbV2Panel = useMemo(() => {
   const tau1 = LIFT_CONFIG.tau1, tau2 = LIFT_CONFIG.tau2, lookbackDays = selectedRangePoints ?? 90, warmupDays = 42
@@ -8056,7 +8120,7 @@ const tsbV2Panel = useMemo(() => {
     dayKeys.push(d.toISOString().slice(0,10))
   const mkL = () => ({ overall:0, running:0, cycling:0, swimming:0, strength:0 })
   const dailyLoads = Object.fromEntries(dayKeys.map(k => [k, mkL()]))
-  const wkts = Array.isArray(normalizedActiveWorkouts) ? normalizedActiveWorkouts : []
+  const wkts = Array.isArray(operationalWorkouts) ? operationalWorkouts : []
   wkts.forEach(w => {
     const date = String(w.date || '').slice(0,10)
     if (!dailyLoads[date]) return
@@ -8098,7 +8162,7 @@ const tsbV2Panel = useMemo(() => {
     : null
   const risk = riskFromOC ?? (tsbNow < -25 ? 'red' : tsbNow < -15 ? 'orange' : tsbNow < -8 ? 'yellow' : 'green')
   return { rows, alerts: [], readinessRiskLabel: risk, readinessDetail: { score: readinessScore ?? Math.round(50 + tsbNow) } }
-}, [normalizedActiveWorkouts, schedLog, ocItems, readinessScore, selectedRangePoints])
+}, [operationalWorkouts, schedLog, ocItems, readinessScore, selectedRangePoints])
 
 const operationalCapacityData = useMemo(() => {
   const items = Array.isArray(ocItems) ? ocItems : []
@@ -8133,15 +8197,12 @@ const operationalCapacityData = useMemo(() => {
 
   if (!datedEntries.length) return []
 
-  const firstDate = new Date(datedEntries[0]._start)
-  firstDate.setHours(0, 0, 0, 0)
-
   const endDate = new Date(today)
   endDate.setDate(endDate.getDate() + 60)
 
   const series = []
 
-  for (let d = new Date(firstDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+  for (let d = new Date(today); d <= endDate; d.setDate(d.getDate() + 1)) {
     const acuteLoss = datedEntries
       .filter(e => e._category === "acute")
       .reduce((sum, e) => {
@@ -8203,7 +8264,7 @@ const bodyCompositionOverviewData = useMemo(() => {
     estimatedCurrentBF != null
       ? [{
           date: new Date().toISOString().slice(0, 10),
-          label: daily?.length ? fmtShortDate(daily[daily.length - 1]?.date) : "Current",
+          label: dailyWithBiometrics?.length ? fmtShortDate(dailyWithBiometrics[dailyWithBiometrics.length - 1]?.date) : "Current",
           dexaBF: null,
           estimatedBF: Number(estimatedCurrentBF)
         }]
@@ -8214,7 +8275,7 @@ const bodyCompositionOverviewData = useMemo(() => {
     .sort((a, b) => String(a.date).localeCompare(String(b.date)))
 
   return merged
-}, [dexaSeries, estimatedCurrentBF, daily])
+}, [dexaSeries, estimatedCurrentBF, dailyWithBiometrics])
 
 const bodyCompositionOverviewDomain = useMemo(() => {
   const vals = bodyCompositionOverviewData
@@ -8288,7 +8349,7 @@ const eventThresholds = {
     Number((100 / (1 + Math.exp(-k * (month + offset - threshold)))).toFixed(1))
 
   // AFTER: activity-specific starting readiness from CTL
-const currentCTL = computedTSB?.global?.ctl ?? enduranceForecast?.ctl ?? 30
+const currentCTL = latestHealthFit?.ctl ?? computedTSBFromSessions?.global?.ctl ?? computedTSB?.global?.ctl ?? 30
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v))
 
 // CTL thresholds calibrated to tau1=27 fitted model
@@ -8321,7 +8382,7 @@ const offsets = {
   }
 
   return series
-}, [enduranceForecast])
+}, [enduranceForecast, latestHealthFit, computedTSBFromSessions, computedTSB])
 const eventReadinessMarkers = useMemo(() => {
   if (!readinessProjectionData?.length) return []
 
@@ -9409,14 +9470,14 @@ return (
   </ResponsiveContainer>
 </div>
 
-<div style={{ ...cardStyle(), minWidth: "0" }}>
-  <div style={{ fontWeight: "bold", marginBottom: "12px", minHeight: "20px" }}>
-    Operational Capacity
-  </div>
-  {(!operationalCapacityData || operationalCapacityData.length === 0) ? (
-    <div style={{ fontSize: "12px", color: "#444", textAlign: "center", padding: "40px 0" }}>
-      No issues logged — add issues in the Operational Capacity tab to see history.
-    </div>
+	<div style={{ ...cardStyle(), minWidth: "0" }}>
+	  <div style={{ fontWeight: "bold", marginBottom: "12px", minHeight: "20px" }}>
+	    Operational Capacity Projection
+	  </div>
+	  {(!operationalCapacityData || operationalCapacityData.length === 0) ? (
+	    <div style={{ fontSize: "12px", color: "#444", textAlign: "center", padding: "40px 0" }}>
+	      No current OC issues — true historical snapshots are not stored yet.
+	    </div>
   ) : (
     <ResponsiveContainer width="100%" height={300}>
       <LineChart data={operationalCapacityData} margin={{ top: 20, right: 20, left: 55, bottom: 35 }}>
