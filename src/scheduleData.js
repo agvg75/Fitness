@@ -12,43 +12,47 @@ export const PROGRAM_META = {
 export const CARDIO = {
   Mon: {
     sessions: [
-      { mod: "walk", type: "Walk/jog intervals", dMin: 0, dMax: 0, intensity: "KNR prescribed", dist: "2.5 mi total · (walk ½mi → jog ½mi → walk ¼mi) × 2", rationale: "Do AFTER strength", cnote: "" },
+      { mod: "bike", type: "Long bike", dMin: 45, dMax: 60, intensity: "Easy aerobic", dist: "10-14 miles", rationale: "Bike long day. One cardio session only, kept aerobic.", cnote: "" },
     ],
-    goal: "Walk/jog intervals · 2.5 mi total · (walk ½mi → jog ½mi → walk ¼mi) × 2 · KNR prescribed · Do AFTER strength", wt: { walk: 0 },
+    goal: "Long bike, easy aerobic", wt: { bike: 55 },
   },
   Tue: {
-    noCardio: true,
-    sessions: [],
-    goal: "", wt: {},
+    sessions: [
+      { mod: "run", type: "Short run", dMin: 15, dMax: 25, intensity: "Conversational", dist: "1-2 miles", rationale: "Priority run stays short because it sits near leg day.", cnote: "Light pickups only if foot is calm." },
+      { mod: "swim", type: "Medium swim", dMin: 25, dMax: 35, intensity: "Easy aerobic / technique support", dist: "600-900 yards", rationale: "Paired easy day: short run plus medium swim across different modalities.", cnote: "" },
+    ],
+    goal: "Short run + medium swim, both easy overall", wt: { run: 20, swim: 30 },
   },
   Wed: {
-    sessions: [
-      { mod: "run", type: "Medium easy run", dMin: 25, dMax: 35, intensity: "Easy (Zone 2, conversational)", dist: "2 miles", rationale: "No strength today. Primary run volume session of the week. Keep fully conversational throughout.", cnote: "If legs are heavy from Tuesday KNR, reduce to 1.5 miles or substitute easy bike." },
-    ],
-    goal: "10K aerobic base — medium day", wt: { run: 30 },
-  },
-  Thu: {
     noCardio: true,
     sessions: [],
-    goal: "", wt: {},
+    goal: "Full rest day — no cardio", wt: {},
+  },
+  Thu: {
+    sessions: [
+      { mod: "run", type: "Medium run", dMin: 25, dMax: 35, intensity: "Steady but comfortable", dist: "2-3 miles", rationale: "Second weekday run day, buffered by Wednesday rest.", cnote: "" },
+      { mod: "bike", type: "Short bike", dMin: 15, dMax: 25, intensity: "Light spin / cadence work", dist: "4-6 miles", rationale: "Paired easy day: medium run plus short bike across different modalities.", cnote: "" },
+    ],
+    goal: "Medium run + short bike", wt: { run: 30, bike: 20 },
   },
   Fri: {
     sessions: [
-      { mod: "bike", type: "Long ride", dMin: 35, dMax: 50, intensity: "Easy to easy-moderate (Zone 2)", dist: "8-10 miles", rationale: "Friday is the long bike day. No run today. Keep cadence 80-95 RPM, resistance moderate. Posterior chain is loaded from hip/glute strength — keep intensity aerobic.", cnote: "If hips feel heavy from strength session, reduce to 6 miles and stop at 35 min." },
+      { mod: "bike", type: "Medium bike", dMin: 25, dMax: 35, intensity: "Easy aerobic", dist: "6-9 miles", rationale: "Paired easy day: medium bike plus short swim across different modalities.", cnote: "" },
+      { mod: "swim", type: "Short swim", dMin: 15, dMax: 25, intensity: "Easy recovery / technique", dist: "400-600 yards", rationale: "Short swim supports frequency without adding impact.", cnote: "" },
     ],
-    goal: "Triathlon cycling — volume day", wt: { bike: 45 },
+    goal: "Medium bike + short swim", wt: { bike: 30, swim: 20 },
   },
   Sat: {
     sessions: [
-      { mod: "swim", type: "Medium swim", dMin: 25, dMax: 35, intensity: "Easy", dist: "600 yards", rationale: "Saturday medium swim. Rest day from strength. Non-compressive aerobic stimulus.", cnote: "Can be done before or during child nap window. Easy pace throughout." },
+      { mod: "swim", type: "Long swim", dMin: 35, dMax: 50, intensity: "Easy aerobic", dist: "900-1400 yards", rationale: "Swim long day. One cardio session only, kept aerobic.", cnote: "" },
     ],
-    goal: "Triathlon swim — medium day", wt: { swim: 30 },
+    goal: "Long swim, easy aerobic", wt: { swim: 45 },
   },
   Sun: {
     sessions: [
-      { mod: "run", type: "Longer easy run", dMin: 35, dMax: 45, intensity: "Easy (Zone 2, fully conversational)", dist: "3+ miles", rationale: "Sunday is the long run day. Full rest from strength yesterday. Best setup of the week for the run.", cnote: "Run before or after child nap. Extend past 3 miles only if toe stays silent past mile 2 and legs feel good." },
+      { mod: "run", type: "Long run", dMin: 35, dMax: 50, intensity: "Easy aerobic", dist: "3-5 miles", rationale: "Run long day. One cardio session only and the priority modality long session.", cnote: "Extend only if foot stays calm and legs feel good." },
     ],
-    goal: "10K → half-marathon distance build", wt: { run: 40 },
+    goal: "Long run, easy aerobic", wt: { run: 45 },
   },
 }
 

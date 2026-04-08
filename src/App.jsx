@@ -2211,6 +2211,9 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
         <div style={{ fontSize: 10, fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", margin: "10px 0 6px" }}>Log actual</div>
         {entries.map((entry, idx) => {
           const mc = modColor[entry.modality] || "#888"
+          const target = prescribedSessions[idx] || cd
+          const targetDuration = target?.dMin != null && target?.dMax != null ? `${target.dMin}–${target.dMax} min` : "minutes"
+          const targetLabel = [target?.type, target?.intensity].filter(Boolean).join(" · ")
           return (
             <div key={idx} style={{ marginBottom: 10, padding: "10px 12px", border: `0.5px solid #1e1e1e`, borderRadius: 7, background: "#0a0a0a" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
@@ -2218,8 +2221,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
                   style={{ padding: "4px 8px", borderRadius: 20, fontSize: 11, fontWeight: 700, background: `${mc}22`, color: mc, border: `0.5px solid ${mc}`, outline: "none", cursor: "pointer", fontFamily: "inherit" }}>
                   {["run", "bike", "swim", "walk", "row"].map(m => <option key={m} value={m}>{modLabel[m]}</option>)}
                 </select>
-                {idx === 0 && <span style={{ fontSize: 11, color: "#555" }}>{cd.type} · {cd.intensity}</span>}
-                {idx > 0 && <span style={{ fontSize: 10, color: "#444" }}>Additional session</span>}
+                <span style={{ fontSize: idx === 0 ? 11 : 10, color: idx === 0 ? "#555" : "#444" }}>{targetLabel || (idx > 0 ? "Additional session" : "Cardio")}</span>
                 {idx > 0 && (
                   <button onClick={() => removeCardioEntry(day, idx)}
                     style={{ marginLeft: "auto", background: "transparent", border: "none", color: "#444", cursor: "pointer", fontSize: 12 }}>✕</button>
@@ -2229,14 +2231,14 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
                 <div>
                   <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Duration (min)</div>
                   <input type="text" value={entry.duration} onChange={e => setCardioEntryF(day, idx, "duration", e.target.value)}
-                    placeholder={idx === 0 ? `${cd.dMin}–${cd.dMax} min` : "minutes"}
+                    placeholder={targetDuration}
                     style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
-                  {idx === 0 && <div style={{ fontSize: 9, color: "#444", marginTop: 2 }}>Target: {cd.dMin}–{cd.dMax} min</div>}
+                  <div style={{ fontSize: 9, color: "#444", marginTop: 2 }}>Target: {targetDuration}</div>
                 </div>
                 <div>
                   <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Distance (mi)</div>
                   <input type="text" inputMode="decimal" value={entry.distance || ""} onChange={e => setCardioEntryF(day, idx, "distance", e.target.value)}
-                    placeholder={idx === 0 ? (cd.dist || "miles") : "miles"}
+                    placeholder={target?.dist || "miles"}
                     style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
                 </div>
                 <div>
