@@ -4588,7 +4588,11 @@ function normalizeOffset(offset) {
 function normalizeDateString(value) {
   const raw = String(value || '').trim();
   if (!raw) return null;
-  if (/^\d{4}-\d{2}-\d{2}T/.test(raw)) return raw.replace(/([+-]\d{2})(\d{2})$/, '$1:$2');
+  if (/^\d{4}-\d{2}-\d{2}T/.test(raw)) {
+    return raw
+      .replace(/(\.\d{3})\d+(?=Z|[+-]\d{2}:?\d{2}$)/, '$1')
+      .replace(/([+-]\d{2})(\d{2})$/, '$1:$2');
+  }
   const m = raw.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})(?:\s*([+-]\d{2}:?\d{2}|Z))?$/);
   if (m) {
     const tz = m[3] === 'Z' ? 'Z' : normalizeOffset(m[3] || '');
@@ -4845,10 +4849,7 @@ function firstValue(obj, keys) {
   return null;
 }
 
-function normalizeTechnogymFile(file) {
-  const reader = new FileReaderSync();
-  const text = reader.readAsText(file);
-  const parsed = JSON.parse(text);
+function normalizeTechnogymPayload(parsed) {
   const candidates = [];
   collectTechnogymCandidates(parsed, candidates, 0);
 
@@ -4919,6 +4920,17 @@ function normalizeTechnogymFile(file) {
       unique_sessions: workouts.length
     }
   };
+}
+
+function normalizeTechnogymFile(file) {
+  const reader = new FileReaderSync();
+  const text = reader.readAsText(file);
+  const parsed = JSON.parse(text);
+  return normalizeTechnogymPayload(parsed);
+}
+
+function parseTechnogymText(text) {
+  return normalizeTechnogymPayload(JSON.parse(String(text || "")));
 }
 
 function parseTechnogymFile(file) {
@@ -5215,6 +5227,30 @@ function stableHash(input) {
 
   const blob = new Blob([workerSource], { type: "text/javascript" })
   return new Worker(URL.createObjectURL(blob))
+}
+
+function normalizeOffset(offset) {
+  if (!offset) return '';
+  if (/^[+-]\d{2}:\d{2}$/.test(offset)) return offset;
+  if (/^[+-]\d{4}$/.test(offset)) return offset.slice(0, 3) + ':' + offset.slice(3);
+  return offset;
+}
+
+function normalizeDateString(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  if (/^\d{4}-\d{2}-\d{2}T/.test(raw)) {
+    return raw
+      .replace(/(\.\d{3})\d+(?=Z|[+-]\d{2}:?\d{2}$)/, '$1')
+      .replace(/([+-]\d{2})(\d{2})$/, '$1:$2');
+  }
+  const m = raw.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})(?:\s*([+-]\d{2}:?\d{2}|Z))?$/);
+  if (m) {
+    const tz = m[3] === 'Z' ? 'Z' : normalizeOffset(m[3] || '');
+    return m[1] + 'T' + m[2] + tz;
+  }
+  const t = Date.parse(raw);
+  return Number.isFinite(t) ? new Date(t).toISOString() : null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -6135,8 +6171,52 @@ function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily,
     if (allBiometrics.length) setBiometricResult(allBiometrics)
     if (allHealthFit.length) setHealthFitResult(allHealthFit)
 
+    // Technogym-only imports do not need the generic overlap worker.
+    // Parse directly so the UI cannot get stranded waiting on overlap state.
+    if (technogymFile && !appleFile) {
+      const technogymText = await new Promise((res, rej) => {
+        const r = new FileReader()
+        r.onload = e => res(e.target?.result || "")
+        r.onerror = () => rej(new Error("Read failed"))
+        r.readAsText(technogymFile)
+      }).catch(() => null)
+
+      if (!technogymText) {
+        setStatus("Error: Technogym file read failed")
+        setImporting(false)
+        return
+      }
+
+      try {
+        const technogym = parseTechnogymText(technogymText)
+        const built = buildImportResult([], technogym.workouts, [], technogym.rejected || [])
+        built.diagnostics = {
+          apple: { parsed_lines: 0 },
+          technogym: technogym.diagnostics,
+          overlaps: { total_candidates: 0, strong_candidates: 0, weak_candidates: 0 }
+        }
+        built.appleSleep = []
+
+        const mergedReviewRows = [...(Array.isArray(built?.review) ? built.review : []), ...pendingReviewRows]
+        setResult({
+          ...built,
+          review: mergedReviewRows,
+          summary: {
+            ...(built.summary || {}),
+            review: mergedReviewRows.length
+          }
+        })
+        setReviewRows(mergedReviewRows)
+        setSelectedReviewIds([])
+        pendingFileReviewRowsRef.current = []
+        setStatus(`Technogym: ${built.accepted?.length || 0} sessions ready`)
+      } catch (err) {
+        setStatus(`Error: ${err?.message || String(err)}`)
+      } finally {
+        setImporting(false)
+      }
     // Send Apple + Technogym to worker for overlap pipeline
-    if (appleFile || technogymFile) {
+    } else if (appleFile || technogymFile) {
       setStatus("Running overlap pipeline...")
       worker.postMessage({ type: "process", appleFile, technogymFile })
     } else if (allNutrition.length || allSleep.length || allBiometrics.length || allHealthFit.length) {
@@ -7241,12 +7321,9 @@ const normalizedActiveWorkouts = useMemo(() => {
     // Normalize date: canonical sessions use "2026-01-01 15:46:19 -0600" or ISO format
     let dateStr = w.date || null
     if (!dateStr && w.start_date) {
-      // Replace space-separated offset format to make it parseable
-      const raw = String(w.start_date)
-const cleaned = raw.replace(/^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}) ([+-]\d{2}:\d{2})$/, '$1T$2$3')
-                          .replace(/^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}) ([+-])(\d{2})(\d{2})$/, '$1T$2$3$4:$5')
-const d = new Date(cleaned)
-dateStr = Number.isFinite(d.getTime()) ? d.toISOString().slice(0, 10) + 'T12:00:00' : null
+      const cleaned = normalizeDateString(w.start_date)
+      const d = cleaned ? new Date(cleaned) : new Date(NaN)
+      dateStr = Number.isFinite(d.getTime()) ? d.toISOString().slice(0, 10) + 'T12:00:00' : null
     }
 
     // For indoor sessions with no GPS distance, derive a duration-based proxy.
