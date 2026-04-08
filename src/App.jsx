@@ -2667,7 +2667,29 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
 }
 
 function GymSetTimerModal({ onClose }) {
+  const timerMachineStorageKey = "lift_timer_machines"
+  const normalizeMachineName = value => String(value || "").trim().replace(/\s+/g, " ")
+  const sortMachineNames = names => [...names].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))
+  const mergeMachineNames = names => {
+    const byKey = new Map()
+    ;(names || []).forEach(name => {
+      const normalized = normalizeMachineName(name)
+      if (!normalized) return
+      const key = normalized.toLowerCase()
+      if (!byKey.has(key)) byKey.set(key, normalized)
+    })
+    return sortMachineNames([...byKey.values()])
+  }
+
   const [machineName, setMachineName] = useState("")
+  const [savedMachineNames, setSavedMachineNames] = useState(() => {
+    if (typeof window === "undefined") return []
+    try {
+      return mergeMachineNames(JSON.parse(window.localStorage.getItem(timerMachineStorageKey) || "[]"))
+    } catch {
+      return []
+    }
+  })
   const [sets, setSets] = useState(3)
   const [workSec, setWorkSec] = useState(45)
   const [restSec, setRestSec] = useState(60)
@@ -2677,6 +2699,10 @@ function GymSetTimerModal({ onClose }) {
   const [elapsedMs, setElapsedMs] = useState(0)
   const [anchorMs, setAnchorMs] = useState(null)
   const [nowMs, setNowMs] = useState(Date.now())
+  const [viewport, setViewport] = useState(() => ({
+    width: typeof window === "undefined" ? 390 : window.innerWidth,
+    height: typeof window === "undefined" ? 844 : window.innerHeight
+  }))
   const panelRef = useRef(null)
 
   const clampInt = (value, min, max) => {
@@ -2740,6 +2766,17 @@ function GymSetTimerModal({ onClose }) {
     setAnchorMs(null)
   }, [isComplete, running, totalSec])
 
+  useEffect(() => {
+    const updateViewport = () => setViewport({ width: window.innerWidth, height: window.innerHeight })
+    updateViewport()
+    window.addEventListener("resize", updateViewport)
+    window.addEventListener("orientationchange", updateViewport)
+    return () => {
+      window.removeEventListener("resize", updateViewport)
+      window.removeEventListener("orientationchange", updateViewport)
+    }
+  }, [])
+
   const fmt = seconds => {
     const s = Math.max(0, Math.floor(Number(seconds) || 0))
     const m = Math.floor(s / 60)
@@ -2755,6 +2792,17 @@ function GymSetTimerModal({ onClose }) {
   }
 
   const startTimer = () => {
+    const normalizedMachineName = normalizeMachineName(machineName)
+    if (normalizedMachineName) {
+      const nextMachineNames = mergeMachineNames([...savedMachineNames, normalizedMachineName])
+      setSavedMachineNames(nextMachineNames)
+      setMachineName(normalizedMachineName)
+      if (typeof window !== "undefined") {
+        try {
+          window.localStorage.setItem(timerMachineStorageKey, JSON.stringify(nextMachineNames))
+        } catch {}
+      }
+    }
     setStarted(true)
     setRunning(true)
     setElapsedMs(0)
@@ -2802,6 +2850,15 @@ function GymSetTimerModal({ onClose }) {
     onClose()
   }
 
+  const clearSavedMachines = () => {
+    setSavedMachineNames([])
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.removeItem(timerMachineStorageKey)
+      } catch {}
+    }
+  }
+
   const phase = phaseState.phase || phases[0]
   const phaseRemaining = isComplete ? 0 : phaseState.phaseRemaining
   const pulse = started && !isComplete && phaseRemaining <= 10
@@ -2812,6 +2869,28 @@ function GymSetTimerModal({ onClose }) {
   const panelBg = phase?.kind === "rest" ? "#031711" : "#07111f"
   const accent = phase?.kind === "rest" ? "#22c55e" : "#38bdf8"
   const phaseLabel = isComplete ? "Complete" : phase?.label || "Ready"
+  const isLandscape = viewport.width > viewport.height
+  const isShort = viewport.height < 640
+  const isCompact = isLandscape || isShort
+  const isTiny = viewport.height < 440
+  const panelGap = isTiny ? 5 : isCompact ? 7 : 12
+  const panelPadding = isTiny ? "6px" : isCompact ? "8px" : "14px"
+  const headerTitleSize = isCompact ? 15 : 20
+  const headerLabelSize = isCompact ? 9 : 11
+  const oppositeTimeSize = isTiny ? "clamp(26px, 9vh, 42px)" : isCompact ? "clamp(30px, 10vh, 58px)" : "clamp(40px, 12vw, 88px)"
+  const oppositeLabelSize = isCompact ? "clamp(11px, 3vh, 16px)" : "clamp(14px, 4vw, 24px)"
+  const timerGap = isTiny ? 5 : isCompact ? 7 : 12
+  const timerMinHeight = isTiny ? "150px" : isCompact ? "190px" : "300px"
+  const phaseFontSize = isTiny ? "clamp(14px, 4vh, 20px)" : isCompact ? "clamp(15px, 5vh, 26px)" : "clamp(18px, 5vw, 34px)"
+  const countdownFontSize = isTiny ? "clamp(58px, 25vh, 108px)" : isCompact ? "clamp(68px, 30vh, 152px)" : "clamp(92px, 24vh, 230px)"
+  const metaFontSize = isCompact ? "clamp(12px, 4vh, 18px)" : "clamp(14px, 4vw, 24px)"
+  const sequenceFontSize = isCompact ? "clamp(10px, 3vh, 14px)" : "clamp(12px, 3.5vw, 18px)"
+  const timelineHeight = isCompact ? 10 : 12
+  const timelineActiveHeight = isCompact ? 14 : 18
+  const progressHeight = isCompact ? 8 : 12
+  const controlPadding = isTiny ? 8 : isCompact ? 10 : 14
+  const controlGap = isCompact ? 5 : 8
+  const controlFontSize = isCompact ? 12 : 14
 
   return (
     <div ref={panelRef} style={{
@@ -2820,12 +2899,12 @@ function GymSetTimerModal({ onClose }) {
       zIndex: 5000,
       background: panelBg,
       color: "#f8fafc",
-      padding: "14px",
+      padding: panelPadding,
       boxSizing: "border-box",
       display: "flex",
       flexDirection: "column",
-      gap: "12px",
-      overflowY: "auto"
+      gap: panelGap,
+      overflow: "hidden"
     }}>
       {showOpposite && (
         <div style={{
@@ -2833,69 +2912,84 @@ function GymSetTimerModal({ onClose }) {
           textAlign: "center",
           border: "1px solid rgba(255,255,255,0.25)",
           borderRadius: 8,
-          padding: "8px",
-          background: "rgba(0,0,0,0.28)"
+          padding: isCompact ? "3px 8px" : "7px 8px",
+          background: "rgba(0,0,0,0.28)",
+          flex: "0 0 auto",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: isCompact ? 8 : 12,
+          maxHeight: isCompact ? 48 : 108
         }}>
-          <div style={{ fontSize: "clamp(40px, 14vw, 96px)", fontWeight: 900, lineHeight: 0.9 }}>{fmt(remainingSec)}</div>
-          <div style={{ fontSize: "clamp(14px, 5vw, 28px)", fontWeight: 800, color: accent }}>{machineName || "Machine timer"}</div>
+          <div style={{ fontSize: oppositeTimeSize, fontWeight: 900, lineHeight: 0.9 }}>{fmt(remainingSec)}</div>
+          <div style={{ fontSize: oppositeLabelSize, fontWeight: 800, color: accent, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{machineName || "Machine timer"}</div>
         </div>
       )}
 
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
-        <div>
-          <div style={{ fontSize: 11, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.14em" }}>Machine timer</div>
-          <div style={{ fontSize: 20, fontWeight: 800 }}>{machineName || "Unnamed machine"}</div>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", flex: "0 0 auto", minHeight: 0 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: headerLabelSize, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.14em" }}>Machine timer</div>
+          <div style={{ fontSize: headerTitleSize, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{machineName || "Unnamed machine"}</div>
         </div>
-        <button onClick={closeTimer} style={{ ...buttonStyle(false), color: "#f8fafc", borderColor: "rgba(255,255,255,0.35)" }}>Close</button>
+        <button onClick={closeTimer} style={{ ...buttonStyle(false), color: "#f8fafc", borderColor: "rgba(255,255,255,0.35)", padding: isCompact ? "6px 10px" : undefined }}>Close</button>
       </div>
 
       {!started && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 92px", gap: 8 }}>
-          <input value={machineName} onChange={e => setMachineName(e.target.value)} placeholder="Exercise or machine name" style={{ ...inputStyle(), fontSize: 16, padding: "10px 12px", background: "#020617", color: "#f8fafc" }} />
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 92px", gap: isCompact ? 5 : 8, flex: "0 0 auto" }}>
+          <input value={machineName} onChange={e => setMachineName(e.target.value)} placeholder="Exercise or machine name" style={{ ...inputStyle(), fontSize: isCompact ? 14 : 16, padding: isCompact ? "7px 9px" : "10px 12px", background: "#020617", color: "#f8fafc" }} />
           <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#cbd5e1" }}>
             <input type="checkbox" checked={showOpposite} onChange={e => setShowOpposite(e.target.checked)} />
             flip
           </label>
+          {savedMachineNames.length > 0 && (
+            <>
+              <select value="" onChange={e => { if (e.target.value) setMachineName(e.target.value) }} style={{ ...inputStyle(), fontSize: isCompact ? 13 : 15, padding: isCompact ? "6px 8px" : "8px 10px", background: "#020617", color: "#f8fafc" }}>
+                <option value="">Saved machines</option>
+                {savedMachineNames.map(name => <option key={name} value={name}>{name}</option>)}
+              </select>
+              <button onClick={clearSavedMachines} style={{ ...buttonStyle(false), padding: isCompact ? "6px 8px" : "8px 10px", fontSize: isCompact ? 11 : 12, color: "#cbd5e1", borderColor: "rgba(255,255,255,0.25)" }}>Clear</button>
+            </>
+          )}
           {[
             ["Sets", sets, setSets, 1, 20],
             ["Work sec", workSec, setWorkSec, 5, 1800],
             ["Rest sec", restSec, setRestSec, 0, 1800]
           ].map(([label, value, setter, min, max]) => (
-            <label key={label} style={{ display: "grid", gap: 4, fontSize: 11, color: "#cbd5e1" }}>
+            <label key={label} style={{ display: "grid", gap: isCompact ? 2 : 4, fontSize: isCompact ? 10 : 11, color: "#cbd5e1" }}>
               {label}
               <input type="number" min={min} max={max} value={value} onChange={e => setter(clampInt(e.target.value, min, max))}
-                style={{ ...inputStyle(), fontSize: 18, padding: "9px 10px", background: "#020617", color: "#f8fafc" }} />
+                style={{ ...inputStyle(), fontSize: isCompact ? 15 : 18, padding: isCompact ? "6px 8px" : "9px 10px", background: "#020617", color: "#f8fafc" }} />
             </label>
           ))}
         </div>
       )}
 
-      <div style={{ flex: "1 1 auto", minHeight: "330px", display: "flex", flexDirection: "column", justifyContent: "center", gap: "12px", textAlign: "center" }}>
-        <div style={{ fontSize: "clamp(18px, 5vw, 34px)", color: accent, fontWeight: 900 }}>{phaseLabel}</div>
+      <div style={{ flex: "1 1 auto", minHeight: timerMinHeight, display: "flex", flexDirection: "column", justifyContent: "center", gap: timerGap, textAlign: "center", overflow: "hidden" }}>
+        <div style={{ fontSize: phaseFontSize, color: accent, fontWeight: 900, lineHeight: 1.05 }}>{phaseLabel}</div>
         <div style={{
-          fontSize: "clamp(92px, 32vw, 230px)",
+          fontSize: countdownFontSize,
           fontWeight: 900,
           lineHeight: 0.82,
-          letterSpacing: "-0.06em",
+          letterSpacing: 0,
           color: isComplete ? "#22c55e" : "#ffffff",
           opacity: pulse && Math.floor(nowMs / 500) % 2 === 0 ? 0.58 : 1
         }}>
           {fmt(remainingSec)}
         </div>
-        <div style={{ display: "flex", justifyContent: "center", gap: 18, flexWrap: "wrap", color: "#cbd5e1", fontSize: "clamp(14px, 4vw, 24px)" }}>
+        <div style={{ display: "flex", justifyContent: "center", gap: isCompact ? 10 : 18, flexWrap: "wrap", color: "#cbd5e1", fontSize: metaFontSize, lineHeight: 1.1 }}>
           <span>Elapsed {fmt(liveElapsedSec)}</span>
           <span>Phase {isComplete ? "0:00" : fmt(phaseRemaining)}</span>
         </div>
-        <div style={{ color: "#94a3b8", fontSize: "clamp(12px, 3.5vw, 18px)", lineHeight: 1.4 }}>{sequence}</div>
+        <div style={{ color: "#94a3b8", fontSize: sequenceFontSize, lineHeight: 1.15, whiteSpace: isCompact ? "nowrap" : "normal", overflow: "hidden", textOverflow: "ellipsis" }}>{sequence}</div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.max(1, phases.length)}, minmax(0, 1fr))`, gap: 3 }}>
+      <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.max(1, phases.length)}, minmax(0, 1fr))`, gap: isCompact ? 2 : 3, flex: "0 0 auto" }}>
         {phases.map((p, idx) => {
           const done = idx < phaseState.index || isComplete
           const active = idx === phaseState.index && started && !isComplete
           return (
             <div key={`${p.short}-${idx}`} style={{
-              height: active ? 18 : 12,
+              height: active ? timelineActiveHeight : timelineHeight,
               borderRadius: 4,
               background: done ? "#64748b" : p.kind === "rest" ? "#166534" : "#0369a1",
               outline: active ? `2px solid ${accent}` : "none",
@@ -2904,21 +2998,21 @@ function GymSetTimerModal({ onClose }) {
           )
         })}
       </div>
-      <div style={{ height: 12, background: "rgba(255,255,255,0.16)", borderRadius: 999, overflow: "hidden" }}>
+      <div style={{ height: progressHeight, background: "rgba(255,255,255,0.16)", borderRadius: 999, overflow: "hidden", flex: "0 0 auto" }}>
         <div style={{ width: `${fillPct}%`, height: "100%", background: accent, transition: "width 0.25s linear" }} />
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 8 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: controlGap, flex: "0 0 auto" }}>
         {!started || isComplete ? (
-          <button disabled={controlsDisabled} onClick={startTimer} style={{ ...buttonStyle(true), padding: 14, fontSize: 14, opacity: controlsDisabled ? 0.5 : 1 }}>Start</button>
+          <button disabled={controlsDisabled} onClick={startTimer} style={{ ...buttonStyle(true), padding: controlPadding, fontSize: controlFontSize, opacity: controlsDisabled ? 0.5 : 1 }}>Start</button>
         ) : running ? (
-          <button onClick={pauseTimer} style={{ ...buttonStyle(false), padding: 14, fontSize: 14, color: "#f8fafc", borderColor: "rgba(255,255,255,0.35)" }}>Pause</button>
+          <button onClick={pauseTimer} style={{ ...buttonStyle(false), padding: controlPadding, fontSize: controlFontSize, color: "#f8fafc", borderColor: "rgba(255,255,255,0.35)" }}>Pause</button>
         ) : (
-          <button onClick={resumeTimer} style={{ ...buttonStyle(true), padding: 14, fontSize: 14 }}>Resume</button>
+          <button onClick={resumeTimer} style={{ ...buttonStyle(true), padding: controlPadding, fontSize: controlFontSize }}>Resume</button>
         )}
-        <button disabled={!started || isComplete} onClick={skipPhase} style={{ ...buttonStyle(false), padding: 14, fontSize: 14, color: "#f8fafc", borderColor: "rgba(255,255,255,0.35)", opacity: !started || isComplete ? 0.45 : 1 }}>Skip</button>
-        <button onClick={resetTimer} style={{ ...buttonStyle(false), padding: 14, fontSize: 14, color: "#f8fafc", borderColor: "rgba(255,255,255,0.35)" }}>Reset</button>
-        <button onClick={() => setShowOpposite(v => !v)} style={{ ...buttonStyle(false), padding: 14, fontSize: 14, color: "#f8fafc", borderColor: "rgba(255,255,255,0.35)" }}>Flip</button>
+        <button disabled={!started || isComplete} onClick={skipPhase} style={{ ...buttonStyle(false), padding: controlPadding, fontSize: controlFontSize, color: "#f8fafc", borderColor: "rgba(255,255,255,0.35)", opacity: !started || isComplete ? 0.45 : 1 }}>Skip</button>
+        <button onClick={resetTimer} style={{ ...buttonStyle(false), padding: controlPadding, fontSize: controlFontSize, color: "#f8fafc", borderColor: "rgba(255,255,255,0.35)" }}>Reset</button>
+        <button onClick={() => setShowOpposite(v => !v)} style={{ ...buttonStyle(false), padding: controlPadding, fontSize: controlFontSize, color: "#f8fafc", borderColor: "rgba(255,255,255,0.35)" }}>Flip</button>
       </div>
     </div>
   )
