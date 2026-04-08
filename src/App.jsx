@@ -14,6 +14,7 @@ import {
   migrateLocalCanonicalSessions,
   migrateLocalHealthfitDaily,
   migrateLocalSleepRecords,
+  upsertCanonicalSessions,
   upsertBiometricRecords,
   upsertHealthfitDaily,
   upsertSleepRecords
@@ -4879,6 +4880,150 @@ function parseFitnessViewCSV(text) {
   return { workouts, rejected, nutrition: [] }
 }
 
+function dateOnlyFromWorkout(value) {
+  return String(value || "").slice(0, 10)
+}
+
+function fitnessViewModality(type) {
+  const t = String(type || "").toLowerCase()
+  if (t.includes("run")) return "run"
+  if (t.includes("cycl") || t.includes("bike")) return "bike"
+  if (t.includes("swim")) return "swim"
+  if (t.includes("walk")) return "walk"
+  if (t.includes("row")) return "row"
+  if (t.includes("strength")) return "strength"
+  return "other"
+}
+
+function scheduleWorkoutModality(workout) {
+  const t = String(workout?.type || "").toLowerCase()
+  if (t.includes("running")) return "run"
+  if (t.includes("cycling") || t.includes("bike")) return "bike"
+  if (t.includes("swimming")) return "swim"
+  if (t.includes("walking")) return "walk"
+  if (t.includes("rowing")) return "row"
+  if (t.includes("strength")) return "strength"
+  return "other"
+}
+
+function parseScheduleWorkoutDuration(workout) {
+  const value = Number(workout?.dur ?? workout?.duration_min ?? workout?.durationMin ?? 0)
+  return Number.isFinite(value) && value > 0 ? value : null
+}
+
+function parseScheduleWorkoutDistance(workout) {
+  const value = Number(workout?.distance ?? workout?.distance_miles ?? workout?.miles ?? 0)
+  return Number.isFinite(value) && value > 0 ? value : null
+}
+
+function makeFitnessViewCanonicalSession(workout, scheduleMatch = null) {
+  const schedule = scheduleMatch?.schedule || null
+  const scheduleId = schedule?._scheduleId || schedule?.id || null
+  const sessionId = scheduleId
+    ? `schedule_fv_${scheduleId}_${stableHash(`${workout.start_date}|${workout.type}|${workout.duration_min || ""}|${workout.distance || ""}`)}`
+    : makeSessionId("fv", workout)
+  const startMs = Date.parse(workout.start_date || "")
+  const endDate = Number.isFinite(startMs) && Number(workout.duration_min) > 0
+    ? new Date(startMs + Number(workout.duration_min) * 60000).toISOString()
+    : workout.end_date || workout.start_date
+
+  return {
+    session_id: sessionId,
+    match_confidence: schedule ? "high" : "single_source",
+    relationship: schedule ? "schedule_fitnessview_linked" : "fitnessview_only",
+    canonical_type: workout.type,
+    start_date: workout.start_date,
+    end_date: endDate,
+    duration_min: workout.duration_min,
+    overlap_summary: schedule ? {
+      matched_by: scheduleMatch.reasons,
+      schedule_workout_id: schedule.id || null,
+      schedule_id: scheduleId,
+      duration_diff_min: scheduleMatch.durationDiffMin,
+      distance_diff_mi: scheduleMatch.distanceDiffMi,
+    } : null,
+    sources: {
+      fitnessview: workout,
+      schedule_workout: schedule,
+      apple: null,
+      technogym: null,
+    },
+    preferred_metrics: {
+      hr: { value: workout.hr || null, source: "FitnessView" },
+      calories: { value: workout.calories || null, source: "FitnessView" },
+      distance: { value: workout.distance || null, source: "FitnessView", unit: workout.distance_unit, rationale: schedule ? "FitnessView linked to Schedule activity" : "FitnessView only" },
+      power_avg: { value: null, source: null },
+      level: { value: null, source: null },
+      rpm_avg: { value: null, source: null },
+      vo2: { value: null, source: null },
+    }
+  }
+}
+
+function findScheduleWorkoutMatchForFitnessView(workout, scheduleWorkouts) {
+  const date = dateOnlyFromWorkout(workout.start_date)
+  const modality = fitnessViewModality(workout.type)
+  if (!date || modality === "other") return null
+
+  const candidates = (Array.isArray(scheduleWorkouts) ? scheduleWorkouts : [])
+    .filter(schedule => schedule?._scheduleId != null)
+    .filter(schedule => dateOnlyFromWorkout(schedule.dateTime || schedule.date) === date)
+    .filter(schedule => scheduleWorkoutModality(schedule) === modality)
+    .map(schedule => {
+      const reasons = ["same day", "compatible modality"]
+      let score = 2
+      const fvDuration = Number(workout.duration_min || 0) || null
+      const scheduleDuration = parseScheduleWorkoutDuration(schedule)
+      const durationDiffMin = fvDuration && scheduleDuration ? Math.abs(fvDuration - scheduleDuration) : null
+      if (durationDiffMin != null && durationDiffMin <= Math.max(10, scheduleDuration * 0.35)) {
+        score += 2
+        reasons.push("duration similarity")
+      } else if (durationDiffMin != null) {
+        score -= 2
+      }
+
+      const fvDistance = Number(workout.distance || 0) || null
+      const scheduleDistance = parseScheduleWorkoutDistance(schedule)
+      const distanceDiffMi = fvDistance && scheduleDistance ? Math.abs(fvDistance - scheduleDistance) : null
+      if (distanceDiffMi != null && distanceDiffMi <= Math.max(0.35, scheduleDistance * 0.3)) {
+        score += 2
+        reasons.push("distance similarity")
+      } else if (distanceDiffMi != null) {
+        score -= 2
+      }
+
+      const fvMs = Date.parse(workout.start_date || "")
+      const scheduleMs = Date.parse(schedule.dateTime || "")
+      if (
+        Number.isFinite(fvMs) &&
+        Number.isFinite(scheduleMs) &&
+        String(workout.start_date || "").includes("T00:00:00") === false
+      ) {
+        const diffMin = Math.abs(fvMs - scheduleMs) / 60000
+        if (diffMin <= 90) {
+          score += 2
+          reasons.push("time window")
+        } else {
+          score -= 3
+        }
+      }
+
+      return { schedule, score, reasons, durationDiffMin, distanceDiffMi }
+    })
+    .filter(match => match.score >= 4)
+    .sort((a, b) => b.score - a.score)
+
+  if (!candidates.length) return null
+  if (candidates.length > 1 && candidates[0].score === candidates[1].score) return null
+  return candidates[0]
+}
+
+function makeFitnessViewCanonicalSessions(workouts, scheduleWorkouts) {
+  return (Array.isArray(workouts) ? workouts : []).map(workout =>
+    makeFitnessViewCanonicalSession(workout, findScheduleWorkoutMatchForFitnessView(workout, scheduleWorkouts))
+  )
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // CRONOMETER CSV PARSER  (nutrition records — separate from workouts)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -5386,30 +5531,15 @@ function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily,
             // Store for post-processing — pass alongside apple in worker
             if (!technogymFile) {
               // No XML apple — use FitnessView directly as canonical accepted sessions
-              const accepted = fvSessions.map(w => ({
-                session_id: makeSessionId("fv", w),
-                match_confidence: "single_source",
-                relationship: "fitnessview_only",
-                canonical_type: w.type,
-                start_date: w.start_date,
-                end_date: w.end_date,
-                duration_min: w.duration_min,
-                overlap_summary: null,
-                sources: { fitnessview: w, apple: null, technogym: null },
-                preferred_metrics: {
-                  hr: { value: w.hr || null, source: "FitnessView" },
-                  calories: { value: w.calories || null, source: "FitnessView" },
-                  distance: { value: w.distance || null, source: "FitnessView", unit: w.distance_unit, rationale: "FitnessView only" },
-                  power_avg: { value: null, source: null }, level: { value: null, source: null },
-                  rpm_avg: { value: null, source: null }, vo2: { value: null, source: null }
-                }
-              }))
+              const scheduleWorkouts = await store.get("ufd-workouts") || []
+              const accepted = makeFitnessViewCanonicalSessions(fvSessions, scheduleWorkouts)
+              const linkedCount = accepted.filter(session => session.relationship === "schedule_fitnessview_linked").length
               const mergedReviewRows = pendingReviewRows.slice()
               setResult({ accepted, all_sessions: accepted, review: mergedReviewRows, rejected: allRejected,
-                summary: { accepted: accepted.length, review: mergedReviewRows.length, rejected: allRejected.length, total: accepted.length } })
+                summary: { accepted: accepted.length, linked: linkedCount, review: mergedReviewRows.length, rejected: allRejected.length, total: accepted.length } })
               setReviewRows(mergedReviewRows)
               setImporting(false)
-              setStatus(`FitnessView: ${accepted.length} sessions imported directly`)
+              setStatus(`FitnessView: ${accepted.length} sessions ready (${linkedCount} linked to Schedule, ${accepted.length - linkedCount} standalone)`)
               return
             }
           }
@@ -5531,13 +5661,18 @@ function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily,
     try {
       // Commit workout sessions
       if (sessions.length) {
-        localStorage.setItem("lift_canonical_sessions", JSON.stringify(sessions))
-        setCanonicalSessions(sessions)
+        const existingCanonical = supabase && STORE_USER_ID
+          ? await loadCanonicalSessions(supabase, STORE_USER_ID).catch(() => canonicalSessions)
+          : canonicalSessions
+        const mergedSessions = dedupeCanonicalSessions([...(Array.isArray(existingCanonical) ? existingCanonical : []), ...sessions])
+        localStorage.setItem("lift_canonical_sessions", JSON.stringify(mergedSessions))
+        setCanonicalSessions(mergedSessions)
         committed += sessions.length
         if (supabase && STORE_USER_ID) {
-          const withUser = sessions.map(s => ({ ...s, user_id: STORE_USER_ID }))
-          const { error } = await supabase.from("canonical_sessions").upsert(withUser, { onConflict: "session_id" })
-          if (error) { if (process.env.NODE_ENV === "development") console.warn("Supabase write failed:", error.message) }
+          await upsertCanonicalSessions(supabase, STORE_USER_ID, sessions)
+          const remoteSessions = await loadCanonicalSessions(supabase, STORE_USER_ID)
+          localStorage.setItem("lift_canonical_sessions", JSON.stringify(remoteSessions))
+          setCanonicalSessions(remoteSessions)
         }
       }
       // Commit nutrition to user_kv (feeds Calories tab)
