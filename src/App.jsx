@@ -5253,6 +5253,137 @@ function normalizeDateString(value) {
   return Number.isFinite(t) ? new Date(t).toISOString() : null;
 }
 
+function normalizeTechnogymPayload(parsed) {
+  function tgNum(value) {
+    const n = Number(value)
+    return Number.isFinite(n) ? n : null
+  }
+
+  function tgFirstValue(obj, keys) {
+    for (let i = 0; i < keys.length; i += 1) {
+      const key = keys[i]
+      if (obj?.[key] != null && obj[key] !== "") return obj[key]
+    }
+    return null
+  }
+
+  function tgClassify(workout) {
+    if (workout.TotalIsoWeight != null || workout.Rm1 != null) return "Traditional Strength Training"
+    if (workout.AvgSpeedRpm != null || workout.AvgRpm != null) return "Cycling"
+    if (workout.AvgRunningCadence != null || workout.RunType != null) return "Running"
+    if (workout.HDistance != null) return "Cycling"
+    const raw = String(workout.activity_type || workout.type || workout.raw_type || "").toLowerCase()
+    if (raw.includes("run") || raw.includes("tread")) return "Running"
+    if (raw.includes("bike") || raw.includes("cycl") || raw.includes("spin")) return "Cycling"
+    if (raw.includes("row")) return "Rowing"
+    if (raw.includes("ellip")) return "Elliptical"
+    if (raw.includes("stair")) return "Stair Climbing"
+    if (raw.includes("strength") || raw.includes("weight")) return "Traditional Strength Training"
+    return "Indoor Cycling"
+  }
+
+  function tgLooksLikeSession(obj) {
+    if (!obj || Array.isArray(obj) || typeof obj !== "object") return false
+    const keys = Object.keys(obj)
+    if (!keys.length) return false
+    const lower = keys.map(key => String(key).toLowerCase())
+    const hasDate = lower.some(key => key.includes("date") || key.includes("start"))
+    const hasDuration = lower.some(key => key.includes("duration") || key.includes("time") || key.includes("elapsed"))
+    const hasMetrics = lower.some(key =>
+      key.includes("cal") || key.includes("distance") || key.includes("rpm") || key.includes("power") || key.includes("weight") || key.includes("hr")
+    )
+    return (hasDate && hasDuration) || (hasDate && hasMetrics)
+  }
+
+  function tgCollectCandidates(node, acc, depth) {
+    if (!node || depth > 8) return
+    if (Array.isArray(node)) {
+      for (let i = 0; i < node.length; i += 1) tgCollectCandidates(node[i], acc, depth + 1)
+      return
+    }
+    if (typeof node !== "object") return
+    if (tgLooksLikeSession(node)) acc.push(node)
+    const values = Object.values(node)
+    for (let i = 0; i < values.length; i += 1) {
+      const value = values[i]
+      if (value && typeof value === "object") tgCollectCandidates(value, acc, depth + 1)
+    }
+  }
+
+  const candidates = []
+  tgCollectCandidates(parsed, candidates, 0)
+
+  const workouts = []
+  const rejected = []
+  const seen = new Set()
+
+  for (let i = 0; i < candidates.length; i += 1) {
+    const raw = candidates[i]
+    const startRaw = tgFirstValue(raw, ["start_date", "startDate", "StartDate", "Date", "date", "TrainingStartDate", "WorkoutStartDate"])
+    const startDate = normalizeDateString(startRaw)
+
+    let durationSec = tgNum(tgFirstValue(raw, ["duration_sec", "DurationSeconds", "durationSeconds", "ElapsedSeconds", "MovingTimeSeconds"]))
+    if (!Number.isFinite(durationSec)) {
+      const durationMin = tgNum(tgFirstValue(raw, ["duration_min", "DurationMinutes", "duration", "Duration", "ElapsedMinutes", "MovingTimeMinutes"]))
+      if (Number.isFinite(durationMin)) durationSec = durationMin > 240 ? durationMin : durationMin * 60
+    }
+    if (!Number.isFinite(durationSec)) durationSec = null
+
+    const endRaw = tgFirstValue(raw, ["end_date", "endDate", "EndDate", "WorkoutEndDate"])
+    let endDate = normalizeDateString(endRaw)
+    if (!endDate && startDate && Number.isFinite(durationSec) && durationSec > 0) {
+      endDate = new Date(toMs(startDate) + durationSec * 1000).toISOString()
+    }
+
+    const signature = `${startDate || "na"}|${endDate || "na"}|${JSON.stringify(Object.keys(raw).sort())}`
+    if (seen.has(signature)) continue
+    seen.add(signature)
+
+    if (!startDate || !endDate) {
+      rejected.push({ source: "Technogym", reason: "Missing usable start or end date", raw })
+      continue
+    }
+
+    const distanceRaw = tgFirstValue(raw, ["distance", "Distance", "HDistance", "TotalDistance", "DistanceMeters"])
+    const distance = tgNum(distanceRaw)
+    const type = tgClassify(raw)
+
+    workouts.push({
+      source: "Technogym",
+      raw_type: tgFirstValue(raw, ["activity_type", "ActivityType", "type", "Type", "discipline"]) || type,
+      type,
+      start_date: startDate,
+      end_date: endDate,
+      duration_min: minutesBetween(startDate, endDate),
+      distance: Number.isFinite(distance) ? distance : null,
+      distance_unit: tgFirstValue(raw, ["distance_unit", "DistanceUnit", "Unit"]) || (Number.isFinite(distance) ? "m" : null),
+      calories: tgNum(tgFirstValue(raw, ["calories", "Calories", "Energy", "TotalCalories"])) || 0,
+      hr: tgNum(tgFirstValue(raw, ["hr", "AvgHeartRate", "AverageHeartRate"])) || null,
+      notes: "",
+      power_avg: tgNum(tgFirstValue(raw, ["power_avg", "AvgPower", "AveragePower"])),
+      level: tgNum(tgFirstValue(raw, ["level", "Level"])),
+      rpm_avg: tgNum(tgFirstValue(raw, ["rpm_avg", "AvgRpm", "AvgSpeedRpm"])),
+      vo2: tgNum(tgFirstValue(raw, ["vo2", "VO2", "EstimatedVO2"])),
+      raw,
+    })
+  }
+
+  workouts.sort((a, b) => (toMs(a.start_date) || 0) - (toMs(b.start_date) || 0))
+
+  return {
+    workouts,
+    rejected,
+    diagnostics: {
+      candidate_records: candidates.length,
+      unique_sessions: workouts.length,
+    },
+  }
+}
+
+function parseTechnogymText(text) {
+  return normalizeTechnogymPayload(JSON.parse(String(text || "")))
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // SOURCE AUTO-DETECTION
 // Inspects file content to determine source. Never guesses silently —
