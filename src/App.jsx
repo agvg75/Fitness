@@ -13,7 +13,10 @@ import {
   migrateLocalBiometricRecords,
   migrateLocalCanonicalSessions,
   migrateLocalHealthfitDaily,
-  migrateLocalSleepRecords
+  migrateLocalSleepRecords,
+  upsertBiometricRecords,
+  upsertHealthfitDaily,
+  upsertSleepRecords
 } from "./lib/persistence.js"
 import {
   LineChart,
@@ -5242,7 +5245,7 @@ function makeImportFileReviewRow(fileInfo, reason) {
   }
 }
 
-function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily, setSleepRecords }) {
+function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily, setSleepRecords, setBiometricRecords }) {
   const [queuedFiles, setQueuedFiles] = useState([])  // [{file, detected, firstChunk}]
   const [status, setStatus] = useState("Drop files to import")
   const [progress, setProgress] = useState(null)
@@ -5482,7 +5485,7 @@ function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily,
       setStatus("Running overlap pipeline...")
       worker.postMessage({ type: "process", appleFile, technogymFile })
     } else if (allNutrition.length || allSleep.length || allBiometrics.length || allHealthFit.length) {
-      setStatus("Non-workout files processed. Nutrition, sleep, and biometric data ready to commit.")
+      setStatus("Small-source files processed. Sleep, daily metrics, biometrics, and nutrition are ready to commit.")
       setImporting(false)
     } else if (pendingReviewRows.length) {
       setStatus("Files held for manual review. Override source if needed, then reprocess.")
@@ -5549,7 +5552,7 @@ function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily,
         await store.set("ufd-meal-entries", merged)
         committed += nutritionResult.length
       }
-      // Sleep and biometrics — store for future tab integration
+      // Small-source imports: local fallback, Supabase tables when signed in
       if (sleepResult.length) {
         const existing = JSON.parse(localStorage.getItem("lift_sleep_records") || "[]")
         const byDate = {}
@@ -5558,26 +5561,54 @@ function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily,
         const merged = Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date))
         localStorage.setItem("lift_sleep_records", JSON.stringify(merged))
         if (setSleepRecords) setSleepRecords(merged)
+        committed += sleepResult.length
+        if (supabase && STORE_USER_ID) {
+          await upsertSleepRecords(supabase, STORE_USER_ID, merged)
+          const remoteSleep = await loadSleepRecords(supabase, STORE_USER_ID)
+          localStorage.setItem("lift_sleep_records", JSON.stringify(remoteSleep))
+          if (setSleepRecords) setSleepRecords(remoteSleep)
+        }
       }
-      if (biometricResult.length) localStorage.setItem("lift_biometric_records", JSON.stringify(biometricResult))
+      if (biometricResult.length) {
+        const existing = JSON.parse(localStorage.getItem("lift_biometric_records") || "[]")
+        const byKey = {}
+        ;(Array.isArray(existing) ? existing : []).forEach(r => { byKey[r.biometric_id || r.id || `${r.source || "bio"}_${r.timestamp || r.date}`] = r })
+        biometricResult.forEach(r => { byKey[r.biometric_id || r.id || `${r.source || "bio"}_${r.timestamp || r.date}`] = r })
+        const merged = Object.values(byKey).sort((a, b) => String(a.timestamp || a.date || "").localeCompare(String(b.timestamp || b.date || "")))
+        localStorage.setItem("lift_biometric_records", JSON.stringify(merged))
+        if (setBiometricRecords) setBiometricRecords(merged)
+        committed += biometricResult.length
+        if (supabase && STORE_USER_ID) {
+          await upsertBiometricRecords(supabase, STORE_USER_ID, merged)
+          const remoteBiometrics = await loadBiometricRecords(supabase, STORE_USER_ID)
+          localStorage.setItem("lift_biometric_records", JSON.stringify(remoteBiometrics))
+          if (setBiometricRecords) setBiometricRecords(remoteBiometrics)
+        }
+      }
 
-      // HealthFit CTL/ATL/TSB — merge by date into user_kv "healthfit-daily"
+      // HealthFit CTL/ATL/TSB — local fallback, Supabase healthfit_daily when signed in
       if (healthFitResult.length) {
         const existing = await store.get("healthfit-daily") || []
         const byDate = {}
         ;(Array.isArray(existing) ? existing : []).forEach(r => { byDate[r.date] = r })
         healthFitResult.forEach(r => { byDate[r.date] = r })
         const merged = Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date))
-        await store.set("healthfit-daily", merged)
+        localStorage.setItem("healthfit-daily", JSON.stringify(merged))
         if (setHealthFitDaily) setHealthFitDaily(merged)
         committed += healthFitResult.length
+        if (supabase && STORE_USER_ID) {
+          await upsertHealthfitDaily(supabase, STORE_USER_ID, merged)
+          const remoteHealthFit = await loadHealthfitDaily(supabase, STORE_USER_ID)
+          localStorage.setItem("healthfit-daily", JSON.stringify(remoteHealthFit))
+          if (setHealthFitDaily) setHealthFitDaily(remoteHealthFit)
+        }
       }
 
       setStatus(`Committed ${committed} records.${sleepResult.length ? ` ${sleepResult.length} sleep records saved.` : ""}${biometricResult.length ? ` ${biometricResult.length} biometrics saved.` : ""}${healthFitResult.length ? ` ${healthFitResult.length} HealthFit records saved.` : ""}${reviewRows.length ? ` ${reviewRows.length} still in review.` : ""}`)
     } catch (err) {
       setStatus(`Commit failed: ${err.message || String(err)}`)
     }
-  }, [result, nutritionResult, sleepResult, biometricResult, healthFitResult, reviewRows.length, setCanonicalSessions, setHealthFitDaily, setSleepRecords])
+  }, [result, nutritionResult, sleepResult, biometricResult, healthFitResult, reviewRows.length, setCanonicalSessions, setHealthFitDaily, setSleepRecords, setBiometricRecords])
 
   const cs = SOURCE_LABELS
   const s = v => ({ padding: "4px 8px", border: "none", borderRadius: 4, fontSize: 11, cursor: "pointer", background: "#1a1b2e", color: "#aaa", fontFamily: "inherit", ...v })
@@ -5644,7 +5675,7 @@ function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily,
             {importing ? "Processing..." : "Process files"}
           </button>
           <button onClick={commitAll} style={buttonStyle(false)}
-            disabled={!result?.accepted?.length && !nutritionResult.length && !sleepResult.length && !biometricResult.length}>
+            disabled={!result?.accepted?.length && !nutritionResult.length && !sleepResult.length && !biometricResult.length && !healthFitResult.length}>
             Commit to dashboard
           </button>
           {queuedFiles.length > 0 && <button onClick={() => setQueuedFiles([])} style={s()}>Clear queue</button>}
@@ -5659,7 +5690,7 @@ function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily,
       </div>
 
       {/* Summary */}
-      {(result || nutritionResult.length > 0 || sleepResult.length > 0 || biometricResult.length > 0) && (
+      {(result || nutritionResult.length > 0 || sleepResult.length > 0 || biometricResult.length > 0 || healthFitResult.length > 0) && (
         <div style={{ ...cardStyle(), minWidth: 0 }}>
           <div style={{ fontWeight: "bold", marginBottom: 10 }}>Results</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 }}>
@@ -5671,6 +5702,7 @@ function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily,
             {nutritionResult.length > 0 && <SummaryCell label="Nutrition entries" value={nutritionResult.length} />}
             {sleepResult.length > 0 && <SummaryCell label="Sleep records" value={sleepResult.length} />}
             {biometricResult.length > 0 && <SummaryCell label="Biometrics" value={biometricResult.length} />}
+            {healthFitResult.length > 0 && <SummaryCell label="HealthFit daily" value={healthFitResult.length} />}
             <SummaryCell label="In dashboard" value={Array.isArray(canonicalSessions) ? canonicalSessions.length : 0} />
           </div>
         </div>
@@ -10240,6 +10272,7 @@ return (
     setCanonicalSessions={setCanonicalSessions}
     setHealthFitDaily={setHealthFitDaily}
     setSleepRecords={setSleepRecords}
+    setBiometricRecords={setBiometricRecords}
   />
 )}
 
