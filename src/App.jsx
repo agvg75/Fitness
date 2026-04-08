@@ -1542,6 +1542,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const [inlineExForm, setInlineExForm] = useState(null)   // day | null
   const [inlineExName, setInlineExName] = useState("")
   const [highlightedLogEntryId, setHighlightedLogEntryId] = useState(null)
+  const [showSetTimer, setShowSetTimer] = useState(false)
   const logEntryRefs = useRef({})
 
   const SPLIT_DAYS = ["Tue", "Thu"]
@@ -2533,10 +2534,13 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
             )
           })}
         </div>
-<div style={{ display: "flex", gap: 6 }}>
-          <button onClick={() => setSchedView(v => v === "log" ? "schedule" : "log")} style={buttonStyle(false)}>
-            {schedView === "log" ? "◀ Schedule" : `Log (${schedLog.length})`}
-          </button>
+	<div style={{ display: "flex", gap: 6 }}>
+	          <button onClick={() => setShowSetTimer(true)} style={buttonStyle(true)}>
+	            Set Timer
+	          </button>
+	          <button onClick={() => setSchedView(v => v === "log" ? "schedule" : "log")} style={buttonStyle(false)}>
+	            {schedView === "log" ? "◀ Schedule" : `Log (${schedLog.length})`}
+	          </button>
           <button onClick={exportLog} style={buttonStyle(false)}>Export ↓</button>
           <button onClick={() => importRef.current?.click()} style={buttonStyle(false)}>Import ↑</button>
         </div>
@@ -2647,15 +2651,275 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
             </div>
           )}
 
-          {logBar()}
-        </>
-      )}
+	          {logBar()}
+	        </>
+	      )}
 
-      {toast && (
-        <div style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", background: "#1a1a1a", border: "1px solid #333", color: "#e8e8e8", padding: "8px 20px", borderRadius: 8, fontSize: 13, zIndex: 999, pointerEvents: "none" }}>
+	      {showSetTimer && <GymSetTimerModal onClose={() => setShowSetTimer(false)} />}
+
+	      {toast && (
+	        <div style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", background: "#1a1a1a", border: "1px solid #333", color: "#e8e8e8", padding: "8px 20px", borderRadius: 8, fontSize: 13, zIndex: 999, pointerEvents: "none" }}>
           {toast}
         </div>
       )}
+    </div>
+  )
+}
+
+function GymSetTimerModal({ onClose }) {
+  const [machineName, setMachineName] = useState("")
+  const [sets, setSets] = useState(3)
+  const [workSec, setWorkSec] = useState(45)
+  const [restSec, setRestSec] = useState(60)
+  const [showOpposite, setShowOpposite] = useState(false)
+  const [running, setRunning] = useState(false)
+  const [started, setStarted] = useState(false)
+  const [elapsedMs, setElapsedMs] = useState(0)
+  const [anchorMs, setAnchorMs] = useState(null)
+  const [nowMs, setNowMs] = useState(Date.now())
+  const panelRef = useRef(null)
+
+  const clampInt = (value, min, max) => {
+    const n = Number.parseInt(value, 10)
+    if (!Number.isFinite(n)) return min
+    return Math.max(min, Math.min(max, n))
+  }
+
+  const phases = useMemo(() => {
+    const count = clampInt(sets, 1, 20)
+    const work = clampInt(workSec, 5, 1800)
+    const rest = clampInt(restSec, 0, 1800)
+    const out = []
+
+    for (let i = 1; i <= count; i += 1) {
+      out.push({ kind: "work", label: `Set ${i} of ${count}`, short: `Set ${i}`, duration: work, setNo: i })
+      if (i < count && rest > 0) out.push({ kind: "rest", label: `Rest after Set ${i}`, short: "Rest", duration: rest, setNo: i })
+    }
+
+    return out
+  }, [sets, workSec, restSec])
+
+  const totalSec = phases.reduce((sum, phase) => sum + phase.duration, 0)
+  const liveElapsedSec = Math.min(
+    totalSec,
+    Math.floor((elapsedMs + (running && anchorMs ? nowMs - anchorMs : 0)) / 1000)
+  )
+  const remainingSec = Math.max(0, totalSec - liveElapsedSec)
+  const isComplete = started && remainingSec <= 0
+
+  const phaseState = useMemo(() => {
+    let cursor = 0
+    for (let i = 0; i < phases.length; i += 1) {
+      const phase = phases[i]
+      const next = cursor + phase.duration
+      if (liveElapsedSec < next || i === phases.length - 1) {
+        const elapsedInPhase = Math.max(0, liveElapsedSec - cursor)
+        return {
+          index: i,
+          phase,
+          phaseRemaining: Math.max(0, phase.duration - elapsedInPhase),
+          phaseElapsed: elapsedInPhase
+        }
+      }
+      cursor = next
+    }
+
+    return { index: phases.length - 1, phase: phases[phases.length - 1], phaseRemaining: 0, phaseElapsed: 0 }
+  }, [phases, liveElapsedSec])
+
+  useEffect(() => {
+    if (!running) return undefined
+    const id = window.setInterval(() => setNowMs(Date.now()), 250)
+    return () => window.clearInterval(id)
+  }, [running])
+
+  useEffect(() => {
+    if (!running || !isComplete) return
+    setElapsedMs(totalSec * 1000)
+    setRunning(false)
+    setAnchorMs(null)
+  }, [isComplete, running, totalSec])
+
+  const fmt = seconds => {
+    const s = Math.max(0, Math.floor(Number(seconds) || 0))
+    const m = Math.floor(s / 60)
+    const rem = s % 60
+    return `${m}:${String(rem).padStart(2, "0")}`
+  }
+
+  const requestFullscreen = () => {
+    const el = panelRef.current
+    if (el?.requestFullscreen && document.fullscreenElement == null) {
+      el.requestFullscreen().catch(() => {})
+    }
+  }
+
+  const startTimer = () => {
+    setStarted(true)
+    setRunning(true)
+    setElapsedMs(0)
+    setAnchorMs(Date.now())
+    setNowMs(Date.now())
+    requestFullscreen()
+  }
+
+  const pauseTimer = () => {
+    if (!running) return
+    const nextElapsed = Math.min(totalSec * 1000, elapsedMs + (Date.now() - (anchorMs || Date.now())))
+    setElapsedMs(nextElapsed)
+    setRunning(false)
+    setAnchorMs(null)
+  }
+
+  const resumeTimer = () => {
+    if (isComplete) return
+    setRunning(true)
+    setAnchorMs(Date.now())
+    setNowMs(Date.now())
+    requestFullscreen()
+  }
+
+  const skipPhase = () => {
+    const elapsedBeforeCurrent = phases
+      .slice(0, phaseState.index + 1)
+      .reduce((sum, phase) => sum + phase.duration, 0)
+    setElapsedMs(Math.min(totalSec * 1000, elapsedBeforeCurrent * 1000))
+    setAnchorMs(running ? Date.now() : null)
+    setNowMs(Date.now())
+  }
+
+  const resetTimer = () => {
+    setRunning(false)
+    setStarted(false)
+    setElapsedMs(0)
+    setAnchorMs(null)
+  }
+
+  const closeTimer = () => {
+    if (document.fullscreenElement && document.exitFullscreen) {
+      document.exitFullscreen().catch(() => {})
+    }
+    onClose()
+  }
+
+  const phase = phaseState.phase || phases[0]
+  const phaseRemaining = isComplete ? 0 : phaseState.phaseRemaining
+  const pulse = started && !isComplete && phaseRemaining <= 10
+  const sequence = phases.map(p => p.short).join(" → ")
+
+  const fillPct = totalSec > 0 ? Math.min(100, (liveElapsedSec / totalSec) * 100) : 0
+  const controlsDisabled = phases.length === 0 || totalSec <= 0
+  const panelBg = phase?.kind === "rest" ? "#031711" : "#07111f"
+  const accent = phase?.kind === "rest" ? "#22c55e" : "#38bdf8"
+  const phaseLabel = isComplete ? "Complete" : phase?.label || "Ready"
+
+  return (
+    <div ref={panelRef} style={{
+      position: "fixed",
+      inset: 0,
+      zIndex: 5000,
+      background: panelBg,
+      color: "#f8fafc",
+      padding: "14px",
+      boxSizing: "border-box",
+      display: "flex",
+      flexDirection: "column",
+      gap: "12px",
+      overflowY: "auto"
+    }}>
+      {showOpposite && (
+        <div style={{
+          transform: "rotate(180deg)",
+          textAlign: "center",
+          border: "1px solid rgba(255,255,255,0.25)",
+          borderRadius: 8,
+          padding: "8px",
+          background: "rgba(0,0,0,0.28)"
+        }}>
+          <div style={{ fontSize: "clamp(40px, 14vw, 96px)", fontWeight: 900, lineHeight: 0.9 }}>{fmt(remainingSec)}</div>
+          <div style={{ fontSize: "clamp(14px, 5vw, 28px)", fontWeight: 800, color: accent }}>{machineName || "Machine timer"}</div>
+        </div>
+      )}
+
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+        <div>
+          <div style={{ fontSize: 11, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.14em" }}>Machine timer</div>
+          <div style={{ fontSize: 20, fontWeight: 800 }}>{machineName || "Unnamed machine"}</div>
+        </div>
+        <button onClick={closeTimer} style={{ ...buttonStyle(false), color: "#f8fafc", borderColor: "rgba(255,255,255,0.35)" }}>Close</button>
+      </div>
+
+      {!started && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 92px", gap: 8 }}>
+          <input value={machineName} onChange={e => setMachineName(e.target.value)} placeholder="Exercise or machine name" style={{ ...inputStyle(), fontSize: 16, padding: "10px 12px", background: "#020617", color: "#f8fafc" }} />
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#cbd5e1" }}>
+            <input type="checkbox" checked={showOpposite} onChange={e => setShowOpposite(e.target.checked)} />
+            flip
+          </label>
+          {[
+            ["Sets", sets, setSets, 1, 20],
+            ["Work sec", workSec, setWorkSec, 5, 1800],
+            ["Rest sec", restSec, setRestSec, 0, 1800]
+          ].map(([label, value, setter, min, max]) => (
+            <label key={label} style={{ display: "grid", gap: 4, fontSize: 11, color: "#cbd5e1" }}>
+              {label}
+              <input type="number" min={min} max={max} value={value} onChange={e => setter(clampInt(e.target.value, min, max))}
+                style={{ ...inputStyle(), fontSize: 18, padding: "9px 10px", background: "#020617", color: "#f8fafc" }} />
+            </label>
+          ))}
+        </div>
+      )}
+
+      <div style={{ flex: "1 1 auto", minHeight: "330px", display: "flex", flexDirection: "column", justifyContent: "center", gap: "12px", textAlign: "center" }}>
+        <div style={{ fontSize: "clamp(18px, 5vw, 34px)", color: accent, fontWeight: 900 }}>{phaseLabel}</div>
+        <div style={{
+          fontSize: "clamp(92px, 32vw, 230px)",
+          fontWeight: 900,
+          lineHeight: 0.82,
+          letterSpacing: "-0.06em",
+          color: isComplete ? "#22c55e" : "#ffffff",
+          opacity: pulse && Math.floor(nowMs / 500) % 2 === 0 ? 0.58 : 1
+        }}>
+          {fmt(remainingSec)}
+        </div>
+        <div style={{ display: "flex", justifyContent: "center", gap: 18, flexWrap: "wrap", color: "#cbd5e1", fontSize: "clamp(14px, 4vw, 24px)" }}>
+          <span>Elapsed {fmt(liveElapsedSec)}</span>
+          <span>Phase {isComplete ? "0:00" : fmt(phaseRemaining)}</span>
+        </div>
+        <div style={{ color: "#94a3b8", fontSize: "clamp(12px, 3.5vw, 18px)", lineHeight: 1.4 }}>{sequence}</div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.max(1, phases.length)}, minmax(0, 1fr))`, gap: 3 }}>
+        {phases.map((p, idx) => {
+          const done = idx < phaseState.index || isComplete
+          const active = idx === phaseState.index && started && !isComplete
+          return (
+            <div key={`${p.short}-${idx}`} style={{
+              height: active ? 18 : 12,
+              borderRadius: 4,
+              background: done ? "#64748b" : p.kind === "rest" ? "#166534" : "#0369a1",
+              outline: active ? `2px solid ${accent}` : "none",
+              opacity: done ? 0.55 : 1
+            }} title={`${p.label}: ${fmt(p.duration)}`} />
+          )
+        })}
+      </div>
+      <div style={{ height: 12, background: "rgba(255,255,255,0.16)", borderRadius: 999, overflow: "hidden" }}>
+        <div style={{ width: `${fillPct}%`, height: "100%", background: accent, transition: "width 0.25s linear" }} />
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 8 }}>
+        {!started || isComplete ? (
+          <button disabled={controlsDisabled} onClick={startTimer} style={{ ...buttonStyle(true), padding: 14, fontSize: 14, opacity: controlsDisabled ? 0.5 : 1 }}>Start</button>
+        ) : running ? (
+          <button onClick={pauseTimer} style={{ ...buttonStyle(false), padding: 14, fontSize: 14, color: "#f8fafc", borderColor: "rgba(255,255,255,0.35)" }}>Pause</button>
+        ) : (
+          <button onClick={resumeTimer} style={{ ...buttonStyle(true), padding: 14, fontSize: 14 }}>Resume</button>
+        )}
+        <button disabled={!started || isComplete} onClick={skipPhase} style={{ ...buttonStyle(false), padding: 14, fontSize: 14, color: "#f8fafc", borderColor: "rgba(255,255,255,0.35)", opacity: !started || isComplete ? 0.45 : 1 }}>Skip</button>
+        <button onClick={resetTimer} style={{ ...buttonStyle(false), padding: 14, fontSize: 14, color: "#f8fafc", borderColor: "rgba(255,255,255,0.35)" }}>Reset</button>
+        <button onClick={() => setShowOpposite(v => !v)} style={{ ...buttonStyle(false), padding: 14, fontSize: 14, color: "#f8fafc", borderColor: "rgba(255,255,255,0.35)" }}>Flip</button>
+      </div>
     </div>
   )
 }
