@@ -535,6 +535,16 @@ const buildScheduleDayDateMismatchReport = entries => {
     .filter(Boolean)
 }
 
+const mergeScheduleLogEntries = (...logs) => Object.values(
+  logs
+    .flatMap(log => Array.isArray(log) ? log : [])
+    .reduce((acc, entry) => {
+      if (entry?.id == null) return acc
+      acc[entry.id] = entry
+      return acc
+    }, {})
+).sort((a, b) => b.id - a.id)
+
 const SDAY_TYPES = {
   Mon: ["Running", "Traditional Strength Training"],
   Tue: ["Traditional Strength Training"],
@@ -1536,14 +1546,49 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const VENUE_TIMES = { ymca: "05:30", knr: "09:35" }
   const VENUE_LABELS = { ymca: "YMCA (5:30–7:00)", knr: "KNR (9:35–10:45)" }
 
+  const writeLocalScheduleKey = (key, value) => {
+    try { localStorage.setItem(key, JSON.stringify(value)) } catch {}
+  }
+
+  const readScheduleKeyFromSupabase = async key => {
+    if (!supabase || !session?.user?.id) return null
+    const { data, error } = await supabase
+      .from("user_kv")
+      .select("value")
+      .eq("user_id", session.user.id)
+      .eq("key", key)
+      .maybeSingle()
+    if (error) throw error
+    return data?.value ?? null
+  }
+
   const saveScheduleKey = async (key, value) => {
-    await store.set(key, value)
-    if (!supabase || !session?.user?.id) return
-    const { error } = await supabase.from("user_kv").upsert(
+    writeLocalScheduleKey(key, value)
+    if (!supabase || !session?.user?.id) return value
+
+    const { data, error } = await supabase.from("user_kv").upsert(
       { user_id: session.user.id, key, value, updated_at: new Date().toISOString() },
       { onConflict: "user_id,key" }
-    )
-    if (error) { if (process.env.NODE_ENV === "development") console.error(`Failed to sync ${key}:`, error) }
+    ).select("value").maybeSingle()
+
+    if (error) {
+      if (process.env.NODE_ENV === "development") console.error(`Failed to sync ${key}:`, error)
+      return value
+    }
+
+    const savedValue = data?.value ?? value
+    writeLocalScheduleKey(key, savedValue)
+    return savedValue
+  }
+
+  const loadScheduleLogForMutation = async fallbackLog => {
+    try {
+      const remoteLog = await readScheduleKeyFromSupabase("wt-log")
+      if (Array.isArray(remoteLog)) return mergeScheduleLogEntries(fallbackLog, remoteLog)
+    } catch (error) {
+      if (process.env.NODE_ENV === "development") console.error("Failed to refresh wt-log before mutation:", error)
+    }
+    return Array.isArray(fallbackLog) ? fallbackLog : []
   }
 
   // ── Load from storage ──────────────────────────────────────────────────
@@ -1554,18 +1599,15 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       const ci = await store.get("wt-custom-items")
       const cx = await store.get("wt-custom-exercises")
       // Fetch wt-log from Supabase and merge with localStorage
-      if (supabase) {
+      if (supabase && session?.user?.id) {
         try {
-          const { data } = await supabase.from("user_kv").select("value").eq("key", "wt-log")
-          const sbLg = data?.[0]?.value
-          if (process.env.NODE_ENV === "development") console.log("wt-log from Supabase:", Array.isArray(sbLg) ? sbLg.length + " entries" : "not array", data)
+          const sbLg = await readScheduleKeyFromSupabase("wt-log")
+          if (process.env.NODE_ENV === "development") console.log("wt-log from Supabase:", Array.isArray(sbLg) ? sbLg.length + " entries" : "not array")
           if (Array.isArray(sbLg)) {
             const local = Array.isArray(lg) ? lg : []
-            const merged = Object.values(
-              [...local, ...sbLg].reduce((acc, e) => { acc[e.id] = e; return acc }, {})
-            ).sort((a, b) => b.id - a.id)
+            const merged = mergeScheduleLogEntries(local, sbLg)
             setSchedLog(merged)
-            await store.set("wt-log", merged)
+            writeLocalScheduleKey("wt-log", merged)
           } else if (Array.isArray(lg)) {
             setSchedLog(lg)
           }
@@ -1869,11 +1911,13 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       })),
     }
 
-    const newLog = [entry, ...schedLog]
+    const currentLog = await loadScheduleLogForMutation(schedLog)
+    const newLog = [entry, ...currentLog.filter(e => e.id !== entry.id)]
     setSchedLog(newLog)
     setSavedEntries(prev => ({ ...prev, [day]: { ...(prev[day] || {}), [venue]: entry } }))
 
-    await saveScheduleKey("wt-log", newLog)
+    const savedLog = await saveScheduleKey("wt-log", newLog)
+    if (Array.isArray(savedLog)) setSchedLog(savedLog)
     await saveScheduleKey("wt-sessions", buildSessionsStore())
 
     const allCardio = getCardioEntries(day)
@@ -1892,7 +1936,8 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       const merged = [...(Array.isArray(existing) ? existing : []), ...summaryEntries]
         .sort((a, b) => String(a.dateTime || a.date || "").localeCompare(String(b.dateTime || b.date || "")))
       setStoredWorkouts(merged)
-      await saveScheduleKey("ufd-workouts", merged)
+      const savedWorkouts = await saveScheduleKey("ufd-workouts", merged)
+      if (Array.isArray(savedWorkouts)) setStoredWorkouts(savedWorkouts)
     }
 
     showToast(`${VENUE_LABELS[venue] || "Session"} logged`)
@@ -1902,22 +1947,33 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     const day = activeDay
     const entry = savedEntries[day]?.[venue]
     if (!entry) return
-    const newLog = schedLog.filter(e => e.id !== entry.id)
+    const currentLog = await loadScheduleLogForMutation(schedLog)
+    const newLog = currentLog.filter(e => e.id !== entry.id)
     setSchedLog(newLog)
-    const newWorkouts = storedWorkouts.filter(w => w._scheduleId !== entry.id)
+    const existingWorkouts = await store.get("ufd-workouts") || storedWorkouts
+    const newWorkouts = (Array.isArray(existingWorkouts) ? existingWorkouts : []).filter(w => w._scheduleId !== entry.id)
     setStoredWorkouts(newWorkouts)
     setSavedEntries(prev => ({ ...prev, [day]: { ...(prev[day] || {}), [venue]: null } }))
     setJustUndone(venue)
-    await saveScheduleKey("wt-log", newLog)
-    await saveScheduleKey("ufd-workouts", newWorkouts)
+    const savedLog = await saveScheduleKey("wt-log", newLog)
+    if (Array.isArray(savedLog)) setSchedLog(savedLog)
+    const savedWorkouts = await saveScheduleKey("ufd-workouts", newWorkouts)
+    if (Array.isArray(savedWorkouts)) setStoredWorkouts(savedWorkouts)
     setTimeout(() => setJustUndone(null), 4000)
     showToast("Session removed")
   }
 
   const deleteEntry = async id => {
-    const newLog = schedLog.filter(e => e.id !== id)
+    const currentLog = await loadScheduleLogForMutation(schedLog)
+    const newLog = currentLog.filter(e => e.id !== id)
     setSchedLog(newLog)
-    await saveScheduleKey("wt-log", newLog)
+    const existingWorkouts = await store.get("ufd-workouts") || storedWorkouts
+    const newWorkouts = (Array.isArray(existingWorkouts) ? existingWorkouts : []).filter(w => w._scheduleId !== id)
+    const savedLog = await saveScheduleKey("wt-log", newLog)
+    if (Array.isArray(savedLog)) setSchedLog(savedLog)
+    setStoredWorkouts(newWorkouts)
+    const savedWorkouts = await saveScheduleKey("ufd-workouts", newWorkouts)
+    if (Array.isArray(savedWorkouts)) setStoredWorkouts(savedWorkouts)
     showToast("Entry deleted")
   }
 
@@ -1987,11 +2043,13 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       try {
         const parsed = JSON.parse(ev.target.result)
         if (!parsed.log || !Array.isArray(parsed.log)) throw new Error("bad format")
-        const existingIds = new Set(schedLog.map(e => e.id))
+        const currentLog = await loadScheduleLogForMutation(schedLog)
+        const existingIds = new Set(currentLog.map(e => e.id))
         const newEntries = parsed.log.filter(e => !existingIds.has(e.id))
-        const merged = [...newEntries, ...schedLog].sort((a, b) => b.id - a.id)
+        const merged = mergeScheduleLogEntries(newEntries, currentLog)
         setSchedLog(merged)
-        await saveScheduleKey("wt-log", merged)
+        const savedLog = await saveScheduleKey("wt-log", merged)
+        if (Array.isArray(savedLog)) setSchedLog(savedLog)
         showToast(`Imported ${newEntries.length} new entries`)
         setSchedView("log")
       } catch (_) {
