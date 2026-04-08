@@ -5259,6 +5259,19 @@ function normalizeTechnogymPayload(parsed) {
     return Number.isFinite(n) ? n : null
   }
 
+  function tgFlattenRecord(obj) {
+    if (!obj || Array.isArray(obj) || typeof obj !== "object") return obj
+    const flat = { ...obj }
+    const metricPairs = Array.isArray(obj?.performedData?.pr) ? obj.performedData.pr : []
+    for (let i = 0; i < metricPairs.length; i += 1) {
+      const pair = metricPairs[i]
+      const name = String(pair?.n || "").trim()
+      if (!name) continue
+      flat[name] = pair?.v
+    }
+    return flat
+  }
+
   function tgFirstValue(obj, keys) {
     for (let i = 0; i < keys.length; i += 1) {
       const key = keys[i]
@@ -5284,10 +5297,11 @@ function normalizeTechnogymPayload(parsed) {
 
   function tgLooksLikeSession(obj) {
     if (!obj || Array.isArray(obj) || typeof obj !== "object") return false
-    const keys = Object.keys(obj)
+    const flat = tgFlattenRecord(obj)
+    const keys = Object.keys(flat)
     if (!keys.length) return false
     const lower = keys.map(key => String(key).toLowerCase())
-    const hasDate = lower.some(key => key.includes("date") || key.includes("start"))
+    const hasDate = flat?.on != null || lower.some(key => key.includes("date") || key.includes("start"))
     const hasDuration = lower.some(key => key.includes("duration") || key.includes("time") || key.includes("elapsed"))
     const hasMetrics = lower.some(key =>
       key.includes("cal") || key.includes("distance") || key.includes("rpm") || key.includes("power") || key.includes("weight") || key.includes("hr")
@@ -5319,17 +5333,18 @@ function normalizeTechnogymPayload(parsed) {
 
   for (let i = 0; i < candidates.length; i += 1) {
     const raw = candidates[i]
-    const startRaw = tgFirstValue(raw, ["start_date", "startDate", "StartDate", "Date", "date", "TrainingStartDate", "WorkoutStartDate"])
+    const flattened = tgFlattenRecord(raw)
+    const startRaw = tgFirstValue(flattened, ["on", "start_date", "startDate", "StartDate", "Date", "date", "TrainingStartDate", "WorkoutStartDate"])
     const startDate = normalizeDateString(startRaw)
 
-    let durationSec = tgNum(tgFirstValue(raw, ["duration_sec", "DurationSeconds", "durationSeconds", "ElapsedSeconds", "MovingTimeSeconds"]))
+    let durationSec = tgNum(tgFirstValue(flattened, ["duration_sec", "DurationSeconds", "durationSeconds", "ElapsedSeconds", "MovingTimeSeconds"]))
     if (!Number.isFinite(durationSec)) {
-      const durationMin = tgNum(tgFirstValue(raw, ["duration_min", "DurationMinutes", "duration", "Duration", "ElapsedMinutes", "MovingTimeMinutes"]))
+      const durationMin = tgNum(tgFirstValue(flattened, ["duration_min", "DurationMinutes", "duration", "Duration", "ElapsedMinutes", "MovingTimeMinutes"]))
       if (Number.isFinite(durationMin)) durationSec = durationMin > 240 ? durationMin : durationMin * 60
     }
     if (!Number.isFinite(durationSec)) durationSec = null
 
-    const endRaw = tgFirstValue(raw, ["end_date", "endDate", "EndDate", "WorkoutEndDate"])
+    const endRaw = tgFirstValue(flattened, ["end_date", "endDate", "EndDate", "WorkoutEndDate"])
     let endDate = normalizeDateString(endRaw)
     if (!endDate && startDate && Number.isFinite(durationSec) && durationSec > 0) {
       endDate = new Date(toMs(startDate) + durationSec * 1000).toISOString()
@@ -5344,26 +5359,26 @@ function normalizeTechnogymPayload(parsed) {
       continue
     }
 
-    const distanceRaw = tgFirstValue(raw, ["distance", "Distance", "HDistance", "TotalDistance", "DistanceMeters"])
+    const distanceRaw = tgFirstValue(flattened, ["distance", "Distance", "HDistance", "TotalDistance", "DistanceMeters"])
     const distance = tgNum(distanceRaw)
-    const type = tgClassify(raw)
+    const type = tgClassify(flattened)
 
     workouts.push({
       source: "Technogym",
-      raw_type: tgFirstValue(raw, ["activity_type", "ActivityType", "type", "Type", "discipline"]) || type,
+      raw_type: tgFirstValue(flattened, ["activity_type", "ActivityType", "type", "Type", "discipline"]) || type,
       type,
       start_date: startDate,
       end_date: endDate,
       duration_min: minutesBetween(startDate, endDate),
       distance: Number.isFinite(distance) ? distance : null,
-      distance_unit: tgFirstValue(raw, ["distance_unit", "DistanceUnit", "Unit"]) || (Number.isFinite(distance) ? "m" : null),
-      calories: tgNum(tgFirstValue(raw, ["calories", "Calories", "Energy", "TotalCalories"])) || 0,
-      hr: tgNum(tgFirstValue(raw, ["hr", "AvgHeartRate", "AverageHeartRate"])) || null,
+      distance_unit: tgFirstValue(flattened, ["distance_unit", "DistanceUnit", "Unit"]) || (Number.isFinite(distance) ? "m" : null),
+      calories: tgNum(tgFirstValue(flattened, ["calories", "Calories", "Energy", "TotalCalories"])) || 0,
+      hr: tgNum(tgFirstValue(flattened, ["hr", "AvgHeartRate", "AverageHeartRate", "AvgHr"])) || null,
       notes: "",
-      power_avg: tgNum(tgFirstValue(raw, ["power_avg", "AvgPower", "AveragePower"])),
-      level: tgNum(tgFirstValue(raw, ["level", "Level"])),
-      rpm_avg: tgNum(tgFirstValue(raw, ["rpm_avg", "AvgRpm", "AvgSpeedRpm"])),
-      vo2: tgNum(tgFirstValue(raw, ["vo2", "VO2", "EstimatedVO2"])),
+      power_avg: tgNum(tgFirstValue(flattened, ["power_avg", "AvgPower", "AveragePower"])),
+      level: tgNum(tgFirstValue(flattened, ["level", "Level"])),
+      rpm_avg: tgNum(tgFirstValue(flattened, ["rpm_avg", "AvgRpm", "AvgSpeedRpm"])),
+      vo2: tgNum(tgFirstValue(flattened, ["vo2", "VO2", "EstimatedVO2", "Vo2"])),
       raw,
     })
   }
