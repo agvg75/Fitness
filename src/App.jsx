@@ -6569,12 +6569,43 @@ const unifiedCanonicalSessions = useMemo(() => {
 const fmt0 = n => Number.isFinite(Number(n)) ? Math.round(Number(n)).toLocaleString() : "0"
 const fmt1 = n => Number.isFinite(Number(n)) ? Number(n).toFixed(1) : "0.0"
 
+function getTechnogymSource(workout) {
+  return workout?.sources?.technogym ||
+    (String(workout?.source || "").toLowerCase() === "technogym" ? workout : null)
+}
+
+function getMetricValue(workout, key) {
+  return workout?.preferred_metrics?.[key]?.value ??
+    workout?.sources?.technogym?.[key] ??
+    workout?.[key] ??
+    null
+}
+
+function isTechnogymCyclingSession(workout) {
+  const technogym = getTechnogymSource(workout)
+  if (!technogym) return false
+
+  const tgType = String(
+    technogym?.type ||
+    technogym?.raw_type ||
+    technogym?.activity_type ||
+    ""
+  ).toLowerCase()
+
+  if (tgType.includes("cycl") || tgType.includes("bike") || tgType.includes("spin")) return true
+
+  const rpmAvg = getMetricValue(workout, "rpm_avg")
+  return rpmAvg !== null && Number.isFinite(Number(rpmAvg))
+}
+
 function normalizeWorkoutType(type, workout) {
   const t = String(type || "").toLowerCase()
 
   if (t.includes("traditional strength")) return "Strength"
   if (t.includes("functional strength")) return "Strength"
   if (t.includes("core")) return "Strength"
+
+  if (isTechnogymCyclingSession(workout)) return "Cycling"
 
   if (t.includes("running")) return "Running"
   if (t.includes("walking")) return "Walking"
@@ -6642,11 +6673,18 @@ function formatBucketLabel(dateStr, mode) {
 }
 function extractDistanceInfo(workout) {
   const pmDist = workout?.preferred_metrics?.distance
+  const pmSource = String(pmDist?.source || "").toLowerCase()
+  const pmUnit = pmDist?.unit ||
+    (pmSource.includes("technogym")
+      ? (workout?.sources?.technogym?.distance_unit || "m")
+      : pmSource.includes("apple")
+      ? workout?.sources?.apple?.distance_unit
+      : (workout?.sources?.technogym?.distance_unit || workout?.sources?.apple?.distance_unit || ""))
 
   const candidates = [
     {
       value: pmDist?.value,
-      unit: pmDist?.unit || workout?.sources?.apple?.distance_unit || workout?.sources?.technogym?.distance_unit || (pmDist?.source === "Technogym" ? "m" : "")
+      unit: pmUnit
 
     },
     {
@@ -6711,12 +6749,12 @@ function extractDistanceInfo(workout) {
       unit: workout?.total_distance_unit
     },
     {
-      value: workout?.sources?.apple?.distance,
-      unit: workout?.sources?.apple?.distance_unit
-    },
-    {
       value: workout?.sources?.technogym?.distance,
       unit: workout?.sources?.technogym?.distance_unit || "m"
+    },
+    {
+      value: workout?.sources?.apple?.distance,
+      unit: workout?.sources?.apple?.distance_unit
     }
   ]
 
@@ -6973,7 +7011,10 @@ dateStr = Number.isFinite(d.getTime()) ? d.toISOString().slice(0, 10) + 'T12:00:
       distance,
       calories: w.preferred_metrics?.calories?.value ?? w.calories ?? 0,
       hr: w.preferred_metrics?.hr?.value ?? w.hr ?? null,
-      dur: extractDurationMin(w)
+      dur: extractDurationMin(w),
+      power_avg: getMetricValue(w, "power_avg"),
+      rpm_avg: getMetricValue(w, "rpm_avg"),
+      level: getMetricValue(w, "level")
     }
   })
 }, [activeWorkouts])
