@@ -1891,6 +1891,8 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     const checkedStretch = getProgDay(day).stretch?.map((item, i) => ({ ...item, done: isChecked(day, "stretch", i) }))
     const checkedWarmup = getProgDay(day).warmup?.map((item, i) => ({ ...item, done: isChecked(day, "warmup", i) }))
 
+    const completedCardio = getCardioEntries(day).filter((_, i) => isChecked(day, "cardio", i))
+
     const entry = {
       id: Date.now(),
       session_id: ts.replace(/\D/g, "").slice(0, 17),
@@ -1901,7 +1903,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       program: "Kinesiology (primary)",
       rpe: sessionRPE[`${day}_${venue}`] ?? null,
       exercises: [...filteredExercises, ...filteredCustomExs],
-      cardio: getCardioEntries(day),
+      cardio: completedCardio,
       stretch_completed: checkedStretch,
       warmup_completed: checkedWarmup,
       source: "LIFT Schedule Tab", apple_watch_sync_pending: true,
@@ -1925,7 +1927,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     if (Array.isArray(savedLog)) setSchedLog(savedLog)
     await saveScheduleKey("wt-sessions", buildSessionsStore())
 
-    const allCardio = getCardioEntries(day)
+    const allCardio = completedCardio
     if (allCardio.some(c => c.duration)) {
       const summaryEntries = allCardio.filter(c => c.duration).map((c, i) => ({
         id: entry.id + i, date: sessionDate, time: VENUE_TIMES[venue] || "", dateTime: ts,
@@ -2277,14 +2279,23 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
           const target = prescribedSessions[idx] || cd
           const targetDuration = target?.dMin != null && target?.dMax != null ? `${target.dMin}–${target.dMax} min` : "minutes"
           const targetLabel = [target?.type, target?.intensity].filter(Boolean).join(" · ")
+          const cardioChecked = isChecked(day, "cardio", idx)
           return (
             <div key={idx} style={{ marginBottom: 10, padding: "10px 12px", border: `0.5px solid #1e1e1e`, borderRadius: 7, background: "#0a0a0a" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={cardioChecked}
+                  onChange={() => toggleCheck(day, "cardio", idx)}
+                  style={{ accentColor: "#4a9ee8", width: 14, height: 14, cursor: "pointer", flexShrink: 0 }}
+                />
                 <select value={entry.modality} onChange={e => setCardioEntryF(day, idx, "modality", e.target.value)}
                   style={{ padding: "4px 8px", borderRadius: 20, fontSize: 11, fontWeight: 700, background: `${mc}22`, color: mc, border: `0.5px solid ${mc}`, outline: "none", cursor: "pointer", fontFamily: "inherit" }}>
                   {["run", "bike", "swim", "walk", "row"].map(m => <option key={m} value={m}>{modLabel[m]}</option>)}
                 </select>
-                <span style={{ fontSize: idx === 0 ? 11 : 10, color: idx === 0 ? "#555" : "#444" }}>{targetLabel || (idx > 0 ? "Additional session" : "Cardio")}</span>
+                <span style={{ fontSize: idx === 0 ? 11 : 10, color: cardioChecked ? "#9ca3af" : idx === 0 ? "#555" : "#444" }}>
+                  {cardioChecked ? "Completed" : "Planned"}{targetLabel ? ` · ${targetLabel}` : idx > 0 ? " · Additional session" : " · Cardio"}
+                </span>
                 {idx > 0 && (
                   <button onClick={() => removeCardioEntry(day, idx)}
                     style={{ marginLeft: "auto", background: "transparent", border: "none", color: "#444", cursor: "pointer", fontSize: 12 }}>✕</button>
@@ -3531,6 +3542,118 @@ function getWorkoutDistanceMiles(workout) {
     workout?.sources?.apple?.distance,
     workout?.sources?.apple?.distance_unit,
     workout
+  )
+}
+
+function parseScheduleDurationMinutes(value) {
+  const raw = String(value || "").trim().toLowerCase()
+  if (!raw) return null
+  if (/^\d+\s*-\s*\d+$/.test(raw)) return null
+
+  const exact = raw.match(/(\d+(?:\.\d+)?)/)
+  if (!exact) return null
+  const minutes = Number(exact[1])
+  return Number.isFinite(minutes) && minutes > 0 ? minutes : null
+}
+
+function parseScheduleDistanceMiles(value, modality = "") {
+  const raw = String(value || "").trim().toLowerCase()
+  if (!raw) return null
+
+  const milesMatch = raw.match(/(\d+(?:\.\d+)?)\s*(?:mi|mile|miles)\b/)
+  if (milesMatch) return Number(milesMatch[1])
+
+  const kmMatch = raw.match(/(\d+(?:\.\d+)?)\s*(?:km|kilometer|kilometers)\b/)
+  if (kmMatch) return Number(kmMatch[1]) / 1.60934
+
+  const meterMatch = raw.match(/(\d+(?:\.\d+)?)\s*(?:m|meter|meters)\b/)
+  if (meterMatch && !raw.includes("min")) return Number(meterMatch[1]) / 1609.34
+
+  const yardMatch = raw.match(/(\d+(?:\.\d+)?)\s*(?:yd|yds|yrd|yrds|yard|yards)\b/)
+  if (yardMatch) return Number(yardMatch[1]) / 1760
+
+  const plain = raw.match(/^(\d+(?:\.\d+)?)$/)
+  if (!plain) return null
+
+  const n = Number(plain[1])
+  if (!Number.isFinite(n) || n <= 0) return null
+  if (String(modality || "").toLowerCase() === "swim" && n > 20) return null
+  return n
+}
+
+function scoreScheduleWorkoutEvidence(workout) {
+  let score = 0
+  if (Number(workout?.distanceMiles || 0) > 0) score += 4
+  if (Number(workout?.dur || 0) > 0) score += 3
+  if (Number(workout?.hr || 0) > 0) score += 1
+  if (Number(workout?.calories || 0) > 0) score += 1
+  if (String(workout?.notes || "").trim()) score += 0.5
+  return score
+}
+
+function buildScheduleCardioWorkoutsFromLog(logEntries) {
+  const rows = []
+
+  ;(Array.isArray(logEntries) ? logEntries : []).forEach(entry => {
+    const cardioEntries = Array.isArray(entry?.cardio) ? entry.cardio : []
+    cardioEntries.forEach((cardio, idx) => {
+      const modality = String(cardio?.modality || "").toLowerCase()
+      const distanceMiles =
+        parseScheduleDistanceMiles(cardio?.distance, modality) ??
+        parseScheduleDistanceMiles(cardio?.notes, modality)
+      const durationMin = parseScheduleDurationMinutes(cardio?.duration)
+      const hr = Number(cardio?.hr)
+      const calories = Number(cardio?.calories)
+      const hasActualEvidence =
+        (Number.isFinite(durationMin) && durationMin > 0) ||
+        (Number.isFinite(distanceMiles) && distanceMiles > 0) ||
+        (Number.isFinite(hr) && hr > 0) ||
+        (Number.isFinite(calories) && calories > 0)
+
+      if (!hasActualEvidence) return
+
+      rows.push({
+        id: `${entry?.session_id || entry?.id || entry?.date || "schedule"}_${idx}`,
+        session_id: entry?.session_id || null,
+        _scheduleId: entry?.id ?? entry?.session_id ?? null,
+        source: "ManualSchedule",
+        date: entry?.date || String(entry?.logged_at || "").slice(0, 10) || null,
+        time: "",
+        dateTime: entry?.logged_at || (entry?.date ? `${String(entry.date).slice(0, 10)}T12:00:00` : null),
+        type:
+          modality === "run" ? "Running" :
+          modality === "bike" ? "Cycling" :
+          modality === "swim" ? "Swimming" :
+          modality === "row" ? "Rowing" :
+          "Other",
+        modality,
+        dur: Number.isFinite(durationMin) ? durationMin : 0,
+        distance: Number.isFinite(distanceMiles) && distanceMiles > 0 ? distanceMiles : null,
+        distanceMiles: Number.isFinite(distanceMiles) && distanceMiles > 0 ? distanceMiles : null,
+        distance_miles: Number.isFinite(distanceMiles) && distanceMiles > 0 ? distanceMiles : null,
+        hr: Number.isFinite(hr) && hr > 0 ? hr : null,
+        calories: Number.isFinite(calories) && calories > 0 ? calories : null,
+        notes: cardio?.notes || ""
+      })
+    })
+  })
+
+  const deduped = new Map()
+  rows.forEach(row => {
+    const key = [
+      row.session_id || row._scheduleId || "",
+      String(row.date || "").slice(0, 10),
+      row.type,
+      row.modality
+    ].join("|")
+    const existing = deduped.get(key)
+    if (!existing || scoreScheduleWorkoutEvidence(row) > scoreScheduleWorkoutEvidence(existing)) {
+      deduped.set(key, row)
+    }
+  })
+
+  return [...deduped.values()].sort((a, b) =>
+    String(a.dateTime || a.date || "").localeCompare(String(b.dateTime || b.date || ""))
   )
 }
 
@@ -7203,7 +7326,8 @@ function areDuplicateOperationalWorkouts(imported, manual) {
   return true
 }
 const normalizedStoredWorkouts = useMemo(() => {
-  return (Array.isArray(storedWorkouts) ? storedWorkouts : []).map(w => {
+  const scheduleRows = buildScheduleCardioWorkoutsFromLog(schedLog)
+  const legacyRows = (Array.isArray(storedWorkouts) ? storedWorkouts : []).map(w => {
     const rawType = w.type || "Other"
     const category = normalizeWorkoutType(rawType, w)
 
@@ -7223,7 +7347,22 @@ const normalizedStoredWorkouts = useMemo(() => {
       dur: extractDurationMin(w)
     }
   })
-}, [storedWorkouts])
+
+  const scheduleIds = new Set(
+    scheduleRows
+      .map(w => String(w._scheduleId || w.session_id || ""))
+      .filter(Boolean)
+  )
+
+  const legacyOnly = legacyRows.filter(w => {
+    const id = String(w._scheduleId || w.session_id || "")
+    return !id || !scheduleIds.has(id)
+  })
+
+  return [...scheduleRows, ...legacyOnly].sort((a, b) =>
+    String(a.dateTime || a.date || "").localeCompare(String(b.dateTime || b.date || ""))
+  )
+}, [schedLog, storedWorkouts])
 
 const operationalWorkouts = useMemo(() => {
   const imported = Array.isArray(normalizedActiveWorkouts) ? normalizedActiveWorkouts : []
