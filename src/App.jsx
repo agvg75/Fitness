@@ -3490,6 +3490,50 @@ if (w.category === "Strength") {
     </div>
   )
 }
+function distanceValueToMiles(value, unit, workout) {
+  const n = Number(value)
+  if (!Number.isFinite(n) || n <= 0) return 0
+
+  const u = String(unit || "").toLowerCase()
+  if (u === "mi" || u === "mile" || u === "miles") return n
+  if (u === "km" || u === "kilometer" || u === "kilometers") return n / 1.60934
+  if (u === "m" || u === "meter" || u === "meters") return n / 1609.34
+  if (u === "yd" || u === "yard" || u === "yards") return n / 1760
+  if (workout?.source === "Technogym" || workout?.sources?.technogym) return n / 1609.34
+
+  return n
+}
+
+function getWorkoutDistanceMiles(workout) {
+  const explicit = Number(workout?.distanceMiles ?? workout?.distance_miles)
+  if (Number.isFinite(explicit) && explicit > 0) return explicit
+
+  const normalized = Number(workout?.distance)
+  if (Number.isFinite(normalized) && normalized > 0) return normalized
+
+  const pmDist = workout?.preferred_metrics?.distance
+  const pmSource = String(pmDist?.source || "").toLowerCase()
+  const pmUnit = pmDist?.unit ||
+    (pmSource.includes("technogym")
+      ? (workout?.sources?.technogym?.distance_unit || "m")
+      : workout?.sources?.apple?.distance_unit)
+  const preferredMiles = distanceValueToMiles(pmDist?.value, pmUnit, workout)
+  if (preferredMiles > 0) return preferredMiles
+
+  const technogymMiles = distanceValueToMiles(
+    workout?.sources?.technogym?.distance,
+    workout?.sources?.technogym?.distance_unit || "m",
+    workout
+  )
+  if (technogymMiles > 0) return technogymMiles
+
+  return distanceValueToMiles(
+    workout?.sources?.apple?.distance,
+    workout?.sources?.apple?.distance_unit,
+    workout
+  )
+}
+
 function buildTrainingSummary(workouts) {
   const now = new Date()
   const daysAgo = n => {
@@ -6948,16 +6992,6 @@ function normalizeDistanceToMiles(workout) {
   }
 
   return value
-}
-
-function getWorkoutDistanceMiles(workout) {
-  const explicit = Number(workout?.distanceMiles ?? workout?.distance_miles)
-  if (Number.isFinite(explicit) && explicit > 0) return explicit
-
-  const normalized = Number(workout?.distance)
-  if (Number.isFinite(normalized) && normalized > 0) return normalized
-
-  return normalizeDistanceToMiles(workout)
 }
 
 function summarizeDailyNutrition(entries) {
