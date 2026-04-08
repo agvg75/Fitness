@@ -659,7 +659,7 @@ function ExCard({ ex, setData, onUpdate, onAdd, onRemove }) {
   )
 }
 
-function ScheduleLogView({ log, expanded, setExpanded, onDelete, onEdit }) {
+function ScheduleLogView({ log, expanded, setExpanded, onDelete, onEdit, highlightedId, setEntryRef }) {
   const toggle = id => setExpanded(p => ({ ...p, [id]: !p[id] }))
 
   if (!log.length) {
@@ -701,9 +701,23 @@ function ScheduleLogView({ log, expanded, setExpanded, onDelete, onEdit }) {
         }
 
         const open = expanded[entry.id]
+        const highlighted = String(highlightedId || "") === String(entry.id)
 
         return (
-          <div key={entry.id} style={{ background: "#0e0e0e", border: "1px solid #1a1a1a", borderLeft: `3px solid ${m.color}`, borderRadius: "8px", marginBottom: "10px", overflow: "hidden" }}>
+          <div
+            key={entry.id}
+            ref={node => setEntryRef?.(entry.id, node)}
+            style={{
+              background: highlighted ? "#17120a" : "#0e0e0e",
+              border: highlighted ? "1px solid #f59e0b" : "1px solid #1a1a1a",
+              borderLeft: `3px solid ${highlighted ? "#f59e0b" : m.color}`,
+              borderRadius: "8px",
+              marginBottom: "10px",
+              overflow: "hidden",
+              boxShadow: highlighted ? "0 0 0 1px rgba(245, 158, 11, 0.25)" : "none",
+              transition: "background 180ms ease, border-color 180ms ease, box-shadow 180ms ease",
+            }}
+          >
             <div onClick={() => toggle(entry.id)} style={{ padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
               <div>
                 <div style={{ fontSize: "15px", fontWeight: "700", color: "#d0d0d0" }}>
@@ -813,7 +827,7 @@ function ScheduleLogView({ log, expanded, setExpanded, onDelete, onEdit }) {
   )
 }
 
-function ScheduleMismatchDiagnostics({ report }) {
+function ScheduleMismatchDiagnostics({ report, onOpenEntry }) {
   const rows = Array.isArray(report) ? report : []
 
   return (
@@ -839,7 +853,7 @@ function ScheduleMismatchDiagnostics({ report }) {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, color: "#aaa" }}>
             <thead>
               <tr style={{ color: "#555", textAlign: "left", borderBottom: "1px solid #181818" }}>
-                {["Entry id", "Stored day", "Stored date", "Date weekday", "Logged at", "Venue", "Type"].map(h => (
+                {["Entry id", "Stored day", "Stored date", "Date weekday", "Logged at", "Venue", "Type", "Action"].map(h => (
                   <th key={h} style={{ padding: "5px 8px", fontWeight: 700, whiteSpace: "nowrap" }}>{h}</th>
                 ))}
               </tr>
@@ -854,6 +868,14 @@ function ScheduleMismatchDiagnostics({ report }) {
                   <td style={{ padding: "5px 8px", whiteSpace: "nowrap" }}>{row.loggedAt || "NA"}</td>
                   <td style={{ padding: "5px 8px", whiteSpace: "nowrap" }}>{row.venue || "NA"}</td>
                   <td style={{ padding: "5px 8px", whiteSpace: "nowrap" }}>{row.trainingType}</td>
+                  <td style={{ padding: "5px 8px", whiteSpace: "nowrap" }}>
+                    <button
+                      onClick={() => onOpenEntry?.(row.id)}
+                      style={{ background: "none", border: "1px solid #2a2a2a", borderRadius: "4px", color: "#aaa", fontSize: "10px", padding: "4px 10px", cursor: "pointer" }}
+                    >
+                      Open
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -1505,6 +1527,8 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const [inlineItemDetail, setInlineItemDetail] = useState("")
   const [inlineExForm, setInlineExForm] = useState(null)   // day | null
   const [inlineExName, setInlineExName] = useState("")
+  const [highlightedLogEntryId, setHighlightedLogEntryId] = useState(null)
+  const logEntryRefs = useRef({})
 
   const SPLIT_DAYS = ["Tue", "Thu"]
   const isSplitDay = SPLIT_DAYS.includes(activeDay)
@@ -1574,6 +1598,11 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const showToast = useCallback((msg) => {
     setToast(msg)
     setTimeout(() => setToast(null), 2500)
+  }, [])
+
+  const setLogEntryRef = useCallback((id, node) => {
+    if (node) logEntryRefs.current[id] = node
+    else delete logEntryRefs.current[id]
   }, [])
 
   const switchScheduleDay = useCallback((day) => {
@@ -1905,6 +1934,32 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       : `Loaded ${entry.dayLabel} for editing`
     )
   }
+
+  const openDiagnosticEntry = useCallback((id) => {
+    const entry = schedLog.find(e => String(e.id) === String(id) || String(e.session_id) === String(id))
+    if (!entry) {
+      showToast("Log entry not found")
+      return
+    }
+    const mismatch = getScheduleEntryDayDateMismatch(entry)
+    const entryDate = String(entry.date || entry.logged_at || "").slice(0, 10)
+    const targetDay = mismatch?.dateDay || entry.day
+
+    if (targetDay) setActiveDay(targetDay)
+    if (/^\d{4}-\d{2}-\d{2}$/.test(entryDate)) setSessionDate(entryDate)
+    setSchedView("log")
+    setExpandedLog(prev => ({ ...prev, [entry.id]: true }))
+    setHighlightedLogEntryId(entry.id)
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        logEntryRefs.current[entry.id]?.scrollIntoView({ behavior: "smooth", block: "center" })
+      })
+    })
+
+    setTimeout(() => setHighlightedLogEntryId(current => current === entry.id ? null : current), 1800)
+    showToast(`Opened log entry ${entry.id}`)
+  }, [schedLog, showToast])
 
   const toggleSection = k => setOpenSections(prev => ({ ...prev, [k]: !prev[k] }))
  const importRef = useRef(null)
@@ -2396,7 +2451,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     <div style={{ color: "#d8d8d8", position: "relative" }}>
       <input ref={importRef} type="file" accept=".json" style={{ display: "none" }} onChange={importLog} />
       <DailyReadinessPanel readinessScore={readinessScore} latestHealthFit={latestHealthFit} ocItems={ocItems} computedTSB={computedTSB} />
-      <ScheduleMismatchDiagnostics report={scheduleMismatchReport} />
+      <ScheduleMismatchDiagnostics report={scheduleMismatchReport} onOpenEntry={openDiagnosticEntry} />
       {/* Day navigation */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
         <div style={{ display: "flex", gap: 3, background: "#0a0a0a", borderRadius: 8, padding: 4, border: "1px solid #1a1a1a", flexWrap: "wrap" }}>
@@ -2424,7 +2479,15 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       </div>
 
       {schedView === "log" && (
-        <ScheduleLogView log={schedLog} expanded={expandedLog} setExpanded={setExpandedLog} onDelete={deleteEntry} onEdit={editEntry} />
+        <ScheduleLogView
+          log={schedLog}
+          expanded={expandedLog}
+          setExpanded={setExpandedLog}
+          onDelete={deleteEntry}
+          onEdit={editEntry}
+          highlightedId={highlightedLogEntryId}
+          setEntryRef={setLogEntryRef}
+        />
       )}
 
       {schedView === "schedule" && (
