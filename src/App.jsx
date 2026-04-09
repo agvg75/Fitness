@@ -990,13 +990,17 @@ function computeReadinessDetail(ocItems, sleepRecords, healthFitDaily, tsbFallba
   const injuryPenalty = active.length ? Math.round(maxRegional * 12 + maxGlobal * 10 + sumAll * 1.5) : 0
 
   // ── Sleep penalty — average of last 7 nights ───────────────────
+  const sleepMinutes = record => {
+    const raw = Number(record?.duration_min || 0) || 0
+    return raw > 24 * 60 ? raw / 60 : raw
+  }
   const sevenDaysAgo = Date.now() - 7 * 24 * 3600000
   const recentSleep = (Array.isArray(sleepRecords) ? sleepRecords : [])
     .filter(r => r.date && new Date(r.date).getTime() >= sevenDaysAgo && r.duration_min != null)
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, 7)
   const avgSleepHours = recentSleep.length
-    ? recentSleep.reduce((s, r) => s + (r.duration_min || 0), 0) / recentSleep.length / 60
+    ? recentSleep.reduce((s, r) => s + sleepMinutes(r), 0) / recentSleep.length / 60
     : null
   const sleepPenalty = avgSleepHours == null ? 0
     : avgSleepHours < 5.5 ? 20
@@ -1042,12 +1046,12 @@ function computeOcRecoveryDate(item) {
 }
 
 // ─── TabOperationalCapacity ────────────────────────────────────────────────────
-function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapacityData, healthFitDaily, sleepRecords, runSessions = [] }) {
+function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapacityData, healthFitDaily, sleepRecords, tsbFallback = null, runSessions = [] }) {
   const [selectedId, setSelectedId] = useState(null)
   const [addForm, setAddForm] = useState({ key: "muscleStatus", location: "Quad L", currentScore: 1, halfLifeHours: null })
 
   const selectedItem = ocItems.find(i => i.id === selectedId) || null
-  const rd = computeReadinessDetail(ocItems, sleepRecords, healthFitDaily)
+  const rd = computeReadinessDetail(ocItems, sleepRecords, healthFitDaily, tsbFallback)
   const readiness = rd.score
   const readinessColor = readiness >= 80 ? "#4ade80" : readiness >= 60 ? "#fbbf24" : readiness >= 40 ? "#f97316" : "#ef4444"
   const active = rd.active
@@ -9625,6 +9629,7 @@ const forecastReadinessCards = useMemo(() => {
     { label: "12 months", value: byMonth.get(12) ?? enduranceForecast.readiness12m }
   ]
 }, [readinessProjectionData, enduranceForecast])
+const readinessChartsReady = baseDataLoaded
 const eventReadinessMarkers = useMemo(() => {
   if (!readinessProjectionData?.length) return []
 
@@ -10263,7 +10268,7 @@ return (
     </div>
   )
 })()}
-      {panel.rows.length > 0 ? (
+      {readinessChartsReady && panel.rows.length > 0 ? (
         <>
         {/* Icon legend row */}
         <div style={{ display:'flex', gap:14, alignItems:'center', marginBottom:6, flexWrap:'wrap' }}>
@@ -10290,16 +10295,20 @@ return (
             <Tooltip formatter={(v,n) => [Number(v).toFixed(2), n]} />
             {/* Icon legend — replaces Recharts Legend */}
             <Legend verticalAlign="top" height={0} content={() => null} />
-            <Line type="monotone" dataKey="overallTsb"  name="Overall TSB"  stroke="#e5e7eb" strokeWidth={2.2} dot={false} connectNulls />
-            <Line type="monotone" dataKey="runningTsb"  name="Running TSB"  stroke="#ef4444" strokeWidth={1.8} dot={false} connectNulls />
-            <Line type="monotone" dataKey="cyclingTsb"  name="Cycling TSB"  stroke="#22d3ee" strokeWidth={1.8} dot={false} connectNulls />
-            <Line type="monotone" dataKey="swimmingTsb" name="Swimming TSB" stroke="#a78bfa" strokeWidth={1.8} dot={false} connectNulls />
-            <Line type="monotone" dataKey="strengthTsb" name="Strength TSB" stroke="#ffd166" strokeWidth={1.8} dot={false} connectNulls strokeDasharray="4 2" />
+            <Line type="monotone" dataKey="overallTsb"  name="Overall TSB"  stroke="#e5e7eb" strokeWidth={2.2} dot={false} connectNulls isAnimationActive={false} />
+            <Line type="monotone" dataKey="runningTsb"  name="Running TSB"  stroke="#ef4444" strokeWidth={1.8} dot={false} connectNulls isAnimationActive={false} />
+            <Line type="monotone" dataKey="cyclingTsb"  name="Cycling TSB"  stroke="#22d3ee" strokeWidth={1.8} dot={false} connectNulls isAnimationActive={false} />
+            <Line type="monotone" dataKey="swimmingTsb" name="Swimming TSB" stroke="#a78bfa" strokeWidth={1.8} dot={false} connectNulls isAnimationActive={false} />
+            <Line type="monotone" dataKey="strengthTsb" name="Strength TSB" stroke="#ffd166" strokeWidth={1.8} dot={false} connectNulls strokeDasharray="4 2" isAnimationActive={false} />
           </ComposedChart>
         </ResponsiveContainer>
         </>
       ) : (
-        <div style={{ color:'#666', fontSize:12, padding:'20px 0' }}>CTL {computedTSB?.global?.ctl?.toFixed(1) ?? '—'} · ATL {computedTSB?.global?.atl?.toFixed(1) ?? '—'} · TSB {computedTSB?.global?.tsb?.toFixed(1) ?? '—'} (computed from workouts)</div>
+        <div style={{ color:'#666', fontSize:12, padding:'20px 0' }}>
+          {readinessChartsReady
+            ? `CTL ${computedTSB?.global?.ctl?.toFixed(1) ?? '—'} · ATL ${computedTSB?.global?.atl?.toFixed(1) ?? '—'} · TSB ${computedTSB?.global?.tsb?.toFixed(1) ?? '—'} (computed from workouts)`
+            : 'Loading readiness chart...'}
+        </div>
       )}
       <div style={{ marginTop: 6 }}>
         <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 4 }}>Strength load (normalized)</div>
@@ -10325,6 +10334,7 @@ return (
 
   <div style={{ marginBottom: "14px" }}>
 
+{readinessChartsReady ? (
 <ResponsiveContainer width="100%" height={300}>
       <LineChart
   data={readinessProjectionData}
@@ -10368,6 +10378,7 @@ return (
           strokeWidth={2}
           dot={false}
           name="5K"
+          isAnimationActive={false}
         />
 
         <Line
@@ -10377,6 +10388,7 @@ return (
           strokeWidth={2}
           dot={false}
           name="10K"
+          isAnimationActive={false}
         />
 
         <Line
@@ -10386,6 +10398,7 @@ return (
           strokeWidth={2}
           dot={false}
           name="Half marathon"
+          isAnimationActive={false}
         />
 
         <Line
@@ -10395,6 +10408,7 @@ return (
           strokeWidth={3}
           dot={false}
           name="Olympic triathlon"
+          isAnimationActive={false}
         />
 
         {eventReadinessMarkers
@@ -10415,6 +10429,9 @@ return (
           ))}
       </LineChart>
     </ResponsiveContainer>
+) : (
+  <div style={{ color:'#666', fontSize:12, padding:'40px 0', textAlign:'center' }}>Loading readiness chart...</div>
+)}
   </div>
 </div>
 
@@ -11262,6 +11279,7 @@ return (
     operationalCapacityData={operationalCapacityData}
     healthFitDaily={healthFitDaily}
     sleepRecords={sleepRecords}
+    tsbFallback={computedTSBFromSessions?.tsb ?? null}
     runSessions={operationalWorkouts.filter(w => w.category === "Running" && w.distance > 0)}
   />
 )}
@@ -11476,6 +11494,7 @@ return (
           </div>
         ))}
       </div>
+      {readinessChartsReady ? (
       <ResponsiveContainer width="100%" height={240}>
         <LineChart data={readinessProjectionData} margin={{ top: 10, right: 20, left: 55, bottom: 20 }}>
           <CartesianGrid stroke="#1a1b2e" />
@@ -11483,12 +11502,15 @@ return (
           <YAxis domain={[0, 100]} label={{ value: "Readiness score", angle: -90, position: "insideLeft", offset: 15, fill: "#ced2f0", style: { textAnchor: "middle" } }} />
           <Tooltip />
           <Legend verticalAlign="top" height={28} />
-          <Line type="monotone" dataKey="baseReadiness" name="Readiness"      stroke="#4a9ee8" strokeWidth={2} dot={{ r: 3 }} />
-          <Line type="monotone" dataKey="fiveK"         name="5K readiness"   stroke="#ef4444" strokeWidth={1} strokeDasharray="4 3" dot={false} />
-          <Line type="monotone" dataKey="tenK"          name="10K readiness"  stroke="#22c55e" strokeWidth={1} strokeDasharray="4 3" dot={false} />
-          <Line type="monotone" dataKey="half"          name="Half readiness" stroke="#facc15" strokeWidth={1} strokeDasharray="4 3" dot={false} />
+          <Line type="monotone" dataKey="baseReadiness" name="Readiness"      stroke="#4a9ee8" strokeWidth={2} dot={{ r: 3 }} isAnimationActive={false} />
+          <Line type="monotone" dataKey="fiveK"         name="5K readiness"   stroke="#ef4444" strokeWidth={1} strokeDasharray="4 3" dot={false} isAnimationActive={false} />
+          <Line type="monotone" dataKey="tenK"          name="10K readiness"  stroke="#22c55e" strokeWidth={1} strokeDasharray="4 3" dot={false} isAnimationActive={false} />
+          <Line type="monotone" dataKey="half"          name="Half readiness" stroke="#facc15" strokeWidth={1} strokeDasharray="4 3" dot={false} isAnimationActive={false} />
         </LineChart>
       </ResponsiveContainer>
+      ) : (
+        <div style={{ color:'#666', fontSize:12, padding:'40px 0', textAlign:'center' }}>Loading readiness chart...</div>
+      )}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "10px", marginTop: "12px", marginBottom: "12px" }}>
         <label style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "12px" }}>
           <span>Tendon pain: {displayedTendonStatus.painScore}/10</span>
@@ -11498,29 +11520,12 @@ return (
             max={10}
             step={1}
             value={displayedTendonStatus.painScore}
-            onChange={e => setTendonStatus(prev => ({ ...prev, painScore: Number(e.target.value) || 0 }))}
+            disabled
           />
         </label>
-        <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px" }}>
-          <input
-            type="checkbox"
-            checked={displayedTendonStatus.stiffness}
-            onChange={e => setTendonStatus(prev => ({ ...prev, stiffness: e.target.checked }))}
-          />
-          <span>Morning stiffness</span>
-        </label>
-        <label style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "12px" }}>
-          <span>Tendon override</span>
-          <select
-            value={displayedTendonStatus.override ?? ""}
-            onChange={e => setTendonStatus(prev => ({ ...prev, override: e.target.value || null }))}
-            style={{ background: "#0d0e1c", color: "#e5e7eb", border: "1px solid #2a2d44", borderRadius: "6px", padding: "6px 8px" }}
-          >
-            <option value="">None</option>
-            <option value="hold">Hold</option>
-            <option value="deload">Deload</option>
-          </select>
-        </label>
+      </div>
+      <div style={{ fontSize: "12px", opacity: 0.65, marginTop: "-2px", marginBottom: "10px" }}>
+        Edit tendon and injury state in Capacity
       </div>
       <div style={{ fontSize: "12px", opacity: 0.75, marginTop: "8px" }}>
         Tendon: pain {displayedTendonStatus.painScore}/10 · stiffness {displayedTendonStatus.stiffness ? "yes" : "no"} · override {displayedTendonStatus.override || "none"} · progression {runningReadiness?.progressionReadiness ?? "hold"}
