@@ -9112,6 +9112,60 @@ const computedTSBFromSessions = useMemo(() => {
   return out
 }, [unifiedCanonicalSessions])
 
+const acwrSeries = useMemo(() => {
+  const sessions = Array.isArray(unifiedCanonicalSessions) ? unifiedCanonicalSessions : []
+  if (!sessions.length) return []
+
+  // Build daily TRIMP map
+  const dailyTrimp = {}
+  sessions.forEach(s => {
+    const date = (s.start_date || s.dateTime || s.date || "").slice(0, 10)
+    if (!date) return
+    const dur = Number(s.dur_min || s.duration_min || (Number(s.duration_sec) > 0 ? s.duration_sec / 60 : 0))
+    const hr  = Number(s.avg_hr) || 0
+    const trimp = s.trimp != null
+      ? Number(s.trimp)
+      : dur * (hr > 0 ? (hr / 180) * 1.2 : 0.5)
+    if (Number.isFinite(trimp) && trimp > 0)
+      dailyTrimp[date] = (dailyTrimp[date] || 0) + trimp
+  })
+
+  // Generate a day-by-day series for the last 180 days
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const rows = []
+
+  for (let i = 179; i >= 0; i--) {
+    const d = new Date(today)
+    d.setDate(d.getDate() - i)
+    const key = d.toISOString().slice(0, 10)
+
+    // ATL = 7-day rolling average, CTL = 28-day rolling average
+    let atl = 0, ctl = 0, atlCount = 0, ctlCount = 0
+    for (let j = 0; j < 28; j++) {
+      const dd = new Date(d)
+      dd.setDate(dd.getDate() - j)
+      const dk = dd.toISOString().slice(0, 10)
+      const t = dailyTrimp[dk] || 0
+      if (j < 7)  { atl += t; atlCount++ }
+      ctl += t; ctlCount++
+    }
+    atl = atlCount > 0 ? atl / atlCount : 0
+    ctl = ctlCount > 0 ? ctl / ctlCount : 0
+    const acwr = ctl > 0 ? Number((atl / ctl).toFixed(3)) : null
+
+    rows.push({
+      date:  key,
+      label: fmtShortDate(key),
+      atl:   Number(atl.toFixed(1)),
+      ctl:   Number(ctl.toFixed(1)),
+      acwr
+    })
+  }
+
+  return rows
+}, [unifiedCanonicalSessions])
+
 const trainingSummary = useMemo(() => {
   return buildTrainingSummary(operationalWorkouts)
 }, [operationalWorkouts])
@@ -10231,6 +10285,56 @@ return (
 
 {tab === "Overview" && (
   <div>
+    {(() => {
+      const rd = computeReadinessDetail(ocItems, sleepRecords, healthFitDaily, computedTSBFromSessions?.tsb ?? null)
+      const latestAcwr = acwrSeries.length ? acwrSeries[acwrSeries.length - 1]?.acwr ?? null : null
+      const tsbNow = computedTSBFromSessions?.tsb ?? computedTSB?.global?.tsb ?? null
+      const mtpItem = ocItems.find(i => (i.location || "").toLowerCase().includes("toe"))
+
+      let message = ""
+      let color = "#4ade80"
+
+      if (rd.score < 60) {
+        message = `Readiness is low (${rd.score}/100). `
+        if (rd.injuryPenalty > 0) message += `Active injury penalty: ${rd.injuryPenalty} pts. `
+        if (rd.sleepPenalty > 0) message += `Sleep deficit penalty: ${rd.sleepPenalty} pts. `
+        if (rd.tsbPenalty > 0) message += `Fatigue penalty: ${rd.tsbPenalty} pts. `
+        message += "Consider substituting today's session with easy aerobic work."
+        color = "#ef4444"
+      } else if (latestAcwr != null && latestAcwr > 1.3) {
+        message = `ACWR is ${latestAcwr.toFixed(2)} — workload is rising faster than your fitness base can absorb. Avoid adding volume this week.`
+        color = latestAcwr > 1.5 ? "#ef4444" : "#f97316"
+      } else if (tsbNow != null && tsbNow < -20) {
+        message = `TSB is ${tsbNow.toFixed(1)} — acute fatigue is high. Today's priority is recovery, not load.`
+        color = "#f97316"
+      } else if (mtpItem && mtpItem.currentScore >= 1) {
+        message = `MTP score is ${mtpItem.currentScore}. Run progression is paused until 3 consecutive score-0 sessions are logged.`
+        color = "#fbbf24"
+      } else if (tsbNow != null && tsbNow > 10) {
+        message = `Form is positive (TSB ${tsbNow.toFixed(1)}). Good window for a quality session or long run.`
+        color = "#4ade80"
+      } else {
+        message = `Readiness is ${rd.score}/100. Proceed with scheduled session at controlled effort.`
+        color = "#4ade80"
+      }
+
+      return (
+        <div style={{
+          padding: "12px 16px",
+          marginBottom: 16,
+          background: `${color}14`,
+          border: `1px solid ${color}44`,
+          borderLeft: `4px solid ${color}`,
+          borderRadius: 8,
+          fontSize: 13,
+          color: "#e0e0e0",
+          lineHeight: 1.6
+        }}>
+          {message}
+        </div>
+      )
+    })()}
+
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "8px" }}>
       <h3 style={{ margin: 0 }}>Overview</h3>
       <div style={{ display: "flex", gap: "6px" }}>
@@ -10584,6 +10688,62 @@ return (
   )
 })()}
 </div>
+
+    <div style={{ ...cardStyle(), minWidth: 0, marginBottom: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <div style={{ fontWeight: "bold" }}>Acute:Chronic Workload Ratio (ACWR)</div>
+        <div style={{ fontSize: 10, color: "#445" }}>ATL 7-day avg / CTL 28-day avg · injury risk signal</div>
+      </div>
+      {(() => {
+        const latest = acwrSeries.length ? acwrSeries[acwrSeries.length - 1] : null
+        const acwrVal = latest?.acwr ?? null
+        const acwrColor = acwrVal == null ? "#555"
+          : acwrVal > 1.5  ? "#ef4444"
+          : acwrVal > 1.3  ? "#f97316"
+          : acwrVal > 0.8  ? "#4ade80"
+          : "#fbbf24"
+        const acwrLabel = acwrVal == null ? "No data"
+          : acwrVal > 1.5  ? "High risk — load spike detected"
+          : acwrVal > 1.3  ? "Caution — approaching overreach zone"
+          : acwrVal > 0.8  ? "Optimal training zone"
+          : "Low — undertraining or deload"
+        return (
+          <div style={{ borderLeft: `3px solid ${acwrColor}`, paddingLeft: 9, fontSize: 11, color: "#ccc", lineHeight: 1.5, marginBottom: 12 }}>
+            {acwrVal != null && (
+              <span style={{ fontSize: 20, fontWeight: 800, color: acwrColor, marginRight: 8 }}>
+                {acwrVal.toFixed(2)}
+              </span>
+            )}
+            {acwrLabel}
+          </div>
+        )
+      })()}
+      {acwrSeries.length > 0 ? (
+        <ResponsiveContainer width="100%" height={180}>
+          <ComposedChart data={acwrSeries.slice(-90)} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+            <CartesianGrid stroke="#1a1b2e" />
+            <XAxis dataKey="label" tick={{ fontSize: 9 }} interval="preserveStartEnd" />
+            <YAxis domain={[0, 2.5]} tick={{ fontSize: 10 }} />
+            <Tooltip formatter={(v, n) => [Number(v).toFixed(2), n]} />
+            <ReferenceArea y1={1.3} y2={1.5} fill="rgba(249,115,22,0.10)" />
+            <ReferenceArea y1={1.5} y2={2.5} fill="rgba(239,68,68,0.10)" />
+            <ReferenceLine y={1.3} stroke="#f97316" strokeDasharray="4 3"
+              label={{ value: "1.3 caution", fill: "#f97316", fontSize: 9, position: "insideTopRight" }} />
+            <ReferenceLine y={1.5} stroke="#ef4444" strokeDasharray="4 3"
+              label={{ value: "1.5 risk", fill: "#ef4444", fontSize: 9, position: "insideTopRight" }} />
+            <Line dataKey="acwr" stroke="#fbbf24" strokeWidth={2} dot={false} name="ACWR" connectNulls />
+          </ComposedChart>
+        </ResponsiveContainer>
+      ) : (
+        <div style={{ color: "#555", fontSize: 12, padding: "20px 0" }}>
+          No session data available for ACWR computation.
+        </div>
+      )}
+      <div style={{ fontSize: 10, color: "#445", marginTop: 6, lineHeight: 1.6 }}>
+        ACWR below 0.8 indicates undertraining. 0.8 to 1.3 is optimal. Above 1.3 is caution. Above 1.5 is high injury risk.
+        Based on all modalities combined. November 2025 overreach peaked at 2.15.
+      </div>
+    </div>
 
     <div style={{ display: "grid", gridTemplateColumns: window.innerWidth < 768 ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: "16px", marginBottom: "20px", alignItems: "start" }}>
       <div style={{ ...cardStyle(), minWidth: "0" }}>
