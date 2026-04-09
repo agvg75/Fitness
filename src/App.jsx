@@ -9879,8 +9879,15 @@ function getPlannedLongRunAtMonth(hmPlanLongRun, monthsFromNow) {
   const lastKey = keys[keys.length - 1]
   const lastDate = new Date(lastKey)
 
+  // More than 3 weeks past the end of the plan means the race is over.
+  // Return null so the chart holds at its peak rather than dropping
+  // to the last taper entry.
   if (targetMs > lastDate.getTime() + 21 * 86400000) return null
 
+  // Within the plan window, return the MAXIMUM long run within a ±3-week
+  // window around the target date. This prevents the projection from
+  // landing on alternating race-week entries (3.1 mi) that sit between
+  // peak training weeks and making the curve look flat for months 1-3.
   const windowMs = 21 * 86400000
   let best = null
   for (const k of keys) {
@@ -9891,14 +9898,12 @@ function getPlannedLongRunAtMonth(hmPlanLongRun, monthsFromNow) {
     }
   }
 
+  // If nothing found in the window, fall back to nearest entry
   if (best === null) {
     let closestDiff = Infinity
     for (const k of keys) {
       const diff = Math.abs(new Date(k).getTime() - targetMs)
-      if (diff < closestDiff) {
-        closestDiff = diff
-        best = hmPlanLongRun[k]
-      }
+      if (diff < closestDiff) { closestDiff = diff; best = hmPlanLongRun[k] }
     }
   }
 
@@ -9945,6 +9950,9 @@ const readinessProjectionData = useMemo(() => {
 
   const maxMonth = 12
   const series = []
+  let lastFiveK = Number(clamp(runningReadiness.completionReadiness?.fiveK ?? 0))
+  let lastTenK  = Number(clamp(runningReadiness.completionReadiness?.tenK  ?? 0))
+  let lastHalf  = Number(clamp(runningReadiness.completionReadiness?.half  ?? 0))
 
   for (let month = 0; month <= maxMonth; month += 1) {
     const baseReadiness = Number(interpolateBaseReadiness(month).toFixed(1))
@@ -9979,13 +9987,21 @@ const readinessProjectionData = useMemo(() => {
           : 12
         ))
       : Number(clamp(runningReadiness.completionReadiness?.half ?? 0))
+    const finalFiveK = plannedLR != null ? projectedFiveK : lastFiveK
+    const finalTenK  = plannedLR != null ? projectedTenK  : lastTenK
+    const finalHalf  = plannedLR != null ? projectedHalf  : lastHalf
+    if (plannedLR != null) {
+      lastFiveK = finalFiveK
+      lastTenK  = finalTenK
+      lastHalf  = finalHalf
+    }
     series.push({
       month,
       label: month === 0 ? "Now" : `${month}M`,
       baseReadiness,
-      fiveK: projectedFiveK,
-      tenK: projectedTenK,
-      half: projectedHalf,
+      fiveK: finalFiveK,
+      tenK: finalTenK,
+      half: finalHalf,
       tri: Number(clamp(baseReadiness - 14).toFixed(1)),
     })
   }
