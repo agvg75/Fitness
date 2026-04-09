@@ -5906,6 +5906,9 @@ function detectSourceType(filename, firstChunk) {
   // Technogym JSON — look for characteristic fields
   if (name.endsWith(".json") || chunk.trimStart().startsWith("{") || chunk.trimStart().startsWith("[")) {
     const lower = chunk.toLowerCase()
+    if (lower.includes('"date"') && lower.includes('"exercises"')) {
+      return { source: "knr_json", format: "json", confidence: "high" }
+    }
     if (lower.includes("avgrpm") || lower.includes("avgsrpeedRpm") || lower.includes("hdistance") ||
         lower.includes("totalIsoWeight") || lower.includes("technogym") || lower.includes("rm1") ||
         lower.includes("avgrunningcadence") || lower.includes("trainingStartDate"))
@@ -6559,6 +6562,7 @@ const SOURCE_LABELS = {
   apple_health:       { label: "Apple Health XML",      color: "#ef4444" },
   apple_health_csv:   { label: "Apple Health CSV",      color: "#ef4444" },
   technogym:          { label: "Technogym",             color: "#3b82f6" },
+  knr_json:           { label: "KNR JSON",              color: "#4ade80" },
   fitnessview:        { label: "FitnessView",           color: "#8b5cf6" },
   cronometer:         { label: "Cronometer",            color: "#22c55e" },
   sleep_cycle:        { label: "Sleep Cycle",           color: "#0ea5e9" },
@@ -6849,7 +6853,7 @@ Return ONLY a JSON object with this exact structure, no explanation:
     pendingFileReviewRowsRef.current = []
 
     let appleFile = null, technogymFile = null
-    const allNutrition = [], allSleep = [], allBiometrics = [], allHealthFit = [], allRejected = []
+    const allNutrition = [], allSleep = [], allBiometrics = [], allHealthFit = [], allRejected = [], allKnrSessions = []
     const pendingReviewRows = []
 
     for (const q of queuedFiles) {
@@ -6948,6 +6952,20 @@ Return ONLY a JSON object with this exact structure, no explanation:
         continue
       }
 
+      if (src === "knr_json") {
+        try {
+          const parsed = parseKnrJsonSessions(text, canonicalSessions)
+          allKnrSessions.push(...(parsed.accepted || []))
+          allRejected.push(...(parsed.rejected || []))
+          setStatus(`KNR JSON: ${(parsed.accepted || []).length} sessions parsed`)
+          continue
+        } catch (err) {
+          setStatus(`Error: ${err?.message || String(err)}`)
+          setImporting(false)
+          return
+        }
+      }
+
       pendingReviewRows.push(makeImportFileReviewRow(
         q,
         `Auto-detection returned '${src}' (${q.detected.confidence} confidence). File held for manual review instead of being rejected.`
@@ -6965,7 +6983,29 @@ Return ONLY a JSON object with this exact structure, no explanation:
 
     // Technogym-only imports do not need the generic overlap worker.
     // Parse directly so the UI cannot get stranded waiting on overlap state.
-    if (technogymFile && !appleFile) {
+    if (allKnrSessions.length) {
+      const accepted = dedupeCanonicalSessions(allKnrSessions)
+      const mergedReviewRows = pendingReviewRows.slice()
+      setResult({
+        accepted,
+        all_sessions: accepted,
+        review: mergedReviewRows,
+        rejected: allRejected,
+        generated_at: new Date().toISOString(),
+        summary: {
+          accepted: accepted.length,
+          linked: 0,
+          review: mergedReviewRows.length,
+          rejected: allRejected.length,
+          total: accepted.length
+        }
+      })
+      setReviewRows(mergedReviewRows)
+      setSelectedReviewIds([])
+      pendingFileReviewRowsRef.current = []
+      setStatus(`KNR JSON: ${accepted.length} sessions ready`)
+      setImporting(false)
+    } else if (technogymFile && !appleFile) {
       const technogymText = await new Promise((res, rej) => {
         const r = new FileReader()
         r.onload = e => res(e.target?.result || "")
@@ -7483,6 +7523,126 @@ function makeSessionFromSingleSource(prefix, appleRecord, technoRecord) {
       rpm_avg: { value: technoRecord?.rpm_avg ?? null, source: technoRecord?.rpm_avg != null ? "Technogym" : null },
       vo2: { value: technoRecord?.vo2 ?? null, source: technoRecord?.vo2 != null ? "Technogym" : null, note: technoRecord?.vo2 != null ? "Technogym workout-level VO2 estimate" : null }
     }
+  }
+}
+
+function getKnrSubtypeLabel(value) {
+  const raw = String(value || "").trim().toLowerCase()
+  if (raw === "upper") return "Upper"
+  if (raw === "lower") return "Lower"
+  return raw ? raw.replace(/\b\w/g, c => c.toUpperCase()) : "Strength"
+}
+
+function getKnrSessionKeyFromCanonical(session) {
+  const schedule = session?.sources?.schedule || null
+  const venue = String(schedule?.venue || session?.venue || "").toLowerCase()
+  const subtype = getKnrSubtypeLabel(schedule?.subtype || schedule?.workoutType || session?.subtype || "")
+  const date = String(session?.start_date || session?.date || schedule?.date || "").slice(0, 10)
+  if (venue !== "knr" || !date || !subtype) return null
+  return `${date}|${subtype.toLowerCase()}`
+}
+
+function parseKnrJsonSessions(text, existingSessions = []) {
+  const parsed = JSON.parse(String(text || "null"))
+  if (!Array.isArray(parsed)) {
+    throw new Error("KNR JSON import expects a top-level array.")
+  }
+
+  const existingKeys = new Set(
+    (Array.isArray(existingSessions) ? existingSessions : [])
+      .map(getKnrSessionKeyFromCanonical)
+      .filter(Boolean)
+  )
+  const seenKeys = new Set()
+  const accepted = []
+  const rejected = []
+  const skipped = []
+
+  parsed.forEach((entry, idx) => {
+    const date = String(entry?.date || "").slice(0, 10)
+    const exercises = Array.isArray(entry?.exercises) ? entry.exercises : []
+    const subtype = getKnrSubtypeLabel(entry?.subtype)
+    const key = date && subtype ? `${date}|${subtype.toLowerCase()}` : null
+
+    if (!date || !exercises.length) {
+      rejected.push({
+        source: "KNR JSON",
+        reason: "Missing date or exercises",
+        index: idx
+      })
+      return
+    }
+
+    if (existingKeys.has(key) || seenKeys.has(key)) {
+      skipped.push({
+        source: "KNR JSON",
+        reason: `Skipped duplicate session for ${date} ${subtype}`,
+        index: idx
+      })
+      return
+    }
+
+    seenKeys.add(key)
+    const startDate = `${date}T12:00:00`
+    const endDate = `${date}T13:00:00`
+    const canonicalType = String(entry?.category || "").toLowerCase() === "strength"
+      ? "Traditional Strength Training"
+      : String(entry?.subtype || entry?.category || "Other")
+
+    accepted.push(applyCanonicalSessionMergePolicy({
+      session_id: `knr_${date}_${subtype}`,
+      match_confidence: "single_source",
+      relationship: "schedule_only",
+      canonical_type: canonicalType,
+      category: entry?.category || "Strength",
+      subtype,
+      venue: "knr",
+      start_date: startDate,
+      end_date: endDate,
+      duration_min: 60,
+      overlap_summary: null,
+      sources: {
+        apple: null,
+        technogym: null,
+        schedule: {
+          id: `knr_${date}_${subtype}`,
+          date,
+          venue: "knr",
+          category: entry?.category || "Strength",
+          subtype,
+          source: "knr_json",
+          exercises: exercises.map((exercise, exerciseIdx) => ({
+            exercise_id: `knr_${date}_${subtype}_${exerciseIdx}`,
+            exercise_name: exercise?.name || `Exercise ${exerciseIdx + 1}`,
+            variant: "machine",
+            sets: Array.isArray(exercise?.sets) ? exercise.sets.map(set => ({
+              reps: set?.reps ?? null,
+              weight: set?.weight ?? null
+            })) : [],
+            actual: {
+              sets: Array.isArray(exercise?.sets) ? exercise.sets.length : 0,
+              reps: Array.isArray(exercise?.sets) ? exercise.sets[0]?.reps ?? null : null,
+              load: Array.isArray(exercise?.sets) ? exercise.sets[0]?.weight ?? null : null
+            }
+          }))
+        }
+      },
+      preferred_metrics: {
+        hr: { value: null, source: null },
+        calories: { value: null, source: null },
+        distance: { value: null, source: null, rationale: null, unit: null },
+        duration: { value: 60, source: "KNR JSON" },
+        power_avg: { value: null, source: null },
+        level: { value: null, source: null },
+        rpm_avg: { value: null, source: null },
+        vo2: { value: null, source: null, note: null }
+      }
+    }))
+  })
+
+  return {
+    accepted,
+    rejected: [...rejected, ...skipped]
   }
 }
 
