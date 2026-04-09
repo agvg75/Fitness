@@ -3640,6 +3640,17 @@ function getWorkoutDistanceMiles(workout) {
   )
 }
 
+// Returns cycling distance in miles. When no odometer distance exists (Apple-only sessions),
+// derives an equivalent from duration at a conservative 13 mph indoor pace.
+// This is clearly labeled as an estimate in chart tooltips.
+function getCyclingDistanceMiles(workout) {
+  const explicit = getWorkoutDistanceMiles(workout)
+  if (explicit > 0) return explicit
+  const dur = Number(workout?.dur || 0)
+  if (dur > 0) return Number((dur * (13 / 60)).toFixed(2))
+  return 0
+}
+
 function parseScheduleDurationMinutes(value) {
   const raw = String(value || "").trim().toLowerCase()
   if (!raw) return null
@@ -3790,7 +3801,7 @@ const last28 = workouts.filter(w => new Date(w.dateTime || w.date) >= daysAgo(28
     } else if (w.category === "Swimming") {
       summary.swimmingDistance28 += getWorkoutDistanceMiles(w)
     } else if (w.category === "Cycling") {
-      summary.cyclingDistance28 += getWorkoutDistanceMiles(w)
+      summary.cyclingDistance28 += getCyclingDistanceMiles(w)
     }
   })
 
@@ -4740,35 +4751,48 @@ function buildRacePrediction(enduranceForecast) {
     half12m: predictForReadiness(readiness12m)
   }
 }
-function getInjuryPenalties() {
-  const injuries = JSON.parse(localStorage.getItem("injuries") || "[]")
-  const today = new Date()
+function getInjuryPenalties(ocItems = []) {
+  const penalties = { running: 1, swimming: 1, cycling: 1, lifting: 1 }
 
-  const penalties = {
-    running: 1,
-    swimming: 1,
-    cycling: 1,
-    lifting: 1
+  const RUN_REGIONS = [
+    "Toe L", "Toe R", "Ankle L", "Ankle R", "Knee L", "Knee R",
+    "Shin L", "Shin R", "Calf L", "Calf R", "IT Band L", "IT Band R",
+    "Hamstring L", "Hamstring R", "Quad L", "Quad R", "Hip L", "Hip R"
+  ]
+  const SWIM_REGIONS = [
+    "Shoulder L", "Shoulder R", "Elbow L", "Elbow R",
+    "Wrist L", "Wrist R", "Toe L", "Toe R"
+  ]
+  const CYCLE_REGIONS = [
+    "Knee L", "Knee R", "Hip L", "Hip R",
+    "IT Band L", "IT Band R", "Lower Back"
+  ]
+  const LIFT_REGIONS = [
+    "Shoulder L", "Shoulder R", "Elbow L", "Elbow R",
+    "Lower Back", "Upper Back", "Wrist L", "Wrist R"
+  ]
+
+  const regionMaxScore = (regions) =>
+    (Array.isArray(ocItems) ? ocItems : [])
+      .filter(i =>
+        regions.some(r =>
+          (i.location || "").toLowerCase() === r.toLowerCase()
+        )
+      )
+      .reduce((max, i) => Math.max(max, Number(i.currentScore || 0)), 0)
+
+  const toMultiplier = (maxScore) => {
+    if (maxScore <= 0) return 1
+    if (maxScore === 1) return 0.90
+    if (maxScore === 2) return 0.75
+    if (maxScore === 3) return 0.55
+    return 0.40
   }
 
-  injuries.forEach(entry => {
-    const recoveryDays = Number(entry.recoveryDays || 0)
-    const severity = Number(entry.severity || 0)
-
-    const start = new Date()
-    const end = new Date(start)
-    end.setDate(start.getDate() + recoveryDays)
-
-    if (today <= end) {
-      const reduction = Math.min(0.8, severity / 10)
-      const multiplier = 1 - reduction
-
-      if (entry.affectsRunning) penalties.running = Math.min(penalties.running, multiplier)
-      if (entry.affectsSwimming) penalties.swimming = Math.min(penalties.swimming, multiplier)
-      if (entry.affectsCycling) penalties.cycling = Math.min(penalties.cycling, multiplier)
-      if (entry.affectsLifting) penalties.lifting = Math.min(penalties.lifting, multiplier)
-    }
-  })
+  penalties.running = toMultiplier(regionMaxScore(RUN_REGIONS))
+  penalties.swimming = toMultiplier(regionMaxScore(SWIM_REGIONS))
+  penalties.cycling = toMultiplier(regionMaxScore(CYCLE_REGIONS))
+  penalties.lifting = toMultiplier(regionMaxScore(LIFT_REGIONS))
 
   return penalties
 }
@@ -4808,7 +4832,7 @@ const buckets = {}
       buckets[key].swimming += getWorkoutDistanceMiles(w)
       buckets[key].cardioMinutes += Number(w.dur || 0)
     } else if (w.category === "Cycling") {
-      buckets[key].cycling += getWorkoutDistanceMiles(w)
+      buckets[key].cycling += getCyclingDistanceMiles(w)
       buckets[key].cardioMinutes += Number(w.dur || 0)
     } else if (w.category === "Strength") {
       buckets[key].strength += 1
@@ -7482,10 +7506,11 @@ const unifiedCanonicalSessions = useMemo(() => {
   return mergeCanonicalSessionsWithScheduleSeeds(canonicalSessions, scheduleStrengthCanonicalSeeds)
 }, [canonicalSessions, scheduleStrengthCanonicalSeeds])
 
-  const activeWorkouts =
-    unifiedCanonicalSessions && unifiedCanonicalSessions.length > 0
+  const activeWorkouts = useMemo(() => {
+    return unifiedCanonicalSessions && unifiedCanonicalSessions.length > 0
       ? unifiedCanonicalSessions
       : workouts
+  }, [unifiedCanonicalSessions, workouts])
 const fmt0 = n => Number.isFinite(Number(n)) ? Math.round(Number(n)).toLocaleString() : "0"
 const fmt1 = n => Number.isFinite(Number(n)) ? Number(n).toFixed(1) : "0.0"
 
@@ -8121,7 +8146,18 @@ useEffect(() => {
           return r.json()
         })
 
-        const bw = await fetch(`${base}data/body_weight.json`).then(r => r.ok ? r.json() : []).catch(() => [])
+        const bw = await fetch(`${base}data/body_weight.json`)
+          .then(r => {
+            if (!r.ok) {
+              console.warn("[LIFT] body_weight.json fetch failed:", r.status, r.url)
+              return []
+            }
+            return r.json()
+          })
+          .catch(err => {
+            console.warn("[LIFT] body_weight.json fetch threw:", err?.message || err)
+            return []
+          })
         const dx = await fetch(`${base}data/dexa_summary.json`).then(r => {
           if (!r.ok) throw new Error("dexa_summary.json failed")
           return r.json()
@@ -8321,9 +8357,36 @@ useEffect(() => {
           return currentCanonicalSessions
         })
       }
-      if (remoteSleepRecords.length) setSleepRecords(remoteSleepRecords)
-      if (remoteHealthFitDaily.length) setHealthFitDaily(remoteHealthFitDaily)
-      if (remoteBiometricRecords.length) setBiometricRecords(remoteBiometricRecords)
+      if (remoteSleepRecords.length) {
+        setSleepRecords(prev => {
+          const byId = {}
+          ;(Array.isArray(prev) ? prev : []).forEach(r => { if (r.id) byId[r.id] = r })
+          remoteSleepRecords.forEach(r => { if (r.id) byId[r.id] = r })
+          return Object.values(byId).sort((a, b) =>
+            String(a.date || "").localeCompare(String(b.date || ""))
+          )
+        })
+      }
+      if (remoteHealthFitDaily.length) {
+        setHealthFitDaily(prev => {
+          const byDate = {}
+          ;(Array.isArray(prev) ? prev : []).forEach(r => { if (r.date) byDate[r.date] = r })
+          remoteHealthFitDaily.forEach(r => { if (r.date) byDate[r.date] = r })
+          return Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date))
+        })
+      }
+      if (remoteBiometricRecords.length) {
+        setBiometricRecords(prev => {
+          const byId = {}
+          ;(Array.isArray(prev) ? prev : []).forEach(r => { if (r.id) byId[r.id] = r })
+          remoteBiometricRecords.forEach(r => { if (r.id) byId[r.id] = r })
+          return Object.values(byId).sort((a, b) =>
+            String(a.measured_date || a.date || "").localeCompare(
+              String(b.measured_date || b.date || "")
+            )
+          )
+        })
+      }
     } catch (err) {
       console.error("Core imported data migration/hydration failed:", err)
       if (process.env.NODE_ENV === "development") console.warn("Core imported data hydration failed:", err)
@@ -8508,7 +8571,15 @@ useEffect(() => {
 
     ;(Array.isArray(biometricRecords) ? biometricRecords : []).forEach(row => {
       const date = String(row?.measured_date || row?.date || row?.measured_at || row?.timestamp || "").slice(0, 10)
-      const weight = Number(row?.weight_lb ?? row?.weight ?? row?.weight_lbs_mean)
+      const weight = Number(
+        row?.weight_lb ??
+        row?.weight_lbs ??
+        row?.weight_lbs_mean ??
+        row?.weight ??
+        row?.["Weight (lb)"] ??
+        row?.["Weight (lb, same-day if available)"] ??
+        row?.value
+      )
       if (!date || !Number.isFinite(weight) || weight <= 0) return
 
       byDate[date] = {
@@ -8563,7 +8634,7 @@ useEffect(() => {
     return filteredDaily.slice(-10).reverse()
   }, [filteredDaily])
 
- const weightSmoothed = useMemo(() => {
+const weightSmoothed = useMemo(() => {
   if (!filteredDaily.length) return []
 
   return filteredDaily.map((d, i) => {
@@ -8588,6 +8659,39 @@ useEffect(() => {
     }
   })
 }, [filteredDaily])
+
+useEffect(() => {
+  const hasWeight = weightSmoothed.some(r => r.weight != null && Number.isFinite(r.weight) && r.weight > 0)
+  const hasAvg = weightSmoothed.some(r => r.avg != null && Number.isFinite(r.avg) && r.avg > 0)
+  console.log("[LIFT] weight pipeline", {
+    dailyRows: daily.length,
+    biometricRecordRows: biometricRecords.length,
+    dailyWithBiometrics: dailyWithBiometrics.length,
+    filteredDaily: filteredDaily.length,
+    weightSmoothedRows: weightSmoothed.length,
+    hasAnyWeight: hasWeight,
+    hasAnyAvg: hasAvg,
+    sampleFirst: weightSmoothed[0] ?? null,
+    sampleLast: weightSmoothed[weightSmoothed.length - 1] ?? null,
+    biometricSampleFirst: biometricRecords[0] ?? null,
+  })
+}, [daily, biometricRecords, dailyWithBiometrics, filteredDaily, weightSmoothed])
+
+useEffect(() => {
+  const cyclingSample = operationalWorkouts.filter(w =>
+    (w.category || "").toLowerCase().includes("cycle")
+  ).slice(0, 5)
+
+  console.log("operationalWorkouts summary", {
+    total: operationalWorkouts.length,
+    newest: operationalWorkouts.slice(-1)[0],
+    cyclingCount: operationalWorkouts.filter(w =>
+      (w.category || "").toLowerCase().includes("cycle")
+    ).length,
+    cyclingSample,
+    weightCount: weightSmoothed?.length || 0
+  })
+}, [operationalWorkouts, weightSmoothed])
 
 const overviewWeightDomain = useMemo(() => {
   const vals = weightSmoothed
@@ -9359,8 +9463,8 @@ const bodyForecast = useMemo(() => {
 }, [dailyWithBiometrics, dailyNutritionSummary, trainingSummary])
 
 const injuryPenalties = useMemo(() => {
-  return getInjuryPenalties()
-}, [tab, activeWorkouts])
+  return getInjuryPenalties(ocItems)
+}, [ocItems])
 const latestTrainingLoadPct = useMemo(() => {
   const last = weeklyTrainingBuckets?.[weeklyTrainingBuckets.length - 1]
   if (!last) return null
@@ -9437,7 +9541,7 @@ const computedTSB = useMemo(() => {
     const days = Object.keys(loadMap).sort();
     if (!days.length) return { ctl: 0, atl: 0, tsb: 0 };
     let ctl = 0, atl = 0;
-    const eCtl = Math.exp(-1/42), eAtl = Math.exp(-1/7);
+    const eCtl = Math.exp(-1 / LIFT_CONFIG.tau1), eAtl = Math.exp(-1 / LIFT_CONFIG.tau2);
     let prev = days[0];
     days.forEach(d => {
       const gap = (new Date(d) - new Date(prev)) / 86400000;
