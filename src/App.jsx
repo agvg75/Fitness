@@ -7448,6 +7448,8 @@ const [schedLog, setSchedLog] = useState(() => { try { return JSON.parse(localSt
 const [ocItems, setOcItems] = useState(() => { try { return JSON.parse(localStorage.getItem('oc-items') || '[]') } catch { return [] } })
 const [tendonStatus, setTendonStatus] = useState({ painScore: 0, stiffness: false, override: null })
 const [baseDataLoaded, setBaseDataLoaded] = useState(false)
+const [readinessInputsHydrated, setReadinessInputsHydrated] = useState(false)
+const [readinessRemoteInputsHydrated, setReadinessRemoteInputsHydrated] = useState(false)
 
 const scheduleStrengthCanonicalSeeds = useMemo(() => {
   return (Array.isArray(schedLog) ? schedLog : [])
@@ -8122,6 +8124,8 @@ useEffect(() => {
 }, [])
 
 useEffect(() => {
+  if (!baseDataLoaded) return
+
   const readLocalImportDiagnostic = key => {
     try {
       const raw = localStorage.getItem(key)
@@ -8164,11 +8168,11 @@ useEffect(() => {
   console.log("Core imported data migration entered", migrationSummary)
 
   const earlyExitReasons = []
-  if (!baseDataLoaded) earlyExitReasons.push("baseDataLoaded is false")
   if (!supabase) earlyExitReasons.push("Supabase client is missing")
   if (!session?.user?.id) earlyExitReasons.push("signed-in user id is missing")
 
   if (earlyExitReasons.length) {
+    setReadinessRemoteInputsHydrated(true)
     migrationSummary.earlyExitReason = earlyExitReasons.join("; ")
     console.warn("Core imported data migration exiting early", migrationSummary)
     console.log("Core imported data migration final summary", migrationSummary)
@@ -8176,6 +8180,7 @@ useEffect(() => {
   }
 
   let cancelled = false
+  setReadinessRemoteInputsHydrated(false)
 
   ;(async () => {
     try {
@@ -8254,6 +8259,7 @@ useEffect(() => {
       console.error("Core imported data migration/hydration failed:", err)
       if (process.env.NODE_ENV === "development") console.warn("Core imported data hydration failed:", err)
     } finally {
+      if (!cancelled) setReadinessRemoteInputsHydrated(true)
       console.log("Core imported data migration final summary", migrationSummary)
     }
   })()
@@ -8307,6 +8313,7 @@ useEffect(() => {
   }, [session])
   useEffect(() => {
   ;(async () => {
+    try {
     // Load from localStorage first
     const wo = await store.get("ufd-workouts")
     const lg = await store.get("wt-log")
@@ -8378,6 +8385,9 @@ useEffect(() => {
     } else {
       if (Array.isArray(wo)) setStoredWorkouts(wo)
       if (Array.isArray(ocLocal)) setOcItems(ocLocal)
+    }
+    } finally {
+      setReadinessInputsHydrated(true)
     }
   })()
 }, [])
@@ -9629,7 +9639,10 @@ const forecastReadinessCards = useMemo(() => {
     { label: "12 months", value: byMonth.get(12) ?? enduranceForecast.readiness12m }
   ]
 }, [readinessProjectionData, enduranceForecast])
-const readinessChartsReady = baseDataLoaded
+const readinessChartsReady =
+  baseDataLoaded &&
+  readinessInputsHydrated &&
+  readinessRemoteInputsHydrated
 const eventReadinessMarkers = useMemo(() => {
   if (!readinessProjectionData?.length) return []
 
