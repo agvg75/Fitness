@@ -8399,10 +8399,10 @@ useEffect(() => {
       }
       if (remoteSleepRecords.length) {
         setSleepRecords(prev => {
-          const byId = {}
-          ;(Array.isArray(prev) ? prev : []).forEach(r => { if (r.id) byId[r.id] = r })
-          remoteSleepRecords.forEach(r => { if (r.id) byId[r.id] = r })
-          return Object.values(byId).sort((a, b) =>
+          const byDate = {}
+          ;(Array.isArray(prev) ? prev : []).forEach(r => { if (r.date) byDate[r.date] = r })
+          remoteSleepRecords.forEach(r => { if (r.date) byDate[r.date] = r })
+          return Object.values(byDate).sort((a, b) =>
             String(a.date || "").localeCompare(String(b.date || ""))
           )
         })
@@ -9715,7 +9715,16 @@ const tsbV2Panel = useMemo(() => {
     ? (readinessScore >= 75 ? 'green' : readinessScore >= 50 ? 'yellow' : readinessScore >= 25 ? 'orange' : 'red')
     : null
   const risk = riskFromOC ?? (tsbNow < -25 ? 'red' : tsbNow < -15 ? 'orange' : tsbNow < -8 ? 'yellow' : 'green')
-  return { rows, alerts: [], readinessRiskLabel: risk, readinessDetail: { score: readinessScore ?? Math.round(50 + tsbNow) } }
+  // Compute tight Y-axis domain from actual TSB values in the rows
+  const tsbVals = rows.map(r => r.overallTsb).filter(v => Number.isFinite(v))
+  const rawMin = tsbVals.length ? Math.min(...tsbVals) : -15
+  const rawMax = tsbVals.length ? Math.max(...tsbVals) : 10
+  // Add padding, enforce a minimum readable span of 12 units,
+  // and always include 0 in the visible range
+  const domLow  = Math.floor(Math.min(rawMin - 3, -2))
+  const domHigh = Math.ceil(Math.max(rawMax + 3,  5))
+  const tsbDomain = [domLow, domHigh]
+  return { rows, alerts: [], readinessRiskLabel: risk, readinessDetail: { score: readinessScore ?? Math.round(50 + tsbNow) }, tsbDomain }
 }, [operationalWorkouts, schedLog, ocItems, readinessScore, selectedRangePoints])
 
 const operationalCapacityData = useMemo(() => {
@@ -10770,7 +10779,7 @@ return (
           <ComposedChart data={panel.rows} margin={{ top:12, right:16, left:45, bottom:20 }}>
             <CartesianGrid stroke="#1a1b2e" />
             <XAxis dataKey="label" tick={{ fontSize:10 }} interval={Math.max(1, Math.floor((panel.rows.length||1)/12)-1)} />
-            <YAxis domain={[-40, 20]} label={{ value:'TSB', angle:-90, position:'insideLeft', fill:'#9ca3af', style:{ textAnchor:'middle' } }} />
+            <YAxis domain={panel.tsbDomain || [-15, 10]} tick={{ fontSize: 10 }} label={{ value:'TSB', angle:-90, position:'insideLeft', fill:'#9ca3af', style:{ textAnchor:'middle' } }} />
             <ReferenceLine y={0} stroke="#444" strokeDasharray="3 3" />
             <Tooltip formatter={(v,n) => [Number(v).toFixed(2), n]} />
             {/* Icon legend — replaces Recharts Legend */}
