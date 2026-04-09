@@ -4982,6 +4982,23 @@ function normalizeDateString(value) {
   return Number.isFinite(t) ? new Date(t).toISOString() : null;
 }
 
+function getNewestWorkoutLikeTimestamp(rows) {
+  if (!Array.isArray(rows) || !rows.length) return null
+  let newest = null
+  rows.forEach(row => {
+    const raw = row?.dateTime || row?.date || row?.start_date || row?.startDate || null
+    const normalized = normalizeDateString(raw)
+    const ts = normalized ? Date.parse(normalized) : NaN
+    if (Number.isFinite(ts) && (newest == null || ts > newest)) newest = ts
+  })
+  return newest
+}
+
+function getNewestWorkoutLikeDate(rows) {
+  const ts = getNewestWorkoutLikeTimestamp(rows)
+  return Number.isFinite(ts) ? new Date(ts).toISOString().slice(0, 10) : null
+}
+
 function toMs(value) {
   const normalized = normalizeDateString(value);
   if (!normalized) return null;
@@ -7450,6 +7467,7 @@ const [tendonStatus, setTendonStatus] = useState({ painScore: 0, stiffness: fals
 const [baseDataLoaded, setBaseDataLoaded] = useState(false)
 const [readinessInputsHydrated, setReadinessInputsHydrated] = useState(false)
 const [readinessRemoteInputsHydrated, setReadinessRemoteInputsHydrated] = useState(false)
+const operationalWorkoutUpdateRef = useRef({ source: "initial", newestDate: null, count: 0 })
 
 const scheduleStrengthCanonicalSeeds = useMemo(() => {
   return (Array.isArray(schedLog) ? schedLog : [])
@@ -8013,6 +8031,24 @@ const operationalWorkouts = useMemo(() => {
     String(a.dateTime || a.date || "").localeCompare(String(b.dateTime || b.date || ""))
   )
 }, [normalizedActiveWorkouts, normalizedStoredWorkouts])
+useEffect(() => {
+  const recent = (Array.isArray(operationalWorkouts) ? operationalWorkouts : []).filter(w => {
+    const raw = w?.dateTime || w?.date || w?.start_date || w?.startDate || null
+    const normalized = normalizeDateString(raw)
+    const ts = normalized ? Date.parse(normalized) : NaN
+    return Number.isFinite(ts) && ts >= Date.now() - 30 * 24 * 3600000
+  })
+  console.log("operationalWorkouts changed", {
+    source: operationalWorkoutUpdateRef.current?.source || "unknown",
+    newestDate: getNewestWorkoutLikeDate(operationalWorkouts),
+    count: Array.isArray(operationalWorkouts) ? operationalWorkouts.length : 0,
+    last30Count: recent.length,
+    cycling30Count: recent.filter(w => normalizeWorkoutType(w.type, w) === "Cycling").length,
+    canonicalNewestDate: getNewestWorkoutLikeDate(canonicalSessions),
+    storedNewestDate: getNewestWorkoutLikeDate(storedWorkouts),
+    schedNewestDate: getNewestWorkoutLikeDate(buildScheduleCardioWorkoutsFromLog(schedLog))
+  })
+}, [operationalWorkouts, canonicalSessions, storedWorkouts, schedLog])
 
 
 const [session, setSession] = useState(null)
@@ -8111,7 +8147,14 @@ useEffect(() => {
         setInjury(Array.isArray(i) ? i : [])
         setDexa(Array.isArray(dx) ? dx : [])
         setWorkouts(Array.isArray(w) ? w : [])
-        setCanonicalSessions(Array.isArray(cs?.all_sessions) ? cs.all_sessions : [])
+        const bundledCanonicalSessions = Array.isArray(cs?.all_sessions) ? cs.all_sessions : []
+        operationalWorkoutUpdateRef.current = {
+          source: "bundle:canonicalSessions",
+          newestDate: getNewestWorkoutLikeDate(bundledCanonicalSessions),
+          count: bundledCanonicalSessions.length
+        }
+        console.log("Readiness workout source update", operationalWorkoutUpdateRef.current)
+        setCanonicalSessions(bundledCanonicalSessions)
       } catch (err) {
         if (process.env.NODE_ENV === "development") console.log(err)
         setError(String(err))
@@ -8251,7 +8294,33 @@ useEffect(() => {
       ])
 
       if (cancelled) return
-      if (remoteCanonicalSessions.length) setCanonicalSessions(remoteCanonicalSessions)
+      if (remoteCanonicalSessions.length) {
+        setCanonicalSessions(currentCanonicalSessions => {
+          const currentNewestTs = getNewestWorkoutLikeTimestamp(currentCanonicalSessions)
+          const remoteNewestTs = getNewestWorkoutLikeTimestamp(remoteCanonicalSessions)
+          const shouldUseRemote =
+            !Number.isFinite(currentNewestTs) ||
+            (Number.isFinite(remoteNewestTs) && remoteNewestTs >= currentNewestTs)
+
+          if (shouldUseRemote) {
+            operationalWorkoutUpdateRef.current = {
+              source: "remote:canonicalSessions",
+              newestDate: getNewestWorkoutLikeDate(remoteCanonicalSessions),
+              count: remoteCanonicalSessions.length
+            }
+            console.log("Readiness workout source update", operationalWorkoutUpdateRef.current)
+            return remoteCanonicalSessions
+          }
+
+          console.warn("Ignoring stale remote canonical sessions", {
+            currentNewestDate: getNewestWorkoutLikeDate(currentCanonicalSessions),
+            remoteNewestDate: getNewestWorkoutLikeDate(remoteCanonicalSessions),
+            currentCount: Array.isArray(currentCanonicalSessions) ? currentCanonicalSessions.length : 0,
+            remoteCount: remoteCanonicalSessions.length
+          })
+          return currentCanonicalSessions
+        })
+      }
       if (remoteSleepRecords.length) setSleepRecords(remoteSleepRecords)
       if (remoteHealthFitDaily.length) setHealthFitDaily(remoteHealthFitDaily)
       if (remoteBiometricRecords.length) setBiometricRecords(remoteBiometricRecords)
@@ -8339,9 +8408,21 @@ useEffect(() => {
                 return acc
               }, {})
             ).sort((a, b) => String(a.dateTime || a.date || "").localeCompare(String(b.dateTime || b.date || "")))
+            operationalWorkoutUpdateRef.current = {
+              source: "remote:user_kv:ufd-workouts",
+              newestDate: getNewestWorkoutLikeDate(merged),
+              count: merged.length
+            }
+            console.log("Readiness workout source update", operationalWorkoutUpdateRef.current)
             setStoredWorkouts(merged)
             await store.set("ufd-workouts", merged)
              } else if (Array.isArray(wo)) {
+            operationalWorkoutUpdateRef.current = {
+              source: "local:ufd-workouts",
+              newestDate: getNewestWorkoutLikeDate(wo),
+              count: wo.length
+            }
+            console.log("Readiness workout source update", operationalWorkoutUpdateRef.current)
             setStoredWorkouts(wo)
           }
           const sbLg = data.find(r => r.key === "wt-log")?.value
@@ -8350,9 +8431,21 @@ useEffect(() => {
             const merged = Object.values(
               [...local, ...sbLg].reduce((acc, e) => { acc[e.id] = e; return acc }, {})
             ).sort((a, b) => b.id - a.id)
+            operationalWorkoutUpdateRef.current = {
+              source: "remote:user_kv:wt-log",
+              newestDate: getNewestWorkoutLikeDate(buildScheduleCardioWorkoutsFromLog(merged)),
+              count: merged.length
+            }
+            console.log("Readiness workout source update", operationalWorkoutUpdateRef.current)
             setSchedLog(merged)
             await store.set("wt-log", merged)
           } else if (Array.isArray(lg)) {
+            operationalWorkoutUpdateRef.current = {
+              source: "local:wt-log",
+              newestDate: getNewestWorkoutLikeDate(buildScheduleCardioWorkoutsFromLog(lg)),
+              count: lg.length
+            }
+            console.log("Readiness workout source update", operationalWorkoutUpdateRef.current)
             setSchedLog(lg)
           }
           // Merge oc-items
