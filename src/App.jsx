@@ -3773,6 +3773,39 @@ function buildScheduleCardioWorkoutsFromLog(logEntries) {
   )
 }
 
+function getWorkoutCategoryForSummary(workout) {
+  if (workout?.category) return workout.category
+
+  const rawType = String(workout?.canonical_type || workout?.type || "").toLowerCase()
+  const schedule = workout?.sources?.schedule || workout?.schedule || null
+  const scheduleExercises = Array.isArray(schedule?.exercises) ? schedule.exercises : []
+  const hasStrengthExercises = scheduleExercises.some(ex => String(ex?.variant || "").toLowerCase() !== "cardio")
+  const cardioModalities = Array.isArray(schedule?.cardio)
+    ? schedule.cardio.map(cardio => String(cardio?.modality || "").toLowerCase())
+    : []
+
+  if (rawType.includes("traditional strength")) return "Strength"
+  if (rawType.includes("functional strength")) return "Strength"
+  if (rawType.includes("core")) return "Strength"
+  if (hasStrengthExercises) return "Strength"
+
+  if (rawType.includes("running")) return "Running"
+  if (rawType.includes("walking")) return "Walking"
+  if (rawType.includes("cycling")) return "Cycling"
+  if (rawType.includes("swimming")) return "Swimming"
+  if (rawType.includes("elliptical")) return "Elliptical"
+  if (rawType.includes("rowing")) return "Rowing"
+  if (rawType.includes("stair")) return "Stairs"
+
+  if (cardioModalities.includes("run")) return "Running"
+  if (cardioModalities.includes("walk")) return "Walking"
+  if (cardioModalities.includes("bike")) return "Cycling"
+  if (cardioModalities.includes("swim")) return "Swimming"
+  if (cardioModalities.includes("row")) return "Rowing"
+
+  return "Other"
+}
+
 function buildTrainingSummary(workouts) {
   const now = new Date()
   const daysAgo = n => {
@@ -3793,7 +3826,7 @@ const last28 = workouts.filter(w => new Date(w.dateTime || w.date) >= daysAgo(28
   }
 
   last28.forEach(w => {
-    const category = w.category || normalizeWorkoutType(w.canonical_type || w.type || "Other", w)
+    const category = getWorkoutCategoryForSummary(w)
     summary.totalWorkouts28 += 1
 
     if (category === "Strength") {
