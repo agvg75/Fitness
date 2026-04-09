@@ -34,7 +34,7 @@ function getCanonicalDistanceMetric(session) {
 }
 
 function getTechnogymDistanceMetric(session) {
-  const distance = Number(session?.sources?.technogym?.distance)
+  const distance = Number(session?.sources?.technogym?.distance ?? session?.sources?.technogym?.HDistance)
   if (!Number.isFinite(distance) || distance <= 0) return null
   return {
     value: distance,
@@ -67,43 +67,106 @@ function canonicalSessionQualityScore(session) {
 }
 
 function mergeSessionSources(winner, loser) {
-  return {
-    ...(winner?.sources || {}),
-    apple: winner?.sources?.apple || loser?.sources?.apple || null,
-    technogym: winner?.sources?.technogym || loser?.sources?.technogym || null,
-    schedule: winner?.sources?.schedule || loser?.sources?.schedule || null
+  return mergeSourceValues(winner?.sources || {}, loser?.sources || {})
+}
+
+function isCyclingLikeSession(session) {
+  const canonicalType = normalizeCanonicalType(session?.canonical_type || session?.type)
+  const technogymType = normalizeCanonicalType(
+    session?.sources?.technogym?.type ||
+    session?.sources?.technogym?.raw_type ||
+    session?.sources?.technogym?.activity_type
+  )
+
+  if (
+    canonicalType.includes("cycl") ||
+    canonicalType.includes("bike") ||
+    canonicalType.includes("spin") ||
+    technogymType.includes("cycl") ||
+    technogymType.includes("bike") ||
+    technogymType.includes("spin")
+  ) {
+    return true
   }
+
+  return (
+    isPositiveNumber(session?.preferred_metrics?.rpm_avg?.value) ||
+    isPositiveNumber(session?.preferred_metrics?.power_avg?.value) ||
+    isPositiveNumber(session?.sources?.technogym?.rpm_avg) ||
+    isPositiveNumber(session?.sources?.technogym?.power_avg)
+  )
 }
 
 function mergePreferredMetrics(winner, loser) {
+  const mergedSession = {
+    ...loser,
+    ...winner,
+    sources: mergeSessionSources(winner, loser)
+  }
   const merged = {
     ...(loser?.preferred_metrics || {}),
     ...(winner?.preferred_metrics || {})
   }
 
-  if (shouldCarryForwardTechnogymDistance(winner, loser)) {
-    const technoDistance = getTechnogymDistanceMetric(loser)
+  const winnerDistance = winner?.preferred_metrics?.distance || null
+  const loserDistance = loser?.preferred_metrics?.distance || null
+  const technogymDistance = getTechnogymDistanceMetric(winner) || getTechnogymDistanceMetric(loser)
+
+  if (isCyclingLikeSession(mergedSession) && technogymDistance) {
     merged.distance = {
-      ...(winner?.preferred_metrics?.distance || {}),
-      ...technoDistance
+      ...(loserDistance || {}),
+      ...(winnerDistance || {}),
+      ...technogymDistance
     }
-  } else if (!merged.distance && loser?.preferred_metrics?.distance) {
-    merged.distance = { ...loser.preferred_metrics.distance }
+  } else if (shouldCarryForwardTechnogymDistance(winner, loser)) {
+    merged.distance = {
+      ...(winnerDistance || {}),
+      ...getTechnogymDistanceMetric(loser)
+    }
+  } else {
+    merged.distance = mergeMetricEntry(winnerDistance, loserDistance)
   }
 
+  merged.duration = mergeMetricEntry(getDurationMetric(winner), getDurationMetric(loser))
+  merged.calories = mergeMetricEntry(winner?.preferred_metrics?.calories, loser?.preferred_metrics?.calories)
+  merged.hr = mergeMetricEntry(winner?.preferred_metrics?.hr, loser?.preferred_metrics?.hr)
+  merged.power_avg = mergeMetricEntry(winner?.preferred_metrics?.power_avg, loser?.preferred_metrics?.power_avg)
+  merged.level = mergeMetricEntry(winner?.preferred_metrics?.level, loser?.preferred_metrics?.level)
+  merged.rpm_avg = mergeMetricEntry(winner?.preferred_metrics?.rpm_avg, loser?.preferred_metrics?.rpm_avg)
+  merged.vo2 = mergeMetricEntry(winner?.preferred_metrics?.vo2, loser?.preferred_metrics?.vo2)
+
   return merged
+}
+
+export function applyCanonicalSessionMergePolicy(session) {
+  if (!session || typeof session !== "object") return session
+
+  const sources = mergeSourceValues(session?.sources || {}, {})
+  const preferred_metrics = mergePreferredMetrics(
+    { ...session, sources },
+    { preferred_metrics: {}, sources: {} }
+  )
+  const durationMin = getSessionDurationValue({ ...session, sources, preferred_metrics })
+
+  return {
+    ...session,
+    sources,
+    duration_min: isPositiveNumber(durationMin) ? durationMin : session?.duration_min ?? null,
+    preferred_metrics
+  }
 }
 
 function mergeCanonicalSessionPair(a, b) {
   const winner = canonicalSessionQualityScore(a) >= canonicalSessionQualityScore(b) ? a : b
   const loser = winner === a ? b : a
 
-  return {
+  return applyCanonicalSessionMergePolicy({
     ...loser,
     ...winner,
     sources: mergeSessionSources(winner, loser),
-    preferred_metrics: mergePreferredMetrics(winner, loser)
-  }
+    preferred_metrics: mergePreferredMetrics(winner, loser),
+    duration_min: getSessionDurationValue(winner) ?? getSessionDurationValue(loser) ?? winner?.duration_min ?? loser?.duration_min ?? null
+  })
 }
 
 function getDuplicateSessionKey(session) {
@@ -132,7 +195,9 @@ export function dedupeCanonicalSessions(sessions) {
     deduped.set(key, mergeCanonicalSessionPair(existing, session))
   })
 
-  return [...deduped.values()].sort((a, b) => String(a?.start_date || "").localeCompare(String(b?.start_date || "")))
+  return [...deduped.values()]
+    .map(applyCanonicalSessionMergePolicy)
+    .sort((a, b) => String(a?.start_date || "").localeCompare(String(b?.start_date || "")))
 }
 
 function estimateScheduleStrengthTrimp(entry) {
@@ -150,6 +215,129 @@ function estimateScheduleStrengthTrimp(entry) {
 
 export function safeCloneForScheduleSeeds(value) {
   return value == null ? null : JSON.parse(JSON.stringify(value))
+}
+
+function isPlainObject(value) {
+  return value != null && typeof value === "object" && !Array.isArray(value)
+}
+
+function cloneValue(value) {
+  if (Array.isArray(value)) return value.slice()
+  if (isPlainObject(value)) return { ...value }
+  return value
+}
+
+function pickMeaningfulScalar(primary, secondary) {
+  if (typeof primary === "number") {
+    if (Number.isFinite(primary) && primary > 0) return primary
+    if (typeof secondary === "number" && Number.isFinite(secondary) && secondary > 0) return secondary
+    return Number.isFinite(primary) ? primary : secondary
+  }
+
+  if (typeof primary === "string") {
+    if (primary.trim()) return primary
+    return typeof secondary === "string" && secondary.trim() ? secondary : primary
+  }
+
+  if (typeof primary === "boolean") return primary
+  return primary ?? secondary
+}
+
+function mergeSourceValues(primary, secondary) {
+  if (primary == null) return cloneValue(secondary)
+  if (secondary == null) return cloneValue(primary)
+
+  if (Array.isArray(primary)) return primary.length ? primary.slice() : cloneValue(secondary)
+  if (Array.isArray(secondary)) return cloneValue(primary)
+
+  if (isPlainObject(primary) && isPlainObject(secondary)) {
+    const merged = {}
+    const keys = new Set([...Object.keys(secondary), ...Object.keys(primary)])
+    keys.forEach(key => {
+      merged[key] = mergeSourceValues(primary[key], secondary[key])
+    })
+    return merged
+  }
+
+  return pickMeaningfulScalar(primary, secondary)
+}
+
+function getMetricValue(metric) {
+  const value = Number(metric?.value)
+  return Number.isFinite(value) ? value : null
+}
+
+function mergeMetricEntry(primaryMetric, secondaryMetric) {
+  if (!primaryMetric && !secondaryMetric) return { value: null, source: null }
+  if (!primaryMetric) return cloneValue(secondaryMetric)
+  if (!secondaryMetric) return cloneValue(primaryMetric)
+
+  const primaryValue = getMetricValue(primaryMetric)
+  const secondaryValue = getMetricValue(secondaryMetric)
+
+  if (isPositiveNumber(primaryValue)) {
+    return {
+      ...secondaryMetric,
+      ...primaryMetric,
+      value: primaryValue
+    }
+  }
+
+  if (isPositiveNumber(secondaryValue)) {
+    return {
+      ...primaryMetric,
+      ...secondaryMetric,
+      value: secondaryValue
+    }
+  }
+
+  return {
+    ...secondaryMetric,
+    ...primaryMetric,
+    value: primaryValue ?? secondaryValue ?? primaryMetric?.value ?? secondaryMetric?.value ?? null
+  }
+}
+
+function getSessionDurationValue(session) {
+  const candidates = [
+    session?.preferred_metrics?.duration?.value,
+    session?.duration_min,
+    session?.sources?.apple?.duration_min,
+    session?.sources?.apple?.duration,
+    session?.sources?.technogym?.duration_min,
+    session?.sources?.technogym?.duration,
+    session?.sources?.fitnessview?.duration_min,
+    session?.sources?.schedule?.duration_min
+  ]
+
+  for (const candidate of candidates) {
+    const value = Number(candidate)
+    if (Number.isFinite(value) && value > 0) return value
+  }
+
+  return null
+}
+
+function getDurationMetric(session) {
+  const value = getSessionDurationValue(session)
+  if (!isPositiveNumber(value)) {
+    return session?.preferred_metrics?.duration ? { ...session.preferred_metrics.duration } : { value: null, source: null }
+  }
+
+  const existing = session?.preferred_metrics?.duration || {}
+  const source =
+    existing?.source ||
+    (isPositiveNumber(session?.sources?.apple?.duration_min) || isPositiveNumber(session?.sources?.apple?.duration) ? "AppleHealth" : null) ||
+    (isPositiveNumber(session?.sources?.technogym?.duration_min) || isPositiveNumber(session?.sources?.technogym?.duration) ? "Technogym" : null) ||
+    (isPositiveNumber(session?.sources?.fitnessview?.duration_min) ? "FitnessView" : null) ||
+    (isPositiveNumber(session?.sources?.schedule?.duration_min) ? "Schedule" : null) ||
+    null
+
+  return {
+    ...existing,
+    value,
+    source
+  }
 }
 
 function normalizeOffsetForScheduleSeeds(offset) {
@@ -181,10 +369,17 @@ export function toMsForScheduleSeeds(value) {
 
 export function normalizeWorkoutTypeForScheduleSeeds(type, workout) {
   const t = String(type || "").toLowerCase()
+  const schedule = workout?.sources?.schedule || workout?.schedule || null
+  const scheduleExercises = Array.isArray(schedule?.exercises) ? schedule.exercises : []
+  const hasStrengthExercises = scheduleExercises.some(ex => String(ex?.variant || "").toLowerCase() !== "cardio")
+  const cardioModalities = Array.isArray(schedule?.cardio)
+    ? schedule.cardio.map(cardio => String(cardio?.modality || "").toLowerCase())
+    : []
 
   if (t.includes("traditional strength")) return "Strength"
   if (t.includes("functional strength")) return "Strength"
   if (t.includes("core")) return "Strength"
+  if (hasStrengthExercises) return "Strength"
 
   if (t.includes("running")) return "Running"
   if (t.includes("walking")) return "Walking"
@@ -193,6 +388,11 @@ export function normalizeWorkoutTypeForScheduleSeeds(type, workout) {
   if (t.includes("elliptical")) return "Elliptical"
   if (t.includes("rowing")) return "Rowing"
   if (t.includes("stair")) return "Stairs"
+  if (cardioModalities.includes("run")) return "Running"
+  if (cardioModalities.includes("walk")) return "Walking"
+  if (cardioModalities.includes("bike")) return "Cycling"
+  if (cardioModalities.includes("swim")) return "Swimming"
+  if (cardioModalities.includes("row")) return "Rowing"
 
   if (t.includes("machine cardio") || t === "other") {
     const rpmAvg =
@@ -231,6 +431,20 @@ export function normalizeWorkoutTypeForScheduleSeeds(type, workout) {
   return "Other"
 }
 
+function inferCanonicalTypeFromScheduleLog(entry) {
+  const normalizedType = normalizeWorkoutTypeForScheduleSeeds("", { schedule: entry })
+  if (normalizedType === "Strength") return "Traditional Strength Training"
+  if (normalizedType === "Running") return "Running"
+  if (normalizedType === "Walking") return "Walking"
+  if (normalizedType === "Cycling") return "Cycling"
+  if (normalizedType === "Swimming") return "Swimming"
+  if (normalizedType === "Elliptical") return "Elliptical"
+  if (normalizedType === "Rowing") return "Rowing"
+  if (normalizedType === "Stairs") return "Stairs"
+  if (normalizedType === "Machine Cardio") return "Machine Cardio"
+  return "Other"
+}
+
 export function makeCanonicalSessionFromScheduleLog(entry) {
   const startDate =
     entry?.logged_at ||
@@ -240,12 +454,13 @@ export function makeCanonicalSessionFromScheduleLog(entry) {
   const endDate = Number.isFinite(startMs)
     ? new Date(startMs + durationMin * 60000).toISOString()
     : null
+  const canonicalType = inferCanonicalTypeFromScheduleLog(entry)
 
   return {
     session_id: `schedule_${entry?.session_id || entry?.id || stableHash(JSON.stringify(entry || {}))}`,
     match_confidence: "single_source",
     relationship: "schedule_only",
-    canonical_type: "Traditional Strength Training",
+    canonical_type: canonicalType,
     start_date: startDate,
     end_date: endDate,
     duration_min: durationMin,

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { PROG, CARDIO } from "./scheduleData.js"
 import {
+  applyCanonicalSessionMergePolicy,
   dedupeCanonicalSessions,
   makeCanonicalSessionFromScheduleLog,
   mergeCanonicalSessionsWithScheduleSeeds
@@ -3792,24 +3793,25 @@ const last28 = workouts.filter(w => new Date(w.dateTime || w.date) >= daysAgo(28
   }
 
   last28.forEach(w => {
+    const category = w.category || normalizeWorkoutType(w.canonical_type || w.type || "Other", w)
     summary.totalWorkouts28 += 1
 
-    if (w.category === "Strength") {
+    if (category === "Strength") {
       summary.strengthSessions28 += 1
       return
     }
 
     if (
-      ["Running", "Walking", "Cycling", "Swimming", "Elliptical", "Rowing", "Stairs", "Machine Cardio", "Indoor Cycling"].includes(w.category)
+      ["Running", "Walking", "Cycling", "Swimming", "Elliptical", "Rowing", "Stairs", "Machine Cardio", "Indoor Cycling"].includes(category)
     ) {
       summary.cardioMinutes28 += Number(w.dur || 0)
     }
 
-    if (w.category === "Running" || w.category === "Walking") {
+    if (category === "Running" || category === "Walking") {
       summary.runningDistance28 += getWorkoutDistanceMiles(w)
-    } else if (w.category === "Swimming") {
+    } else if (category === "Swimming") {
       summary.swimmingDistance28 += getWorkoutDistanceMiles(w)
-    } else if (w.category === "Cycling") {
+    } else if (category === "Cycling") {
       summary.cyclingDistance28 += getCyclingDistanceMiles(w)
     }
   })
@@ -6582,7 +6584,8 @@ function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily,
 
     try {
       if (!ANTHROPIC_API_KEY) {
-        throw new Error("Missing VITE_ANTHROPIC_API_KEY.")
+        setPhotoError("Photo extraction is not configured on this deployment. Add VITE_ANTHROPIC_API_KEY to enable it.")
+        return
       }
 
       const base64 = await new Promise((resolve, reject) => {
@@ -7043,33 +7046,12 @@ Return ONLY a JSON object with this exact structure, no explanation:
           ? await loadCanonicalSessions(supabase, STORE_USER_ID).catch(() => canonicalSessions)
           : canonicalSessions
         const mergedSessions = dedupeCanonicalSessions([...(Array.isArray(existingCanonical) ? existingCanonical : []), ...sessions])
-        // Restore Technogym distance to sessions where Apple/FitnessView reported 0
-        const distanceEnriched = mergedSessions.map(session => {
-          const existingDist = session?.preferred_metrics?.distance?.value
-          if (Number.isFinite(Number(existingDist)) && Number(existingDist) > 0) return session
-
-          const tgDist = session?.sources?.technogym?.HDistance
-            ?? session?.sources?.technogym?.distance
-          if (!Number.isFinite(Number(tgDist)) || Number(tgDist) <= 0) return session
-
-          const distMiles = Number(tgDist) / 1609.34
-          return {
-            ...session,
-            preferred_metrics: {
-              ...(session.preferred_metrics || {}),
-              distance: {
-                value: distMiles,
-                unit: "mi",
-                source: "technogym:HDistance"
-              }
-            }
-          }
-        })
-        localStorage.setItem("lift_canonical_sessions", JSON.stringify(distanceEnriched))
-        setCanonicalSessions(distanceEnriched)
+        const policyMergedSessions = mergedSessions.map(applyCanonicalSessionMergePolicy)
+        localStorage.setItem("lift_canonical_sessions", JSON.stringify(policyMergedSessions))
+        setCanonicalSessions(policyMergedSessions)
         committed += sessions.length
         if (supabase && STORE_USER_ID) {
-          await upsertCanonicalSessions(supabase, STORE_USER_ID, distanceEnriched)
+          await upsertCanonicalSessions(supabase, STORE_USER_ID, policyMergedSessions)
           const remoteSessions = await loadCanonicalSessions(supabase, STORE_USER_ID)
           localStorage.setItem("lift_canonical_sessions", JSON.stringify(remoteSessions))
           setCanonicalSessions(remoteSessions)
@@ -7841,10 +7823,17 @@ function isTechnogymCyclingSession(workout) {
 
 function normalizeWorkoutType(type, workout) {
   const t = String(type || "").toLowerCase()
+  const schedule = workout?.sources?.schedule || workout?.schedule || null
+  const scheduleExercises = Array.isArray(schedule?.exercises) ? schedule.exercises : []
+  const hasStrengthExercises = scheduleExercises.some(ex => String(ex?.variant || "").toLowerCase() !== "cardio")
+  const cardioModalities = Array.isArray(schedule?.cardio)
+    ? schedule.cardio.map(cardio => String(cardio?.modality || "").toLowerCase())
+    : []
 
   if (t.includes("traditional strength")) return "Strength"
   if (t.includes("functional strength")) return "Strength"
   if (t.includes("core")) return "Strength"
+  if (hasStrengthExercises) return "Strength"
 
   if (isTechnogymCyclingSession(workout)) return "Cycling"
 
@@ -7855,6 +7844,11 @@ function normalizeWorkoutType(type, workout) {
   if (t.includes("elliptical")) return "Elliptical"
   if (t.includes("rowing")) return "Rowing"
   if (t.includes("stair")) return "Stairs"
+  if (cardioModalities.includes("run")) return "Running"
+  if (cardioModalities.includes("walk")) return "Walking"
+  if (cardioModalities.includes("bike")) return "Cycling"
+  if (cardioModalities.includes("swim")) return "Swimming"
+  if (cardioModalities.includes("row")) return "Rowing"
 
   // For Machine Cardio, check rpm_avg as the definitive bike signal,
   // then fall back to sub-type string matching
@@ -10221,7 +10215,7 @@ const readinessProjectionData = useMemo(() => {
 
   for (let month = 0; month <= maxMonth; month += 1) {
     const baseReadiness = Number(interpolateBaseReadiness(month).toFixed(1))
-    const plannedLR = getPlannedLongRunAtMonth(HM_PLAN_LONG_RUN, month)
+    const plannedLR = month === 0 ? null : getPlannedLongRunAtMonth(HM_PLAN_LONG_RUN, month)
     const projectedFiveK = plannedLR != null
       ? Math.min(100, Math.round(
           plannedLR >= 3.1 ? 100
