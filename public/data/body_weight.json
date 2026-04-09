@@ -148,5 +148,30 @@
     "date": "2026-03-04",
     "weight_lb": 158.1,
     "source": "AppleHealth"
+  },
+  {
+    "date": "2026-03-12",
+    "weight_lb": 158.8,
+    "source": "AppleHealth"
+  },
+  {
+    "date": "2026-03-14",
+    "weight_lb": 158.2,
+    "source": "AppleHealth"
+  },
+  {
+    "date": "2026-03-18",
+    "weight_lb": 157.5,
+    "source": "AppleHealth"
+  },
+  {
+    "date": "2026-04-01",
+    "weight_lb": 160.2,
+    "source": "AppleHealth"
+  },
+  {
+    "date": "2026-04-04",
+    "weight_lb": 158,
+    "source": "AppleHealth"
   }
 ]
