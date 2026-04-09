@@ -40,6 +40,7 @@ import { createClient } from "@supabase/supabase-js"
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
+const ANTHROPIC_API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY
 const supabase = SUPABASE_URL && SUPABASE_ANON_KEY
   ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
   : null
@@ -6551,7 +6552,7 @@ function makeImportFileReviewRow(fileInfo, reason) {
   }
 }
 
-function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily, setSleepRecords, setBiometricRecords }) {
+function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily, setSleepRecords, setBiometricRecords, setSchedLog }) {
   const [queuedFiles, setQueuedFiles] = useState([])  // [{file, detected, firstChunk}]
   const [status, setStatus] = useState("Drop files to import")
   const [progress, setProgress] = useState(null)
@@ -6564,10 +6565,165 @@ function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily,
   const [sleepResult, setSleepResult] = useState([])
   const [biometricResult, setBiometricResult] = useState([])
   const [healthFitResult, setHealthFitResult] = useState([])
+  const [photoFile, setPhotoFile] = useState(null)
+  const [photoPreview, setPhotoPreview] = useState(null)
+  const [photoExtracting, setPhotoExtracting] = useState(false)
+  const [photoResult, setPhotoResult] = useState(null)
+  const [photoError, setPhotoError] = useState(null)
 
   const worker = useMemo(() => createInlineImportWorker(), [])
   const pendingFileReviewRowsRef = useRef([])
   useEffect(() => () => worker.terminate(), [worker])
+
+  const extractWorkoutFromPhoto = async file => {
+    setPhotoExtracting(true)
+    setPhotoError(null)
+    setPhotoResult(null)
+
+    try {
+      if (!ANTHROPIC_API_KEY) {
+        throw new Error("Missing VITE_ANTHROPIC_API_KEY.")
+      }
+
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result.split(",")[1])
+        reader.onerror = reject
+        reader.readAsDataURL(file)
+      })
+
+      const mediaType = file.type || "image/jpeg"
+
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": ANTHROPIC_API_KEY,
+          "anthropic-version": "2023-06-01"
+        },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 1000,
+          messages: [{
+            role: "user",
+            content: [
+              {
+                type: "image",
+                source: { type: "base64", media_type: mediaType, data: base64 }
+              },
+              {
+                type: "text",
+                text: `Extract the workout data from this handwritten KNR session sheet.
+Return ONLY a JSON object with this exact structure, no explanation:
+{
+  "date": "YYYY-MM-DD or MM/DD as written",
+  "day": "Mon|Tue|Wed|Thu|Fri|Sat|Sun",
+  "workoutType": "Upper|Lower|Combined|Other",
+  "venue": "KNR",
+  "exercises": [
+    {
+      "name": "exercise name as written",
+      "sets": [
+        { "reps": "number or descriptor", "weight": "number or BW or band descriptor" }
+      ],
+      "hr": "heart rate if noted",
+      "rpe": "RPE if noted",
+      "notes": "any notes"
+    }
+  ],
+  "coreExercises": [
+    {
+      "name": "exercise name",
+      "sets": "descriptor e.g. 3x8 or 3 sets of 8",
+      "weight": "if noted",
+      "notes": "any notes"
+    }
+  ],
+  "warmupCompleted": true
+}`
+              }
+            ]
+          }]
+        })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null)
+        throw new Error(errorData?.error?.message || `Extraction failed (${response.status})`)
+      }
+
+      const data = await response.json()
+      const text = data?.content?.[0]?.text || ""
+      const clean = text.replace(/```json|```/g, "").trim()
+      const parsed = JSON.parse(clean)
+      setPhotoResult(parsed)
+    } catch (err) {
+      setPhotoError(err?.message || "Extraction failed. Check the image and try again.")
+    } finally {
+      setPhotoExtracting(false)
+    }
+  }
+
+  const commitPhotoSession = () => {
+    if (!photoResult) return
+
+    const dateStr = (() => {
+      const raw = String(photoResult.date || "")
+      if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw
+      const parts = raw.split("/")
+      if (parts.length === 2) {
+        const year = new Date().getFullYear()
+        const m = String(parts[0]).padStart(2, "0")
+        const d = String(parts[1]).padStart(2, "0")
+        return `${year}-${m}-${d}`
+      }
+      return new Date().toISOString().slice(0, 10)
+    })()
+
+    const allExercises = [
+      ...(photoResult.exercises || []),
+      ...(photoResult.coreExercises || []).map(e => ({ ...e, isCore: true }))
+    ]
+
+    const entry = {
+      id: Date.now(),
+      date: dateStr,
+      logged_at: new Date().toISOString(),
+      day: photoResult.day || "Thu",
+      venue: "knr",
+      venue_label: "KNR (9:35–10:45)",
+      source: "photo_import",
+      exercises: allExercises.map((ex, i) => ({
+        exercise_id: `photo_${i}`,
+        exercise_name: ex.name,
+        variant: "machine",
+        actual: {
+          sets: ex.sets?.length || (ex.sets ? 1 : null),
+          reps: ex.sets?.[0]?.reps || ex.sets || null,
+          load: ex.sets?.[0]?.weight || ex.weight || null
+        },
+        sets: ex.sets || [],
+        notes: ex.notes || "",
+        hr: ex.hr || null,
+        rpe: ex.rpe || null,
+        isCore: ex.isCore || false
+      })),
+      data: {},
+      cardio: [],
+      rpe: null
+    }
+
+    const existing = JSON.parse(localStorage.getItem("wt-log") || "[]")
+    const updated = [entry, ...existing].sort((a, b) => b.id - a.id)
+    localStorage.setItem("wt-log", JSON.stringify(updated))
+
+    if (typeof setSchedLog === "function") setSchedLog(updated)
+
+    setPhotoResult(null)
+    setPhotoFile(null)
+    setPhotoPreview(null)
+    alert(`Session imported for ${dateStr}. Check the Schedule tab to review.`)
+  }
 
   // Read first chunk of a file to detect source
   const detectFile = file => new Promise(resolve => {
@@ -7064,6 +7220,106 @@ function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily,
         {progress?.processed_bytes && (
           <div style={{ fontSize: "12px", color: "#555", marginTop: 4 }}>
             {Math.round((100 * progress.processed_bytes) / Math.max(1, progress.total_bytes || 1))}% of Apple file parsed ({progress.parsed_lines?.toLocaleString() || 0} lines)
+          </div>
+        )}
+      </div>
+
+      <div style={{ marginTop: 24, padding: "16px", background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: 12 }}>
+        <div style={{ fontWeight: "bold", marginBottom: 8, fontSize: 13 }}>
+          Import from KNR Sheet Photo
+        </div>
+        <div style={{ fontSize: 11, color: "#555", marginBottom: 12, lineHeight: 1.6 }}>
+          Take a photo of your KNR handwritten session sheet. Claude will read it and create a draft log entry.
+        </div>
+
+        <input
+          type="file"
+          accept="image/*"
+          capture="environment"
+          id="knr-photo-input"
+          style={{ display: "none" }}
+          onChange={e => {
+            const file = e.target.files?.[0]
+            if (!file) return
+            setPhotoFile(file)
+            setPhotoResult(null)
+            setPhotoError(null)
+            const url = URL.createObjectURL(file)
+            setPhotoPreview(url)
+          }}
+        />
+
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+          <button
+            onClick={() => document.getElementById("knr-photo-input").click()}
+            style={{ padding: "8px 16px", background: "#0d1a2e", border: "1px solid #1a3a5a", borderRadius: 8, color: "#4a9ee8", fontSize: 12, cursor: "pointer" }}
+          >
+            {photoFile ? "Change photo" : "Choose photo"}
+          </button>
+          {photoFile && !photoExtracting && !photoResult && (
+            <button
+              onClick={() => extractWorkoutFromPhoto(photoFile)}
+              style={{ padding: "8px 16px", background: "#0d2e1a", border: "1px solid #1a5a3a", borderRadius: 8, color: "#4ae880", fontSize: 12, cursor: "pointer" }}
+            >
+              Extract workout
+            </button>
+          )}
+        </div>
+
+        {photoPreview && (
+          <img src={photoPreview} alt="Sheet preview"
+            style={{ maxWidth: "100%", maxHeight: 300, borderRadius: 8, marginBottom: 12, border: "1px solid #1a1b2e", objectFit: "contain" }} />
+        )}
+
+        {photoExtracting && (
+          <div style={{ fontSize: 12, color: "#4a9ee8", padding: "12px 0" }}>Reading sheet...</div>
+        )}
+
+        {photoError && (
+          <div style={{ fontSize: 12, color: "#ef4444", padding: "8px", background: "rgba(239,68,68,0.08)", borderRadius: 6, marginBottom: 8 }}>
+            {photoError}
+          </div>
+        )}
+
+        {photoResult && (
+          <div style={{ marginTop: 8 }}>
+            <div style={{ fontSize: 12, color: "#4ade80", marginBottom: 8, fontWeight: 600 }}>
+              Extracted: {photoResult.date} · {photoResult.workoutType} · {(photoResult.exercises?.length || 0) + (photoResult.coreExercises?.length || 0)} exercises
+            </div>
+            <div style={{ background: "#07080e", border: "1px solid #1a1b2e", borderRadius: 8, padding: 10, marginBottom: 10, maxHeight: 240, overflowY: "auto" }}>
+              {[...(photoResult.exercises || []), ...(photoResult.coreExercises || []).map(e => ({ ...e, _core: true }))].map((ex, i) => (
+                <div key={i} style={{ fontSize: 11, padding: "4px 0", borderBottom: "1px solid #111", color: "#ccc" }}>
+                  <span style={{ color: ex._core ? "#a78bfa" : "#4a9ee8", marginRight: 6 }}>
+                    {ex._core ? "◆" : "●"}
+                  </span>
+                  <strong>{ex.name}</strong>
+                  {ex.sets && Array.isArray(ex.sets) && ex.sets.length > 0 && (
+                    <span style={{ color: "#777", marginLeft: 8 }}>
+                      {ex.sets.map((s, si) => `S${si + 1}: ${s.reps}r @ ${s.weight}`).join(" · ")}
+                    </span>
+                  )}
+                  {ex.sets && typeof ex.sets === "string" && (
+                    <span style={{ color: "#777", marginLeft: 8 }}>{ex.sets}</span>
+                  )}
+                  {ex.hr && <span style={{ color: "#ef4444", marginLeft: 8 }}>HR {ex.hr}</span>}
+                  {ex.rpe && <span style={{ color: "#fbbf24", marginLeft: 8 }}>RPE {ex.rpe}</span>}
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                onClick={commitPhotoSession}
+                style={{ padding: "8px 18px", background: "#0d2e1a", border: "1px solid #1a5a3a", borderRadius: 8, color: "#4ae880", fontSize: 12, cursor: "pointer", fontWeight: 600 }}
+              >
+                Add to Schedule Log
+              </button>
+              <button
+                onClick={() => { setPhotoResult(null); setPhotoFile(null); setPhotoPreview(null) }}
+                style={{ padding: "8px 14px", background: "transparent", border: "1px solid #222", borderRadius: 8, color: "#555", fontSize: 12, cursor: "pointer" }}
+              >
+                Discard
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -12328,6 +12584,7 @@ return (
     setHealthFitDaily={setHealthFitDaily}
     setSleepRecords={setSleepRecords}
     setBiometricRecords={setBiometricRecords}
+    setSchedLog={setSchedLog}
   />
 )}
 
