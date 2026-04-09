@@ -9321,44 +9321,6 @@ const latestReadinessTsb = useMemo(() => {
   }
   return computedTSBFromSessions?.tsb ?? null
 }, [healthFitDaily, computedTSBFromSessions])
-const readinessDebugData = useMemo(() => {
-  const now = Date.now()
-  const cutoff = now - 30 * 24 * 3600000
-  const workouts = Array.isArray(operationalWorkouts) ? operationalWorkouts : []
-  const recentWorkouts = workouts.filter(w => {
-    const rawDate = w?.dateTime || w?.date || w?.start_date || null
-    const ts = rawDate ? new Date(rawDate).getTime() : NaN
-    return Number.isFinite(ts) && ts >= cutoff
-  })
-  const recentCyclingCount = recentWorkouts.filter(w => normalizeWorkoutType(w.type, w) === "Cycling").length
-  return {
-    operationalWorkoutsTotal: workouts.length,
-    operationalWorkoutsLast30d: recentWorkouts.length,
-    cyclingWorkoutsLast30d: recentCyclingCount,
-    normalizedActiveWorkouts: Array.isArray(normalizedActiveWorkouts) ? normalizedActiveWorkouts.length : 0,
-    normalizedStoredWorkouts: Array.isArray(normalizedStoredWorkouts) ? normalizedStoredWorkouts.length : 0,
-    computedTsb: computedTSBFromSessions?.tsb ?? null,
-    healthFitTsb: latestHealthFit?.tsb ?? null,
-    readinessTsbUsed: latestReadinessTsb,
-    readinessInputsHydrated,
-    readinessRemoteInputsHydrated,
-    readinessChartsReady,
-    latestOperationalWorkouts: workouts.slice(-5).reverse().map(w => ({
-      date: String(w?.dateTime || w?.date || w?.start_date || "").slice(0, 10) || "—",
-      category: normalizeWorkoutType(w.type, w) || "Other"
-    }))
-  }
-}, [
-  operationalWorkouts,
-  normalizedActiveWorkouts,
-  normalizedStoredWorkouts,
-  computedTSBFromSessions,
-  latestHealthFit,
-  latestReadinessTsb,
-  readinessInputsHydrated,
-  readinessRemoteInputsHydrated,
-  readinessChartsReady
-])
 
 const computedTSB = useMemo(() => {
   if (!unifiedCanonicalSessions?.length) return null;
@@ -9692,6 +9654,44 @@ const readinessChartsReady =
   baseDataLoaded &&
   readinessInputsHydrated &&
   readinessRemoteInputsHydrated
+const readinessDebugData = useMemo(() => {
+  const now = Date.now()
+  const cutoff = now - 30 * 24 * 3600000
+  const workouts = Array.isArray(operationalWorkouts) ? operationalWorkouts : []
+  const recentWorkouts = workouts.filter(w => {
+    const rawDate = w?.dateTime || w?.date || w?.start_date || null
+    const ts = rawDate ? new Date(rawDate).getTime() : NaN
+    return Number.isFinite(ts) && ts >= cutoff
+  })
+  const recentCyclingCount = recentWorkouts.filter(w => normalizeWorkoutType(w.type, w) === "Cycling").length
+  return {
+    operationalWorkoutsTotal: workouts.length,
+    operationalWorkoutsLast30d: recentWorkouts.length,
+    cyclingWorkoutsLast30d: recentCyclingCount,
+    normalizedActiveWorkouts: Array.isArray(normalizedActiveWorkouts) ? normalizedActiveWorkouts.length : 0,
+    normalizedStoredWorkouts: Array.isArray(normalizedStoredWorkouts) ? normalizedStoredWorkouts.length : 0,
+    computedTsb: computedTSBFromSessions?.tsb ?? null,
+    healthFitTsb: latestHealthFit?.tsb ?? null,
+    readinessTsbUsed: latestReadinessTsb,
+    readinessInputsHydrated,
+    readinessRemoteInputsHydrated,
+    readinessChartsReady,
+    latestOperationalWorkouts: workouts.slice(-5).reverse().map(w => ({
+      date: String(w?.dateTime || w?.date || w?.start_date || "").slice(0, 10) || "—",
+      category: normalizeWorkoutType(w.type, w) || "Other"
+    }))
+  }
+}, [
+  operationalWorkouts,
+  normalizedActiveWorkouts,
+  normalizedStoredWorkouts,
+  computedTSBFromSessions,
+  latestHealthFit,
+  latestReadinessTsb,
+  readinessInputsHydrated,
+  readinessRemoteInputsHydrated,
+  readinessChartsReady
+])
 const eventReadinessMarkers = useMemo(() => {
   if (!readinessProjectionData?.length) return []
 
