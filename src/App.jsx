@@ -1481,7 +1481,7 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
 }
 
 function DailyReadinessPanel({ readinessScore, latestHealthFit, ocItems, computedTSB = null }) {
-  const tsb = latestHealthFit?.tsb ?? null
+  const tsb = latestHealthFit?.tsb ?? computedTSB?.global?.tsb ?? null
   const hasActiveIssue = (ocItems || []).some(i => i.currentScore >= 3)
   let status, color, bg, rationale
   if (readinessScore < 40 || hasActiveIssue) {
@@ -9310,6 +9310,55 @@ const latestHealthFit = useMemo(() => {
   return arr.filter(r => r.tsb != null || r.ctl != null || r.atl != null)
     .sort((a, b) => b.date.localeCompare(a.date))[0] ?? null
 }, [healthFitDaily])
+const latestReadinessTsb = useMemo(() => {
+  const sortedHF = (Array.isArray(healthFitDaily) ? healthFitDaily : [])
+    .filter(r => r.date && r.tsb != null)
+    .sort((a, b) => b.date.localeCompare(a.date))
+  const latest = sortedHF[0] ?? null
+  if (latest) {
+    const ageDays = (Date.now() - new Date(latest.date).getTime()) / 86400000
+    if (ageDays <= 7) return Number(latest.tsb)
+  }
+  return computedTSBFromSessions?.tsb ?? null
+}, [healthFitDaily, computedTSBFromSessions])
+const readinessDebugData = useMemo(() => {
+  const now = Date.now()
+  const cutoff = now - 30 * 24 * 3600000
+  const workouts = Array.isArray(operationalWorkouts) ? operationalWorkouts : []
+  const recentWorkouts = workouts.filter(w => {
+    const rawDate = w?.dateTime || w?.date || w?.start_date || null
+    const ts = rawDate ? new Date(rawDate).getTime() : NaN
+    return Number.isFinite(ts) && ts >= cutoff
+  })
+  const recentCyclingCount = recentWorkouts.filter(w => normalizeWorkoutType(w.type, w) === "Cycling").length
+  return {
+    operationalWorkoutsTotal: workouts.length,
+    operationalWorkoutsLast30d: recentWorkouts.length,
+    cyclingWorkoutsLast30d: recentCyclingCount,
+    normalizedActiveWorkouts: Array.isArray(normalizedActiveWorkouts) ? normalizedActiveWorkouts.length : 0,
+    normalizedStoredWorkouts: Array.isArray(normalizedStoredWorkouts) ? normalizedStoredWorkouts.length : 0,
+    computedTsb: computedTSBFromSessions?.tsb ?? null,
+    healthFitTsb: latestHealthFit?.tsb ?? null,
+    readinessTsbUsed: latestReadinessTsb,
+    readinessInputsHydrated,
+    readinessRemoteInputsHydrated,
+    readinessChartsReady,
+    latestOperationalWorkouts: workouts.slice(-5).reverse().map(w => ({
+      date: String(w?.dateTime || w?.date || w?.start_date || "").slice(0, 10) || "—",
+      category: normalizeWorkoutType(w.type, w) || "Other"
+    }))
+  }
+}, [
+  operationalWorkouts,
+  normalizedActiveWorkouts,
+  normalizedStoredWorkouts,
+  computedTSBFromSessions,
+  latestHealthFit,
+  latestReadinessTsb,
+  readinessInputsHydrated,
+  readinessRemoteInputsHydrated,
+  readinessChartsReady
+])
 
 const computedTSB = useMemo(() => {
   if (!unifiedCanonicalSessions?.length) return null;
@@ -11506,6 +11555,27 @@ return (
             </div>
           </div>
         ))}
+      </div>
+      <div style={{ background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: "8px", padding: "12px", marginBottom: "14px" }}>
+        <div style={{ fontWeight: "bold", marginBottom: "8px" }}>Readiness Debug</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "8px", fontSize: "12px" }}>
+          <div>operationalWorkouts total: {readinessDebugData.operationalWorkoutsTotal}</div>
+          <div>operationalWorkouts last 30d: {readinessDebugData.operationalWorkoutsLast30d}</div>
+          <div>cycling workouts last 30d: {readinessDebugData.cyclingWorkoutsLast30d}</div>
+          <div>normalizedActiveWorkouts: {readinessDebugData.normalizedActiveWorkouts}</div>
+          <div>normalizedStoredWorkouts: {readinessDebugData.normalizedStoredWorkouts}</div>
+          <div>computedTSBFromSessions.tsb: {readinessDebugData.computedTsb ?? "—"}</div>
+          <div>latest HealthFit TSB: {readinessDebugData.healthFitTsb ?? "—"}</div>
+          <div>TSB used by readiness: {readinessDebugData.readinessTsbUsed ?? "—"}</div>
+          <div>readinessInputsHydrated: {String(readinessDebugData.readinessInputsHydrated)}</div>
+          <div>readinessRemoteInputsHydrated: {String(readinessDebugData.readinessRemoteInputsHydrated)}</div>
+          <div>readinessChartsReady: {String(readinessDebugData.readinessChartsReady)}</div>
+        </div>
+        <div style={{ fontSize: "12px", opacity: 0.8, marginTop: "10px" }}>
+          Latest 5 operational workouts: {readinessDebugData.latestOperationalWorkouts.length
+            ? readinessDebugData.latestOperationalWorkouts.map(w => `${w.date} ${w.category}`).join(" · ")
+            : "none"}
+        </div>
       </div>
       {readinessChartsReady ? (
       <ResponsiveContainer width="100%" height={240}>
