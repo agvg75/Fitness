@@ -4982,23 +4982,6 @@ function normalizeDateString(value) {
   return Number.isFinite(t) ? new Date(t).toISOString() : null;
 }
 
-function getNewestWorkoutLikeTimestamp(rows) {
-  if (!Array.isArray(rows) || !rows.length) return null
-  let newest = null
-  rows.forEach(row => {
-    const raw = row?.dateTime || row?.date || row?.start_date || row?.startDate || null
-    const normalized = normalizeDateString(raw)
-    const ts = normalized ? Date.parse(normalized) : NaN
-    if (Number.isFinite(ts) && (newest == null || ts > newest)) newest = ts
-  })
-  return newest
-}
-
-function getNewestWorkoutLikeDate(rows) {
-  const ts = getNewestWorkoutLikeTimestamp(rows)
-  return Number.isFinite(ts) ? new Date(ts).toISOString().slice(0, 10) : null
-}
-
 function toMs(value) {
   const normalized = normalizeDateString(value);
   if (!normalized) return null;
@@ -5648,6 +5631,23 @@ function normalizeDateString(value) {
   }
   const t = Date.parse(raw);
   return Number.isFinite(t) ? new Date(t).toISOString() : null;
+}
+
+function getNewestWorkoutLikeTimestamp(rows) {
+  if (!Array.isArray(rows) || !rows.length) return null
+  let newest = null
+  rows.forEach(row => {
+    const raw = row?.dateTime || row?.date || row?.start_date || row?.startDate || null
+    const normalized = normalizeDateString(raw)
+    const ts = normalized ? Date.parse(normalized) : NaN
+    if (Number.isFinite(ts) && (newest == null || ts > newest)) newest = ts
+  })
+  return newest
+}
+
+function getNewestWorkoutLikeDate(rows) {
+  const ts = getNewestWorkoutLikeTimestamp(rows)
+  return Number.isFinite(ts) ? new Date(ts).toISOString().slice(0, 10) : null
 }
 
 function toMs(value) {
