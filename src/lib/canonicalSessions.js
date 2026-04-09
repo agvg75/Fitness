@@ -20,14 +20,119 @@ function makeSessionId(prefix, payload) {
   return `${prefix}_${stableHash(safeStringify(payload) || String(Date.now()))}`
 }
 
+function normalizeCanonicalType(type) {
+  return String(type || "").trim().toLowerCase()
+}
+
+function isPositiveNumber(value) {
+  const n = Number(value)
+  return Number.isFinite(n) && n > 0
+}
+
+function getCanonicalDistanceMetric(session) {
+  return session?.preferred_metrics?.distance || null
+}
+
+function getTechnogymDistanceMetric(session) {
+  const distance = Number(session?.sources?.technogym?.distance)
+  if (!Number.isFinite(distance) || distance <= 0) return null
+  return {
+    value: distance,
+    unit: session?.sources?.technogym?.distance_unit || "m",
+    source: "technogym",
+    rationale: "Carried forward from Technogym HDistance during canonical session merge"
+  }
+}
+
+function shouldCarryForwardTechnogymDistance(winner, loser) {
+  const winnerDistance = getCanonicalDistanceMetric(winner)
+  const winnerValue = Number(winnerDistance?.value)
+  const loserTechnoDistance = getTechnogymDistanceMetric(loser)
+  return (!Number.isFinite(winnerValue) || winnerValue <= 0) && loserTechnoDistance
+}
+
+function canonicalSessionQualityScore(session) {
+  const sources = session?.sources || {}
+  let score = 0
+  if (sources.apple) score += 2
+  if (sources.technogym) score += 3
+  if (sources.schedule) score += 1
+  if (isPositiveNumber(session?.preferred_metrics?.distance?.value)) score += 2
+  if (isPositiveNumber(session?.preferred_metrics?.hr?.value)) score += 1
+  if (isPositiveNumber(session?.preferred_metrics?.calories?.value)) score += 1
+  if (isPositiveNumber(session?.preferred_metrics?.power_avg?.value)) score += 1
+  if (isPositiveNumber(session?.preferred_metrics?.rpm_avg?.value)) score += 1
+  if (isPositiveNumber(session?.duration_min)) score += 1
+  return score
+}
+
+function mergeSessionSources(winner, loser) {
+  return {
+    ...(winner?.sources || {}),
+    apple: winner?.sources?.apple || loser?.sources?.apple || null,
+    technogym: winner?.sources?.technogym || loser?.sources?.technogym || null,
+    schedule: winner?.sources?.schedule || loser?.sources?.schedule || null
+  }
+}
+
+function mergePreferredMetrics(winner, loser) {
+  const merged = {
+    ...(loser?.preferred_metrics || {}),
+    ...(winner?.preferred_metrics || {})
+  }
+
+  if (shouldCarryForwardTechnogymDistance(winner, loser)) {
+    const technoDistance = getTechnogymDistanceMetric(loser)
+    merged.distance = {
+      ...(winner?.preferred_metrics?.distance || {}),
+      ...technoDistance
+    }
+  } else if (!merged.distance && loser?.preferred_metrics?.distance) {
+    merged.distance = { ...loser.preferred_metrics.distance }
+  }
+
+  return merged
+}
+
+function mergeCanonicalSessionPair(a, b) {
+  const winner = canonicalSessionQualityScore(a) >= canonicalSessionQualityScore(b) ? a : b
+  const loser = winner === a ? b : a
+
+  return {
+    ...loser,
+    ...winner,
+    sources: mergeSessionSources(winner, loser),
+    preferred_metrics: mergePreferredMetrics(winner, loser)
+  }
+}
+
+function getDuplicateSessionKey(session) {
+  const startMs = toMsForScheduleSeeds(session?.start_date || session?.dateTime || session?.date)
+  const endMs = toMsForScheduleSeeds(session?.end_date)
+  const type = normalizeCanonicalType(session?.canonical_type || session?.type)
+  if (!Number.isFinite(startMs) || !type) {
+    return session?.session_id || makeSessionId("session", session)
+  }
+
+  const roundedStart = Math.round(startMs / (5 * 60 * 1000))
+  const roundedEnd = Number.isFinite(endMs) ? Math.round(endMs / (5 * 60 * 1000)) : "na"
+  return `${type}|${roundedStart}|${roundedEnd}`
+}
+
 export function dedupeCanonicalSessions(sessions) {
-  const seen = new Set()
-  return (Array.isArray(sessions) ? sessions : []).filter(session => {
-    const key = session?.session_id || makeSessionId("session", session)
-    if (seen.has(key)) return false
-    seen.add(key)
-    return true
-  }).sort((a, b) => String(a?.start_date || "").localeCompare(String(b?.start_date || "")))
+  const deduped = new Map()
+
+  ;(Array.isArray(sessions) ? sessions : []).forEach(session => {
+    const key = getDuplicateSessionKey(session)
+    const existing = deduped.get(key)
+    if (!existing) {
+      deduped.set(key, session)
+      return
+    }
+    deduped.set(key, mergeCanonicalSessionPair(existing, session))
+  })
+
+  return [...deduped.values()].sort((a, b) => String(a?.start_date || "").localeCompare(String(b?.start_date || "")))
 }
 
 function estimateScheduleStrengthTrimp(entry) {

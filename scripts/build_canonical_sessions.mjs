@@ -92,7 +92,7 @@ function pickHr(apple, techno) {
 }
 
 function pickDistance(apple, techno) {
-  if (techno?.distance != null) {
+  if (Number.isFinite(Number(techno?.distance)) && Number(techno.distance) > 0) {
     return {
       value: techno.distance,
       source: "Technogym",
@@ -100,7 +100,7 @@ function pickDistance(apple, techno) {
       unit: techno.distance_unit || "m"
     };
   }
-  if (apple?.distance != null) {
+  if (Number.isFinite(Number(apple?.distance)) && Number(apple.distance) > 0) {
     return {
       value: apple.distance,
       source: "AppleHealth",

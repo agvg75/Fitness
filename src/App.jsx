@@ -1233,7 +1233,15 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
 
         const PROGRESSION_THRESHOLD = 3
         const progressPct = Math.min(100, Math.round((streak / PROGRESSION_THRESHOLD) * 100))
-        const nextMilestone = recentMax > 0 ? (recentMax * 1.1).toFixed(2) : null
+        const nextDistanceMilestone = recentMax > 0 ? (recentMax * 1.1).toFixed(2) : null
+        const remainingScoreZeroSessions = Math.max(0, PROGRESSION_THRESHOLD - streak)
+        const nextMilestoneDate = (() => {
+          if (streak >= PROGRESSION_THRESHOLD) return "Cleared"
+          const projected = new Date()
+          projected.setHours(12, 0, 0, 0)
+          projected.setDate(projected.getDate() + remainingScoreZeroSessions * 7)
+          return fmtShortDate(projected.toISOString().slice(0, 10))
+        })()
         const barColor = isActive ? "#ef4444" : streak >= PROGRESSION_THRESHOLD ? "#4ade80" : "#fbbf24"
 
         return (
@@ -1277,9 +1285,9 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
               <div style={{ background: "#07080e", border: "1px solid #1a1b2e", borderRadius: "8px", padding: "10px", textAlign: "center" }}>
                 <div style={{ fontSize: "10px", color: "#555", marginBottom: "3px" }}>Next milestone</div>
                 <div style={{ fontSize: "24px", fontWeight: "800", color: streak >= PROGRESSION_THRESHOLD ? "#4ade80" : "#667", lineHeight: 1 }}>
-                  {nextMilestone || "—"}
+                  {nextMilestoneDate || "—"}
                 </div>
-                <div style={{ fontSize: "10px", color: "#555" }}>mi (+10%)</div>
+                <div style={{ fontSize: "10px", color: "#555" }}>target date</div>
               </div>
               <div style={{ background: "#07080e", border: "1px solid #1a1b2e", borderRadius: "8px", padding: "10px", textAlign: "center" }}>
                 <div style={{ fontSize: "10px", color: "#555", marginBottom: "3px" }}>Last run</div>
@@ -1297,8 +1305,8 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
               {isActive
                 ? `Resolve MTP to score 0 before resuming progression. ${sortedRuns.length > 0 ? `Last run: ${fmtShortDate(sortedRuns[0]?.date)}.` : ""}`
                 : streak >= PROGRESSION_THRESHOLD
-                  ? `Threshold met. Advance from ${recentMax.toFixed(2)} mi to ${nextMilestone} mi on next run.`
-                  : `${PROGRESSION_THRESHOLD - streak} more score-0 run${PROGRESSION_THRESHOLD - streak === 1 ? "" : "s"} required before advancing to ${nextMilestone} mi.`
+                  ? `Threshold met. Advance from ${recentMax.toFixed(2)} mi to ${nextDistanceMilestone} mi on next run.`
+                  : `${remainingScoreZeroSessions} more score-0 run${remainingScoreZeroSessions === 1 ? "" : "s"} required before advancing to ${nextDistanceMilestone} mi. Expected by ${nextMilestoneDate}.`
               }
             </div>
           </div>
@@ -4439,10 +4447,17 @@ function buildRunningReadinessController({
   const recentRunFrequency = Number(inputs.runsPerWeek28 || 0)
   const activeWeeks28 = Number(inputs.activeWeeks28 || 0)
 
-  const buildCompletionScore = ({ distanceMiles, volumeThresholds }) => {
-    if (recentCompletedRunMiles >= distanceMiles) return 100
+  const buildCompletionScore = ({ distanceMiles, volumeThresholds, projectedCompletedRunMiles, projectedLongestRunMiles }) => {
+    const completedRunMiles = Number.isFinite(Number(projectedCompletedRunMiles))
+      ? Number(projectedCompletedRunMiles)
+      : recentCompletedRunMiles
+    const longestRunMiles = Number.isFinite(Number(projectedLongestRunMiles))
+      ? Number(projectedLongestRunMiles)
+      : recentLongestRunMiles
 
-    const longestRatio = distanceMiles > 0 ? recentLongestRunMiles / distanceMiles : 0
+    if (completedRunMiles >= distanceMiles) return 100
+
+    const longestRatio = distanceMiles > 0 ? longestRunMiles / distanceMiles : 0
     const longestScore = scoreThreshold(longestRatio, [
       [0.9, 90],
       [0.75, 75],
@@ -4508,6 +4523,7 @@ function buildRunningReadinessController({
     completionReadiness,
     progressionReadiness: ocConstraintState?.gate?.progressionReadiness ?? "hold",
     progressionReasons: ocConstraintState?.gate?.progressionReasons ?? [],
+    buildCompletionScore,
     signals: {
       recentCompletedRunMiles: Number(recentCompletedRunMiles.toFixed(1)),
       recentLongestRunMiles: Number(recentLongestRunMiles.toFixed(1)),
@@ -5467,8 +5483,8 @@ function pickHr(apple, techno) {
 }
 
 function pickDistance(apple, techno) {
-  if (techno && techno.distance != null) return { value: techno.distance, source: 'Technogym', rationale: 'Preferred machine distance', unit: techno.distance_unit || 'm' };
-  if (apple && apple.distance != null) return { value: apple.distance, source: 'AppleHealth', rationale: 'Fallback to Apple distance', unit: apple.distance_unit || 'mi' };
+  if (techno && Number.isFinite(Number(techno.distance)) && Number(techno.distance) > 0) return { value: techno.distance, source: 'Technogym', rationale: 'Preferred machine distance', unit: techno.distance_unit || 'm' };
+  if (apple && Number.isFinite(Number(apple.distance)) && Number(apple.distance) > 0) return { value: apple.distance, source: 'AppleHealth', rationale: 'Fallback to Apple distance', unit: apple.distance_unit || 'mi' };
   return { value: null, source: null, rationale: null, unit: null };
 }
 
@@ -5589,20 +5605,22 @@ function buildImportResult(appleWorkouts, technoWorkouts, overlapCandidates, rej
     return (toMs(a.start_date) || 0) - (toMs(b.start_date) || 0);
   });
 
+  const mergedAccepted = dedupeCanonicalSessions(accepted);
+
   return {
-    accepted: accepted,
+    accepted: mergedAccepted,
     review: review,
     rejected: rejected,
-    all_sessions: accepted.slice(),
+    all_sessions: mergedAccepted.slice(),
     generated_at: new Date().toISOString(),
     summary: {
-      total: accepted.length,
-      accepted: accepted.length,
+      total: mergedAccepted.length,
+      accepted: mergedAccepted.length,
       review: review.length,
       rejected: rejected.length,
-      linked: accepted.filter(function(s) { return s.sources.apple && s.sources.technogym; }).length,
-      unmatched_apple: accepted.filter(function(s) { return s.sources.apple && !s.sources.technogym; }).length,
-      unmatched_technogym: accepted.filter(function(s) { return !s.sources.apple && s.sources.technogym; }).length
+      linked: mergedAccepted.filter(function(s) { return s.sources.apple && s.sources.technogym; }).length,
+      unmatched_apple: mergedAccepted.filter(function(s) { return s.sources.apple && !s.sources.technogym; }).length,
+      unmatched_technogym: mergedAccepted.filter(function(s) { return !s.sources.apple && s.sources.technogym; }).length
     }
   };
 }
@@ -7166,7 +7184,7 @@ function makeSessionFromSingleSource(prefix, appleRecord, technoRecord) {
     preferred_metrics: {
       hr: appleRecord?.hr != null ? { value: appleRecord.hr, source: "AppleHealth" } : technoRecord?.hr != null ? { value: technoRecord.hr, source: "Technogym" } : { value: null, source: null },
       calories: appleRecord?.calories != null ? { value: appleRecord.calories, source: "AppleHealth" } : technoRecord?.calories != null ? { value: technoRecord.calories, source: "Technogym" } : { value: null, source: null },
-      distance: technoRecord?.distance != null ? { value: technoRecord.distance, source: "Technogym", rationale: "Manual review resolution", unit: technoRecord.distance_unit || "m" } : appleRecord?.distance != null ? { value: appleRecord.distance, source: "AppleHealth", rationale: "Manual review resolution", unit: appleRecord.distance_unit || null } : { value: null, source: null, rationale: null, unit: null },
+      distance: Number.isFinite(Number(technoRecord?.distance)) && Number(technoRecord.distance) > 0 ? { value: technoRecord.distance, source: "Technogym", rationale: "Manual review resolution", unit: technoRecord.distance_unit || "m" } : Number.isFinite(Number(appleRecord?.distance)) && Number(appleRecord.distance) > 0 ? { value: appleRecord.distance, source: "AppleHealth", rationale: "Manual review resolution", unit: appleRecord.distance_unit || null } : { value: null, source: null, rationale: null, unit: null },
       power_avg: { value: technoRecord?.power_avg ?? null, source: technoRecord?.power_avg != null ? "Technogym" : null },
       level: { value: technoRecord?.level ?? null, source: technoRecord?.level != null ? "Technogym" : null },
       rpm_avg: { value: technoRecord?.rpm_avg ?? null, source: technoRecord?.rpm_avg != null ? "Technogym" : null },
@@ -9866,11 +9884,44 @@ const readinessProjectionData = useMemo(() => {
   }
 
   const clamp = (v, lo = 0, hi = 100) => Math.min(hi, Math.max(lo, v))
-  const eventAdjustments = {
-    fiveK: 6,
-    tenK: 0,
-    half: -8,
-    tri: -14
+  const longRunPlanPoints = Object.entries(HM_PLAN_LONG_RUN)
+    .map(([weekKey, miles]) => ({
+      ts: Date.parse(`${weekKey}T12:00:00`),
+      miles: Number(miles)
+    }))
+    .filter(point => Number.isFinite(point.ts) && Number.isFinite(point.miles))
+    .sort((a, b) => a.ts - b.ts)
+  const interpolatePlannedLongRunMiles = month => {
+    if (!longRunPlanPoints.length) return null
+    const target = new Date()
+    target.setHours(12, 0, 0, 0)
+    target.setMonth(target.getMonth() + month)
+    const targetTs = target.getTime()
+
+    if (targetTs <= longRunPlanPoints[0].ts) return longRunPlanPoints[0].miles
+
+    for (let i = 1; i < longRunPlanPoints.length; i += 1) {
+      const prev = longRunPlanPoints[i - 1]
+      const curr = longRunPlanPoints[i]
+      if (targetTs <= curr.ts) {
+        const frac = (targetTs - prev.ts) / (curr.ts - prev.ts || 1)
+        return prev.miles + frac * (curr.miles - prev.miles)
+      }
+    }
+
+    return longRunPlanPoints[longRunPlanPoints.length - 1].miles
+  }
+  const projectEventReadiness = (month, distanceMiles, volumeThresholds, fallbackValue) => {
+    const projectedLongRunMiles = interpolatePlannedLongRunMiles(month)
+    if (!Number.isFinite(Number(projectedLongRunMiles)) || typeof runningReadiness.buildCompletionScore !== "function") {
+      return Number(clamp(fallbackValue ?? 0).toFixed(1))
+    }
+    return Number(clamp(runningReadiness.buildCompletionScore({
+      distanceMiles,
+      volumeThresholds,
+      projectedCompletedRunMiles: projectedLongRunMiles,
+      projectedLongestRunMiles: projectedLongRunMiles
+    })).toFixed(1))
   }
 
   const maxMonth = 12
@@ -9878,14 +9929,32 @@ const readinessProjectionData = useMemo(() => {
 
   for (let month = 0; month <= maxMonth; month += 1) {
     const baseReadiness = Number(interpolateBaseReadiness(month).toFixed(1))
+    const projectedFiveK = projectEventReadiness(month, 3.1069, [
+      [9, 95],
+      [7, 82],
+      [5, 68],
+      [3, 50]
+    ], runningReadiness.completionReadiness?.fiveK)
+    const projectedTenK = projectEventReadiness(month, 6.2137, [
+      [18, 95],
+      [14, 82],
+      [10, 65],
+      [7, 48]
+    ], runningReadiness.completionReadiness?.tenK)
+    const projectedHalf = projectEventReadiness(month, 13.1094, [
+      [30, 95],
+      [24, 82],
+      [18, 65],
+      [12, 48]
+    ], runningReadiness.completionReadiness?.half)
     series.push({
       month,
       label: month === 0 ? "Now" : `${month}M`,
       baseReadiness,
-      fiveK: Number(clamp(runningReadiness.completionReadiness?.fiveK ?? 0).toFixed(1)),
-      tenK:  Number(clamp(runningReadiness.completionReadiness?.tenK ?? 0).toFixed(1)),
-      half:  Number(clamp(runningReadiness.completionReadiness?.half ?? 0).toFixed(1)),
-      tri:   Number(clamp(baseReadiness + eventAdjustments.tri).toFixed(1)),
+      fiveK: projectedFiveK,
+      tenK: projectedTenK,
+      half: projectedHalf,
+      tri: Number(clamp(Math.min(baseReadiness, projectedHalf) - 12).toFixed(1)),
     })
   }
 
