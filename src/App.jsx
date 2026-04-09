@@ -1,6 +1,25 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { PROG, CARDIO } from "./scheduleData.js"
 import {
+  dedupeCanonicalSessions,
+  makeCanonicalSessionFromScheduleLog,
+  mergeCanonicalSessionsWithScheduleSeeds
+} from "./lib/canonicalSessions.js"
+import {
+  loadBiometricRecords,
+  loadCanonicalSessions,
+  loadHealthfitDaily,
+  loadSleepRecords,
+  migrateLocalBiometricRecords,
+  migrateLocalCanonicalSessions,
+  migrateLocalHealthfitDaily,
+  migrateLocalSleepRecords,
+  upsertCanonicalSessions,
+  upsertBiometricRecords,
+  upsertHealthfitDaily,
+  upsertSleepRecords
+} from "./lib/persistence.js"
+import {
   LineChart,
   Line,
   XAxis,
@@ -276,76 +295,61 @@ const mk = (r, w) => ({ r: String(r), w: String(w) })
 
 const PLAN = {
 Mon: {
-  cardio: "Speed run, 20 to 30 min, Zone 3 to 4, easy jog warm-up 5 min first",
-  warmup: [],
-  topNote: null,
-  sections: [
-    {
-      h: "A, Push Primary",
-      ex: [
-        { id: "m1", name: "Chest Press", sub: "Technogym machine", def: [mk(6,110), mk(6,110), mk(6,110)], note: "2-0-2 tempo, full ROM" },
-        { id: "m2", name: "Incline Press", sub: "DB incline / Smith low angle", def: [mk(10,"—"), mk(10,"—"), mk(10,"—")], note: "Low incline, shoulder-safe" }
-      ]
-    },
-    {
-      h: "B, Shoulder",
-      ex: [
-        { id: "m3", name: "Face Pull / ER", sub: "Cable or resistance band", def: [mk(12,"—"), mk(12,"—"), mk(12,"—")], note: "Rear delt and cuff" },
-        { id: "m4", name: "Shoulder Press", sub: "Technogym / DB", def: [mk(10,"—"), mk(10,"—")], note: "Neutral grip if neck tight" }
-      ]
-    },
-    {
-      h: "C, Triceps",
-      ex: [
-        { id: "m5", name: "Triceps Overhead", sub: "Cable / 30 lb DB", def: [mk(10,30), mk(10,30)], note: "Full stretch at top" },
-        { id: "m6", name: "Triceps Pushdown", sub: "Cable pressdown", def: [mk(10,35), mk(10,35), mk(10,35)], note: "Elbows fixed" }
-      ]
-    }
-  ]
-},
+    cardio: "Walk/jog intervals · 2.5 mi total · (walk ½mi → jog ½mi → walk ¼mi) × 2 · KNR prescribed · Do AFTER strength",
+    warmup: [
+      "Cable shoulder ER/IR  2×10 @ 10 lb",
+      "Banded X's  2×8 each side",
+      "Arm circles  2×30 sec each direction",
+    ],
+    topNote: null,
+    sections: [
+      { h: "A — Chest", ex: [
+        { id:"m1", name:"Chest Press",           sub:"Technogym / machine",          def:[mk(6,110),mk(6,110),mk(6,110)],           note:"2-0-2 tempo · full ROM · KNR baseline 110 lb" },
+        { id:"m2", name:"Incline Chest Press",   sub:"Smith machine · low angle",    def:[mk(6,90),mk(6,90),mk(6,90)],              note:"Low incline · shoulder-safe · KNR baseline 90 lb" },
+        { id:"m3", name:"Machine Flys",          sub:"Cable or pec deck",            def:[mk(6,30),mk(6,30),mk(6,30)],              note:"Full stretch · controlled return · KNR baseline 30 lb" },
+      ]},
+      { h: "B — Triceps", ex: [
+        { id:"m4", name:"Triceps Pulldown",      sub:"Cable pressdown",              def:[mk(6,25),mk(6,25),mk(6,25)],              note:"Elbows fixed · full extension · KNR baseline 25 lb" },
+      ]},
+      { h: "C — Core", ex: [
+        { id:"m5", name:"Pushup Plank w/ Shoulder Touch", sub:"Bodyweight · 2×10e", def:[mk("10e","BW"),mk("10e","BW")],              note:"Hips level · no rotation · controlled" },
+        { id:"m6", name:"Pallof Press",          sub:"Cable · split stance · 40 lb", def:[mk("10e",40),mk("10e",40)],                 note:"Brace · press slowly · zero rotation" },
+      ]},
+    ],
+  },
 
   Tue: {
-  cardio: null,
-  warmup: [
-    "Stationary bike 5 to 10 min",
-    "Standing calf raises 2x8 off step",
-    "Bodyweight squat 2x8",
-    "Ankle inversion and dorsiflexion 2x10",
-    "Towel scrunches 5 sets"
-  ],
-  topNote: null,
-  sections: [
-    {
-      h: "Glutes / Hips",
-      ex: [
-        { id: "t1", name: "Hip Thrust", sub: "Machine or Smith bar", def: [mk(10,115), mk(10,135), mk(10,165)], note: "Pause at top" }
-      ]
-    },
-    {
-      h: "Quads / Posterior Chain",
-      ex: [
-        { id: "t2", name: "Leg Press, Heel Drive", sub: "Machine", def: [mk(15,160), mk(15,160), mk(15,160)], note: "Endurance mode" },
-        { id: "t3", name: "KB RDL", sub: "Kettlebell", def: [mk(10,50), mk(10,50), mk(10,50)], note: "Hinge not squat" },
-        { id: "t6", name: "Leg Curl", sub: "Machine", def: [mk(10,100), mk(10,100), mk(10,100)], note: "Slow lower" },
-        { id: "t7", name: "Leg Extension", sub: "Machine", def: [mk(10,80), mk(10,80), mk(10,80)], note: "Controlled" }
-      ]
-    },
-    {
-      h: "Hip Stability",
-      ex: [
-        { id: "t4", name: "Lateral Band Walk", sub: "Green band", def: [mk("2 laps","band"), mk("2 laps","band")], note: "Maintain tension" },
-        { id: "t5", name: "Monster Walk", sub: "Green band", def: [mk("2 laps","band"), mk("2 laps","band")], note: "Forward / diagonal" }
-      ]
-    },
-    {
-      h: "Core",
-      ex: [
-        { id: "t8", name: "Marches w/ Band", sub: "3x10 each side", def: [mk("10e","band"), mk("10e","band"), mk("10e","band")], note: "Pelvic neutral" },
-        { id: "t9", name: "90/90 Bicycle", sub: "3x30 sec", def: [mk("30s","BW"), mk("30s","BW"), mk("30s","BW")], note: "Slow and controlled" }
-      ]
-    }
-  ]
-},
+    cardio: null,
+    warmup: [
+      "Stationary bike  5–10 min · light → moderate · get blood flowing",
+      "Standing calf raises  2×8 off plate/step · full stretch at bottom",
+      "Bodyweight squat  2×8 · band around knees if form OK",
+      "⚑ TOE/ANKLE BLOCK — do not skip · MTP protection",
+      "Ankle (L) inversion + dorsiflexion  2×10 · band assisted",
+      "Towel scrunches (L)  5 sets · intrinsic foot strength",
+    ],
+    topNote: "KNR Day 2 — Legs. Toe/ankle warm-up block is non-optional given MTP history. If kinesiologist skips it, confirm reason and log.",
+    sections: [
+      { h: "Glutes / Hips", ex: [
+        { id:"t1", name:"Hip Thrust",             sub:"Smith machine",                def:[mk(10,115),mk(10,145),mk(10,155)],       note:"Full hip ext · pause at top · ribs down · working range 115–155 lb" },
+      ]},
+      { h: "Posterior Chain", ex: [
+        { id:"t2", name:"Leg Press — Heel Drive", sub:"Machine · endurance protocol", def:[mk(15,160),mk(15,160),mk(15,160)],      note:"Heels high on plate · 15 reps · aerobic intent · not strength failure" },
+        { id:"t3", name:"TB DL / KB RDL",         sub:"KB 50 lb interim · TB DL when ready", def:[mk(10,50),mk(10,50),mk(10,50)], note:"Hinge not squat · flat back · TB DL = trap bar deadlift progression" },
+      ]},
+      { h: "Hip Stability", ex: [
+        { id:"t4", name:"Lateral Band Walk",      sub:"Green band · 2 laps (~60 ft)", def:[mk("2 laps","green"),mk("2 laps","green")], note:"Band at ankles or above knees per KNR instruction · maintain tension" },
+        { id:"t5", name:"Hip Drive Marches",      sub:"Band · replaces leg curl in current protocol", def:[mk("10e","grn"),mk("10e","grn"),mk("10e","grn")], note:"Pelvic neutral · controlled · per KNR 3/24 substitution" },
+      ]},
+      { h: "Quads", ex: [
+        { id:"t6", name:"Leg Extension",          sub:"Machine",                      def:[mk(12,80),mk(12,80),mk(12,80)],          note:"Full extension · controlled eccentric · 80 lb confirmed" },
+      ]},
+      { h: "Core", ex: [
+        { id:"t7", name:"Plank",                  sub:"3×60 sec",                     def:[mk("60s","BW"),mk("60s","BW"),mk("60s","BW")], note:"Neutral spine · breathe · do not let hips sag" },
+        { id:"t8", name:"90/90 Deadbugs",         sub:"2×15 each side",               def:[mk("15e","BW"),mk("15e","BW")],             note:"Back flat on floor · slow · full extension" },
+      ]},
+    ],
+  },
 
   Wed: {
   cardio: "Easy run, 30 min, Zone 2, conversational pace, run before lifting",
@@ -375,31 +379,31 @@ Mon: {
 },
 
   Thu: {
-  cardio: null,
-  warmup: [
-    "Cable shoulder ER/IR 2x10",
-    "Banded X's 2x8 each side",
-    "Arm circles 2x30 sec"
-  ],
-  topNote: "KNR Day 4, confirm exact movements and loads with your kinesiologist each session.",
-  sections: [
-    {
-      h: "Back Primary",
-      ex: [
-        { id: "th1", name: "Lat Pulldown", sub: "Machine or cable", def: [mk(10,"—"), mk(10,"—"), mk(10,"—")], note: "Elbows to ribs" },
-        { id: "th2", name: "Seated Row", sub: "Cable", def: [mk(10,"—"), mk(10,"—"), mk(10,"—")], note: "Scap retraction" },
-        { id: "th3", name: "Chest-Supported Row", sub: "Machine or incline DB", def: [mk(10,"—"), mk(10,"—"), mk(10,"—")], note: "Chest on pad" }
-      ]
-    },
-    {
-      h: "Biceps",
-      ex: [
-        { id: "th4", name: "Biceps Curl", sub: "Cable or DB", def: [mk(10,25), mk(10,25), mk(10,25)], note: "No sway" },
-        { id: "th5", name: "Hammer Curl", sub: "DB alternating", def: [mk(10,"—"), mk(10,"—")], note: "Neutral grip" }
-      ]
-    }
-  ]
-},
+    cardio: null,
+    warmup: [
+      "Wall slides  8e · pause at top · scapular upward rotation",
+      "Scap pushups  2×10 · on wall or bench · protraction/retraction",
+      "Face pulls w/ band  2×10 · light band",
+      "Pull aparts w/ band  2×10",
+    ],
+    topNote: "KNR Day 4 — Back / Biceps. Single-arm cable row weight (53–63 lb) reflects one-arm variant, not bilateral. Do not compare to bilateral archive baseline of 80–85 lb.",
+    sections: [
+      { h: "Back Primary", ex: [
+        { id:"th1", name:"Cable Row (mid) — Single Arm", sub:"Cable · mid-height · SA", def:[mk("6e",53),mk("6e",53),mk("6e",63)],  note:"SLOW tempo · full retraction · working range 53–80 lb SA" },
+        { id:"th2", name:"Lat Pulldown",               sub:"Machine or cable",          def:[mk(6,105),mk(6,110),mk(6,120)],         note:"Chest up · elbows to ribs · 2-1-2 · progressing 105→120 lb" },
+      ]},
+      { h: "Biceps", ex: [
+        { id:"th3", name:"Biceps Curl — DB/BB Palms Up", sub:"DB or barbell · palms up", def:[mk(8,60),mk(8,60),mk(8,60)],          note:"No sway · full elbow extension · 2-0-2 · 60 lb confirmed" },
+        { id:"th4", name:"Cable D2 Flexion",             sub:"Cable · unsheathing sword motion", def:[mk("8e",7),mk("8e",7)],           note:"Rotator cuff + shoulder health · light load only · 7 lb · diagonal pattern" },
+        { id:"th5", name:"Biceps Curl — Cable Rope Neutral", sub:"Cable w/ rope · neutral grip", def:[mk(8,47),mk(8,57),mk(8,57)],  note:"Neutral grip · full ROM · working range 43–57 lb" },
+      ]},
+      { h: "Core", ex: [
+        { id:"th6", name:"Straight Arm Pulldowns",      sub:"Cable · Wolverines · 40 lb", def:[mk(8,40),mk(8,40),mk(8,40)],         note:"3×8 · arms straight · lat engagement · shoulder health" },
+        { id:"th7", name:"Inverted Row",                sub:"TRX or bar · 3–4 sets",      def:[mk(8,"BW"),mk(8,"BW"),mk(8,"BW")],   note:"Scapular retraction focus · horizontal pull · bodyweight" },
+        { id:"th8", name:"Suitcase Carry",              sub:"DB 60 lb · 2 laps each arm (1 lap ≈ 30 ft)", def:[mk("2 laps",60),mk("2 laps",60)], note:"Optional finisher · core anti-lateral-flexion · upright posture" },
+      ]},
+    ],
+  },
 
 Fri: {
   cardio: "Swim, 1000 m, no backstroke, pull buoy or fins if toe irritated",
@@ -487,7 +491,63 @@ const defaultForDay = d => {
   return o
 }
 
-const todayDayKey = () => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][new Date().getDay()]
+const DAY_KEYS_BY_JS_DAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+const todayDayKey = () => DAY_KEYS_BY_JS_DAY[new Date().getDay()]
+const dayKeyFromScheduleDate = dateValue => {
+  const date = String(dateValue || "").slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null
+  const parsed = new Date(`${date}T12:00:00`)
+  return Number.isNaN(parsed.getTime()) ? null : DAY_KEYS_BY_JS_DAY[parsed.getDay()]
+}
+
+const getScheduleEntryDayDateMismatch = entry => {
+  const storedDay = String(entry?.day || "").slice(0, 3)
+  const date = String(entry?.date || entry?.logged_at || "").slice(0, 10)
+  const dateDay = dayKeyFromScheduleDate(date)
+  if (!storedDay || !dateDay || storedDay === dateDay) return null
+  return { storedDay, dateDay, date }
+}
+
+const getScheduleEntryTrainingType = entry => {
+  const cardio = Array.isArray(entry?.cardio) && entry.cardio.some(c =>
+    c?.modality || c?.duration || c?.distance || c?.calories || c?.hr || c?.notes
+  )
+  const strength = Array.isArray(entry?.exercises)
+    ? entry.exercises.some(ex => ex?.variant !== "cardio")
+    : entry?.data && Object.keys(entry.data).length > 0
+  if (cardio && strength) return "both"
+  if (cardio) return "cardio"
+  if (strength) return "strength"
+  return "none"
+}
+
+const buildScheduleDayDateMismatchReport = entries => {
+  return (Array.isArray(entries) ? entries : [])
+    .map(entry => {
+      const mismatch = getScheduleEntryDayDateMismatch(entry)
+      if (!mismatch) return null
+      return {
+        id: entry?.id ?? entry?.session_id ?? "unknown",
+        storedDay: mismatch.storedDay,
+        storedDate: mismatch.date,
+        impliedWeekday: mismatch.dateDay,
+        loggedAt: entry?.logged_at || "",
+        venue: entry?.venue_label || entry?.venue || "",
+        trainingType: getScheduleEntryTrainingType(entry),
+      }
+    })
+    .filter(Boolean)
+}
+
+const mergeScheduleLogEntries = (...logs) => Object.values(
+  logs
+    .flatMap(log => Array.isArray(log) ? log : [])
+    .reduce((acc, entry) => {
+      if (entry?.id == null) return acc
+      acc[entry.id] = entry
+      return acc
+    }, {})
+).sort((a, b) => b.id - a.id)
 
 const SDAY_TYPES = {
   Mon: ["Running", "Traditional Strength Training"],
@@ -613,7 +673,7 @@ function ExCard({ ex, setData, onUpdate, onAdd, onRemove }) {
   )
 }
 
-function ScheduleLogView({ log, expanded, setExpanded, onDelete, onEdit }) {
+function ScheduleLogView({ log, expanded, setExpanded, onDelete, onEdit, highlightedId, setEntryRef }) {
   const toggle = id => setExpanded(p => ({ ...p, [id]: !p[id] }))
 
   if (!log.length) {
@@ -655,9 +715,23 @@ function ScheduleLogView({ log, expanded, setExpanded, onDelete, onEdit }) {
         }
 
         const open = expanded[entry.id]
+        const highlighted = String(highlightedId || "") === String(entry.id)
 
         return (
-          <div key={entry.id} style={{ background: "#0e0e0e", border: "1px solid #1a1a1a", borderLeft: `3px solid ${m.color}`, borderRadius: "8px", marginBottom: "10px", overflow: "hidden" }}>
+          <div
+            key={entry.id}
+            ref={node => setEntryRef?.(entry.id, node)}
+            style={{
+              background: highlighted ? "#17120a" : "#0e0e0e",
+              border: highlighted ? "1px solid #f59e0b" : "1px solid #1a1a1a",
+              borderLeft: `3px solid ${highlighted ? "#f59e0b" : m.color}`,
+              borderRadius: "8px",
+              marginBottom: "10px",
+              overflow: "hidden",
+              boxShadow: highlighted ? "0 0 0 1px rgba(245, 158, 11, 0.25)" : "none",
+              transition: "background 180ms ease, border-color 180ms ease, box-shadow 180ms ease",
+            }}
+          >
             <div onClick={() => toggle(entry.id)} style={{ padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
               <div>
                 <div style={{ fontSize: "15px", fontWeight: "700", color: "#d0d0d0" }}>
@@ -763,6 +837,65 @@ function ScheduleLogView({ log, expanded, setExpanded, onDelete, onEdit }) {
           </div>
         )
       })}
+    </div>
+  )
+}
+
+function ScheduleMismatchDiagnostics({ report, onOpenEntry }) {
+  const rows = Array.isArray(report) ? report : []
+
+  return (
+    <div style={{ marginBottom: 12, padding: "10px 12px", background: "#0a0a0a", border: "1px solid #1a1a1a", borderRadius: 8 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", marginBottom: rows.length ? 10 : 0, flexWrap: "wrap" }}>
+        <div>
+          <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "#777", fontWeight: 700 }}>
+            Schedule day/date diagnostics
+          </div>
+          <div style={{ fontSize: 11, color: "#444", marginTop: 2 }}>
+            Read-only legacy wt-log check.
+          </div>
+        </div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: rows.length ? "#f59e0b" : "#22c55e" }}>
+          {rows.length} {rows.length === 1 ? "mismatch" : "mismatches"}
+        </div>
+      </div>
+
+      {!rows.length ? (
+        <div style={{ fontSize: 12, color: "#555" }}>No mismatches found.</div>
+      ) : (
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, color: "#aaa" }}>
+            <thead>
+              <tr style={{ color: "#555", textAlign: "left", borderBottom: "1px solid #181818" }}>
+                {["Entry id", "Stored day", "Stored date", "Date weekday", "Logged at", "Venue", "Type", "Action"].map(h => (
+                  <th key={h} style={{ padding: "5px 8px", fontWeight: 700, whiteSpace: "nowrap" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(row => (
+                <tr key={`${row.id}_${row.storedDate}`} style={{ borderBottom: "1px solid #121212" }}>
+                  <td style={{ padding: "5px 8px", fontFamily: "'IBM Plex Mono',monospace", color: "#777", whiteSpace: "nowrap" }}>{row.id}</td>
+                  <td style={{ padding: "5px 8px", color: "#f59e0b", fontWeight: 700 }}>{row.storedDay}</td>
+                  <td style={{ padding: "5px 8px", whiteSpace: "nowrap" }}>{row.storedDate}</td>
+                  <td style={{ padding: "5px 8px", color: "#f59e0b", fontWeight: 700 }}>{row.impliedWeekday}</td>
+                  <td style={{ padding: "5px 8px", whiteSpace: "nowrap" }}>{row.loggedAt || "NA"}</td>
+                  <td style={{ padding: "5px 8px", whiteSpace: "nowrap" }}>{row.venue || "NA"}</td>
+                  <td style={{ padding: "5px 8px", whiteSpace: "nowrap" }}>{row.trainingType}</td>
+                  <td style={{ padding: "5px 8px", whiteSpace: "nowrap" }}>
+                    <button
+                      onClick={() => onOpenEntry?.(row.id)}
+                      style={{ background: "none", border: "1px solid #2a2a2a", borderRadius: "4px", color: "#aaa", fontSize: "10px", padding: "4px 10px", cursor: "pointer" }}
+                    >
+                      Open
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }
@@ -1313,12 +1446,12 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
         </div>
       )}
 
-      {/* ── Operational Capacity history chart ───────────────────── */}
+      {/* ── Operational Capacity current projection chart ─────────── */}
       <div style={{ ...cardStyle(), minWidth: "0" }}>
-        <div style={{ fontSize: "12px", fontWeight: "700", marginBottom: "12px" }}>Operational Capacity History</div>
+        <div style={{ fontSize: "12px", fontWeight: "700", marginBottom: "12px" }}>Operational Capacity Projection</div>
         {(!operationalCapacityData || operationalCapacityData.length === 0) ? (
           <div style={{ fontSize: "12px", color: "#444", textAlign: "center", padding: "40px 0" }}>
-            No injury history — chart will populate once data is imported.
+            No current OC issues — true historical snapshots are not stored yet.
           </div>
         ) : (
           <ResponsiveContainer width="100%" height={280}>
@@ -1385,12 +1518,12 @@ function DailyReadinessPanel({ readinessScore, latestHealthFit, ocItems, compute
 }
 
 // ─── TabSchedule ──────────────────────────────────────────────────────────────
-function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, setSchedLog, readinessScore, latestHealthFit = null, ocItems = [], computedTSB = null }) {
+function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, setSchedLog, readinessScore, latestHealthFit = null, ocItems = [], computedTSB = null, progressionReadiness = "progress", progressionReasons = [], tendonStatus = { painScore: 0, stiffness: false, override: null } }) {
   const [activeDay, setActiveDay] = useState(todayDayKey())
   const [schedView, setSchedView] = useState("schedule")
   const [expandedLog, setExpandedLog] = useState({})
   const [toast, setToast] = useState(null)
-  const [openSections, setOpenSections] = useState({ stretch: true, warmup: true, main: true, core: true, cardio: true })
+  const [openSections, setOpenSections] = useState({ stretch: false, warmup: false, main: false, core: false, cardio: false })
   const [variants, setVariants] = useState({})
   const [fields, setFields] = useState({})
   const [cardioEntries, setCardioEntries] = useState({}) // { day: [{modality, duration, notes}] }
@@ -1408,6 +1541,9 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const [inlineItemDetail, setInlineItemDetail] = useState("")
   const [inlineExForm, setInlineExForm] = useState(null)   // day | null
   const [inlineExName, setInlineExName] = useState("")
+  const [highlightedLogEntryId, setHighlightedLogEntryId] = useState(null)
+  const [showSetTimer, setShowSetTimer] = useState(false)
+  const logEntryRefs = useRef({})
 
   const SPLIT_DAYS = ["Tue", "Thu"]
   const isSplitDay = SPLIT_DAYS.includes(activeDay)
@@ -1415,14 +1551,49 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const VENUE_TIMES = { ymca: "05:30", knr: "09:35" }
   const VENUE_LABELS = { ymca: "YMCA (5:30–7:00)", knr: "KNR (9:35–10:45)" }
 
+  const writeLocalScheduleKey = (key, value) => {
+    try { localStorage.setItem(key, JSON.stringify(value)) } catch {}
+  }
+
+  const readScheduleKeyFromSupabase = async key => {
+    if (!supabase || !session?.user?.id) return null
+    const { data, error } = await supabase
+      .from("user_kv")
+      .select("value")
+      .eq("user_id", session.user.id)
+      .eq("key", key)
+      .maybeSingle()
+    if (error) throw error
+    return data?.value ?? null
+  }
+
   const saveScheduleKey = async (key, value) => {
-    await store.set(key, value)
-    if (!supabase || !session?.user?.id) return
-    const { error } = await supabase.from("user_kv").upsert(
+    writeLocalScheduleKey(key, value)
+    if (!supabase || !session?.user?.id) return value
+
+    const { data, error } = await supabase.from("user_kv").upsert(
       { user_id: session.user.id, key, value, updated_at: new Date().toISOString() },
       { onConflict: "user_id,key" }
-    )
-    if (error) { if (process.env.NODE_ENV === "development") console.error(`Failed to sync ${key}:`, error) }
+    ).select("value").maybeSingle()
+
+    if (error) {
+      if (process.env.NODE_ENV === "development") console.error(`Failed to sync ${key}:`, error)
+      return value
+    }
+
+    const savedValue = data?.value ?? value
+    writeLocalScheduleKey(key, savedValue)
+    return savedValue
+  }
+
+  const loadScheduleLogForMutation = async fallbackLog => {
+    try {
+      const remoteLog = await readScheduleKeyFromSupabase("wt-log")
+      if (Array.isArray(remoteLog)) return mergeScheduleLogEntries(fallbackLog, remoteLog)
+    } catch (error) {
+      if (process.env.NODE_ENV === "development") console.error("Failed to refresh wt-log before mutation:", error)
+    }
+    return Array.isArray(fallbackLog) ? fallbackLog : []
   }
 
   // ── Load from storage ──────────────────────────────────────────────────
@@ -1433,18 +1604,15 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       const ci = await store.get("wt-custom-items")
       const cx = await store.get("wt-custom-exercises")
       // Fetch wt-log from Supabase and merge with localStorage
-      if (supabase) {
+      if (supabase && session?.user?.id) {
         try {
-          const { data } = await supabase.from("user_kv").select("value").eq("key", "wt-log")
-          const sbLg = data?.[0]?.value
-          if (process.env.NODE_ENV === "development") console.log("wt-log from Supabase:", Array.isArray(sbLg) ? sbLg.length + " entries" : "not array", data)
+          const sbLg = await readScheduleKeyFromSupabase("wt-log")
+          if (process.env.NODE_ENV === "development") console.log("wt-log from Supabase:", Array.isArray(sbLg) ? sbLg.length + " entries" : "not array")
           if (Array.isArray(sbLg)) {
             const local = Array.isArray(lg) ? lg : []
-            const merged = Object.values(
-              [...local, ...sbLg].reduce((acc, e) => { acc[e.id] = e; return acc }, {})
-            ).sort((a, b) => b.id - a.id)
+            const merged = mergeScheduleLogEntries(local, sbLg)
             setSchedLog(merged)
-            await store.set("wt-log", merged)
+            writeLocalScheduleKey("wt-log", merged)
           } else if (Array.isArray(lg)) {
             setSchedLog(lg)
           }
@@ -1479,6 +1647,16 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     setTimeout(() => setToast(null), 2500)
   }, [])
 
+  const setLogEntryRef = useCallback((id, node) => {
+    if (node) logEntryRefs.current[id] = node
+    else delete logEntryRefs.current[id]
+  }, [])
+
+  const switchScheduleDay = useCallback((day) => {
+    setActiveDay(day)
+    requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }))
+  }, [])
+
   const CARDIO_INJURY_REGIONS = {
     run:  ["Ankle", "Toe", "Knee", "Shin"],
     bike: ["Knee", "Hip", "Glute"],
@@ -1497,9 +1675,72 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     </div>
   ) : null
 
-  // ── Data source: SCH_PLAN (primary) with PROG as fallback ─────────────
+  const chooseTodayWorkout = (plannedWorkout, currentProgressionReadiness, currentTendonStatus) => {
+    const normalizedTendonStatus = {
+      painScore: Number(currentTendonStatus?.painScore || 0),
+      stiffness: Boolean(currentTendonStatus?.stiffness),
+      override: currentTendonStatus?.override || null
+    }
+    const modality = String(plannedWorkout?.modality || plannedWorkout?.type || "strength").toLowerCase()
+    const isRunLike = modality === "run" || modality === "running" || modality === "walk"
+    const isCardio = ["run", "running", "walk", "bike", "swim", "row"].includes(modality)
+    const reasonText = Array.isArray(progressionReasons) && progressionReasons.length
+      ? progressionReasons.join(" · ")
+      : "No controller restriction"
+
+    if (currentProgressionReadiness === "deload") {
+      if (isRunLike && normalizedTendonStatus.stiffness) {
+        return {
+          modification: "Swap run for easy bike or full rest",
+          reason: reasonText
+        }
+      }
+      if (isRunLike) {
+        return {
+          modification: "Replace run with easy bike or cut to recovery effort",
+          reason: reasonText
+        }
+      }
+      if (isCardio) {
+        return {
+          modification: "Keep modality but cut duration and keep effort easy",
+          reason: reasonText
+        }
+      }
+      return {
+        modification: "Keep workout but reduce load 10-15% and trim volume",
+        reason: reasonText
+      }
+    }
+
+    if (currentProgressionReadiness === "hold") {
+      if (isRunLike) {
+        return {
+          modification: "Keep the run, reduce duration or intensity slightly",
+          reason: reasonText
+        }
+      }
+      if (isCardio) {
+        return {
+          modification: "Keep modality, hold progression and stay slightly easier",
+          reason: reasonText
+        }
+      }
+      return {
+        modification: "Keep workout type, trim one set or reduce load slightly",
+        reason: reasonText
+      }
+    }
+
+    return {
+      modification: "As planned",
+      reason: reasonText
+    }
+  }
+
+  // ── Data source: PLAN (primary) with PROG as fallback ─────────────
   const getProgDay = (day) => {
-    const schDay = SCH_PLAN[day]
+    const schDay = PLAN[day]
     if (schDay) {
       const warmup = (schDay.warmup || []).map(s =>
         typeof s === "string" ? { n: s, d: "" } : { n: s.n || "", d: s.d || "" }
@@ -1527,7 +1768,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       )
       return { stretch: [], warmup, exercises, core: [], _topNote: schDay.topNote }
     }
-    // Fallback to PROG for any day not in SCH_PLAN
+    // Fallback to PROG for any day not in PLAN
     return PROG[day] || { stretch: [], warmup: [], exercises: [], core: [] }
   }
   const getVariant = (exId) => variants[exId] || "machine"
@@ -1640,6 +1881,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const getCardioEntries = (day) => {
     if (cardioEntries[day]?.length) return cardioEntries[day]
     const cd = CARDIO[day]
+    if (cd.noCardio) return []
     const sessions = cd.sessions || []
     if (sessions.length > 0) return sessions.map(s => ({ modality: s.mod, duration: `${s.dMin}-${s.dMax}`, distance: "", calories: "", hr: "", notes: "" }))
     return [{ modality: cd.mod || "run", duration: "", distance: "", calories: "", hr: "", notes: "" }]
@@ -1679,6 +1921,11 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   // ── Log session ────────────────────────────────────────────────────────
   const logSession = async (venue, checkedIds = null) => {
     const day = activeDay
+    const dateDay = dayKeyFromScheduleDate(sessionDate)
+    if (dateDay && dateDay !== day) {
+      showToast(`Session date is ${dateDay}; switch from ${day} before saving`)
+      return
+    }
     const prog = getProgDay(day)
     const ts = new Date(`${sessionDate}T${VENUE_TIMES[venue] || "12:00"}:00`).toISOString()
 
@@ -1707,6 +1954,8 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     const checkedStretch = getProgDay(day).stretch?.map((item, i) => ({ ...item, done: isChecked(day, "stretch", i) }))
     const checkedWarmup = getProgDay(day).warmup?.map((item, i) => ({ ...item, done: isChecked(day, "warmup", i) }))
 
+    const completedCardio = getCardioEntries(day).filter((_, i) => isChecked(day, "cardio", i))
+
     const entry = {
       id: Date.now(),
       session_id: ts.replace(/\D/g, "").slice(0, 17),
@@ -1717,7 +1966,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       program: "Kinesiology (primary)",
       rpe: sessionRPE[`${day}_${venue}`] ?? null,
       exercises: [...filteredExercises, ...filteredCustomExs],
-      cardio: getCardioEntries(day),
+      cardio: completedCardio,
       stretch_completed: checkedStretch,
       warmup_completed: checkedWarmup,
       source: "LIFT Schedule Tab", apple_watch_sync_pending: true,
@@ -1732,14 +1981,16 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       })),
     }
 
-    const newLog = [entry, ...schedLog]
+    const currentLog = await loadScheduleLogForMutation(schedLog)
+    const newLog = [entry, ...currentLog.filter(e => e.id !== entry.id)]
     setSchedLog(newLog)
     setSavedEntries(prev => ({ ...prev, [day]: { ...(prev[day] || {}), [venue]: entry } }))
 
-    await saveScheduleKey("wt-log", newLog)
+    const savedLog = await saveScheduleKey("wt-log", newLog)
+    if (Array.isArray(savedLog)) setSchedLog(savedLog)
     await saveScheduleKey("wt-sessions", buildSessionsStore())
 
-    const allCardio = getCardioEntries(day)
+    const allCardio = completedCardio
     if (allCardio.some(c => c.duration)) {
       const summaryEntries = allCardio.filter(c => c.duration).map((c, i) => ({
         id: entry.id + i, date: sessionDate, time: VENUE_TIMES[venue] || "", dateTime: ts,
@@ -1755,7 +2006,8 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       const merged = [...(Array.isArray(existing) ? existing : []), ...summaryEntries]
         .sort((a, b) => String(a.dateTime || a.date || "").localeCompare(String(b.dateTime || b.date || "")))
       setStoredWorkouts(merged)
-      await saveScheduleKey("ufd-workouts", merged)
+      const savedWorkouts = await saveScheduleKey("ufd-workouts", merged)
+      if (Array.isArray(savedWorkouts)) setStoredWorkouts(savedWorkouts)
     }
 
     showToast(`${VENUE_LABELS[venue] || "Session"} logged`)
@@ -1765,32 +2017,75 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     const day = activeDay
     const entry = savedEntries[day]?.[venue]
     if (!entry) return
-    const newLog = schedLog.filter(e => e.id !== entry.id)
+    const currentLog = await loadScheduleLogForMutation(schedLog)
+    const newLog = currentLog.filter(e => e.id !== entry.id)
     setSchedLog(newLog)
-    const newWorkouts = storedWorkouts.filter(w => w._scheduleId !== entry.id)
+    const existingWorkouts = await store.get("ufd-workouts") || storedWorkouts
+    const newWorkouts = (Array.isArray(existingWorkouts) ? existingWorkouts : []).filter(w => w._scheduleId !== entry.id)
     setStoredWorkouts(newWorkouts)
     setSavedEntries(prev => ({ ...prev, [day]: { ...(prev[day] || {}), [venue]: null } }))
     setJustUndone(venue)
-    await saveScheduleKey("wt-log", newLog)
-    await saveScheduleKey("ufd-workouts", newWorkouts)
+    const savedLog = await saveScheduleKey("wt-log", newLog)
+    if (Array.isArray(savedLog)) setSchedLog(savedLog)
+    const savedWorkouts = await saveScheduleKey("ufd-workouts", newWorkouts)
+    if (Array.isArray(savedWorkouts)) setStoredWorkouts(savedWorkouts)
     setTimeout(() => setJustUndone(null), 4000)
     showToast("Session removed")
   }
 
   const deleteEntry = async id => {
-    const newLog = schedLog.filter(e => e.id !== id)
+    const currentLog = await loadScheduleLogForMutation(schedLog)
+    const newLog = currentLog.filter(e => e.id !== id)
     setSchedLog(newLog)
-    await saveScheduleKey("wt-log", newLog)
+    const existingWorkouts = await store.get("ufd-workouts") || storedWorkouts
+    const newWorkouts = (Array.isArray(existingWorkouts) ? existingWorkouts : []).filter(w => w._scheduleId !== id)
+    const savedLog = await saveScheduleKey("wt-log", newLog)
+    if (Array.isArray(savedLog)) setSchedLog(savedLog)
+    setStoredWorkouts(newWorkouts)
+    const savedWorkouts = await saveScheduleKey("ufd-workouts", newWorkouts)
+    if (Array.isArray(savedWorkouts)) setStoredWorkouts(savedWorkouts)
     showToast("Entry deleted")
   }
 
   const editEntry = id => {
     const entry = schedLog.find(e => e.id === id)
     if (!entry) return
-    setActiveDay(entry.day)
+    const mismatch = getScheduleEntryDayDateMismatch(entry)
+    const entryDate = String(entry.date || entry.logged_at || "").slice(0, 10)
+    switchScheduleDay(mismatch?.dateDay || entry.day)
+    if (/^\d{4}-\d{2}-\d{2}$/.test(entryDate)) setSessionDate(entryDate)
     setSchedView("schedule")
-    showToast(`Loaded ${entry.dayLabel} for editing`)
+    showToast(mismatch
+      ? `Existing log mismatch: ${mismatch.date} is ${mismatch.dateDay}, not ${mismatch.storedDay}`
+      : `Loaded ${entry.dayLabel} for editing`
+    )
   }
+
+  const openDiagnosticEntry = useCallback((id) => {
+    const entry = schedLog.find(e => String(e.id) === String(id) || String(e.session_id) === String(id))
+    if (!entry) {
+      showToast("Log entry not found")
+      return
+    }
+    const mismatch = getScheduleEntryDayDateMismatch(entry)
+    const entryDate = String(entry.date || entry.logged_at || "").slice(0, 10)
+    const targetDay = mismatch?.dateDay || entry.day
+
+    if (targetDay) setActiveDay(targetDay)
+    if (/^\d{4}-\d{2}-\d{2}$/.test(entryDate)) setSessionDate(entryDate)
+    setSchedView("log")
+    setExpandedLog(prev => ({ ...prev, [entry.id]: true }))
+    setHighlightedLogEntryId(entry.id)
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        logEntryRefs.current[entry.id]?.scrollIntoView({ behavior: "smooth", block: "center" })
+      })
+    })
+
+    setTimeout(() => setHighlightedLogEntryId(current => current === entry.id ? null : current), 1800)
+    showToast(`Opened log entry ${entry.id}`)
+  }, [schedLog, showToast])
 
   const toggleSection = k => setOpenSections(prev => ({ ...prev, [k]: !prev[k] }))
  const importRef = useRef(null)
@@ -1818,11 +2113,13 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       try {
         const parsed = JSON.parse(ev.target.result)
         if (!parsed.log || !Array.isArray(parsed.log)) throw new Error("bad format")
-        const existingIds = new Set(schedLog.map(e => e.id))
+        const currentLog = await loadScheduleLogForMutation(schedLog)
+        const existingIds = new Set(currentLog.map(e => e.id))
         const newEntries = parsed.log.filter(e => !existingIds.has(e.id))
-        const merged = [...newEntries, ...schedLog].sort((a, b) => b.id - a.id)
+        const merged = mergeScheduleLogEntries(newEntries, currentLog)
         setSchedLog(merged)
-        await saveScheduleKey("wt-log", merged)
+        const savedLog = await saveScheduleKey("wt-log", merged)
+        if (Array.isArray(savedLog)) setSchedLog(savedLog)
         showToast(`Imported ${newEntries.length} new entries`)
         setSchedView("log")
       } catch (_) {
@@ -1929,6 +2226,11 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     const vColors = { machine: "#3b82f6", db: "#22c55e", friendly: "#f97316" }
     const vBgs    = { machine: "rgba(59,130,246,0.12)", db: "rgba(34,197,94,0.12)", friendly: "rgba(249,115,22,0.12)" }
     const fl = ex.fi === "toe" ? "Toe-safe" : "Shoulder-safe"
+    const workoutSuggestion = chooseTodayWorkout(
+      { type: "strength", modality: "strength", name: ex.n },
+      progressionReadiness,
+      tendonStatus
+    )
 
     const fieldInput = (lbl, fKey, rxVal) => (
       <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 3 }}>
@@ -1989,6 +2291,12 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
         </div>
         <div style={{ padding: "4px 12px 10px", background: "#0a0a0a" }}>
           {!isCustom && <div style={{ fontSize: 11, color: "#555", padding: "4px 0 6px" }}>{v?.n}</div>}
+          <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 6 }}>
+            Suggested modification: <span style={{ color: "#e5e7eb" }}>{workoutSuggestion.modification}</span>
+          </div>
+          <div style={{ fontSize: 10, color: "#666", marginBottom: 6 }}>
+            Reason: {workoutSuggestion.reason}
+          </div>
           <div style={{ display: "flex", gap: 8, marginBottom: 6 }}>
             {fieldInput("Sets", "sets", v?.sets)}
             {fieldInput("Reps", "reps", v?.reps)}
@@ -2016,6 +2324,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   // ── Cardio block ───────────────────────────────────────────────────────
   const cardioBlock = (day) => {
     const cd = CARDIO[day]
+    if (cd.noCardio) return null
     const prescribedSessions = cd.sessions || []
     const entries = getCardioEntries(day)
     const modColor = { run: "#ef4444", bike: "#d97706", swim: "#0ea5e9", walk: "#22c55e", row: "#8b5cf6" }
@@ -2032,6 +2341,23 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
               <div style={{ fontSize: 12, fontWeight: 600, color: "#d8d8d8" }}>{ps.type}</div>
               <div style={{ fontSize: 10, color: "#555", marginLeft: "auto" }}>{ps.dMin}–{ps.dMax} min · {ps.dist}</div>
             </div>
+            {(() => {
+              const workoutSuggestion = chooseTodayWorkout(
+                { type: "cardio", modality: ps.mod, name: ps.type },
+                progressionReadiness,
+                tendonStatus
+              )
+              return (
+                <>
+                  <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 4 }}>
+                    Suggested modification: <span style={{ color: "#e5e7eb" }}>{workoutSuggestion.modification}</span>
+                  </div>
+                  <div style={{ fontSize: 10, color: "#666", marginBottom: 4 }}>
+                    Reason: {workoutSuggestion.reason}
+                  </div>
+                </>
+              )
+            })()}
             <div style={{ fontSize: 11, color: "#555" }}>{ps.rationale}</div>
             {ps.cnote && <div style={{ fontSize: 10, color: "#444", marginTop: 3, fontStyle: "italic" }}>{ps.cnote}</div>}
             {injuryTag(getInjuryNote(CARDIO_INJURY_REGIONS[ps.mod]))}
@@ -2041,15 +2367,26 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
         <div style={{ fontSize: 10, fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", margin: "10px 0 6px" }}>Log actual</div>
         {entries.map((entry, idx) => {
           const mc = modColor[entry.modality] || "#888"
+          const target = prescribedSessions[idx] || cd
+          const targetDuration = target?.dMin != null && target?.dMax != null ? `${target.dMin}–${target.dMax} min` : "minutes"
+          const targetLabel = [target?.type, target?.intensity].filter(Boolean).join(" · ")
+          const cardioChecked = isChecked(day, "cardio", idx)
           return (
             <div key={idx} style={{ marginBottom: 10, padding: "10px 12px", border: `0.5px solid #1e1e1e`, borderRadius: 7, background: "#0a0a0a" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={cardioChecked}
+                  onChange={() => toggleCheck(day, "cardio", idx)}
+                  style={{ accentColor: "#4a9ee8", width: 14, height: 14, cursor: "pointer", flexShrink: 0 }}
+                />
                 <select value={entry.modality} onChange={e => setCardioEntryF(day, idx, "modality", e.target.value)}
                   style={{ padding: "4px 8px", borderRadius: 20, fontSize: 11, fontWeight: 700, background: `${mc}22`, color: mc, border: `0.5px solid ${mc}`, outline: "none", cursor: "pointer", fontFamily: "inherit" }}>
                   {["run", "bike", "swim", "walk", "row"].map(m => <option key={m} value={m}>{modLabel[m]}</option>)}
                 </select>
-                {idx === 0 && <span style={{ fontSize: 11, color: "#555" }}>{cd.type} · {cd.intensity}</span>}
-                {idx > 0 && <span style={{ fontSize: 10, color: "#444" }}>Additional session</span>}
+                <span style={{ fontSize: idx === 0 ? 11 : 10, color: cardioChecked ? "#9ca3af" : idx === 0 ? "#555" : "#444" }}>
+                  {cardioChecked ? "Completed" : "Planned"}{targetLabel ? ` · ${targetLabel}` : idx > 0 ? " · Additional session" : " · Cardio"}
+                </span>
                 {idx > 0 && (
                   <button onClick={() => removeCardioEntry(day, idx)}
                     style={{ marginLeft: "auto", background: "transparent", border: "none", color: "#444", cursor: "pointer", fontSize: 12 }}>✕</button>
@@ -2059,14 +2396,14 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
                 <div>
                   <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Duration (min)</div>
                   <input type="text" value={entry.duration} onChange={e => setCardioEntryF(day, idx, "duration", e.target.value)}
-                    placeholder={idx === 0 ? `${cd.dMin}–${cd.dMax} min` : "minutes"}
+                    placeholder={targetDuration}
                     style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
-                  {idx === 0 && <div style={{ fontSize: 9, color: "#444", marginTop: 2 }}>Target: {cd.dMin}–{cd.dMax} min</div>}
+                  <div style={{ fontSize: 9, color: "#444", marginTop: 2 }}>Target: {targetDuration}</div>
                 </div>
                 <div>
                   <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Distance (mi)</div>
                   <input type="text" inputMode="decimal" value={entry.distance || ""} onChange={e => setCardioEntryF(day, idx, "distance", e.target.value)}
-                    placeholder={idx === 0 ? (cd.dist || "miles") : "miles"}
+                    placeholder={target?.dist || "miles"}
                     style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
                 </div>
                 <div>
@@ -2108,10 +2445,20 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
         {/* Date picker */}
         <div style={{ marginBottom: 10, padding: "10px 14px", border: "0.5px solid #1a1a1a", borderRadius: 8, background: "#0a0a0a", display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#555", whiteSpace: "nowrap" }}>Session date</div>
-          <input type="date" value={sessionDate} max={todayISO()} onChange={e => setSessionDate(e.target.value)}
+          <input type="date" value={sessionDate} max={todayISO()} onChange={e => {
+            const nextDate = e.target.value
+            setSessionDate(nextDate)
+            const nextDay = dayKeyFromScheduleDate(nextDate)
+            if (nextDay) switchScheduleDay(nextDay)
+          }}
             style={{ flex: 1, padding: "5px 8px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: sessionDate !== todayISO() ? "#d97706" : "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none", colorScheme: "dark" }} />
           {sessionDate !== todayISO() && (
-            <button onClick={() => setSessionDate(todayISO())}
+            <button onClick={() => {
+              const today = todayISO()
+              setSessionDate(today)
+              const todayDay = dayKeyFromScheduleDate(today)
+              if (todayDay) switchScheduleDay(todayDay)
+            }}
               style={{ padding: "4px 10px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 11, color: "#666", background: "transparent", cursor: "pointer", fontFamily: "inherit" }}>Today</button>
           )}
         </div>
@@ -2262,11 +2609,16 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
 
   const prog = getProgDay(activeDay)
   const meta = SCH_META[activeDay] || SMETA[activeDay] || {}
+  const scheduleMismatchReport = useMemo(
+    () => buildScheduleDayDateMismatchReport(schedLog),
+    [schedLog]
+  )
 
   return (
     <div style={{ color: "#d8d8d8", position: "relative" }}>
       <input ref={importRef} type="file" accept=".json" style={{ display: "none" }} onChange={importLog} />
       <DailyReadinessPanel readinessScore={readinessScore} latestHealthFit={latestHealthFit} ocItems={ocItems} computedTSB={computedTSB} />
+      <ScheduleMismatchDiagnostics report={scheduleMismatchReport} onOpenEntry={openDiagnosticEntry} />
       {/* Day navigation */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
         <div style={{ display: "flex", gap: 3, background: "#0a0a0a", borderRadius: 8, padding: 4, border: "1px solid #1a1a1a", flexWrap: "wrap" }}>
@@ -2275,7 +2627,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
             const active = d === activeDay && schedView === "schedule"
             const isSplit = SPLIT_DAYS.includes(d)
             return (
-              <button key={d} onClick={() => { setActiveDay(d); setSchedView("schedule"); setSavedEntries(prev => ({ ...prev })) }}
+              <button key={d} onClick={() => { switchScheduleDay(d); setSchedView("schedule"); setSavedEntries(prev => ({ ...prev })) }}
                 style={{ padding: "6px 12px", border: "none", cursor: "pointer", background: active ? (m.color || "#185FA5") + "22" : "transparent", fontSize: 12, fontWeight: active ? 700 : 500, letterSpacing: "0.06em", textTransform: "uppercase", color: active ? (m.color || "#185FA5") : "#3a3a3a", borderRadius: 6, position: "relative" }}>
                 {d}
                 {isSplit && <div style={{ fontSize: 7, color: "#7F77DD", marginTop: 1 }}>split</div>}
@@ -2284,17 +2636,28 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
             )
           })}
         </div>
-<div style={{ display: "flex", gap: 6 }}>
-          <button onClick={() => setSchedView(v => v === "log" ? "schedule" : "log")} style={buttonStyle(false)}>
-            {schedView === "log" ? "◀ Schedule" : `Log (${schedLog.length})`}
-          </button>
+	<div style={{ display: "flex", gap: 6 }}>
+	          <button onClick={() => setShowSetTimer(true)} style={buttonStyle(true)}>
+	            Set Timer
+	          </button>
+	          <button onClick={() => setSchedView(v => v === "log" ? "schedule" : "log")} style={buttonStyle(false)}>
+	            {schedView === "log" ? "◀ Schedule" : `Log (${schedLog.length})`}
+	          </button>
           <button onClick={exportLog} style={buttonStyle(false)}>Export ↓</button>
           <button onClick={() => importRef.current?.click()} style={buttonStyle(false)}>Import ↑</button>
         </div>
       </div>
 
       {schedView === "log" && (
-        <ScheduleLogView log={schedLog} expanded={expandedLog} setExpanded={setExpandedLog} onDelete={deleteEntry} onEdit={editEntry} />
+        <ScheduleLogView
+          log={schedLog}
+          expanded={expandedLog}
+          setExpanded={setExpandedLog}
+          onDelete={deleteEntry}
+          onEdit={editEntry}
+          highlightedId={highlightedLogEntryId}
+          setEntryRef={setLogEntryRef}
+        />
       )}
 
       {schedView === "schedule" && (
@@ -2320,7 +2683,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
           {/* Warmup */}
           {prog.warmup?.length > 0 && checklistSection(activeDay, "warmup", prog.warmup, "#BA7517", "Warm-up", "")}
 
-          {/* topNote banner (SCH_PLAN) */}
+          {/* topNote banner (PLAN) */}
           {prog._topNote && (
             <div style={{ marginBottom: 10, padding: "7px 12px", background: "rgba(59,130,246,0.07)", border: "0.5px solid rgba(59,130,246,0.2)", borderRadius: 6, fontSize: 11, color: "#6a9adf" }}>
               {prog._topNote}
@@ -2383,20 +2746,376 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
           {prog.core?.length > 0 && checklistSection(activeDay, "core", prog.core, "#3B6D11", "Core", "~5 min")}
 
           {/* Cardio */}
-          <div style={{ border: "0.5px solid #1a1a1a", borderRadius: 8, marginBottom: 16, overflow: "hidden" }}>
-            {secHdr("cardio", "Cardio prescription", "#993C1D", "")}
-            {openSections.cardio && cardioBlock(activeDay)}
-          </div>
+          {!CARDIO[activeDay]?.noCardio && (
+            <div style={{ border: "0.5px solid #1a1a1a", borderRadius: 8, marginBottom: 16, overflow: "hidden" }}>
+              {secHdr("cardio", "Cardio prescription", "#993C1D", "")}
+              {openSections.cardio && cardioBlock(activeDay)}
+            </div>
+          )}
 
-          {logBar()}
-        </>
-      )}
+	          {logBar()}
+	        </>
+	      )}
 
-      {toast && (
-        <div style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", background: "#1a1a1a", border: "1px solid #333", color: "#e8e8e8", padding: "8px 20px", borderRadius: 8, fontSize: 13, zIndex: 999, pointerEvents: "none" }}>
+	      {showSetTimer && <GymSetTimerModal onClose={() => setShowSetTimer(false)} />}
+
+	      {toast && (
+	        <div style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", background: "#1a1a1a", border: "1px solid #333", color: "#e8e8e8", padding: "8px 20px", borderRadius: 8, fontSize: 13, zIndex: 999, pointerEvents: "none" }}>
           {toast}
         </div>
       )}
+    </div>
+  )
+}
+
+function GymSetTimerModal({ onClose }) {
+  const timerMachineStorageKey = "lift_timer_machines"
+  const normalizeMachineName = value => String(value || "").trim().replace(/\s+/g, " ")
+  const sortMachineNames = names => [...names].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))
+  const mergeMachineNames = names => {
+    const byKey = new Map()
+    ;(names || []).forEach(name => {
+      const normalized = normalizeMachineName(name)
+      if (!normalized) return
+      const key = normalized.toLowerCase()
+      if (!byKey.has(key)) byKey.set(key, normalized)
+    })
+    return sortMachineNames([...byKey.values()])
+  }
+
+  const [machineName, setMachineName] = useState("")
+  const [savedMachineNames, setSavedMachineNames] = useState(() => {
+    if (typeof window === "undefined") return []
+    try {
+      return mergeMachineNames(JSON.parse(window.localStorage.getItem(timerMachineStorageKey) || "[]"))
+    } catch {
+      return []
+    }
+  })
+  const [sets, setSets] = useState(3)
+  const [workSec, setWorkSec] = useState(45)
+  const [restSec, setRestSec] = useState(60)
+  const [showOpposite, setShowOpposite] = useState(false)
+  const [running, setRunning] = useState(false)
+  const [started, setStarted] = useState(false)
+  const [elapsedMs, setElapsedMs] = useState(0)
+  const [anchorMs, setAnchorMs] = useState(null)
+  const [nowMs, setNowMs] = useState(Date.now())
+  const [viewport, setViewport] = useState(() => ({
+    width: typeof window === "undefined" ? 390 : window.innerWidth,
+    height: typeof window === "undefined" ? 844 : window.innerHeight
+  }))
+  const panelRef = useRef(null)
+
+  const clampInt = (value, min, max) => {
+    const n = Number.parseInt(value, 10)
+    if (!Number.isFinite(n)) return min
+    return Math.max(min, Math.min(max, n))
+  }
+
+  const phases = useMemo(() => {
+    const count = clampInt(sets, 1, 20)
+    const work = clampInt(workSec, 5, 1800)
+    const rest = clampInt(restSec, 0, 1800)
+    const out = []
+
+    for (let i = 1; i <= count; i += 1) {
+      out.push({ kind: "work", label: `Set ${i} of ${count}`, short: `Set ${i}`, duration: work, setNo: i })
+      if (i < count && rest > 0) out.push({ kind: "rest", label: `Rest after Set ${i}`, short: "Rest", duration: rest, setNo: i })
+    }
+
+    return out
+  }, [sets, workSec, restSec])
+
+  const totalSec = phases.reduce((sum, phase) => sum + phase.duration, 0)
+  const liveElapsedSec = Math.min(
+    totalSec,
+    Math.floor((elapsedMs + (running && anchorMs ? nowMs - anchorMs : 0)) / 1000)
+  )
+  const remainingSec = Math.max(0, totalSec - liveElapsedSec)
+  const isComplete = started && remainingSec <= 0
+
+  const phaseState = useMemo(() => {
+    let cursor = 0
+    for (let i = 0; i < phases.length; i += 1) {
+      const phase = phases[i]
+      const next = cursor + phase.duration
+      if (liveElapsedSec < next || i === phases.length - 1) {
+        const elapsedInPhase = Math.max(0, liveElapsedSec - cursor)
+        return {
+          index: i,
+          phase,
+          phaseRemaining: Math.max(0, phase.duration - elapsedInPhase),
+          phaseElapsed: elapsedInPhase
+        }
+      }
+      cursor = next
+    }
+
+    return { index: phases.length - 1, phase: phases[phases.length - 1], phaseRemaining: 0, phaseElapsed: 0 }
+  }, [phases, liveElapsedSec])
+
+  useEffect(() => {
+    if (!running) return undefined
+    const id = window.setInterval(() => setNowMs(Date.now()), 250)
+    return () => window.clearInterval(id)
+  }, [running])
+
+  useEffect(() => {
+    if (!running || !isComplete) return
+    setElapsedMs(totalSec * 1000)
+    setRunning(false)
+    setAnchorMs(null)
+  }, [isComplete, running, totalSec])
+
+  useEffect(() => {
+    const updateViewport = () => setViewport({ width: window.innerWidth, height: window.innerHeight })
+    updateViewport()
+    window.addEventListener("resize", updateViewport)
+    window.addEventListener("orientationchange", updateViewport)
+    return () => {
+      window.removeEventListener("resize", updateViewport)
+      window.removeEventListener("orientationchange", updateViewport)
+    }
+  }, [])
+
+  const fmt = seconds => {
+    const s = Math.max(0, Math.floor(Number(seconds) || 0))
+    const m = Math.floor(s / 60)
+    const rem = s % 60
+    return `${m}:${String(rem).padStart(2, "0")}`
+  }
+
+  const requestFullscreen = () => {
+    const el = panelRef.current
+    if (el?.requestFullscreen && document.fullscreenElement == null) {
+      el.requestFullscreen().catch(() => {})
+    }
+  }
+
+  const startTimer = () => {
+    const normalizedMachineName = normalizeMachineName(machineName)
+    if (normalizedMachineName) {
+      const nextMachineNames = mergeMachineNames([...savedMachineNames, normalizedMachineName])
+      setSavedMachineNames(nextMachineNames)
+      setMachineName(normalizedMachineName)
+      if (typeof window !== "undefined") {
+        try {
+          window.localStorage.setItem(timerMachineStorageKey, JSON.stringify(nextMachineNames))
+        } catch {}
+      }
+    }
+    setStarted(true)
+    setRunning(true)
+    setElapsedMs(0)
+    setAnchorMs(Date.now())
+    setNowMs(Date.now())
+    requestFullscreen()
+  }
+
+  const pauseTimer = () => {
+    if (!running) return
+    const nextElapsed = Math.min(totalSec * 1000, elapsedMs + (Date.now() - (anchorMs || Date.now())))
+    setElapsedMs(nextElapsed)
+    setRunning(false)
+    setAnchorMs(null)
+  }
+
+  const resumeTimer = () => {
+    if (isComplete) return
+    setRunning(true)
+    setAnchorMs(Date.now())
+    setNowMs(Date.now())
+    requestFullscreen()
+  }
+
+  const skipPhase = () => {
+    const elapsedBeforeCurrent = phases
+      .slice(0, phaseState.index + 1)
+      .reduce((sum, phase) => sum + phase.duration, 0)
+    setElapsedMs(Math.min(totalSec * 1000, elapsedBeforeCurrent * 1000))
+    setAnchorMs(running ? Date.now() : null)
+    setNowMs(Date.now())
+  }
+
+  const resetTimer = () => {
+    setRunning(false)
+    setStarted(false)
+    setElapsedMs(0)
+    setAnchorMs(null)
+  }
+
+  const closeTimer = () => {
+    if (document.fullscreenElement && document.exitFullscreen) {
+      document.exitFullscreen().catch(() => {})
+    }
+    onClose()
+  }
+
+  const clearSavedMachines = () => {
+    setSavedMachineNames([])
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.removeItem(timerMachineStorageKey)
+      } catch {}
+    }
+  }
+
+  const phase = phaseState.phase || phases[0]
+  const phaseRemaining = isComplete ? 0 : phaseState.phaseRemaining
+  const pulse = started && !isComplete && phaseRemaining <= 10
+  const sequence = phases.map(p => p.short).join(" → ")
+
+  const fillPct = totalSec > 0 ? Math.min(100, (liveElapsedSec / totalSec) * 100) : 0
+  const controlsDisabled = phases.length === 0 || totalSec <= 0
+  const panelBg = phase?.kind === "rest" ? "#031711" : "#07111f"
+  const accent = phase?.kind === "rest" ? "#22c55e" : "#38bdf8"
+  const phaseLabel = isComplete ? "Complete" : phase?.label || "Ready"
+  const isLandscape = viewport.width > viewport.height
+  const isShort = viewport.height < 640
+  const isCompact = isLandscape || isShort
+  const isTiny = viewport.height < 440
+  const panelGap = isTiny ? 5 : isCompact ? 7 : 12
+  const panelPadding = isTiny ? "6px" : isCompact ? "8px" : "14px"
+  const headerTitleSize = isCompact ? 15 : 20
+  const headerLabelSize = isCompact ? 9 : 11
+  const oppositeTimeSize = isTiny ? "clamp(26px, 9vh, 42px)" : isCompact ? "clamp(30px, 10vh, 58px)" : "clamp(40px, 12vw, 88px)"
+  const oppositeLabelSize = isCompact ? "clamp(11px, 3vh, 16px)" : "clamp(14px, 4vw, 24px)"
+  const timerGap = isTiny ? 5 : isCompact ? 7 : 12
+  const timerMinHeight = isTiny ? "150px" : isCompact ? "190px" : "300px"
+  const phaseFontSize = isTiny ? "clamp(14px, 4vh, 20px)" : isCompact ? "clamp(15px, 5vh, 26px)" : "clamp(18px, 5vw, 34px)"
+  const countdownFontSize = isTiny ? "clamp(58px, 25vh, 108px)" : isCompact ? "clamp(68px, 30vh, 152px)" : "clamp(92px, 24vh, 230px)"
+  const metaFontSize = isCompact ? "clamp(12px, 4vh, 18px)" : "clamp(14px, 4vw, 24px)"
+  const sequenceFontSize = isCompact ? "clamp(10px, 3vh, 14px)" : "clamp(12px, 3.5vw, 18px)"
+  const timelineHeight = isCompact ? 10 : 12
+  const timelineActiveHeight = isCompact ? 14 : 18
+  const progressHeight = isCompact ? 8 : 12
+  const controlPadding = isTiny ? 8 : isCompact ? 10 : 14
+  const controlGap = isCompact ? 5 : 8
+  const controlFontSize = isCompact ? 12 : 14
+
+  return (
+    <div ref={panelRef} style={{
+      position: "fixed",
+      inset: 0,
+      zIndex: 5000,
+      background: panelBg,
+      color: "#f8fafc",
+      padding: panelPadding,
+      boxSizing: "border-box",
+      display: "flex",
+      flexDirection: "column",
+      gap: panelGap,
+      overflow: "hidden"
+    }}>
+      {showOpposite && (
+        <div style={{
+          transform: "rotate(180deg)",
+          textAlign: "center",
+          border: "1px solid rgba(255,255,255,0.25)",
+          borderRadius: 8,
+          padding: isCompact ? "3px 8px" : "7px 8px",
+          background: "rgba(0,0,0,0.28)",
+          flex: "0 0 auto",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: isCompact ? 8 : 12,
+          maxHeight: isCompact ? 48 : 108
+        }}>
+          <div style={{ fontSize: oppositeTimeSize, fontWeight: 900, lineHeight: 0.9 }}>{fmt(remainingSec)}</div>
+          <div style={{ fontSize: oppositeLabelSize, fontWeight: 800, color: accent, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{machineName || "Machine timer"}</div>
+        </div>
+      )}
+
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", flex: "0 0 auto", minHeight: 0 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: headerLabelSize, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.14em" }}>Machine timer</div>
+          <div style={{ fontSize: headerTitleSize, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{machineName || "Unnamed machine"}</div>
+        </div>
+        <button onClick={closeTimer} style={{ ...buttonStyle(false), color: "#f8fafc", borderColor: "rgba(255,255,255,0.35)", padding: isCompact ? "6px 10px" : undefined }}>Close</button>
+      </div>
+
+      {!started && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 92px", gap: isCompact ? 5 : 8, flex: "0 0 auto" }}>
+          <input value={machineName} onChange={e => setMachineName(e.target.value)} placeholder="Exercise or machine name" style={{ ...inputStyle(), fontSize: isCompact ? 14 : 16, padding: isCompact ? "7px 9px" : "10px 12px", background: "#020617", color: "#f8fafc" }} />
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#cbd5e1" }}>
+            <input type="checkbox" checked={showOpposite} onChange={e => setShowOpposite(e.target.checked)} />
+            flip
+          </label>
+          {savedMachineNames.length > 0 && (
+            <>
+              <select value="" onChange={e => { if (e.target.value) setMachineName(e.target.value) }} style={{ ...inputStyle(), fontSize: isCompact ? 13 : 15, padding: isCompact ? "6px 8px" : "8px 10px", background: "#020617", color: "#f8fafc" }}>
+                <option value="">Saved machines</option>
+                {savedMachineNames.map(name => <option key={name} value={name}>{name}</option>)}
+              </select>
+              <button onClick={clearSavedMachines} style={{ ...buttonStyle(false), padding: isCompact ? "6px 8px" : "8px 10px", fontSize: isCompact ? 11 : 12, color: "#cbd5e1", borderColor: "rgba(255,255,255,0.25)" }}>Clear</button>
+            </>
+          )}
+          {[
+            ["Sets", sets, setSets, 1, 20],
+            ["Work sec", workSec, setWorkSec, 5, 1800],
+            ["Rest sec", restSec, setRestSec, 0, 1800]
+          ].map(([label, value, setter, min, max]) => (
+            <label key={label} style={{ display: "grid", gap: isCompact ? 2 : 4, fontSize: isCompact ? 10 : 11, color: "#cbd5e1" }}>
+              {label}
+              <input type="number" min={min} max={max} value={value} onChange={e => setter(clampInt(e.target.value, min, max))}
+                style={{ ...inputStyle(), fontSize: isCompact ? 15 : 18, padding: isCompact ? "6px 8px" : "9px 10px", background: "#020617", color: "#f8fafc" }} />
+            </label>
+          ))}
+        </div>
+      )}
+
+      <div style={{ flex: "1 1 auto", minHeight: timerMinHeight, display: "flex", flexDirection: "column", justifyContent: "center", gap: timerGap, textAlign: "center", overflow: "hidden" }}>
+        <div style={{ fontSize: phaseFontSize, color: accent, fontWeight: 900, lineHeight: 1.05 }}>{phaseLabel}</div>
+        <div style={{
+          fontSize: countdownFontSize,
+          fontWeight: 900,
+          lineHeight: 0.82,
+          letterSpacing: 0,
+          color: isComplete ? "#22c55e" : "#ffffff",
+          opacity: pulse && Math.floor(nowMs / 500) % 2 === 0 ? 0.58 : 1
+        }}>
+          {fmt(remainingSec)}
+        </div>
+        <div style={{ display: "flex", justifyContent: "center", gap: isCompact ? 10 : 18, flexWrap: "wrap", color: "#cbd5e1", fontSize: metaFontSize, lineHeight: 1.1 }}>
+          <span>Elapsed {fmt(liveElapsedSec)}</span>
+          <span>Phase {isComplete ? "0:00" : fmt(phaseRemaining)}</span>
+        </div>
+        <div style={{ color: "#94a3b8", fontSize: sequenceFontSize, lineHeight: 1.15, whiteSpace: isCompact ? "nowrap" : "normal", overflow: "hidden", textOverflow: "ellipsis" }}>{sequence}</div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.max(1, phases.length)}, minmax(0, 1fr))`, gap: isCompact ? 2 : 3, flex: "0 0 auto" }}>
+        {phases.map((p, idx) => {
+          const done = idx < phaseState.index || isComplete
+          const active = idx === phaseState.index && started && !isComplete
+          return (
+            <div key={`${p.short}-${idx}`} style={{
+              height: active ? timelineActiveHeight : timelineHeight,
+              borderRadius: 4,
+              background: done ? "#64748b" : p.kind === "rest" ? "#166534" : "#0369a1",
+              outline: active ? `2px solid ${accent}` : "none",
+              opacity: done ? 0.55 : 1
+            }} title={`${p.label}: ${fmt(p.duration)}`} />
+          )
+        })}
+      </div>
+      <div style={{ height: progressHeight, background: "rgba(255,255,255,0.16)", borderRadius: 999, overflow: "hidden", flex: "0 0 auto" }}>
+        <div style={{ width: `${fillPct}%`, height: "100%", background: accent, transition: "width 0.25s linear" }} />
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: controlGap, flex: "0 0 auto" }}>
+        {!started || isComplete ? (
+          <button disabled={controlsDisabled} onClick={startTimer} style={{ ...buttonStyle(true), padding: controlPadding, fontSize: controlFontSize, opacity: controlsDisabled ? 0.5 : 1 }}>Start</button>
+        ) : running ? (
+          <button onClick={pauseTimer} style={{ ...buttonStyle(false), padding: controlPadding, fontSize: controlFontSize, color: "#f8fafc", borderColor: "rgba(255,255,255,0.35)" }}>Pause</button>
+        ) : (
+          <button onClick={resumeTimer} style={{ ...buttonStyle(true), padding: controlPadding, fontSize: controlFontSize }}>Resume</button>
+        )}
+        <button disabled={!started || isComplete} onClick={skipPhase} style={{ ...buttonStyle(false), padding: controlPadding, fontSize: controlFontSize, color: "#f8fafc", borderColor: "rgba(255,255,255,0.35)", opacity: !started || isComplete ? 0.45 : 1 }}>Skip</button>
+        <button onClick={resetTimer} style={{ ...buttonStyle(false), padding: controlPadding, fontSize: controlFontSize, color: "#f8fafc", borderColor: "rgba(255,255,255,0.35)" }}>Reset</button>
+        <button onClick={() => setShowOpposite(v => !v)} style={{ ...buttonStyle(false), padding: controlPadding, fontSize: controlFontSize, color: "#f8fafc", borderColor: "rgba(255,255,255,0.35)" }}>Flip</button>
+      </div>
     </div>
   )
 }
@@ -2873,6 +3592,162 @@ if (w.category === "Strength") {
     </div>
   )
 }
+function distanceValueToMiles(value, unit, workout) {
+  const n = Number(value)
+  if (!Number.isFinite(n) || n <= 0) return 0
+
+  const u = String(unit || "").toLowerCase()
+  if (u === "mi" || u === "mile" || u === "miles") return n
+  if (u === "km" || u === "kilometer" || u === "kilometers") return n / 1.60934
+  if (u === "m" || u === "meter" || u === "meters") return n / 1609.34
+  if (u === "yd" || u === "yard" || u === "yards") return n / 1760
+  if (workout?.source === "Technogym" || workout?.sources?.technogym) return n / 1609.34
+
+  return n
+}
+
+function getWorkoutDistanceMiles(workout) {
+  const explicit = Number(workout?.distanceMiles ?? workout?.distance_miles)
+  if (Number.isFinite(explicit) && explicit > 0) return explicit
+
+  const normalized = Number(workout?.distance)
+  if (Number.isFinite(normalized) && normalized > 0) return normalized
+
+  const pmDist = workout?.preferred_metrics?.distance
+  const pmSource = String(pmDist?.source || "").toLowerCase()
+  const pmUnit = pmDist?.unit ||
+    (pmSource.includes("technogym")
+      ? (workout?.sources?.technogym?.distance_unit || "m")
+      : workout?.sources?.apple?.distance_unit)
+  const preferredMiles = distanceValueToMiles(pmDist?.value, pmUnit, workout)
+  if (preferredMiles > 0) return preferredMiles
+
+  const technogymMiles = distanceValueToMiles(
+    workout?.sources?.technogym?.distance,
+    workout?.sources?.technogym?.distance_unit || "m",
+    workout
+  )
+  if (technogymMiles > 0) return technogymMiles
+
+  return distanceValueToMiles(
+    workout?.sources?.apple?.distance,
+    workout?.sources?.apple?.distance_unit,
+    workout
+  )
+}
+
+function parseScheduleDurationMinutes(value) {
+  const raw = String(value || "").trim().toLowerCase()
+  if (!raw) return null
+  if (/^\d+\s*-\s*\d+$/.test(raw)) return null
+
+  const exact = raw.match(/(\d+(?:\.\d+)?)/)
+  if (!exact) return null
+  const minutes = Number(exact[1])
+  return Number.isFinite(minutes) && minutes > 0 ? minutes : null
+}
+
+function parseScheduleDistanceMiles(value, modality = "") {
+  const raw = String(value || "").trim().toLowerCase()
+  if (!raw) return null
+
+  const milesMatch = raw.match(/(\d+(?:\.\d+)?)\s*(?:mi|mile|miles)\b/)
+  if (milesMatch) return Number(milesMatch[1])
+
+  const kmMatch = raw.match(/(\d+(?:\.\d+)?)\s*(?:km|kilometer|kilometers)\b/)
+  if (kmMatch) return Number(kmMatch[1]) / 1.60934
+
+  const meterMatch = raw.match(/(\d+(?:\.\d+)?)\s*(?:m|meter|meters)\b/)
+  if (meterMatch && !raw.includes("min")) return Number(meterMatch[1]) / 1609.34
+
+  const yardMatch = raw.match(/(\d+(?:\.\d+)?)\s*(?:yd|yds|yrd|yrds|yard|yards)\b/)
+  if (yardMatch) return Number(yardMatch[1]) / 1760
+
+  const plain = raw.match(/^(\d+(?:\.\d+)?)$/)
+  if (!plain) return null
+
+  const n = Number(plain[1])
+  if (!Number.isFinite(n) || n <= 0) return null
+  if (String(modality || "").toLowerCase() === "swim" && n > 20) return null
+  return n
+}
+
+function scoreScheduleWorkoutEvidence(workout) {
+  let score = 0
+  if (Number(workout?.distanceMiles || 0) > 0) score += 4
+  if (Number(workout?.dur || 0) > 0) score += 3
+  if (Number(workout?.hr || 0) > 0) score += 1
+  if (Number(workout?.calories || 0) > 0) score += 1
+  if (String(workout?.notes || "").trim()) score += 0.5
+  return score
+}
+
+function buildScheduleCardioWorkoutsFromLog(logEntries) {
+  const rows = []
+
+  ;(Array.isArray(logEntries) ? logEntries : []).forEach(entry => {
+    const cardioEntries = Array.isArray(entry?.cardio) ? entry.cardio : []
+    cardioEntries.forEach((cardio, idx) => {
+      const modality = String(cardio?.modality || "").toLowerCase()
+      const distanceMiles =
+        parseScheduleDistanceMiles(cardio?.distance, modality) ??
+        parseScheduleDistanceMiles(cardio?.notes, modality)
+      const durationMin = parseScheduleDurationMinutes(cardio?.duration)
+      const hr = Number(cardio?.hr)
+      const calories = Number(cardio?.calories)
+      const hasActualEvidence =
+        (Number.isFinite(durationMin) && durationMin > 0) ||
+        (Number.isFinite(distanceMiles) && distanceMiles > 0) ||
+        (Number.isFinite(hr) && hr > 0) ||
+        (Number.isFinite(calories) && calories > 0)
+
+      if (!hasActualEvidence) return
+
+      rows.push({
+        id: `${entry?.session_id || entry?.id || entry?.date || "schedule"}_${idx}`,
+        session_id: entry?.session_id || null,
+        _scheduleId: entry?.id ?? entry?.session_id ?? null,
+        source: "ManualSchedule",
+        date: entry?.date || String(entry?.logged_at || "").slice(0, 10) || null,
+        time: "",
+        dateTime: entry?.logged_at || (entry?.date ? `${String(entry.date).slice(0, 10)}T12:00:00` : null),
+        type:
+          modality === "run" ? "Running" :
+          modality === "bike" ? "Cycling" :
+          modality === "swim" ? "Swimming" :
+          modality === "row" ? "Rowing" :
+          "Other",
+        modality,
+        dur: Number.isFinite(durationMin) ? durationMin : 0,
+        distance: Number.isFinite(distanceMiles) && distanceMiles > 0 ? distanceMiles : null,
+        distanceMiles: Number.isFinite(distanceMiles) && distanceMiles > 0 ? distanceMiles : null,
+        distance_miles: Number.isFinite(distanceMiles) && distanceMiles > 0 ? distanceMiles : null,
+        hr: Number.isFinite(hr) && hr > 0 ? hr : null,
+        calories: Number.isFinite(calories) && calories > 0 ? calories : null,
+        notes: cardio?.notes || ""
+      })
+    })
+  })
+
+  const deduped = new Map()
+  rows.forEach(row => {
+    const key = [
+      row.session_id || row._scheduleId || "",
+      String(row.date || "").slice(0, 10),
+      row.type,
+      row.modality
+    ].join("|")
+    const existing = deduped.get(key)
+    if (!existing || scoreScheduleWorkoutEvidence(row) > scoreScheduleWorkoutEvidence(existing)) {
+      deduped.set(key, row)
+    }
+  })
+
+  return [...deduped.values()].sort((a, b) =>
+    String(a.dateTime || a.date || "").localeCompare(String(b.dateTime || b.date || ""))
+  )
+}
+
 function buildTrainingSummary(workouts) {
   const now = new Date()
   const daysAgo = n => {
@@ -2907,11 +3782,11 @@ const last28 = workouts.filter(w => new Date(w.dateTime || w.date) >= daysAgo(28
     }
 
     if (w.category === "Running" || w.category === "Walking") {
-      summary.runningDistance28 += Number(w.distance || 0)
+      summary.runningDistance28 += getWorkoutDistanceMiles(w)
     } else if (w.category === "Swimming") {
-      summary.swimmingDistance28 += Number(w.distance || 0)
+      summary.swimmingDistance28 += getWorkoutDistanceMiles(w)
     } else if (w.category === "Cycling") {
-      summary.cyclingDistance28 += Number(w.distance || 0)
+      summary.cyclingDistance28 += getWorkoutDistanceMiles(w)
     }
   })
 
@@ -3288,6 +4163,7 @@ function extractRunPaceMinPerMile(workout) {
 }
 
 function computeEnduranceInputs(workouts, asOfDate = new Date()) {
+  const runs14 = []
   const runs28 = []
   const runs84 = []
 
@@ -3313,10 +4189,12 @@ function computeEnduranceInputs(workouts, asOfDate = new Date()) {
 
     const row = { miles, durationMin, pace, dt }
 
+    if (ageDays <= 14) runs14.push(row)
     if (ageDays <= 28) runs28.push(row)
     if (ageDays <= 84) runs84.push(row)
   })
 
+  const longestRun14 = runs14.reduce((maxMiles, row) => Math.max(maxMiles, safeNum(row.miles)), 0)
   const sumMiles28 = runs28.reduce((s, r) => s + safeNum(r.miles), 0)
   const sumMiles84 = runs84.reduce((s, r) => s + safeNum(r.miles), 0)
 
@@ -3333,7 +4211,21 @@ function computeEnduranceInputs(workouts, asOfDate = new Date()) {
       ? validPaces84.reduce((s, v) => s + v, 0) / validPaces84.length
       : 0
 
+  const longestRun28 = runs28.reduce((maxMiles, row) => Math.max(maxMiles, safeNum(row.miles)), 0)
+  const longestRun84 = runs84.reduce((maxMiles, row) => Math.max(maxMiles, safeNum(row.miles)), 0)
+  const weeksWithRuns28 = new Set(
+    runs28.map(row => {
+      const dt = new Date(row.dt)
+      const day = dt.getDay()
+      const diff = day === 0 ? -6 : 1 - day
+      dt.setDate(dt.getDate() + diff)
+      dt.setHours(0, 0, 0, 0)
+      return dt.toISOString().slice(0, 10)
+    })
+  ).size
+
   return {
+    runs14Count: runs14.length,
     runs28Count: runs28.length,
     runs84Count: runs84.length,
     milesPer4Weeks: Math.round(sumMiles28 * 10) / 10,
@@ -3341,7 +4233,275 @@ function computeEnduranceInputs(workouts, asOfDate = new Date()) {
     weeklyRunMiles28: Math.round((sumMiles28 / 4) * 10) / 10,
     weeklyRunMiles84: Math.round((sumMiles84 / 12) * 10) / 10,
     avgPace28: avgPace28 ? Math.round(avgPace28 * 100) / 100 : 0,
-    avgPace84: avgPace84 ? Math.round(avgPace84 * 100) / 100 : 0
+    avgPace84: avgPace84 ? Math.round(avgPace84 * 100) / 100 : 0,
+    longestRun14: Math.round(longestRun14 * 10) / 10,
+    longestRun28: Math.round(longestRun28 * 10) / 10,
+    longestRun84: Math.round(longestRun84 * 10) / 10,
+    activeWeeks28: weeksWithRuns28,
+    runsPerWeek28: Math.round((runs28.length / 4) * 10) / 10
+  }
+}
+
+function scoreThreshold(value, thresholds, fallback = 0) {
+  for (const [minValue, score] of thresholds) {
+    if (value >= minValue) return score
+  }
+  return fallback
+}
+
+function buildOcConstraintState({ ocItems, sleepRecords, healthFitDaily, computedTSB, weeklyTrainingBuckets, workouts }) {
+  const readiness = computeReadinessDetail(
+    ocItems,
+    sleepRecords,
+    healthFitDaily,
+    computedTSB?.global?.tsb ?? computedTSB?.running?.tsb ?? null
+  )
+  const activeItems = Array.isArray(ocItems)
+    ? ocItems.filter(item => Number(item?.currentScore || 0) > 0)
+    : []
+  const tendonItems = activeItems.filter(item => item.key === "tendonStatus")
+  const painScore = tendonItems.length
+    ? Math.max(...tendonItems.map(item => Number(item.currentScore || 0)))
+    : 0
+  const illnessBurden = activeItems
+    .filter(item => item.key === "illnessLoad")
+    .reduce((sum, item) => sum + Number(item.currentScore || 0), 0)
+  const maxOcScore = activeItems.length
+    ? Math.max(...activeItems.map(item => Number(item.currentScore || 0)))
+    : 0
+
+  const inputs = computeEnduranceInputs(workouts)
+  const priorInputs = computeEnduranceInputs(
+    workouts,
+    (() => {
+      const d = new Date()
+      d.setDate(d.getDate() - 28)
+      return d
+    })()
+  )
+
+  const recentBuckets = Array.isArray(weeklyTrainingBuckets)
+    ? weeklyTrainingBuckets.slice(-4)
+    : []
+  const latestBucket = recentBuckets[recentBuckets.length - 1] || null
+  const priorBuckets = recentBuckets.slice(0, -1)
+  const avgBucketValue = key =>
+    priorBuckets.length
+      ? priorBuckets.reduce((sum, bucket) => sum + Number(bucket?.[key] || 0), 0) / priorBuckets.length
+      : 0
+
+  const latestRunMiles = Number(latestBucket?.running || 0)
+  const priorRunMilesAvg = avgBucketValue("running")
+  const latestCrossMiles = Number(latestBucket?.cycling || 0) + Number(latestBucket?.swimming || 0)
+  const priorCrossMilesAvg = avgBucketValue("cycling") + avgBucketValue("swimming")
+  const priorLongestRunMiles = Number(priorInputs.longestRun28 || 0)
+
+  const runRamp =
+    priorRunMilesAvg > 0
+      ? latestRunMiles / priorRunMilesAvg
+      : latestRunMiles > 0 ? 1 : 0
+
+  const crossRamp =
+    priorCrossMilesAvg > 0
+      ? latestCrossMiles / priorCrossMilesAvg
+      : latestCrossMiles > 0 ? 1 : 0
+
+  const longestRunRamp =
+    priorLongestRunMiles > 0
+      ? Number(inputs.longestRun28 || 0) / priorLongestRunMiles
+      : Number(inputs.longestRun28 || 0) > 0 ? 1 : 0
+
+  const runningTsb = Number.isFinite(Number(computedTSB?.running?.tsb))
+    ? Number(computedTSB.running.tsb)
+    : readiness.latestTsb ?? null
+
+  const tendon = {
+    painScore,
+    stiffness: false,
+    override: null
+  }
+
+  const systemic = {
+    sleepPenalty: readiness.sleepPenalty,
+    avgSleepHours: readiness.avgSleepHours,
+    illnessBurden,
+    injuryPenalty: readiness.injuryPenalty
+  }
+
+  const load = {
+    tsb: Number.isFinite(Number(runningTsb)) ? Number(runningTsb) : null,
+    tsbPenalty: readiness.tsbPenalty,
+    runRamp: Number.isFinite(runRamp) ? Number(runRamp.toFixed(2)) : null,
+    crossRamp: Number.isFinite(crossRamp) ? Number(crossRamp.toFixed(2)) : null,
+    longestRunRamp: Number.isFinite(longestRunRamp) ? Number(longestRunRamp.toFixed(2)) : null
+  }
+
+  const severity = { progress: 0, hold: 1, deload: 2 }
+  let progressionReadiness = "progress"
+  const progressionReasons = []
+
+  const applyState = (nextState, reason) => {
+    if (severity[nextState] > severity[progressionReadiness]) {
+      progressionReadiness = nextState
+    }
+    if (reason) progressionReasons.push(reason)
+  }
+
+  if (tendon.painScore >= 3) {
+    applyState("deload", `Active tendon OC ${tendon.painScore}/5`)
+  } else if (tendon.painScore >= 2) {
+    applyState("hold", `Active tendon OC ${tendon.painScore}/5`)
+  }
+
+  if (maxOcScore >= 4) {
+    applyState("deload", `OC issue severity ${maxOcScore}/5`)
+  } else if (maxOcScore >= 3) {
+    applyState("hold", `OC issue severity ${maxOcScore}/5`)
+  }
+
+  if (systemic.sleepPenalty >= 20) {
+    applyState("deload", "Sleep penalty high")
+  } else if (systemic.sleepPenalty >= 10) {
+    applyState("hold", "Sleep penalty active")
+  }
+
+  if (systemic.illnessBurden >= 4) {
+    applyState("deload", `Illness burden ${systemic.illnessBurden}`)
+  } else if (systemic.illnessBurden >= 2) {
+    applyState("hold", `Illness burden ${systemic.illnessBurden}`)
+  }
+
+  if (Number.isFinite(load.tsb)) {
+    if (load.tsb <= -12) {
+      applyState("deload", `Running TSB ${load.tsb.toFixed(1)}`)
+    } else if (load.tsb <= -5) {
+      applyState("hold", `Running TSB ${load.tsb.toFixed(1)}`)
+    }
+  }
+
+  if (Number(inputs.runsPerWeek28 || 0) < 2 || Number(inputs.activeWeeks28 || 0) < 2) {
+    applyState("hold", "Recent run frequency too low to progress")
+  }
+
+  if (runRamp > 1.18 || longestRunRamp > 1.2) {
+    applyState(
+      Number.isFinite(load.tsb) && load.tsb <= -5 ? "deload" : "hold",
+      "Run load increased faster than target build rate"
+    )
+  } else if (runRamp > 1.1) {
+    applyState("hold", "Run load already at weekly build cap")
+  }
+
+  if (runRamp > 1.05 && crossRamp > 1.05) {
+    applyState("hold", "Bike/swim are rising alongside run volume")
+  }
+
+  return {
+    tendon,
+    systemic,
+    load,
+    gate: {
+      progressionReadiness,
+      progressionReasons
+    }
+  }
+}
+
+function buildRunningReadinessController({
+  workouts,
+  ocConstraintState = null
+}) {
+  const inputs = computeEnduranceInputs(workouts)
+
+  const clamp = (value, lo = 0, hi = 100) => Math.min(hi, Math.max(lo, value))
+  const recentCompletedRunMiles = Math.max(
+    Number(inputs.longestRun14 || 0),
+    Number(inputs.longestRun28 || 0) * 0.8,
+    Number(inputs.longestRun84 || 0) * 0.6
+  )
+  const recentLongestRunMiles = Number(inputs.longestRun28 || 0)
+  const recentRunVolume = Number(inputs.weeklyRunMiles28 || 0)
+  const recentRunFrequency = Number(inputs.runsPerWeek28 || 0)
+  const activeWeeks28 = Number(inputs.activeWeeks28 || 0)
+
+  const buildCompletionScore = ({ distanceMiles, volumeThresholds }) => {
+    if (recentCompletedRunMiles >= distanceMiles) return 100
+
+    const longestRatio = distanceMiles > 0 ? recentLongestRunMiles / distanceMiles : 0
+    const longestScore = scoreThreshold(longestRatio, [
+      [0.9, 90],
+      [0.75, 75],
+      [0.6, 55],
+      [0.45, 35]
+    ], 15)
+
+    const volumeScore = scoreThreshold(recentRunVolume, volumeThresholds, 15)
+
+    const consistencyScore =
+      activeWeeks28 >= 4 && recentRunFrequency >= 3 ? 95 :
+      activeWeeks28 >= 3 && recentRunFrequency >= 2.5 ? 80 :
+      activeWeeks28 >= 3 && recentRunFrequency >= 2 ? 65 :
+      activeWeeks28 >= 2 && recentRunFrequency >= 1.5 ? 45 :
+      activeWeeks28 >= 1 ? 25 :
+      10
+
+    return clamp(Math.round(
+      longestScore * 0.65 +
+      volumeScore * 0.20 +
+      consistencyScore * 0.15
+    ))
+  }
+
+  const completionReadiness = {
+    fiveK: buildCompletionScore({
+      distanceMiles: 3.1069,
+      volumeThresholds: [
+        [9, 95],
+        [7, 82],
+        [5, 68],
+        [3, 50]
+      ]
+    }),
+    tenK: buildCompletionScore({
+      distanceMiles: 6.2137,
+      volumeThresholds: [
+        [18, 95],
+        [14, 82],
+        [10, 65],
+        [7, 48]
+      ]
+    }),
+    half: buildCompletionScore({
+      distanceMiles: 13.1094,
+      volumeThresholds: [
+        [30, 95],
+        [24, 82],
+        [18, 65],
+        [12, 48]
+      ]
+    })
+  }
+
+  const nextEventTargetMiles =
+    completionReadiness.fiveK >= 100
+      ? completionReadiness.tenK >= 100
+        ? 13.1094
+        : 6.2137
+      : 3.1069
+
+  return {
+    completionReadiness,
+    progressionReadiness: ocConstraintState?.gate?.progressionReadiness ?? "hold",
+    progressionReasons: ocConstraintState?.gate?.progressionReasons ?? [],
+    signals: {
+      recentCompletedRunMiles: Number(recentCompletedRunMiles.toFixed(1)),
+      recentLongestRunMiles: Number(recentLongestRunMiles.toFixed(1)),
+      nextEventTargetMiles: Number(nextEventTargetMiles.toFixed(1)),
+      recentRunVolume: Number(recentRunVolume.toFixed(1)),
+      recentRunFrequency: Number(recentRunFrequency.toFixed(1)),
+      activeWeeks28
+    },
+    tendonStatus: ocConstraintState?.tendon ?? { painScore: 0, stiffness: false, override: null }
   }
 }
 
@@ -3389,9 +4549,8 @@ function buildEnduranceForecast({
   // Ceiling at 150 min/week (well above typical training load) to produce a 0-100 scale.
   const cardioScore = Math.min(100, Math.round((cardioMinutesWeekly / 150) * 100))
 
-  // Cycling contributes aerobic base. Apply a 0.35 run-equivalent factor
-  // (reflects typical energy cost ratio for steady-state cycling vs running).
-  const cyclingEquivMiles = cyclingMilesWeekly * 0.35
+  // Cycling contributes aerobic base, but only partially transfers to running readiness.
+  const cyclingEquivMiles = cyclingMilesWeekly * 0.2
   const aerobicVolumeScore = mileageToScore(
     inputs.weeklyRunMiles28 + cyclingEquivMiles
   )
@@ -3416,14 +4575,15 @@ function buildEnduranceForecast({
   // Running volume                20%
   // Cardio minutes consistency    15%
   const swimmingMilesWeekly = safeNum(trainingSummary?.swimmingDistanceWeekly)
-const swimScore = Math.min(100, Math.round((swimmingMilesWeekly / 2) * 100))
-const baseReadinessRaw =
+  const swimScore = Math.min(100, Math.round((swimmingMilesWeekly / 3) * 100))
+  const cyclingScore = Math.min(100, Math.round((cyclingMilesWeekly / 60) * 100))
+  const baseReadinessRaw =
     aerobicVolumeScore * 0.30 +
     runPaceScore       * 0.20 +
     runVolumeScore     * 0.15 +
     cardioScore        * 0.15 +
     swimScore          * 0.10 +
-    Math.min(100, Math.round((cyclingMilesWeekly / 40) * 100)) * 0.10
+    cyclingScore       * 0.10
 
   const readinessNow = Math.max(
     0,
@@ -3437,9 +4597,9 @@ const baseReadinessRaw =
     workouts,
     (() => { const d = new Date(); d.setDate(d.getDate() - 28); return d })()
   )
-  const recentEquiv = inputs.weeklyRunMiles28 + cyclingMilesWeekly * 0.35
+  const recentEquiv = inputs.weeklyRunMiles28 + cyclingEquivMiles
   const priorEquiv  = prior28Inputs.weeklyRunMiles28 +
-    safeNum(trainingSummary?.cyclingDistanceWeekly) * 0.35
+    cyclingEquivMiles
 
   // Scale slope: 1 equivalent mile/week improvement -> ~3 readiness points/month.
   // Cap at +/-4 points/month so the projection stays plausible.
@@ -3638,13 +4798,13 @@ const buckets = {}
     }
 
     if (w.category === "Running" || w.category === "Walking") {
-      buckets[key].running += Number(w.distance || 0)
+      buckets[key].running += getWorkoutDistanceMiles(w)
       buckets[key].cardioMinutes += Number(w.dur || 0)
     } else if (w.category === "Swimming") {
-      buckets[key].swimming += Number(w.distance || 0)
+      buckets[key].swimming += getWorkoutDistanceMiles(w)
       buckets[key].cardioMinutes += Number(w.dur || 0)
     } else if (w.category === "Cycling") {
-      buckets[key].cycling += Number(w.distance || 0)
+      buckets[key].cycling += getWorkoutDistanceMiles(w)
       buckets[key].cardioMinutes += Number(w.dur || 0)
     } else if (w.category === "Strength") {
       buckets[key].strength += 1
@@ -3804,7 +4964,11 @@ function normalizeOffset(offset) {
 function normalizeDateString(value) {
   const raw = String(value || '').trim();
   if (!raw) return null;
-  if (/^\d{4}-\d{2}-\d{2}T/.test(raw)) return raw.replace(/([+-]\d{2})(\d{2})$/, '$1:$2');
+  if (/^\d{4}-\d{2}-\d{2}T/.test(raw)) {
+    return raw
+      .replace(/(\.\d{3})\d+(?=Z|[+-]\d{2}:?\d{2}$)/, '$1')
+      .replace(/([+-]\d{2})(\d{2})$/, '$1:$2');
+  }
   const m = raw.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})(?:\s*([+-]\d{2}:?\d{2}|Z))?$/);
   if (m) {
     const tz = m[3] === 'Z' ? 'Z' : normalizeOffset(m[3] || '');
@@ -3834,7 +4998,7 @@ function num(value) {
 }
 
 function getAttr(line, key) {
-  const escaped = key.replace(/[.*+?^\${}()|[\]\\]/g, '\\export default function App()');
+  const escaped = key.replace(/[.*+?^\${}()|[\\]\\\\]/g, '\\\\$&');
   const m = line.match(new RegExp(escaped + '="([^"]*)"'));
   return m ? m[1] : null;
 }
@@ -4061,10 +5225,7 @@ function firstValue(obj, keys) {
   return null;
 }
 
-function normalizeTechnogymFile(file) {
-  const reader = new FileReaderSync();
-  const text = reader.readAsText(file);
-  const parsed = JSON.parse(text);
+function normalizeTechnogymPayload(parsed) {
   const candidates = [];
   collectTechnogymCandidates(parsed, candidates, 0);
 
@@ -4135,6 +5296,17 @@ function normalizeTechnogymFile(file) {
       unique_sessions: workouts.length
     }
   };
+}
+
+function normalizeTechnogymFile(file) {
+  const reader = new FileReaderSync();
+  const text = reader.readAsText(file);
+  const parsed = JSON.parse(text);
+  return normalizeTechnogymPayload(parsed);
+}
+
+function parseTechnogymText(text) {
+  return normalizeTechnogymPayload(JSON.parse(String(text || "")));
 }
 
 function parseTechnogymFile(file) {
@@ -4433,6 +5605,191 @@ function stableHash(input) {
   return new Worker(URL.createObjectURL(blob))
 }
 
+function normalizeOffset(offset) {
+  if (!offset) return '';
+  if (/^[+-]\d{2}:\d{2}$/.test(offset)) return offset;
+  if (/^[+-]\d{4}$/.test(offset)) return offset.slice(0, 3) + ':' + offset.slice(3);
+  return offset;
+}
+
+function normalizeDateString(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  if (/^\d{4}-\d{2}-\d{2}T/.test(raw)) {
+    return raw
+      .replace(/(\.\d{3})\d+(?=Z|[+-]\d{2}:?\d{2}$)/, '$1')
+      .replace(/([+-]\d{2})(\d{2})$/, '$1:$2');
+  }
+  const m = raw.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})(?:\s*([+-]\d{2}:?\d{2}|Z))?$/);
+  if (m) {
+    const tz = m[3] === 'Z' ? 'Z' : normalizeOffset(m[3] || '');
+    return m[1] + 'T' + m[2] + tz;
+  }
+  const t = Date.parse(raw);
+  return Number.isFinite(t) ? new Date(t).toISOString() : null;
+}
+
+function toMs(value) {
+  const normalized = normalizeDateString(value)
+  if (!normalized) return null
+  const ms = Date.parse(normalized)
+  return Number.isFinite(ms) ? ms : null
+}
+
+function minutesBetween(start, end) {
+  const s = toMs(start)
+  const e = toMs(end)
+  if (!Number.isFinite(s) || !Number.isFinite(e) || e <= s) return null
+  return (e - s) / 60000
+}
+
+function normalizeTechnogymPayload(parsed) {
+  function tgNum(value) {
+    if (value == null || value === "") return null
+    const n = Number(value)
+    return Number.isFinite(n) ? n : null
+  }
+
+  function tgFlattenRecord(obj) {
+    if (!obj || Array.isArray(obj) || typeof obj !== "object") return obj
+    const flat = { ...obj }
+    const metricPairs = Array.isArray(obj?.performedData?.pr) ? obj.performedData.pr : []
+    for (let i = 0; i < metricPairs.length; i += 1) {
+      const pair = metricPairs[i]
+      const name = String(pair?.n || "").trim()
+      if (!name) continue
+      flat[name] = pair?.v
+    }
+    return flat
+  }
+
+  function tgFirstValue(obj, keys) {
+    for (let i = 0; i < keys.length; i += 1) {
+      const key = keys[i]
+      if (obj?.[key] != null && obj[key] !== "") return obj[key]
+    }
+    return null
+  }
+
+  function tgClassify(workout) {
+    if (workout.TotalIsoWeight != null || workout.Rm1 != null) return "Traditional Strength Training"
+    if (workout.AvgSpeedRpm != null || workout.AvgRpm != null) return "Cycling"
+    if (workout.AvgRunningCadence != null || workout.RunType != null) return "Running"
+    if (workout.HDistance != null) return "Cycling"
+    const raw = String(workout.activity_type || workout.type || workout.raw_type || "").toLowerCase()
+    if (raw.includes("run") || raw.includes("tread")) return "Running"
+    if (raw.includes("bike") || raw.includes("cycl") || raw.includes("spin")) return "Cycling"
+    if (raw.includes("row")) return "Rowing"
+    if (raw.includes("ellip")) return "Elliptical"
+    if (raw.includes("stair")) return "Stair Climbing"
+    if (raw.includes("strength") || raw.includes("weight")) return "Traditional Strength Training"
+    return "Indoor Cycling"
+  }
+
+  function tgLooksLikeSession(obj) {
+    if (!obj || Array.isArray(obj) || typeof obj !== "object") return false
+    const flat = tgFlattenRecord(obj)
+    const keys = Object.keys(flat)
+    if (!keys.length) return false
+    const lower = keys.map(key => String(key).toLowerCase())
+    const hasDate = flat?.on != null || lower.some(key => key.includes("date") || key.includes("start"))
+    const hasDuration = lower.some(key => key.includes("duration") || key.includes("time") || key.includes("elapsed"))
+    const hasMetrics = lower.some(key =>
+      key.includes("cal") || key.includes("distance") || key.includes("rpm") || key.includes("power") || key.includes("weight") || key.includes("hr")
+    )
+    return (hasDate && hasDuration) || (hasDate && hasMetrics)
+  }
+
+  function tgCollectCandidates(node, acc, depth) {
+    if (!node || depth > 8) return
+    if (Array.isArray(node)) {
+      for (let i = 0; i < node.length; i += 1) tgCollectCandidates(node[i], acc, depth + 1)
+      return
+    }
+    if (typeof node !== "object") return
+    if (tgLooksLikeSession(node)) acc.push(node)
+    const values = Object.values(node)
+    for (let i = 0; i < values.length; i += 1) {
+      const value = values[i]
+      if (value && typeof value === "object") tgCollectCandidates(value, acc, depth + 1)
+    }
+  }
+
+  const candidates = []
+  tgCollectCandidates(parsed, candidates, 0)
+
+  const workouts = []
+  const rejected = []
+  const seen = new Set()
+
+  for (let i = 0; i < candidates.length; i += 1) {
+    const raw = candidates[i]
+    const flattened = tgFlattenRecord(raw)
+    const startRaw = tgFirstValue(flattened, ["on", "start_date", "startDate", "StartDate", "Date", "date", "TrainingStartDate", "WorkoutStartDate"])
+    const startDate = normalizeDateString(startRaw)
+
+    let durationSec = tgNum(tgFirstValue(flattened, ["duration_sec", "DurationSeconds", "durationSeconds", "ElapsedSeconds", "MovingTimeSeconds"]))
+    if (!Number.isFinite(durationSec)) {
+      const durationMin = tgNum(tgFirstValue(flattened, ["duration_min", "DurationMinutes", "duration", "Duration", "ElapsedMinutes", "MovingTimeMinutes"]))
+      if (Number.isFinite(durationMin)) durationSec = durationMin > 240 ? durationMin : durationMin * 60
+    }
+    if (!Number.isFinite(durationSec)) durationSec = null
+
+    const endRaw = tgFirstValue(flattened, ["end_date", "endDate", "EndDate", "WorkoutEndDate"])
+    let endDate = normalizeDateString(endRaw)
+    if (!endDate && startDate && Number.isFinite(durationSec) && durationSec > 0) {
+      endDate = new Date(toMs(startDate) + durationSec * 1000).toISOString()
+    }
+
+    const signature = `${startDate || "na"}|${endDate || "na"}|${JSON.stringify(Object.keys(raw).sort())}`
+    if (seen.has(signature)) continue
+    seen.add(signature)
+
+    if (!startDate || !endDate) {
+      rejected.push({ source: "Technogym", reason: "Missing usable start or end date", raw })
+      continue
+    }
+
+    const distanceRaw = tgFirstValue(flattened, ["distance", "Distance", "HDistance", "TotalDistance", "DistanceMeters"])
+    const distance = tgNum(distanceRaw)
+    const type = tgClassify(flattened)
+
+    workouts.push({
+      source: "Technogym",
+      raw_type: tgFirstValue(flattened, ["activity_type", "ActivityType", "type", "Type", "discipline"]) || type,
+      type,
+      start_date: startDate,
+      end_date: endDate,
+      duration_min: minutesBetween(startDate, endDate),
+      distance: Number.isFinite(distance) ? distance : null,
+      distance_unit: tgFirstValue(flattened, ["distance_unit", "DistanceUnit", "Unit"]) || (Number.isFinite(distance) ? "m" : null),
+      calories: tgNum(tgFirstValue(flattened, ["calories", "Calories", "Energy", "TotalCalories"])) || 0,
+      hr: tgNum(tgFirstValue(flattened, ["hr", "AvgHeartRate", "AverageHeartRate", "AvgHr"])) || null,
+      notes: "",
+      power_avg: tgNum(tgFirstValue(flattened, ["power_avg", "AvgPower", "AveragePower"])),
+      level: tgNum(tgFirstValue(flattened, ["level", "Level"])),
+      rpm_avg: tgNum(tgFirstValue(flattened, ["rpm_avg", "AvgRpm", "AvgSpeedRpm"])),
+      vo2: tgNum(tgFirstValue(flattened, ["vo2", "VO2", "EstimatedVO2", "Vo2"])),
+      raw,
+    })
+  }
+
+  workouts.sort((a, b) => (toMs(a.start_date) || 0) - (toMs(b.start_date) || 0))
+
+  return {
+    workouts,
+    rejected,
+    diagnostics: {
+      candidate_records: candidates.length,
+      unique_sessions: workouts.length,
+    },
+  }
+}
+
+function parseTechnogymText(text) {
+  return normalizeTechnogymPayload(JSON.parse(String(text || "")))
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // SOURCE AUTO-DETECTION
 // Inspects file content to determine source. Never guesses silently —
@@ -4619,6 +5976,150 @@ function parseFitnessViewCSV(text) {
   }
 
   return { workouts, rejected, nutrition: [] }
+}
+
+function dateOnlyFromWorkout(value) {
+  return String(value || "").slice(0, 10)
+}
+
+function fitnessViewModality(type) {
+  const t = String(type || "").toLowerCase()
+  if (t.includes("run")) return "run"
+  if (t.includes("cycl") || t.includes("bike")) return "bike"
+  if (t.includes("swim")) return "swim"
+  if (t.includes("walk")) return "walk"
+  if (t.includes("row")) return "row"
+  if (t.includes("strength")) return "strength"
+  return "other"
+}
+
+function scheduleWorkoutModality(workout) {
+  const t = String(workout?.type || "").toLowerCase()
+  if (t.includes("running")) return "run"
+  if (t.includes("cycling") || t.includes("bike")) return "bike"
+  if (t.includes("swimming")) return "swim"
+  if (t.includes("walking")) return "walk"
+  if (t.includes("rowing")) return "row"
+  if (t.includes("strength")) return "strength"
+  return "other"
+}
+
+function parseScheduleWorkoutDuration(workout) {
+  const value = Number(workout?.dur ?? workout?.duration_min ?? workout?.durationMin ?? 0)
+  return Number.isFinite(value) && value > 0 ? value : null
+}
+
+function parseScheduleWorkoutDistance(workout) {
+  const value = Number(workout?.distance ?? workout?.distance_miles ?? workout?.miles ?? 0)
+  return Number.isFinite(value) && value > 0 ? value : null
+}
+
+function makeFitnessViewCanonicalSession(workout, scheduleMatch = null) {
+  const schedule = scheduleMatch?.schedule || null
+  const scheduleId = schedule?._scheduleId || schedule?.id || null
+  const sessionId = scheduleId
+    ? `schedule_fv_${scheduleId}_${stableHash(`${workout.start_date}|${workout.type}|${workout.duration_min || ""}|${workout.distance || ""}`)}`
+    : makeSessionId("fv", workout)
+  const startMs = Date.parse(workout.start_date || "")
+  const endDate = Number.isFinite(startMs) && Number(workout.duration_min) > 0
+    ? new Date(startMs + Number(workout.duration_min) * 60000).toISOString()
+    : workout.end_date || workout.start_date
+
+  return {
+    session_id: sessionId,
+    match_confidence: schedule ? "high" : "single_source",
+    relationship: schedule ? "schedule_fitnessview_linked" : "fitnessview_only",
+    canonical_type: workout.type,
+    start_date: workout.start_date,
+    end_date: endDate,
+    duration_min: workout.duration_min,
+    overlap_summary: schedule ? {
+      matched_by: scheduleMatch.reasons,
+      schedule_workout_id: schedule.id || null,
+      schedule_id: scheduleId,
+      duration_diff_min: scheduleMatch.durationDiffMin,
+      distance_diff_mi: scheduleMatch.distanceDiffMi,
+    } : null,
+    sources: {
+      fitnessview: workout,
+      schedule_workout: schedule,
+      apple: null,
+      technogym: null,
+    },
+    preferred_metrics: {
+      hr: { value: workout.hr || null, source: "FitnessView" },
+      calories: { value: workout.calories || null, source: "FitnessView" },
+      distance: { value: workout.distance || null, source: "FitnessView", unit: workout.distance_unit, rationale: schedule ? "FitnessView linked to Schedule activity" : "FitnessView only" },
+      power_avg: { value: null, source: null },
+      level: { value: null, source: null },
+      rpm_avg: { value: null, source: null },
+      vo2: { value: null, source: null },
+    }
+  }
+}
+
+function findScheduleWorkoutMatchForFitnessView(workout, scheduleWorkouts) {
+  const date = dateOnlyFromWorkout(workout.start_date)
+  const modality = fitnessViewModality(workout.type)
+  if (!date || modality === "other") return null
+
+  const candidates = (Array.isArray(scheduleWorkouts) ? scheduleWorkouts : [])
+    .filter(schedule => schedule?._scheduleId != null)
+    .filter(schedule => dateOnlyFromWorkout(schedule.dateTime || schedule.date) === date)
+    .filter(schedule => scheduleWorkoutModality(schedule) === modality)
+    .map(schedule => {
+      const reasons = ["same day", "compatible modality"]
+      let score = 2
+      const fvDuration = Number(workout.duration_min || 0) || null
+      const scheduleDuration = parseScheduleWorkoutDuration(schedule)
+      const durationDiffMin = fvDuration && scheduleDuration ? Math.abs(fvDuration - scheduleDuration) : null
+      if (durationDiffMin != null && durationDiffMin <= Math.max(10, scheduleDuration * 0.35)) {
+        score += 2
+        reasons.push("duration similarity")
+      } else if (durationDiffMin != null) {
+        score -= 2
+      }
+
+      const fvDistance = Number(workout.distance || 0) || null
+      const scheduleDistance = parseScheduleWorkoutDistance(schedule)
+      const distanceDiffMi = fvDistance && scheduleDistance ? Math.abs(fvDistance - scheduleDistance) : null
+      if (distanceDiffMi != null && distanceDiffMi <= Math.max(0.35, scheduleDistance * 0.3)) {
+        score += 2
+        reasons.push("distance similarity")
+      } else if (distanceDiffMi != null) {
+        score -= 2
+      }
+
+      const fvMs = Date.parse(workout.start_date || "")
+      const scheduleMs = Date.parse(schedule.dateTime || "")
+      if (
+        Number.isFinite(fvMs) &&
+        Number.isFinite(scheduleMs) &&
+        String(workout.start_date || "").includes("T00:00:00") === false
+      ) {
+        const diffMin = Math.abs(fvMs - scheduleMs) / 60000
+        if (diffMin <= 90) {
+          score += 2
+          reasons.push("time window")
+        } else {
+          score -= 3
+        }
+      }
+
+      return { schedule, score, reasons, durationDiffMin, distanceDiffMi }
+    })
+    .filter(match => match.score >= 4)
+    .sort((a, b) => b.score - a.score)
+
+  if (!candidates.length) return null
+  if (candidates.length > 1 && candidates[0].score === candidates[1].score) return null
+  return candidates[0]
+}
+
+function makeFitnessViewCanonicalSessions(workouts, scheduleWorkouts) {
+  return (Array.isArray(workouts) ? workouts : []).map(workout =>
+    makeFitnessViewCanonicalSession(workout, findScheduleWorkoutMatchForFitnessView(workout, scheduleWorkouts))
+  )
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -4987,7 +6488,7 @@ function makeImportFileReviewRow(fileInfo, reason) {
   }
 }
 
-function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily, setSleepRecords }) {
+function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily, setSleepRecords, setBiometricRecords }) {
   const [queuedFiles, setQueuedFiles] = useState([])  // [{file, detected, firstChunk}]
   const [status, setStatus] = useState("Drop files to import")
   const [progress, setProgress] = useState(null)
@@ -5128,30 +6629,15 @@ function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily,
             // Store for post-processing — pass alongside apple in worker
             if (!technogymFile) {
               // No XML apple — use FitnessView directly as canonical accepted sessions
-              const accepted = fvSessions.map(w => ({
-                session_id: makeSessionId("fv", w),
-                match_confidence: "single_source",
-                relationship: "fitnessview_only",
-                canonical_type: w.type,
-                start_date: w.start_date,
-                end_date: w.end_date,
-                duration_min: w.duration_min,
-                overlap_summary: null,
-                sources: { fitnessview: w, apple: null, technogym: null },
-                preferred_metrics: {
-                  hr: { value: w.hr || null, source: "FitnessView" },
-                  calories: { value: w.calories || null, source: "FitnessView" },
-                  distance: { value: w.distance || null, source: "FitnessView", unit: w.distance_unit, rationale: "FitnessView only" },
-                  power_avg: { value: null, source: null }, level: { value: null, source: null },
-                  rpm_avg: { value: null, source: null }, vo2: { value: null, source: null }
-                }
-              }))
+              const scheduleWorkouts = await store.get("ufd-workouts") || []
+              const accepted = makeFitnessViewCanonicalSessions(fvSessions, scheduleWorkouts)
+              const linkedCount = accepted.filter(session => session.relationship === "schedule_fitnessview_linked").length
               const mergedReviewRows = pendingReviewRows.slice()
               setResult({ accepted, all_sessions: accepted, review: mergedReviewRows, rejected: allRejected,
-                summary: { accepted: accepted.length, review: mergedReviewRows.length, rejected: allRejected.length, total: accepted.length } })
+                summary: { accepted: accepted.length, linked: linkedCount, review: mergedReviewRows.length, rejected: allRejected.length, total: accepted.length } })
               setReviewRows(mergedReviewRows)
               setImporting(false)
-              setStatus(`FitnessView: ${accepted.length} sessions imported directly`)
+              setStatus(`FitnessView: ${accepted.length} sessions ready (${linkedCount} linked to Schedule, ${accepted.length - linkedCount} standalone)`)
               return
             }
           }
@@ -5222,12 +6708,73 @@ function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily,
     if (allBiometrics.length) setBiometricResult(allBiometrics)
     if (allHealthFit.length) setHealthFitResult(allHealthFit)
 
+    // Technogym-only imports do not need the generic overlap worker.
+    // Parse directly so the UI cannot get stranded waiting on overlap state.
+    if (technogymFile && !appleFile) {
+      const technogymText = await new Promise((res, rej) => {
+        const r = new FileReader()
+        r.onload = e => res(e.target?.result || "")
+        r.onerror = () => rej(new Error("Read failed"))
+        r.readAsText(technogymFile)
+      }).catch(() => null)
+
+      if (!technogymText) {
+        setStatus("Error: Technogym file read failed")
+        setImporting(false)
+        return
+      }
+
+      try {
+        const technogym = parseTechnogymText(technogymText)
+        const accepted = (Array.isArray(technogym.workouts) ? technogym.workouts : [])
+          .map(workout => makeSessionFromSingleSource("techno", null, workout))
+        const built = {
+          accepted,
+          review: [],
+          rejected: Array.isArray(technogym.rejected) ? technogym.rejected.slice() : [],
+          all_sessions: accepted.slice(),
+          generated_at: new Date().toISOString(),
+          summary: {
+            total: accepted.length,
+            accepted: accepted.length,
+            review: 0,
+            rejected: Array.isArray(technogym.rejected) ? technogym.rejected.length : 0,
+            linked: 0,
+            unmatched_apple: 0,
+            unmatched_technogym: accepted.length,
+          },
+        }
+        built.diagnostics = {
+          apple: { parsed_lines: 0 },
+          technogym: technogym.diagnostics,
+          overlaps: { total_candidates: 0, strong_candidates: 0, weak_candidates: 0 }
+        }
+        built.appleSleep = []
+
+        const mergedReviewRows = [...(Array.isArray(built?.review) ? built.review : []), ...pendingReviewRows]
+        setResult({
+          ...built,
+          review: mergedReviewRows,
+          summary: {
+            ...(built.summary || {}),
+            review: mergedReviewRows.length
+          }
+        })
+        setReviewRows(mergedReviewRows)
+        setSelectedReviewIds([])
+        pendingFileReviewRowsRef.current = []
+        setStatus(`Technogym: ${built.accepted?.length || 0} sessions ready`)
+      } catch (err) {
+        setStatus(`Error: ${err?.message || String(err)}`)
+      } finally {
+        setImporting(false)
+      }
     // Send Apple + Technogym to worker for overlap pipeline
-    if (appleFile || technogymFile) {
+    } else if (appleFile || technogymFile) {
       setStatus("Running overlap pipeline...")
       worker.postMessage({ type: "process", appleFile, technogymFile })
     } else if (allNutrition.length || allSleep.length || allBiometrics.length || allHealthFit.length) {
-      setStatus("Non-workout files processed. Nutrition, sleep, and biometric data ready to commit.")
+      setStatus("Small-source files processed. Sleep, daily metrics, biometrics, and nutrition are ready to commit.")
       setImporting(false)
     } else if (pendingReviewRows.length) {
       setStatus("Files held for manual review. Override source if needed, then reprocess.")
@@ -5273,13 +6820,18 @@ function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily,
     try {
       // Commit workout sessions
       if (sessions.length) {
-        localStorage.setItem("lift_canonical_sessions", JSON.stringify(sessions))
-        setCanonicalSessions(sessions)
+        const existingCanonical = supabase && STORE_USER_ID
+          ? await loadCanonicalSessions(supabase, STORE_USER_ID).catch(() => canonicalSessions)
+          : canonicalSessions
+        const mergedSessions = dedupeCanonicalSessions([...(Array.isArray(existingCanonical) ? existingCanonical : []), ...sessions])
+        localStorage.setItem("lift_canonical_sessions", JSON.stringify(mergedSessions))
+        setCanonicalSessions(mergedSessions)
         committed += sessions.length
         if (supabase && STORE_USER_ID) {
-          const withUser = sessions.map(s => ({ ...s, user_id: STORE_USER_ID }))
-          const { error } = await supabase.from("canonical_sessions").upsert(withUser, { onConflict: "session_id" })
-          if (error) { if (process.env.NODE_ENV === "development") console.warn("Supabase write failed:", error.message) }
+          await upsertCanonicalSessions(supabase, STORE_USER_ID, sessions)
+          const remoteSessions = await loadCanonicalSessions(supabase, STORE_USER_ID)
+          localStorage.setItem("lift_canonical_sessions", JSON.stringify(remoteSessions))
+          setCanonicalSessions(remoteSessions)
         }
       }
       // Commit nutrition to user_kv (feeds Calories tab)
@@ -5294,7 +6846,7 @@ function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily,
         await store.set("ufd-meal-entries", merged)
         committed += nutritionResult.length
       }
-      // Sleep and biometrics — store for future tab integration
+      // Small-source imports: local fallback, Supabase tables when signed in
       if (sleepResult.length) {
         const existing = JSON.parse(localStorage.getItem("lift_sleep_records") || "[]")
         const byDate = {}
@@ -5303,26 +6855,54 @@ function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily,
         const merged = Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date))
         localStorage.setItem("lift_sleep_records", JSON.stringify(merged))
         if (setSleepRecords) setSleepRecords(merged)
+        committed += sleepResult.length
+        if (supabase && STORE_USER_ID) {
+          await upsertSleepRecords(supabase, STORE_USER_ID, merged)
+          const remoteSleep = await loadSleepRecords(supabase, STORE_USER_ID)
+          localStorage.setItem("lift_sleep_records", JSON.stringify(remoteSleep))
+          if (setSleepRecords) setSleepRecords(remoteSleep)
+        }
       }
-      if (biometricResult.length) localStorage.setItem("lift_biometric_records", JSON.stringify(biometricResult))
+      if (biometricResult.length) {
+        const existing = JSON.parse(localStorage.getItem("lift_biometric_records") || "[]")
+        const byKey = {}
+        ;(Array.isArray(existing) ? existing : []).forEach(r => { byKey[r.biometric_id || r.id || `${r.source || "bio"}_${r.timestamp || r.date}`] = r })
+        biometricResult.forEach(r => { byKey[r.biometric_id || r.id || `${r.source || "bio"}_${r.timestamp || r.date}`] = r })
+        const merged = Object.values(byKey).sort((a, b) => String(a.timestamp || a.date || "").localeCompare(String(b.timestamp || b.date || "")))
+        localStorage.setItem("lift_biometric_records", JSON.stringify(merged))
+        if (setBiometricRecords) setBiometricRecords(merged)
+        committed += biometricResult.length
+        if (supabase && STORE_USER_ID) {
+          await upsertBiometricRecords(supabase, STORE_USER_ID, merged)
+          const remoteBiometrics = await loadBiometricRecords(supabase, STORE_USER_ID)
+          localStorage.setItem("lift_biometric_records", JSON.stringify(remoteBiometrics))
+          if (setBiometricRecords) setBiometricRecords(remoteBiometrics)
+        }
+      }
 
-      // HealthFit CTL/ATL/TSB — merge by date into user_kv "healthfit-daily"
+      // HealthFit CTL/ATL/TSB — local fallback, Supabase healthfit_daily when signed in
       if (healthFitResult.length) {
         const existing = await store.get("healthfit-daily") || []
         const byDate = {}
         ;(Array.isArray(existing) ? existing : []).forEach(r => { byDate[r.date] = r })
         healthFitResult.forEach(r => { byDate[r.date] = r })
         const merged = Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date))
-        await store.set("healthfit-daily", merged)
+        localStorage.setItem("healthfit-daily", JSON.stringify(merged))
         if (setHealthFitDaily) setHealthFitDaily(merged)
         committed += healthFitResult.length
+        if (supabase && STORE_USER_ID) {
+          await upsertHealthfitDaily(supabase, STORE_USER_ID, merged)
+          const remoteHealthFit = await loadHealthfitDaily(supabase, STORE_USER_ID)
+          localStorage.setItem("healthfit-daily", JSON.stringify(remoteHealthFit))
+          if (setHealthFitDaily) setHealthFitDaily(remoteHealthFit)
+        }
       }
 
       setStatus(`Committed ${committed} records.${sleepResult.length ? ` ${sleepResult.length} sleep records saved.` : ""}${biometricResult.length ? ` ${biometricResult.length} biometrics saved.` : ""}${healthFitResult.length ? ` ${healthFitResult.length} HealthFit records saved.` : ""}${reviewRows.length ? ` ${reviewRows.length} still in review.` : ""}`)
     } catch (err) {
       setStatus(`Commit failed: ${err.message || String(err)}`)
     }
-  }, [result, nutritionResult, sleepResult, biometricResult, healthFitResult, reviewRows.length, setCanonicalSessions, setHealthFitDaily, setSleepRecords])
+  }, [result, nutritionResult, sleepResult, biometricResult, healthFitResult, reviewRows.length, setCanonicalSessions, setHealthFitDaily, setSleepRecords, setBiometricRecords])
 
   const cs = SOURCE_LABELS
   const s = v => ({ padding: "4px 8px", border: "none", borderRadius: 4, fontSize: 11, cursor: "pointer", background: "#1a1b2e", color: "#aaa", fontFamily: "inherit", ...v })
@@ -5389,7 +6969,7 @@ function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily,
             {importing ? "Processing..." : "Process files"}
           </button>
           <button onClick={commitAll} style={buttonStyle(false)}
-            disabled={!result?.accepted?.length && !nutritionResult.length && !sleepResult.length && !biometricResult.length}>
+            disabled={!result?.accepted?.length && !nutritionResult.length && !sleepResult.length && !biometricResult.length && !healthFitResult.length}>
             Commit to dashboard
           </button>
           {queuedFiles.length > 0 && <button onClick={() => setQueuedFiles([])} style={s()}>Clear queue</button>}
@@ -5404,7 +6984,7 @@ function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily,
       </div>
 
       {/* Summary */}
-      {(result || nutritionResult.length > 0 || sleepResult.length > 0 || biometricResult.length > 0) && (
+      {(result || nutritionResult.length > 0 || sleepResult.length > 0 || biometricResult.length > 0 || healthFitResult.length > 0) && (
         <div style={{ ...cardStyle(), minWidth: 0 }}>
           <div style={{ fontWeight: "bold", marginBottom: 10 }}>Results</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 }}>
@@ -5416,6 +6996,7 @@ function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily,
             {nutritionResult.length > 0 && <SummaryCell label="Nutrition entries" value={nutritionResult.length} />}
             {sleepResult.length > 0 && <SummaryCell label="Sleep records" value={sleepResult.length} />}
             {biometricResult.length > 0 && <SummaryCell label="Biometrics" value={biometricResult.length} />}
+            {healthFitResult.length > 0 && <SummaryCell label="HealthFit daily" value={healthFitResult.length} />}
             <SummaryCell label="In dashboard" value={Array.isArray(canonicalSessions) ? canonicalSessions.length : 0} />
           </div>
         </div>
@@ -5549,196 +7130,6 @@ function makeSessionFromSingleSource(prefix, appleRecord, technoRecord) {
   }
 }
 
-function dedupeCanonicalSessions(sessions) {
-  const seen = new Set()
-  return (Array.isArray(sessions) ? sessions : []).filter(session => {
-    const key = session?.session_id || makeSessionId("session", session)
-    if (seen.has(key)) return false
-    seen.add(key)
-    return true
-  }).sort((a, b) => String(a?.start_date || "").localeCompare(String(b?.start_date || "")))
-}
-
-function estimateScheduleStrengthTrimp(entry) {
-  const exList = Array.isArray(entry?.exercises) ? entry.exercises : []
-  const strengthEx = exList.filter(ex => ex?.variant !== "cardio")
-  if (!strengthEx.length) return 40
-  const totalSets = strengthEx.reduce((acc, ex) => {
-    const actualSets = ex?.actual?.sets
-    const prescribedSets = ex?.prescribed?.sets
-    const sets = Number(actualSets ?? prescribedSets ?? 0)
-    return acc + (Number.isFinite(sets) && sets > 0 ? sets : 3)
-  }, 0)
-  return Math.round(Math.min(80, 8 + totalSets * 3.5))
-}
-
-function safeCloneForScheduleSeeds(value) {
-  return value == null ? null : JSON.parse(JSON.stringify(value))
-}
-
-function normalizeOffsetForScheduleSeeds(offset) {
-  if (!offset) return ""
-  if (/^[+-]\d{2}:\d{2}$/.test(offset)) return offset
-  if (/^[+-]\d{4}$/.test(offset)) return offset.slice(0, 3) + ":" + offset.slice(3)
-  return offset
-}
-
-function normalizeDateStringForScheduleSeeds(value) {
-  const raw = String(value || "").trim()
-  if (!raw) return null
-  if (/^\d{4}-\d{2}-\d{2}T/.test(raw)) return raw.replace(/([+-]\d{2})(\d{2})$/, "$1:$2")
-  const m = raw.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})(?:\s*([+-]\d{2}:?\d{2}|Z))?$/)
-  if (m) {
-    const tz = m[3] === "Z" ? "Z" : normalizeOffsetForScheduleSeeds(m[3] || "")
-    return m[1] + "T" + m[2] + tz
-  }
-  const t = Date.parse(raw)
-  return Number.isFinite(t) ? new Date(t).toISOString() : null
-}
-
-function toMsForScheduleSeeds(value) {
-  const normalized = normalizeDateStringForScheduleSeeds(value)
-  if (!normalized) return null
-  const ms = Date.parse(normalized)
-  return Number.isFinite(ms) ? ms : null
-}
-
-function normalizeWorkoutTypeForScheduleSeeds(type, workout) {
-  const t = String(type || "").toLowerCase()
-
-  if (t.includes("traditional strength")) return "Strength"
-  if (t.includes("functional strength")) return "Strength"
-  if (t.includes("core")) return "Strength"
-
-  if (t.includes("running")) return "Running"
-  if (t.includes("walking")) return "Walking"
-  if (t.includes("cycling")) return "Cycling"
-  if (t.includes("swimming")) return "Swimming"
-  if (t.includes("elliptical")) return "Elliptical"
-  if (t.includes("rowing")) return "Rowing"
-  if (t.includes("stair")) return "Stairs"
-
-  if (t.includes("machine cardio") || t === "other") {
-    const rpmAvg =
-      workout?.preferred_metrics?.rpm_avg?.value ??
-      workout?.sources?.technogym?.rpm_avg ??
-      workout?.rpm_avg ??
-      null
-
-    if (rpmAvg !== null && Number.isFinite(Number(rpmAvg))) return "Cycling"
-
-    const powerAvg =
-      workout?.preferred_metrics?.power_avg?.value ??
-      workout?.sources?.technogym?.power_avg ??
-      null
-
-    const tgRaw = String(workout?.sources?.technogym?.raw_type || "").toLowerCase()
-    if (powerAvg !== null && Number.isFinite(Number(powerAvg)) && tgRaw.includes("machine")) return "Cycling"
-
-    const tgType = String(
-      workout?.sources?.technogym?.type ||
-      workout?.sources?.technogym?.raw_type ||
-      workout?.sources?.technogym?.activity_type ||
-      ""
-    ).toLowerCase()
-
-    if (tgType.includes("cycl") || tgType.includes("bike") || tgType.includes("spin")) return "Cycling"
-    if (tgType.includes("run") || tgType.includes("tread")) return "Running"
-    if (tgType.includes("row")) return "Rowing"
-    if (tgType.includes("swim")) return "Swimming"
-    if (tgType.includes("ellip")) return "Elliptical"
-    if (tgType.includes("stair") || tgType.includes("climb")) return "Stairs"
-    if (tgType.includes("strength") || tgType.includes("weight") || tgType.includes("train")) return "Strength"
-    return "Machine Cardio"
-  }
-
-  return "Other"
-}
-
-function makeCanonicalSessionFromScheduleLog(entry) {
-  const startDate =
-    entry?.logged_at ||
-    (entry?.date ? `${String(entry.date).slice(0, 10)}T12:00:00` : null)
-  const durationMin = 60
-  const startMs = toMsForScheduleSeeds(startDate)
-  const endDate = Number.isFinite(startMs)
-    ? new Date(startMs + durationMin * 60000).toISOString()
-    : null
-
-  return {
-    session_id: `schedule_${entry?.session_id || entry?.id || stableHash(JSON.stringify(entry || {}))}`,
-    match_confidence: "single_source",
-    relationship: "schedule_only",
-    canonical_type: "Strength",
-    start_date: startDate,
-    end_date: endDate,
-    duration_min: durationMin,
-    overlap_summary: null,
-    trimp: estimateScheduleStrengthTrimp(entry),
-    sources: {
-      apple: null,
-      technogym: null,
-      schedule: safeCloneForScheduleSeeds(entry)
-    },
-    preferred_metrics: {
-      hr: { value: null, source: null },
-      calories: { value: null, source: null },
-      distance: { value: null, source: null, rationale: null, unit: null },
-      power_avg: { value: null, source: null },
-      level: { value: null, source: null },
-      rpm_avg: { value: null, source: null },
-      vo2: { value: null, source: null, note: null }
-    }
-  }
-}
-
-function isObviousScheduleCanonicalDuplicate(canonical, scheduleSeed) {
-  const canonicalType = normalizeWorkoutTypeForScheduleSeeds(canonical?.canonical_type || canonical?.type, canonical)
-  const scheduleType = normalizeWorkoutTypeForScheduleSeeds(scheduleSeed?.canonical_type || scheduleSeed?.type, scheduleSeed)
-  if (canonicalType !== "Strength" || scheduleType !== "Strength") return false
-
-  const canonicalDate = String(canonical?.start_date || canonical?.dateTime || canonical?.date || "").slice(0, 10)
-  const scheduleDate = String(scheduleSeed?.start_date || scheduleSeed?.dateTime || scheduleSeed?.date || "").slice(0, 10)
-  if (!canonicalDate || canonicalDate !== scheduleDate) return false
-
-  const canonicalMs = toMsForScheduleSeeds(canonical?.start_date || canonical?.dateTime || canonical?.date)
-  const scheduleMs = toMsForScheduleSeeds(scheduleSeed?.start_date || scheduleSeed?.dateTime || scheduleSeed?.date)
-  if (Number.isFinite(canonicalMs) && Number.isFinite(scheduleMs) && Math.abs(canonicalMs - scheduleMs) > 3 * 60 * 60 * 1000) {
-    return false
-  }
-
-  const canonicalDur = Number(canonical?.duration_min ?? canonical?.dur_min ?? canonical?.dur ?? 0) || 0
-  const scheduleDur = Number(scheduleSeed?.duration_min ?? scheduleSeed?.dur_min ?? scheduleSeed?.dur ?? 0) || 0
-  if (canonicalDur > 0 && scheduleDur > 0 && Math.abs(canonicalDur - scheduleDur) > 90) return false
-
-  return true
-}
-
-function mergeCanonicalSessionsWithScheduleSeeds(canonicalSessions, scheduleSeeds) {
-  const merged = (Array.isArray(canonicalSessions) ? canonicalSessions : []).map(session => ({
-    ...session,
-    sources: { ...(session?.sources || {}) }
-  }))
-
-  ;(Array.isArray(scheduleSeeds) ? scheduleSeeds : []).forEach(seed => {
-    const matchIdx = merged.findIndex(session => isObviousScheduleCanonicalDuplicate(session, seed))
-    if (matchIdx >= 0) {
-      const existing = merged[matchIdx]
-      merged[matchIdx] = {
-        ...existing,
-        sources: {
-          ...(existing?.sources || {}),
-          schedule: seed?.sources?.schedule || null
-        }
-      }
-      return
-    }
-    merged.push(seed)
-  })
-
-  return dedupeCanonicalSessions(merged)
-}
-
 const SCH_DAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 const _SCHED_V = 2;
 const SCH_META = {
@@ -5750,136 +7141,9 @@ const SCH_META = {
   Sat: { label:"Saturday",  theme:"Long Run",                venue:"—",    color:"#444"    },
   Sun: { label:"Sunday",    theme:"Aerobic Recovery",        venue:"—",    color:"#444"    },
 };
-const schMk = (r, w) => ({ r: String(r), w: String(w) });
-const SCH_PLAN = {
-  Mon: {
-    cardio: "Easy bike · 30–40 min · Zone 2 · After strength · Technogym or YMCA bike",
-    warmup: [],
-    topNote: null,
-    sections: [
-      { h: "A — Push Primary", ex: [
-        { id:"m1", name:"Chest Press",      sub:"Technogym machine",             def:[schMk(6,110),schMk(6,110),schMk(6,110)],               note:"2-0-2 tempo · full ROM" },
-        { id:"m2", name:"Incline Press",    sub:"DB incline / Smith low angle",  def:[schMk("8-12","—"),schMk("8-12","—"),schMk("8-12","—")], note:"Low incline · shoulder-safe" },
-      ]},
-      { h: "B — Shoulder", ex: [
-        { id:"m3", name:"Face Pull / ER",   sub:"Cable or resistance band",      def:[schMk("12-15","—"),schMk("12-15","—"),schMk("12-15","—")], note:"Elbows high · rear delt + rotator cuff" },
-        { id:"m4", name:"Shoulder Press",   sub:"Technogym / DB",                def:[schMk("8-12","—"),schMk("8-12","—")],                     note:"Neutral grip if neck tight" },
-      ]},
-      { h: "C — Triceps", ex: [
-        { id:"m5", name:"Triceps Overhead", sub:"Cable / 30 lb DB",              def:[schMk("8-12",30),schMk("8-12",30)],                       note:"Full stretch at top · smooth lockout" },
-        { id:"m6", name:"Triceps Pushdown", sub:"Cable pressdown",               def:[schMk("10-15",35),schMk("10-15",35),schMk("10-15",35)],   note:"Elbows fixed · full extension" },
-      ]},
-    ],
-  },
-  Tue: {
-    cardio: "600 yd swim · After KNR · Easy aerobic pace · No backstroke · Pull buoy if toe irritated",
-    warmup: [
-      "Stationary bike 5–10 min (light → moderate)",
-      "Standing calf raises 2×8 off step",
-      "Bodyweight squat 2×8 · band around knees optional",
-      "Ankle (L) inversion + dorsiflexion 2×10 · band assisted",
-      "Towel scrunches (L) 5 sets",
-    ],
-    topNote: "KNR Day 2 — Legs. Confirm exact movements and loads with your kinesiologist and update accordingly.",
-    sections: [
-      { h: "Glutes / Hips", ex: [
-        { id:"t1", name:"Hip Thrust",             sub:"Machine or Smith bar",          def:[schMk(10,115),schMk(8,135),schMk(8,165)],   note:"Full hip ext · pause at top · ribs down" },
-      ]},
-      { h: "Quads / Posterior Chain", ex: [
-        { id:"t2", name:"Leg Press — Heel Drive", sub:"Endurance protocol · machine",  def:[schMk(15,160),schMk(15,160),schMk(15,160)], note:"Heels high · controlled · endurance mode" },
-        { id:"t3", name:"KB RDL",                 sub:"Kettlebell · form focus",        def:[schMk(10,50),schMk(10,50),schMk(10,50)],    note:"Hinge not squat · flat back" },
-        { id:"t6", name:"Leg Curl",               sub:"Machine",                        def:[schMk(8,100),schMk(8,100),schMk(8,100)],    note:"3-count eccentric · slow lower" },
-        { id:"t7", name:"Leg Extension",          sub:"Machine",                        def:[schMk(12,80),schMk(12,80),schMk(12,80)],    note:"Full extension · controlled" },
-      ]},
-      { h: "Hip Stability", ex: [
-        { id:"t4", name:"Lateral Band Walk", sub:"Green band · ~15 ft per lap", def:[schMk("2 laps","band"),schMk("2 laps","band")], note:"Maintain tension throughout" },
-        { id:"t5", name:"Monster Walk",      sub:"Green band",                  def:[schMk("2 laps","band"),schMk("2 laps","band")], note:"Forward/diagonal · band above knees" },
-      ]},
-      { h: "Core", ex: [
-        { id:"t8", name:"Marches w/ Band", sub:"3×10 each side", def:[schMk("10e","band"),schMk("10e","band"),schMk("10e","band")], note:"Pelvic neutral · don't let hip drop" },
-        { id:"t9", name:"90/90 Bicycle",   sub:"3×30 sec",       def:[schMk("30s","BW"),schMk("30s","BW"),schMk("30s","BW")],     note:"Slow · controlled · back flat" },
-      ]},
-    ],
-  },
-  Wed: {
-    cardio: "Swim 800–1200 yd · Zone 2 aerobic only · No intervals · Row 20 min easy after",
-    warmup: [],
-    topNote: "Recovery day. No strength work. Swim and row only. Keep heart rate conversational throughout.",
-    sections: [],
-  },
-  Thu: {
-    cardio: "Moderate bike · 40–50 min · Zone 2–3 · After KNR · Technogym or YMCA bike",
-    warmup: [
-      "Cable shoulder ER/IR 2×10 @ 10 lb",
-      "Banded X's 2×8 each side",
-      "Arm circles 2×30 sec each direction",
-    ],
-    topNote: "KNR Day 4 — Back / Bi. Confirm exact movements and loads with your kinesiologist and update accordingly.",
-    sections: [
-      { h: "Back Primary", ex: [
-        { id:"th1", name:"Lat Pulldown",        sub:"Machine or cable",      def:[schMk("8-12","—"),schMk("8-12","—"),schMk("8-12","—")],    note:"Chest up · elbows to ribs · 2-1-2" },
-        { id:"th2", name:"Seated Row",          sub:"Cable · close grip",    def:[schMk("8-12","—"),schMk("8-12","—"),schMk("8-12","—")],    note:"Scapula retraction · don't round at finish" },
-        { id:"th3", name:"Chest-Supported Row", sub:"Machine or incline DB", def:[schMk("10-12","—"),schMk("10-12","—"),schMk("10-12","—")], note:"Chest on pad · full ROM" },
-      ]},
-      { h: "Biceps", ex: [
-        { id:"th4", name:"Biceps Curl",  sub:"Cable EZ curl / DB curl", def:[schMk("8-12",25),schMk("8-12",25),schMk("8-12",25)], note:"No sway · full elbow extension · 2-0-2" },
-        { id:"th5", name:"Hammer Curl", sub:"DB alternating",           def:[schMk("10-12","—"),schMk("10-12","—")],               note:"Neutral grip · full ROM" },
-      ]},
-    ],
-  },
-  Fri: {
-    cardio: "Long bike · 45–75 min · Zone 2 · After strength · Technogym or outdoor",
-    warmup: [
-      "Cat/Cows 10 slow",
-      "Glute Bridges 2×10",
-      "Hip CARs 8e slow",
-      "Arm circles 2×30 sec each direction",
-    ],
-    topNote: null,
-    sections: [
-      { h: "Hip", ex: [
-        { id:"f1", name:"Hip Abduction", sub:"Abductor machine",             def:[schMk(10,100),schMk(10,100),schMk(10,100)], note:"Full ROM · controlled return" },
-        { id:"f2", name:"Hip Adduction", sub:"Adductor machine",             def:[schMk(10,60),schMk(10,60),schMk(10,60)],   note:"Pelvic control throughout" },
-        { id:"f3", name:"KB Swing",      sub:"Kettlebell · hip hinge drive", def:[schMk(8,25),schMk(8,25),schMk(8,25)],     note:"Power from glutes · not arms" },
-      ]},
-      { h: "Anti-rotation Core", ex: [
-        { id:"f4", name:"Pallof Press", sub:"Cable · split stance", def:[schMk("8e",30),schMk("8e",30),schMk("8e",30)], note:"Brace · press slowly · zero rotation" },
-      ]},
-      { h: "Shoulder Health", ex: [
-        { id:"f5", name:"Shoulder Clock w/ Band", sub:"Resistance band", def:[schMk("5e","band"),schMk("5e","band"),schMk("5e","band")], note:"Full range · light load only" },
-      ]},
-      { h: "Core", ex: [
-        { id:"f6", name:"Russian Twists", sub:"3×30 sec", def:[schMk("30s","BW"),schMk("30s","BW"),schMk("30s","BW")], note:"Feet elevated optional · controlled" },
-      ]},
-    ],
-  },
-  Sat: {
-    cardio: "Long easy run · 30–60 min · Zone 2 · Build weekly · Conversational pace throughout",
-    warmup: [
-      "Dynamic leg swings 10e forward + lateral",
-      "Walking lunges 2×8",
-      "Ankle circles 10e each direction",
-      "Easy 5 min walk before running pace",
-    ],
-    topNote: "Run first. Calf and tibialis work after. Keep post-run strength brief and low-load — this is run resilience maintenance, not a training stimulus.",
-    sections: [
-      { h: "Calf / Ankle — Run Resilience", ex: [
-        { id:"s1", name:"Seated Calf Raise",     sub:"Machine or seated DB", def:[schMk("10-15","—"),schMk("10-15","—"),schMk("10-15","—"),schMk("10-15","—")], note:"Soleus focus · 2-2-3 tempo · full stretch" },
-        { id:"s2", name:"Single-Leg Calf Raise", sub:"DB or bodyweight",     def:[schMk("8-10/leg","BW"),schMk("8-10/leg","BW"),schMk("8-10/leg","BW")],      note:"3-count lower · full range" },
-        { id:"s3", name:"Tibialis Raise",         sub:"Wall shin raises",     def:[schMk("15-25","BW"),schMk("15-25","BW"),schMk("15-25","BW")],               note:"Heels on ground · toes up · stop if sharp shin pain" },
-      ]},
-    ],
-  },
-  Sun: {
-    cardio: "Long swim 1000–1500 yd · or Easy bike 45–60 min · Zone 1–2 · Aerobic recovery only · No strength",
-    warmup: [],
-    topNote: "Recovery day. Aerobic only. Choose swim or bike based on what feels fresher. No strength work.",
-    sections: [],
-  },
-};
 const schDefaultForDay = day => {
   const data = {};
-  (SCH_PLAN[day]?.sections || []).forEach(sec =>
+  (PLAN[day]?.sections || []).forEach(sec =>
     sec.ex.forEach(ex => { data[ex.id] = ex.def.map(s => ({...s})); })
   );
   return data;
@@ -5915,7 +7179,7 @@ function SchWarmupRow({ text }) {
 }
 
 function SchExCard({ ex, setData, accent, onUpdate, onAdd, onRemove }) {
-  const [collapsed, setCollapsed] = React.useState(false);
+  const [collapsed, setCollapsed] = React.useState(true);
   return (
     <div style={{ background:"#111", border:"1px solid #1a1a1a", borderRadius:8, marginBottom:7, overflow:"hidden", "--ac": accent }}>
       <div onClick={() => setCollapsed(v => !v)} style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", padding:"10px 12px 8px", cursor:"pointer" }}>
@@ -5979,7 +7243,7 @@ function SchLogView({ log, expanded, setExpanded, onDelete, onExport, onImport }
         // PATCHED: render plan exercises, then fall back to any imported slugs
         const allEx = [];
         const planIds = new Set();
-        (SCH_PLAN[entry.day]?.sections || []).forEach(sec =>
+        (PLAN[entry.day]?.sections || []).forEach(sec =>
           sec.ex.forEach(ex => {
             if (entry.data[ex.id]) { allEx.push({ ex, sets: entry.data[ex.id] }); planIds.add(ex.id); }
           })
@@ -6174,11 +7438,14 @@ const [error, setError] = useState("")
 const [storedWorkouts, setStoredWorkouts] = useState([])
 const [canonicalSessions, setCanonicalSessions] = useState([])
 const [healthFitDaily, setHealthFitDaily] = useState([])
+const [biometricRecords, setBiometricRecords] = useState(() => { try { return JSON.parse(localStorage.getItem("lift_biometric_records") || "[]") } catch { return [] } })
 const [sleepRecords, setSleepRecords] = useState(() => { try { return JSON.parse(localStorage.getItem("lift_sleep_records") || "[]") } catch { return [] } })
 const [schedLog, setSchedLog] = useState(() => { try { return JSON.parse(localStorage.getItem('wt-log') || '[]') } catch { return [] } })
 const [ocItems, setOcItems] = useState(() => { try { return JSON.parse(localStorage.getItem('oc-items') || '[]') } catch { return [] } })
+const [tendonStatus, setTendonStatus] = useState({ painScore: 0, stiffness: false, override: null })
+const [baseDataLoaded, setBaseDataLoaded] = useState(false)
 
-const scheduleCanonicalSeeds = useMemo(() => {
+const scheduleStrengthCanonicalSeeds = useMemo(() => {
   return (Array.isArray(schedLog) ? schedLog : [])
     .filter(e =>
       (e.exercises || []).some(ex => ex.variant !== "cardio") ||
@@ -6188,8 +7455,8 @@ const scheduleCanonicalSeeds = useMemo(() => {
 }, [schedLog])
 
 const unifiedCanonicalSessions = useMemo(() => {
-  return mergeCanonicalSessionsWithScheduleSeeds(canonicalSessions, scheduleCanonicalSeeds)
-}, [canonicalSessions, scheduleCanonicalSeeds])
+  return mergeCanonicalSessionsWithScheduleSeeds(canonicalSessions, scheduleStrengthCanonicalSeeds)
+}, [canonicalSessions, scheduleStrengthCanonicalSeeds])
 
   const activeWorkouts =
     unifiedCanonicalSessions && unifiedCanonicalSessions.length > 0
@@ -6198,12 +7465,43 @@ const unifiedCanonicalSessions = useMemo(() => {
 const fmt0 = n => Number.isFinite(Number(n)) ? Math.round(Number(n)).toLocaleString() : "0"
 const fmt1 = n => Number.isFinite(Number(n)) ? Number(n).toFixed(1) : "0.0"
 
+function getTechnogymSource(workout) {
+  return workout?.sources?.technogym ||
+    (String(workout?.source || "").toLowerCase() === "technogym" ? workout : null)
+}
+
+function getMetricValue(workout, key) {
+  return workout?.preferred_metrics?.[key]?.value ??
+    workout?.sources?.technogym?.[key] ??
+    workout?.[key] ??
+    null
+}
+
+function isTechnogymCyclingSession(workout) {
+  const technogym = getTechnogymSource(workout)
+  if (!technogym) return false
+
+  const tgType = String(
+    technogym?.type ||
+    technogym?.raw_type ||
+    technogym?.activity_type ||
+    ""
+  ).toLowerCase()
+
+  if (tgType.includes("cycl") || tgType.includes("bike") || tgType.includes("spin")) return true
+
+  const rpmAvg = getMetricValue(workout, "rpm_avg")
+  return rpmAvg !== null && Number.isFinite(Number(rpmAvg))
+}
+
 function normalizeWorkoutType(type, workout) {
   const t = String(type || "").toLowerCase()
 
   if (t.includes("traditional strength")) return "Strength"
   if (t.includes("functional strength")) return "Strength"
   if (t.includes("core")) return "Strength"
+
+  if (isTechnogymCyclingSession(workout)) return "Cycling"
 
   if (t.includes("running")) return "Running"
   if (t.includes("walking")) return "Walking"
@@ -6271,11 +7569,18 @@ function formatBucketLabel(dateStr, mode) {
 }
 function extractDistanceInfo(workout) {
   const pmDist = workout?.preferred_metrics?.distance
+  const pmSource = String(pmDist?.source || "").toLowerCase()
+  const pmUnit = pmDist?.unit ||
+    (pmSource.includes("technogym")
+      ? (workout?.sources?.technogym?.distance_unit || "m")
+      : pmSource.includes("apple")
+      ? workout?.sources?.apple?.distance_unit
+      : (workout?.sources?.technogym?.distance_unit || workout?.sources?.apple?.distance_unit || ""))
 
   const candidates = [
     {
       value: pmDist?.value,
-      unit: pmDist?.unit || workout?.sources?.apple?.distance_unit || workout?.sources?.technogym?.distance_unit || (pmDist?.source === "Technogym" ? "m" : "")
+      unit: pmUnit
 
     },
     {
@@ -6340,12 +7645,12 @@ function extractDistanceInfo(workout) {
       unit: workout?.total_distance_unit
     },
     {
-      value: workout?.sources?.apple?.distance,
-      unit: workout?.sources?.apple?.distance_unit
-    },
-    {
       value: workout?.sources?.technogym?.distance,
       unit: workout?.sources?.technogym?.distance_unit || "m"
+    },
+    {
+      value: workout?.sources?.apple?.distance,
+      unit: workout?.sources?.apple?.distance_unit
     }
   ]
 
@@ -6571,12 +7876,9 @@ const normalizedActiveWorkouts = useMemo(() => {
     // Normalize date: canonical sessions use "2026-01-01 15:46:19 -0600" or ISO format
     let dateStr = w.date || null
     if (!dateStr && w.start_date) {
-      // Replace space-separated offset format to make it parseable
-      const raw = String(w.start_date)
-const cleaned = raw.replace(/^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}) ([+-]\d{2}:\d{2})$/, '$1T$2$3')
-                          .replace(/^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}) ([+-])(\d{2})(\d{2})$/, '$1T$2$3$4:$5')
-const d = new Date(cleaned)
-dateStr = Number.isFinite(d.getTime()) ? d.toISOString().slice(0, 10) + 'T12:00:00' : null
+      const cleaned = normalizeDateString(w.start_date)
+      const d = cleaned ? new Date(cleaned) : new Date(NaN)
+      dateStr = Number.isFinite(d.getTime()) ? d.toISOString().slice(0, 10) + 'T12:00:00' : null
     }
 
     // For indoor sessions with no GPS distance, derive a duration-based proxy.
@@ -6600,9 +7902,14 @@ dateStr = Number.isFinite(d.getTime()) ? d.toISOString().slice(0, 10) + 'T12:00:
       type: rawType,
       category,
       distance,
+      distanceMiles: distance,
+      distance_miles: distance,
       calories: w.preferred_metrics?.calories?.value ?? w.calories ?? 0,
       hr: w.preferred_metrics?.hr?.value ?? w.hr ?? null,
-      dur: extractDurationMin(w)
+      dur: extractDurationMin(w),
+      power_avg: getMetricValue(w, "power_avg"),
+      rpm_avg: getMetricValue(w, "rpm_avg"),
+      level: getMetricValue(w, "level")
     }
   })
 }, [activeWorkouts])
@@ -6612,8 +7919,47 @@ function sameDay(a, b) {
 function closeEnough(a, b, tol = 10) {
   return Math.abs(Number(a || 0) - Number(b || 0)) <= tol
 }
+function getWorkoutScheduleId(workout) {
+  return workout?._scheduleId ??
+    workout?.sources?.schedule?._scheduleId ??
+    workout?.sources?.schedule?.id ??
+    workout?.sources?.schedule_workout?._scheduleId ??
+    workout?.sources?.schedule_workout?.id ??
+    workout?.overlap_summary?.schedule_id ??
+    workout?.overlap_summary?.schedule_workout_id ??
+    null
+}
+function areDuplicateOperationalWorkouts(imported, manual) {
+  const importedScheduleId = getWorkoutScheduleId(imported)
+  const manualScheduleId = getWorkoutScheduleId(manual)
+
+  if (importedScheduleId != null && manualScheduleId != null) {
+    return String(importedScheduleId) === String(manualScheduleId)
+  }
+
+  const importedDate = String(imported?.dateTime || imported?.date || imported?.start_date || "").slice(0, 10)
+  const manualDate = String(manual?.dateTime || manual?.date || manual?.start_date || "").slice(0, 10)
+  if (!importedDate || importedDate !== manualDate) return false
+
+  const importedType = normalizeWorkoutType(imported?.type || imported?.canonical_type || imported?.category, imported)
+  const manualType = normalizeWorkoutType(manual?.type || manual?.canonical_type || manual?.category, manual)
+  if (importedType !== manualType) return false
+
+  const importedDuration = Number(imported?.dur ?? imported?.duration_min ?? 0)
+  const manualDuration = Number(manual?.dur ?? manual?.duration_min ?? 0)
+  if (!Number.isFinite(importedDuration) || !Number.isFinite(manualDuration) || !closeEnough(importedDuration, manualDuration, 15)) return false
+
+  const importedDistance = Number(imported?.distance ?? 0)
+  const manualDistance = Number(manual?.distance ?? 0)
+  if (importedDistance > 0 || manualDistance > 0) {
+    return closeEnough(importedDistance, manualDistance, 0.15)
+  }
+
+  return true
+}
 const normalizedStoredWorkouts = useMemo(() => {
-  return (Array.isArray(storedWorkouts) ? storedWorkouts : []).map(w => {
+  const scheduleRows = buildScheduleCardioWorkoutsFromLog(schedLog)
+  const legacyRows = (Array.isArray(storedWorkouts) ? storedWorkouts : []).map(w => {
     const rawType = w.type || "Other"
     const category = normalizeWorkoutType(rawType, w)
 
@@ -6626,18 +7972,38 @@ const normalizedStoredWorkouts = useMemo(() => {
       type: rawType,
       category,
       distance: normalizeDistanceToMiles(w),
+      distanceMiles: normalizeDistanceToMiles(w),
+      distance_miles: normalizeDistanceToMiles(w),
       calories: Number(w.calories || 0),
       hr: w.hr != null ? Number(w.hr) : null,
       dur: extractDurationMin(w)
     }
   })
-}, [storedWorkouts])
+
+  const scheduleIds = new Set(
+    scheduleRows
+      .map(w => String(w._scheduleId || w.session_id || ""))
+      .filter(Boolean)
+  )
+
+  const legacyOnly = legacyRows.filter(w => {
+    const id = String(w._scheduleId || w.session_id || "")
+    return !id || !scheduleIds.has(id)
+  })
+
+  return [...scheduleRows, ...legacyOnly].sort((a, b) =>
+    String(a.dateTime || a.date || "").localeCompare(String(b.dateTime || b.date || ""))
+  )
+}, [schedLog, storedWorkouts])
 
 const operationalWorkouts = useMemo(() => {
   const imported = Array.isArray(normalizedActiveWorkouts) ? normalizedActiveWorkouts : []
   const manual = Array.isArray(normalizedStoredWorkouts) ? normalizedStoredWorkouts : []
+  const manualOnly = manual.filter(manualWorkout =>
+    !imported.some(importedWorkout => areDuplicateOperationalWorkouts(importedWorkout, manualWorkout))
+  )
 
-  return [...imported, ...manual].sort((a, b) =>
+  return [...imported, ...manualOnly].sort((a, b) =>
     String(a.dateTime || a.date || "").localeCompare(String(b.dateTime || b.date || ""))
   )
 }, [normalizedActiveWorkouts, normalizedStoredWorkouts])
@@ -6743,11 +8109,153 @@ useEffect(() => {
       } catch (err) {
         if (process.env.NODE_ENV === "development") console.log(err)
         setError(String(err))
+      } finally {
+        setBaseDataLoaded(true)
       }
     }
 
     loadData()
-  }, [])
+}, [])
+
+useEffect(() => {
+  const readLocalImportDiagnostic = key => {
+    try {
+      const raw = localStorage.getItem(key)
+      if (raw == null) return { present: false, count: 0 }
+      const parsed = JSON.parse(raw)
+      return { present: true, count: Array.isArray(parsed) ? parsed.length : null }
+    } catch (err) {
+      return { present: true, count: null, error: err?.message || String(err) }
+    }
+  }
+
+  const migrationSummary = {
+    supabaseClientExists: Boolean(supabase),
+    signedInUserExists: Boolean(session?.user?.id),
+    userId: session?.user?.id || null,
+    baseDataLoaded: Boolean(baseDataLoaded),
+    localStorage: {
+      liftCanonicalSessions: readLocalImportDiagnostic("lift_canonical_sessions"),
+      liftSleepRecords: readLocalImportDiagnostic("lift_sleep_records"),
+      liftHealthfitDaily: readLocalImportDiagnostic("lift_healthfit_daily"),
+      healthfitDaily: readLocalImportDiagnostic("healthfit-daily"),
+      liftBiometricRecords: readLocalImportDiagnostic("lift_biometric_records")
+    },
+    attempts: {
+      canonical_sessions: 0,
+      sleep_records: 0,
+      healthfit_daily: 0,
+      biometric_records: 0
+    },
+    successes: {
+      canonical_sessions: 0,
+      sleep_records: 0,
+      healthfit_daily: 0,
+      biometric_records: 0
+    },
+    failures: {},
+    earlyExitReason: null
+  }
+
+  console.log("Core imported data migration entered", migrationSummary)
+
+  const earlyExitReasons = []
+  if (!baseDataLoaded) earlyExitReasons.push("baseDataLoaded is false")
+  if (!supabase) earlyExitReasons.push("Supabase client is missing")
+  if (!session?.user?.id) earlyExitReasons.push("signed-in user id is missing")
+
+  if (earlyExitReasons.length) {
+    migrationSummary.earlyExitReason = earlyExitReasons.join("; ")
+    console.warn("Core imported data migration exiting early", migrationSummary)
+    console.log("Core imported data migration final summary", migrationSummary)
+    return
+  }
+
+  let cancelled = false
+
+  ;(async () => {
+    try {
+      const userId = session.user.id
+      const storedHealthfitDaily = store?.get ? await store.get("healthfit-daily") : []
+      const healthfitDailyStoreCount = Array.isArray(storedHealthfitDaily) ? storedHealthfitDaily.length : 0
+      migrationSummary.store = {
+        healthfitDaily: {
+          present: Array.isArray(storedHealthfitDaily),
+          count: healthfitDailyStoreCount
+        }
+      }
+
+      const runMigration = async (tableName, attemptCount, migrate) => {
+        migrationSummary.attempts[tableName] = attemptCount
+        console.log("Core imported data migration table attempt", { tableName, attemptCount })
+        try {
+          const migrated = await migrate()
+          migrationSummary.successes[tableName] = Array.isArray(migrated) ? migrated.length : 0
+          console.log("Core imported data migration table success", {
+            tableName,
+            successCount: migrationSummary.successes[tableName]
+          })
+          return migrated
+        } catch (err) {
+          migrationSummary.failures[tableName] = err?.message || String(err)
+          console.error("Core imported data migration table failure", { tableName, error: err })
+          throw err
+        }
+      }
+
+      const [
+        migratedCanonicalSessions,
+        migratedSleepRecords,
+        migratedHealthFitDaily,
+        migratedBiometricRecords
+      ] = await Promise.all([
+        runMigration("canonical_sessions", migrationSummary.localStorage.liftCanonicalSessions.count || 0, () =>
+          migrateLocalCanonicalSessions(supabase, userId, { removeLocal: false })
+        ),
+        runMigration("sleep_records", migrationSummary.localStorage.liftSleepRecords.count || 0, () =>
+          migrateLocalSleepRecords(supabase, userId, { removeLocal: false })
+        ),
+        runMigration("healthfit_daily", (migrationSummary.localStorage.healthfitDaily.count || 0) + healthfitDailyStoreCount, () =>
+          migrateLocalHealthfitDaily(supabase, userId, store, { removeLocal: false })
+        ),
+        runMigration("biometric_records", migrationSummary.localStorage.liftBiometricRecords.count || 0, () =>
+          migrateLocalBiometricRecords(supabase, userId, { removeLocal: false })
+        )
+      ])
+      console.log("Core imported data migration summary", {
+        canonicalSessions: migratedCanonicalSessions.length,
+        sleepRecords: migratedSleepRecords.length,
+        healthFitDaily: migratedHealthFitDaily.length,
+        biometricRecords: migratedBiometricRecords.length
+      })
+
+      const [
+        remoteCanonicalSessions,
+        remoteSleepRecords,
+        remoteHealthFitDaily,
+        remoteBiometricRecords
+      ] = await Promise.all([
+        loadCanonicalSessions(supabase, userId),
+        loadSleepRecords(supabase, userId),
+        loadHealthfitDaily(supabase, userId),
+        loadBiometricRecords(supabase, userId)
+      ])
+
+      if (cancelled) return
+      if (remoteCanonicalSessions.length) setCanonicalSessions(remoteCanonicalSessions)
+      if (remoteSleepRecords.length) setSleepRecords(remoteSleepRecords)
+      if (remoteHealthFitDaily.length) setHealthFitDaily(remoteHealthFitDaily)
+      if (remoteBiometricRecords.length) setBiometricRecords(remoteBiometricRecords)
+    } catch (err) {
+      console.error("Core imported data migration/hydration failed:", err)
+      if (process.env.NODE_ENV === "development") console.warn("Core imported data hydration failed:", err)
+    } finally {
+      console.log("Core imported data migration final summary", migrationSummary)
+    }
+  })()
+
+  return () => { cancelled = true }
+}, [baseDataLoaded, session?.user?.id, supabase])
 
 useEffect(() => {
   if (!supabase) return
@@ -6884,10 +8392,33 @@ useEffect(() => {
     }
   })()
 }, [hydrated, session?.user?.id])
+  const dailyWithBiometrics = useMemo(() => {
+    const byDate = {}
+
+    ;(Array.isArray(daily) ? daily : []).forEach(row => {
+      if (row?.date) byDate[row.date] = { ...row }
+    })
+
+    ;(Array.isArray(biometricRecords) ? biometricRecords : []).forEach(row => {
+      const date = String(row?.measured_date || row?.date || row?.measured_at || row?.timestamp || "").slice(0, 10)
+      const weight = Number(row?.weight_lb ?? row?.weight ?? row?.weight_lbs_mean)
+      if (!date || !Number.isFinite(weight) || weight <= 0) return
+
+      byDate[date] = {
+        ...(byDate[date] || { date }),
+        date,
+        weight_lb: weight,
+        weight_source: row?.source || "biometric_records"
+      }
+    })
+
+    return Object.values(byDate).sort((a, b) => String(a.date).localeCompare(String(b.date)))
+  }, [daily, biometricRecords])
+
   const latestWeight = useMemo(() => {
-    if (!daily.length) return null
-    return daily[daily.length - 1]
-  }, [daily])
+    if (!dailyWithBiometrics.length) return null
+    return dailyWithBiometrics[dailyWithBiometrics.length - 1]
+  }, [dailyWithBiometrics])
 
   const latestNutrition = useMemo(() => {
     if (!nutrition.length) return null
@@ -6905,20 +8436,20 @@ useEffect(() => {
   }, [rangeKey])
 
   const filteredDaily = useMemo(() => {
-  if (!daily.length) return []
-  if (selectedRangePoints == null) return daily
+  if (!dailyWithBiometrics.length) return []
+  if (selectedRangePoints == null) return dailyWithBiometrics
   const cutoff = new Date()
   cutoff.setDate(cutoff.getDate() - selectedRangePoints)
   cutoff.setHours(0, 0, 0, 0)
-  return daily.filter(row => {
+  return dailyWithBiometrics.filter(row => {
     const d = new Date(String(row.date || "").slice(0, 10) + "T12:00:00")
     return Number.isFinite(d.getTime()) && d >= cutoff
   })
-}, [daily, selectedRangePoints])
+}, [dailyWithBiometrics, selectedRangePoints])
 
   const mergedDailyWeights = useMemo(() => {
-    return [...daily].sort((a, b) => String(a.date).localeCompare(String(b.date)))
-  }, [daily])
+    return [...dailyWithBiometrics].sort((a, b) => String(a.date).localeCompare(String(b.date)))
+  }, [dailyWithBiometrics])
 
   const recentWeights = useMemo(() => {
     if (!filteredDaily.length) return []
@@ -6958,10 +8489,19 @@ const overviewWeightDomain = useMemo(() => {
 
   if (!vals.length) return [140, 190]
 
-  return [
-    Math.floor(Math.min(...vals)) - 2,
-    Math.ceil(Math.max(...vals)) + 2
-  ]
+  const minVal = Math.min(...vals)
+  const maxVal = Math.max(...vals)
+  let low = Math.floor(minVal) - 3
+  let high = Math.ceil(maxVal) + 3
+  const minSpan = 18
+
+  if ((high - low) < minSpan) {
+    const mid = (high + low) / 2
+    low = Math.floor(mid - minSpan / 2)
+    high = Math.ceil(mid + minSpan / 2)
+  }
+
+  return [low, high]
 }, [weightSmoothed])
   const dexaSeries = useMemo(() => {
     if (!dexa.length) return []
@@ -7704,12 +9244,12 @@ const trainingLoadDistanceMax = useMemo(() => {
 }, [trainingLoadChartData])
 const bodyForecast = useMemo(() => {
   return buildBodyForecast({
-    daily,
+    daily: dailyWithBiometrics,
     nutritionRows: dailyNutritionSummary,
     recentCardioMinutes: trainingSummary?.cardioMinutesWeekly || 0,
     bmr: null
   })
-}, [daily, dailyNutritionSummary, trainingSummary])
+}, [dailyWithBiometrics, dailyNutritionSummary, trainingSummary])
 
 const injuryPenalties = useMemo(() => {
   return getInjuryPenalties()
@@ -7758,14 +9298,14 @@ const latestHealthFit = useMemo(() => {
 }, [healthFitDaily])
 
 const computedTSB = useMemo(() => {
-  if (!canonicalSessions?.length) return null;
+  if (!unifiedCanonicalSessions?.length) return null;
   const INTENSITY = {
     Running: 1.0, Cycling: 0.55, "Indoor Cycling": 0.6,
     Swimming: 1.1, "Traditional Strength Training": 0.7,
     "Functional Strength Training": 0.65, Walking: 0.3
   };
   const dailyLoad = { all: {}, Running: {}, Cycling: {}, Swimming: {} };
-  canonicalSessions.forEach(s => {
+  unifiedCanonicalSessions.forEach(s => {
     const d = (s.start_date || s.dateTime || "").slice(0, 10);
     if (!d) return;
     const dur = s.duration_min || (s.duration_sec / 60) || 0;
@@ -7796,7 +9336,18 @@ const computedTSB = useMemo(() => {
     cycling: calcTSB(dailyLoad.Cycling),
     swimming: calcTSB(dailyLoad.Swimming),
   };
-}, [canonicalSessions])
+}, [unifiedCanonicalSessions])
+
+const ocConstraintState = useMemo(() => {
+  return buildOcConstraintState({
+    ocItems,
+    sleepRecords,
+    healthFitDaily,
+    computedTSB,
+    weeklyTrainingBuckets,
+    workouts: operationalWorkouts
+  })
+}, [ocItems, sleepRecords, healthFitDaily, computedTSB, weeklyTrainingBuckets, operationalWorkouts])
 
 const tsbV2Panel = useMemo(() => {
   const tau1 = LIFT_CONFIG.tau1, tau2 = LIFT_CONFIG.tau2, lookbackDays = selectedRangePoints ?? 90, warmupDays = 42
@@ -7807,7 +9358,7 @@ const tsbV2Panel = useMemo(() => {
     dayKeys.push(d.toISOString().slice(0,10))
   const mkL = () => ({ overall:0, running:0, cycling:0, swimming:0, strength:0 })
   const dailyLoads = Object.fromEntries(dayKeys.map(k => [k, mkL()]))
-  const wkts = Array.isArray(normalizedActiveWorkouts) ? normalizedActiveWorkouts : []
+  const wkts = Array.isArray(operationalWorkouts) ? operationalWorkouts : []
   wkts.forEach(w => {
     const date = String(w.date || '').slice(0,10)
     if (!dailyLoads[date]) return
@@ -7849,7 +9400,7 @@ const tsbV2Panel = useMemo(() => {
     : null
   const risk = riskFromOC ?? (tsbNow < -25 ? 'red' : tsbNow < -15 ? 'orange' : tsbNow < -8 ? 'yellow' : 'green')
   return { rows, alerts: [], readinessRiskLabel: risk, readinessDetail: { score: readinessScore ?? Math.round(50 + tsbNow) } }
-}, [normalizedActiveWorkouts, schedLog, ocItems, readinessScore, selectedRangePoints])
+}, [operationalWorkouts, schedLog, ocItems, readinessScore, selectedRangePoints])
 
 const operationalCapacityData = useMemo(() => {
   const items = Array.isArray(ocItems) ? ocItems : []
@@ -7884,15 +9435,12 @@ const operationalCapacityData = useMemo(() => {
 
   if (!datedEntries.length) return []
 
-  const firstDate = new Date(datedEntries[0]._start)
-  firstDate.setHours(0, 0, 0, 0)
-
   const endDate = new Date(today)
   endDate.setDate(endDate.getDate() + 60)
 
   const series = []
 
-  for (let d = new Date(firstDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+  for (let d = new Date(today); d <= endDate; d.setDate(d.getDate() + 1)) {
     const acuteLoss = datedEntries
       .filter(e => e._category === "acute")
       .reduce((sum, e) => {
@@ -7954,7 +9502,7 @@ const bodyCompositionOverviewData = useMemo(() => {
     estimatedCurrentBF != null
       ? [{
           date: new Date().toISOString().slice(0, 10),
-          label: daily?.length ? fmtShortDate(daily[daily.length - 1]?.date) : "Current",
+          label: dailyWithBiometrics?.length ? fmtShortDate(dailyWithBiometrics[dailyWithBiometrics.length - 1]?.date) : "Current",
           dexaBF: null,
           estimatedBF: Number(estimatedCurrentBF)
         }]
@@ -7965,7 +9513,7 @@ const bodyCompositionOverviewData = useMemo(() => {
     .sort((a, b) => String(a.date).localeCompare(String(b.date)))
 
   return merged
-}, [dexaSeries, estimatedCurrentBF, daily])
+}, [dexaSeries, estimatedCurrentBF, dailyWithBiometrics])
 
 const bodyCompositionOverviewDomain = useMemo(() => {
   const vals = bodyCompositionOverviewData
@@ -7994,8 +9542,14 @@ const enduranceForecast = useMemo(() => {
 const racePrediction = useMemo(() => {
   return buildRacePrediction(enduranceForecast)
 }, [enduranceForecast])
+const runningReadiness = useMemo(() => {
+  return buildRunningReadinessController({
+    workouts: operationalWorkouts,
+    ocConstraintState
+  })
+}, [operationalWorkouts, ocConstraintState])
 const readinessProjectionData = useMemo(() => {
-  if (!enduranceForecast) return []
+  if (!enduranceForecast || !runningReadiness) return []
 
   const rNow = Number(enduranceForecast.readinessNow ?? 0) > 0 ? Number(enduranceForecast.readinessNow) : 50
   const anchors = [
@@ -8028,51 +9582,32 @@ const readinessProjectionData = useMemo(() => {
     return Math.max(0, Math.min(100, last.readiness + slope * (month - last.month)))
   }
 
-const eventThresholds = {
-  fiveK: 45,
-  tenK: 58,
-  half: 70,
-  tri: 88
-}
+  const clamp = (v, lo = 0, hi = 100) => Math.min(hi, Math.max(lo, v))
+  const eventAdjustments = {
+    fiveK: 6,
+    tenK: 0,
+    half: -8,
+    tri: -14
+  }
 
-  const logisticPct = (month, threshold, k, offset) =>
-    Number((100 / (1 + Math.exp(-k * (month + offset - threshold)))).toFixed(1))
-
-  // AFTER: activity-specific starting readiness from CTL
-const currentCTL = computedTSB?.global?.ctl ?? enduranceForecast?.ctl ?? 30
-const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v))
-
-// CTL thresholds calibrated to tau1=27 fitted model
-// [minFeasible, optimalBase] for each activity
-const activityR = {
-  fiveK: clamp(Math.round(1 + 98 * (currentCTL - 15) / (35 - 15)), 1, 99),
-  tenK:  clamp(Math.round(1 + 98 * (currentCTL - 25) / (50 - 25)), 1, 99),
-  half:  clamp(Math.round(1 + 98 * (currentCTL - 35) / (65 - 35)), 1, 99),
-  tri:   clamp(Math.round(1 + 98 * (currentCTL - 40) / (75 - 40)), 1, 99),
-}
-const offsets = {
-  fiveK: 4  - Math.log(100/activityR.fiveK - 1) / 0.30,
-  tenK:  8  - Math.log(100/activityR.tenK  - 1) / 0.24,
-  half:  14 - Math.log(100/activityR.half  - 1) / 0.20,
-  tri:   20 - Math.log(100/activityR.tri   - 1) / 0.18,
-}
-
-  const maxMonth = 24
+  const maxMonth = 12
   const series = []
 
   for (let month = 0; month <= maxMonth; month += 1) {
+    const baseReadiness = Number(interpolateBaseReadiness(month).toFixed(1))
     series.push({
       month,
       label: month === 0 ? "Now" : `${month}M`,
-      fiveK: logisticPct(month, 4,  0.30, offsets.fiveK),
-      tenK:  logisticPct(month, 8,  0.24, offsets.tenK),
-      half:  logisticPct(month, 14, 0.20, offsets.half),
-      tri:   logisticPct(month, 20, 0.18, offsets.tri),
+      baseReadiness,
+      fiveK: Number(clamp(runningReadiness.completionReadiness?.fiveK ?? 0).toFixed(1)),
+      tenK:  Number(clamp(runningReadiness.completionReadiness?.tenK ?? 0).toFixed(1)),
+      half:  Number(clamp(runningReadiness.completionReadiness?.half ?? 0).toFixed(1)),
+      tri:   Number(clamp(baseReadiness + eventAdjustments.tri).toFixed(1)),
     })
   }
 
   return series
-}, [enduranceForecast])
+}, [enduranceForecast, runningReadiness])
 const eventReadinessMarkers = useMemo(() => {
   if (!readinessProjectionData?.length) return []
 
@@ -8297,6 +9832,16 @@ const calorieChartData = useMemo(() => {
   }
   return rows
 }, [filteredNutrition, calorieTarget, templateTotals, selectedRangePoints])
+const overviewCaloriesDomain = useMemo(() => {
+  const vals = calorieChartData
+    .flatMap(row => [Number(row.calories), Number(row.target), Number(row.calories_7d)])
+    .filter(v => Number.isFinite(v) && v > 0)
+
+  if (!vals.length) return [1200, 3000]
+
+  const upper = Math.max(3000, Math.ceil(Math.max(...vals) / 250) * 250)
+  return [1200, upper]
+}, [calorieChartData])
 
 const tsbOverviewData = useMemo(() => {
   const arr = Array.isArray(healthFitDaily) ? healthFitDaily : []
@@ -8723,7 +10268,7 @@ return (
           <ComposedChart data={panel.rows} margin={{ top:12, right:16, left:45, bottom:20 }}>
             <CartesianGrid stroke="#1a1b2e" />
             <XAxis dataKey="label" tick={{ fontSize:10 }} interval={Math.max(1, Math.floor((panel.rows.length||1)/12)-1)} />
-            <YAxis domain={['auto','auto']} label={{ value:'TSB', angle:-90, position:'insideLeft', fill:'#9ca3af', style:{ textAnchor:'middle' } }} />
+            <YAxis domain={[-40, 20]} label={{ value:'TSB', angle:-90, position:'insideLeft', fill:'#9ca3af', style:{ textAnchor:'middle' } }} />
             <ReferenceLine y={0} stroke="#444" strokeDasharray="3 3" />
             <Tooltip formatter={(v,n) => [Number(v).toFixed(2), n]} />
             {/* Icon legend — replaces Recharts Legend */}
@@ -8879,7 +10424,7 @@ return (
   }}
 />
             <YAxis
-  domain={[0, chartMaxCalories]}
+  domain={overviewCaloriesDomain}
   label={{
     value: "Calories (kcal/day)",
     angle: -90,
@@ -8909,7 +10454,7 @@ return (
             />
             <Line
               type="monotone"
-              dataKey="calories7"
+              dataKey="calories_7d"
               stroke="#ffffff"
               strokeWidth={2}
               dot={false}
@@ -9160,14 +10705,14 @@ return (
   </ResponsiveContainer>
 </div>
 
-<div style={{ ...cardStyle(), minWidth: "0" }}>
-  <div style={{ fontWeight: "bold", marginBottom: "12px", minHeight: "20px" }}>
-    Operational Capacity
-  </div>
-  {(!operationalCapacityData || operationalCapacityData.length === 0) ? (
-    <div style={{ fontSize: "12px", color: "#444", textAlign: "center", padding: "40px 0" }}>
-      No issues logged — add issues in the Operational Capacity tab to see history.
-    </div>
+	<div style={{ ...cardStyle(), minWidth: "0" }}>
+	  <div style={{ fontWeight: "bold", marginBottom: "12px", minHeight: "20px" }}>
+	    Operational Capacity Projection
+	  </div>
+	  {(!operationalCapacityData || operationalCapacityData.length === 0) ? (
+	    <div style={{ fontSize: "12px", color: "#444", textAlign: "center", padding: "40px 0" }}>
+	      No current OC issues — true historical snapshots are not stored yet.
+	    </div>
   ) : (
     <ResponsiveContainer width="100%" height={300}>
       <LineChart data={operationalCapacityData} margin={{ top: 20, right: 20, left: 55, bottom: 35 }}>
@@ -9678,6 +11223,9 @@ return (
     latestHealthFit={latestHealthFit}
     ocItems={ocItems}
     computedTSB={computedTSBFromSessions ?? computedTSB}
+    progressionReadiness={ocConstraintState?.gate?.progressionReadiness ?? "hold"}
+    progressionReasons={ocConstraintState?.gate?.progressionReasons ?? []}
+    tendonStatus={ocConstraintState?.tendon ?? { painScore: 0, stiffness: false, override: null }}
   />
 )}
 
@@ -9930,8 +11478,47 @@ return (
           <Line type="monotone" dataKey="half"          name="Half readiness" stroke="#facc15" strokeWidth={1} strokeDasharray="4 3" dot={false} />
         </LineChart>
       </ResponsiveContainer>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "10px", marginTop: "12px", marginBottom: "12px" }}>
+        <label style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "12px" }}>
+          <span>Tendon pain: {tendonStatus.painScore}/10</span>
+          <input
+            type="range"
+            min={0}
+            max={10}
+            step={1}
+            value={tendonStatus.painScore}
+            onChange={e => setTendonStatus(prev => ({ ...prev, painScore: Number(e.target.value) || 0 }))}
+          />
+        </label>
+        <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px" }}>
+          <input
+            type="checkbox"
+            checked={tendonStatus.stiffness}
+            onChange={e => setTendonStatus(prev => ({ ...prev, stiffness: e.target.checked }))}
+          />
+          <span>Morning stiffness</span>
+        </label>
+        <label style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "12px" }}>
+          <span>Tendon override</span>
+          <select
+            value={tendonStatus.override ?? ""}
+            onChange={e => setTendonStatus(prev => ({ ...prev, override: e.target.value || null }))}
+            style={{ background: "#0d0e1c", color: "#e5e7eb", border: "1px solid #2a2d44", borderRadius: "6px", padding: "6px 8px" }}
+          >
+            <option value="">None</option>
+            <option value="hold">Hold</option>
+            <option value="deload">Deload</option>
+          </select>
+        </label>
+      </div>
+      <div style={{ fontSize: "12px", opacity: 0.75, marginTop: "8px" }}>
+        Tendon: pain {tendonStatus.painScore}/10 · stiffness {tendonStatus.stiffness ? "yes" : "no"} · override {tendonStatus.override || "none"} · progression {runningReadiness?.progressionReadiness ?? "hold"}
+      </div>
+      <div style={{ fontSize: "12px", opacity: 0.75, marginTop: "6px" }}>
+        Reasons: {runningReadiness?.progressionReasons?.length ? runningReadiness.progressionReasons.join(" · ") : "none"}
+      </div>
       <div style={{ fontSize: "12px", opacity: 0.7, marginTop: "8px" }}>
-        Running: {enduranceForecast.weeklyRunMiles28} mi/week · pace {enduranceForecast.avgPace28 || "NA"} min/mi · cardio {Math.round(enduranceForecast.cardioMinutesWeekly)} min/week · run modifier {((enduranceForecast.runPenalty ?? 1) * 100).toFixed(0)}%
+        Running: {enduranceForecast.weeklyRunMiles28} mi/week · longest {runningReadiness?.signals?.recentLongestRunMiles ?? "NA"} mi · frequency {runningReadiness?.signals?.recentRunFrequency ?? "NA"}/week · progression {runningReadiness?.progressionReadiness ?? "hold"} · pace {enduranceForecast.avgPace28 || "NA"} min/mi · cardio {Math.round(enduranceForecast.cardioMinutesWeekly)} min/week · run modifier {((enduranceForecast.runPenalty ?? 1) * 100).toFixed(0)}%
       </div>
     </div>
 
@@ -10158,6 +11745,7 @@ return (
     setCanonicalSessions={setCanonicalSessions}
     setHealthFitDaily={setHealthFitDaily}
     setSleepRecords={setSleepRecords}
+    setBiometricRecords={setBiometricRecords}
   />
 )}
 
