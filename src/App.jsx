@@ -6887,11 +6887,33 @@ function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily,
           ? await loadCanonicalSessions(supabase, STORE_USER_ID).catch(() => canonicalSessions)
           : canonicalSessions
         const mergedSessions = dedupeCanonicalSessions([...(Array.isArray(existingCanonical) ? existingCanonical : []), ...sessions])
-        localStorage.setItem("lift_canonical_sessions", JSON.stringify(mergedSessions))
-        setCanonicalSessions(mergedSessions)
+        // Restore Technogym distance to sessions where Apple/FitnessView reported 0
+        const distanceEnriched = mergedSessions.map(session => {
+          const existingDist = session?.preferred_metrics?.distance?.value
+          if (Number.isFinite(Number(existingDist)) && Number(existingDist) > 0) return session
+
+          const tgDist = session?.sources?.technogym?.HDistance
+            ?? session?.sources?.technogym?.distance
+          if (!Number.isFinite(Number(tgDist)) || Number(tgDist) <= 0) return session
+
+          const distMiles = Number(tgDist) / 1609.34
+          return {
+            ...session,
+            preferred_metrics: {
+              ...(session.preferred_metrics || {}),
+              distance: {
+                value: distMiles,
+                unit: "mi",
+                source: "technogym:HDistance"
+              }
+            }
+          }
+        })
+        localStorage.setItem("lift_canonical_sessions", JSON.stringify(distanceEnriched))
+        setCanonicalSessions(distanceEnriched)
         committed += sessions.length
         if (supabase && STORE_USER_ID) {
-          await upsertCanonicalSessions(supabase, STORE_USER_ID, sessions)
+          await upsertCanonicalSessions(supabase, STORE_USER_ID, distanceEnriched)
           const remoteSessions = await loadCanonicalSessions(supabase, STORE_USER_ID)
           localStorage.setItem("lift_canonical_sessions", JSON.stringify(remoteSessions))
           setCanonicalSessions(remoteSessions)
@@ -9846,6 +9868,42 @@ const displayedTendonStatus = ocConstraintState?.tendon ?? tendonStatus
 const ocProgressionReadiness = ocConstraintState?.gate?.progressionReadiness ?? "progress"
 const ocProgressionReasons = ocConstraintState?.gate?.progressionReasons ?? []
 const currentOcReadiness = Number.isFinite(Number(readinessScore)) ? Number(readinessScore) : null
+function getPlannedLongRunAtMonth(hmPlanLongRun, monthsFromNow) {
+  const targetDate = new Date()
+  targetDate.setDate(targetDate.getDate() + Math.round(monthsFromNow * 30.44))
+  const targetMs = targetDate.getTime()
+
+  const keys = Object.keys(hmPlanLongRun).sort()
+  if (!keys.length) return null
+
+  const lastKey = keys[keys.length - 1]
+  const lastDate = new Date(lastKey)
+
+  if (targetMs > lastDate.getTime() + 21 * 86400000) return null
+
+  const windowMs = 21 * 86400000
+  let best = null
+  for (const k of keys) {
+    const diff = Math.abs(new Date(k).getTime() - targetMs)
+    if (diff <= windowMs) {
+      const val = hmPlanLongRun[k]
+      if (best === null || val > best) best = val
+    }
+  }
+
+  if (best === null) {
+    let closestDiff = Infinity
+    for (const k of keys) {
+      const diff = Math.abs(new Date(k).getTime() - targetMs)
+      if (diff < closestDiff) {
+        closestDiff = diff
+        best = hmPlanLongRun[k]
+      }
+    }
+  }
+
+  return best
+}
 const readinessProjectionData = useMemo(() => {
   if (!enduranceForecast || !runningReadiness) return []
 
@@ -9884,69 +9942,43 @@ const readinessProjectionData = useMemo(() => {
   }
 
   const clamp = (v, lo = 0, hi = 100) => Math.min(hi, Math.max(lo, v))
-  const longRunPlanPoints = Object.entries(HM_PLAN_LONG_RUN)
-    .map(([weekKey, miles]) => ({
-      ts: Date.parse(`${weekKey}T12:00:00`),
-      miles: Number(miles)
-    }))
-    .filter(point => Number.isFinite(point.ts) && Number.isFinite(point.miles))
-    .sort((a, b) => a.ts - b.ts)
-  const interpolatePlannedLongRunMiles = month => {
-    if (!longRunPlanPoints.length) return null
-    const target = new Date()
-    target.setHours(12, 0, 0, 0)
-    target.setMonth(target.getMonth() + month)
-    const targetTs = target.getTime()
-
-    if (targetTs <= longRunPlanPoints[0].ts) return longRunPlanPoints[0].miles
-
-    for (let i = 1; i < longRunPlanPoints.length; i += 1) {
-      const prev = longRunPlanPoints[i - 1]
-      const curr = longRunPlanPoints[i]
-      if (targetTs <= curr.ts) {
-        const frac = (targetTs - prev.ts) / (curr.ts - prev.ts || 1)
-        return prev.miles + frac * (curr.miles - prev.miles)
-      }
-    }
-
-    return longRunPlanPoints[longRunPlanPoints.length - 1].miles
-  }
-  const projectEventReadiness = (month, distanceMiles, volumeThresholds, fallbackValue) => {
-    const projectedLongRunMiles = interpolatePlannedLongRunMiles(month)
-    if (!Number.isFinite(Number(projectedLongRunMiles)) || typeof runningReadiness.buildCompletionScore !== "function") {
-      return Number(clamp(fallbackValue ?? 0).toFixed(1))
-    }
-    return Number(clamp(runningReadiness.buildCompletionScore({
-      distanceMiles,
-      volumeThresholds,
-      projectedCompletedRunMiles: projectedLongRunMiles,
-      projectedLongestRunMiles: projectedLongRunMiles
-    })).toFixed(1))
-  }
 
   const maxMonth = 12
   const series = []
 
   for (let month = 0; month <= maxMonth; month += 1) {
     const baseReadiness = Number(interpolateBaseReadiness(month).toFixed(1))
-    const projectedFiveK = projectEventReadiness(month, 3.1069, [
-      [9, 95],
-      [7, 82],
-      [5, 68],
-      [3, 50]
-    ], runningReadiness.completionReadiness?.fiveK)
-    const projectedTenK = projectEventReadiness(month, 6.2137, [
-      [18, 95],
-      [14, 82],
-      [10, 65],
-      [7, 48]
-    ], runningReadiness.completionReadiness?.tenK)
-    const projectedHalf = projectEventReadiness(month, 13.1094, [
-      [30, 95],
-      [24, 82],
-      [18, 65],
-      [12, 48]
-    ], runningReadiness.completionReadiness?.half)
+    const plannedLR = getPlannedLongRunAtMonth(HM_PLAN_LONG_RUN, month)
+    const projectedFiveK = plannedLR != null
+      ? Math.min(100, Math.round(
+          plannedLR >= 3.1 ? 100
+          : plannedLR >= 2.5 ? 90
+          : plannedLR >= 2.0 ? 75
+          : plannedLR >= 1.5 ? 55
+          : 35
+        ))
+      : Number(clamp(runningReadiness.completionReadiness?.fiveK ?? 0))
+    const projectedTenK = plannedLR != null
+      ? Math.min(100, Math.round(
+          plannedLR >= 6.2 ? 100
+          : plannedLR >= 5.0 ? 90
+          : plannedLR >= 4.0 ? 75
+          : plannedLR >= 3.0 ? 58
+          : plannedLR >= 2.0 ? 40
+          : 20
+        ))
+      : Number(clamp(runningReadiness.completionReadiness?.tenK ?? 0))
+    const projectedHalf = plannedLR != null
+      ? Math.min(100, Math.round(
+          plannedLR >= 10.0 ? 92
+          : plannedLR >= 8.0 ? 80
+          : plannedLR >= 6.5 ? 65
+          : plannedLR >= 5.0 ? 50
+          : plannedLR >= 3.5 ? 35
+          : plannedLR >= 2.5 ? 22
+          : 12
+        ))
+      : Number(clamp(runningReadiness.completionReadiness?.half ?? 0))
     series.push({
       month,
       label: month === 0 ? "Now" : `${month}M`,
@@ -9954,7 +9986,7 @@ const readinessProjectionData = useMemo(() => {
       fiveK: projectedFiveK,
       tenK: projectedTenK,
       half: projectedHalf,
-      tri: Number(clamp(Math.min(baseReadiness, projectedHalf) - 12).toFixed(1)),
+      tri: Number(clamp(baseReadiness - 14).toFixed(1)),
     })
   }
 

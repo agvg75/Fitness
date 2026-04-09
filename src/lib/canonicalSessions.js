@@ -245,7 +245,7 @@ export function makeCanonicalSessionFromScheduleLog(entry) {
     session_id: `schedule_${entry?.session_id || entry?.id || stableHash(JSON.stringify(entry || {}))}`,
     match_confidence: "single_source",
     relationship: "schedule_only",
-    canonical_type: "Strength",
+    canonical_type: "Traditional Strength Training",
     start_date: startDate,
     end_date: endDate,
     duration_min: durationMin,
