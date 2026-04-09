@@ -1518,7 +1518,7 @@ function DailyReadinessPanel({ readinessScore, latestHealthFit, ocItems, compute
 }
 
 // ─── TabSchedule ──────────────────────────────────────────────────────────────
-function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, setSchedLog, readinessScore, latestHealthFit = null, ocItems = [], computedTSB = null }) {
+function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, setSchedLog, readinessScore, latestHealthFit = null, ocItems = [], computedTSB = null, progressionReadiness = "progress", progressionReasons = [], tendonStatus = { painScore: 0, stiffness: false, override: null } }) {
   const [activeDay, setActiveDay] = useState(todayDayKey())
   const [schedView, setSchedView] = useState("schedule")
   const [expandedLog, setExpandedLog] = useState({})
@@ -1674,6 +1674,69 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       <span>Active injury: {note} — monitor and modify if symptomatic</span>
     </div>
   ) : null
+
+  const chooseTodayWorkout = (plannedWorkout, currentProgressionReadiness, currentTendonStatus) => {
+    const normalizedTendonStatus = {
+      painScore: Number(currentTendonStatus?.painScore || 0),
+      stiffness: Boolean(currentTendonStatus?.stiffness),
+      override: currentTendonStatus?.override || null
+    }
+    const modality = String(plannedWorkout?.modality || plannedWorkout?.type || "strength").toLowerCase()
+    const isRunLike = modality === "run" || modality === "running" || modality === "walk"
+    const isCardio = ["run", "running", "walk", "bike", "swim", "row"].includes(modality)
+    const reasonText = Array.isArray(progressionReasons) && progressionReasons.length
+      ? progressionReasons.join(" · ")
+      : "No controller restriction"
+
+    if (currentProgressionReadiness === "deload") {
+      if (isRunLike && normalizedTendonStatus.stiffness) {
+        return {
+          modification: "Swap run for easy bike or full rest",
+          reason: reasonText
+        }
+      }
+      if (isRunLike) {
+        return {
+          modification: "Replace run with easy bike or cut to recovery effort",
+          reason: reasonText
+        }
+      }
+      if (isCardio) {
+        return {
+          modification: "Keep modality but cut duration and keep effort easy",
+          reason: reasonText
+        }
+      }
+      return {
+        modification: "Keep workout but reduce load 10-15% and trim volume",
+        reason: reasonText
+      }
+    }
+
+    if (currentProgressionReadiness === "hold") {
+      if (isRunLike) {
+        return {
+          modification: "Keep the run, reduce duration or intensity slightly",
+          reason: reasonText
+        }
+      }
+      if (isCardio) {
+        return {
+          modification: "Keep modality, hold progression and stay slightly easier",
+          reason: reasonText
+        }
+      }
+      return {
+        modification: "Keep workout type, trim one set or reduce load slightly",
+        reason: reasonText
+      }
+    }
+
+    return {
+      modification: "As planned",
+      reason: reasonText
+    }
+  }
 
   // ── Data source: PLAN (primary) with PROG as fallback ─────────────
   const getProgDay = (day) => {
@@ -2163,6 +2226,11 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     const vColors = { machine: "#3b82f6", db: "#22c55e", friendly: "#f97316" }
     const vBgs    = { machine: "rgba(59,130,246,0.12)", db: "rgba(34,197,94,0.12)", friendly: "rgba(249,115,22,0.12)" }
     const fl = ex.fi === "toe" ? "Toe-safe" : "Shoulder-safe"
+    const workoutSuggestion = chooseTodayWorkout(
+      { type: "strength", modality: "strength", name: ex.n },
+      progressionReadiness,
+      tendonStatus
+    )
 
     const fieldInput = (lbl, fKey, rxVal) => (
       <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 3 }}>
@@ -2223,6 +2291,12 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
         </div>
         <div style={{ padding: "4px 12px 10px", background: "#0a0a0a" }}>
           {!isCustom && <div style={{ fontSize: 11, color: "#555", padding: "4px 0 6px" }}>{v?.n}</div>}
+          <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 6 }}>
+            Suggested modification: <span style={{ color: "#e5e7eb" }}>{workoutSuggestion.modification}</span>
+          </div>
+          <div style={{ fontSize: 10, color: "#666", marginBottom: 6 }}>
+            Reason: {workoutSuggestion.reason}
+          </div>
           <div style={{ display: "flex", gap: 8, marginBottom: 6 }}>
             {fieldInput("Sets", "sets", v?.sets)}
             {fieldInput("Reps", "reps", v?.reps)}
@@ -2267,6 +2341,23 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
               <div style={{ fontSize: 12, fontWeight: 600, color: "#d8d8d8" }}>{ps.type}</div>
               <div style={{ fontSize: 10, color: "#555", marginLeft: "auto" }}>{ps.dMin}–{ps.dMax} min · {ps.dist}</div>
             </div>
+            {(() => {
+              const workoutSuggestion = chooseTodayWorkout(
+                { type: "cardio", modality: ps.mod, name: ps.type },
+                progressionReadiness,
+                tendonStatus
+              )
+              return (
+                <>
+                  <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 4 }}>
+                    Suggested modification: <span style={{ color: "#e5e7eb" }}>{workoutSuggestion.modification}</span>
+                  </div>
+                  <div style={{ fontSize: 10, color: "#666", marginBottom: 4 }}>
+                    Reason: {workoutSuggestion.reason}
+                  </div>
+                </>
+              )
+            })()}
             <div style={{ fontSize: 11, color: "#555" }}>{ps.rationale}</div>
             {ps.cnote && <div style={{ fontSize: 10, color: "#444", marginTop: 3, fontStyle: "italic" }}>{ps.cnote}</div>}
             {injuryTag(getInjuryNote(CARDIO_INJURY_REGIONS[ps.mod]))}
@@ -4072,6 +4163,7 @@ function extractRunPaceMinPerMile(workout) {
 }
 
 function computeEnduranceInputs(workouts, asOfDate = new Date()) {
+  const runs14 = []
   const runs28 = []
   const runs84 = []
 
@@ -4097,10 +4189,12 @@ function computeEnduranceInputs(workouts, asOfDate = new Date()) {
 
     const row = { miles, durationMin, pace, dt }
 
+    if (ageDays <= 14) runs14.push(row)
     if (ageDays <= 28) runs28.push(row)
     if (ageDays <= 84) runs84.push(row)
   })
 
+  const longestRun14 = runs14.reduce((maxMiles, row) => Math.max(maxMiles, safeNum(row.miles)), 0)
   const sumMiles28 = runs28.reduce((s, r) => s + safeNum(r.miles), 0)
   const sumMiles84 = runs84.reduce((s, r) => s + safeNum(r.miles), 0)
 
@@ -4117,7 +4211,21 @@ function computeEnduranceInputs(workouts, asOfDate = new Date()) {
       ? validPaces84.reduce((s, v) => s + v, 0) / validPaces84.length
       : 0
 
+  const longestRun28 = runs28.reduce((maxMiles, row) => Math.max(maxMiles, safeNum(row.miles)), 0)
+  const longestRun84 = runs84.reduce((maxMiles, row) => Math.max(maxMiles, safeNum(row.miles)), 0)
+  const weeksWithRuns28 = new Set(
+    runs28.map(row => {
+      const dt = new Date(row.dt)
+      const day = dt.getDay()
+      const diff = day === 0 ? -6 : 1 - day
+      dt.setDate(dt.getDate() + diff)
+      dt.setHours(0, 0, 0, 0)
+      return dt.toISOString().slice(0, 10)
+    })
+  ).size
+
   return {
+    runs14Count: runs14.length,
     runs28Count: runs28.length,
     runs84Count: runs84.length,
     milesPer4Weeks: Math.round(sumMiles28 * 10) / 10,
@@ -4125,7 +4233,275 @@ function computeEnduranceInputs(workouts, asOfDate = new Date()) {
     weeklyRunMiles28: Math.round((sumMiles28 / 4) * 10) / 10,
     weeklyRunMiles84: Math.round((sumMiles84 / 12) * 10) / 10,
     avgPace28: avgPace28 ? Math.round(avgPace28 * 100) / 100 : 0,
-    avgPace84: avgPace84 ? Math.round(avgPace84 * 100) / 100 : 0
+    avgPace84: avgPace84 ? Math.round(avgPace84 * 100) / 100 : 0,
+    longestRun14: Math.round(longestRun14 * 10) / 10,
+    longestRun28: Math.round(longestRun28 * 10) / 10,
+    longestRun84: Math.round(longestRun84 * 10) / 10,
+    activeWeeks28: weeksWithRuns28,
+    runsPerWeek28: Math.round((runs28.length / 4) * 10) / 10
+  }
+}
+
+function scoreThreshold(value, thresholds, fallback = 0) {
+  for (const [minValue, score] of thresholds) {
+    if (value >= minValue) return score
+  }
+  return fallback
+}
+
+function buildOcConstraintState({ ocItems, sleepRecords, healthFitDaily, computedTSB, weeklyTrainingBuckets, workouts }) {
+  const readiness = computeReadinessDetail(
+    ocItems,
+    sleepRecords,
+    healthFitDaily,
+    computedTSB?.global?.tsb ?? computedTSB?.running?.tsb ?? null
+  )
+  const activeItems = Array.isArray(ocItems)
+    ? ocItems.filter(item => Number(item?.currentScore || 0) > 0)
+    : []
+  const tendonItems = activeItems.filter(item => item.key === "tendonStatus")
+  const painScore = tendonItems.length
+    ? Math.max(...tendonItems.map(item => Number(item.currentScore || 0)))
+    : 0
+  const illnessBurden = activeItems
+    .filter(item => item.key === "illnessLoad")
+    .reduce((sum, item) => sum + Number(item.currentScore || 0), 0)
+  const maxOcScore = activeItems.length
+    ? Math.max(...activeItems.map(item => Number(item.currentScore || 0)))
+    : 0
+
+  const inputs = computeEnduranceInputs(workouts)
+  const priorInputs = computeEnduranceInputs(
+    workouts,
+    (() => {
+      const d = new Date()
+      d.setDate(d.getDate() - 28)
+      return d
+    })()
+  )
+
+  const recentBuckets = Array.isArray(weeklyTrainingBuckets)
+    ? weeklyTrainingBuckets.slice(-4)
+    : []
+  const latestBucket = recentBuckets[recentBuckets.length - 1] || null
+  const priorBuckets = recentBuckets.slice(0, -1)
+  const avgBucketValue = key =>
+    priorBuckets.length
+      ? priorBuckets.reduce((sum, bucket) => sum + Number(bucket?.[key] || 0), 0) / priorBuckets.length
+      : 0
+
+  const latestRunMiles = Number(latestBucket?.running || 0)
+  const priorRunMilesAvg = avgBucketValue("running")
+  const latestCrossMiles = Number(latestBucket?.cycling || 0) + Number(latestBucket?.swimming || 0)
+  const priorCrossMilesAvg = avgBucketValue("cycling") + avgBucketValue("swimming")
+  const priorLongestRunMiles = Number(priorInputs.longestRun28 || 0)
+
+  const runRamp =
+    priorRunMilesAvg > 0
+      ? latestRunMiles / priorRunMilesAvg
+      : latestRunMiles > 0 ? 1 : 0
+
+  const crossRamp =
+    priorCrossMilesAvg > 0
+      ? latestCrossMiles / priorCrossMilesAvg
+      : latestCrossMiles > 0 ? 1 : 0
+
+  const longestRunRamp =
+    priorLongestRunMiles > 0
+      ? Number(inputs.longestRun28 || 0) / priorLongestRunMiles
+      : Number(inputs.longestRun28 || 0) > 0 ? 1 : 0
+
+  const runningTsb = Number.isFinite(Number(computedTSB?.running?.tsb))
+    ? Number(computedTSB.running.tsb)
+    : readiness.latestTsb ?? null
+
+  const tendon = {
+    painScore,
+    stiffness: false,
+    override: null
+  }
+
+  const systemic = {
+    sleepPenalty: readiness.sleepPenalty,
+    avgSleepHours: readiness.avgSleepHours,
+    illnessBurden,
+    injuryPenalty: readiness.injuryPenalty
+  }
+
+  const load = {
+    tsb: Number.isFinite(Number(runningTsb)) ? Number(runningTsb) : null,
+    tsbPenalty: readiness.tsbPenalty,
+    runRamp: Number.isFinite(runRamp) ? Number(runRamp.toFixed(2)) : null,
+    crossRamp: Number.isFinite(crossRamp) ? Number(crossRamp.toFixed(2)) : null,
+    longestRunRamp: Number.isFinite(longestRunRamp) ? Number(longestRunRamp.toFixed(2)) : null
+  }
+
+  const severity = { progress: 0, hold: 1, deload: 2 }
+  let progressionReadiness = "progress"
+  const progressionReasons = []
+
+  const applyState = (nextState, reason) => {
+    if (severity[nextState] > severity[progressionReadiness]) {
+      progressionReadiness = nextState
+    }
+    if (reason) progressionReasons.push(reason)
+  }
+
+  if (tendon.painScore >= 3) {
+    applyState("deload", `Active tendon OC ${tendon.painScore}/5`)
+  } else if (tendon.painScore >= 2) {
+    applyState("hold", `Active tendon OC ${tendon.painScore}/5`)
+  }
+
+  if (maxOcScore >= 4) {
+    applyState("deload", `OC issue severity ${maxOcScore}/5`)
+  } else if (maxOcScore >= 3) {
+    applyState("hold", `OC issue severity ${maxOcScore}/5`)
+  }
+
+  if (systemic.sleepPenalty >= 20) {
+    applyState("deload", "Sleep penalty high")
+  } else if (systemic.sleepPenalty >= 10) {
+    applyState("hold", "Sleep penalty active")
+  }
+
+  if (systemic.illnessBurden >= 4) {
+    applyState("deload", `Illness burden ${systemic.illnessBurden}`)
+  } else if (systemic.illnessBurden >= 2) {
+    applyState("hold", `Illness burden ${systemic.illnessBurden}`)
+  }
+
+  if (Number.isFinite(load.tsb)) {
+    if (load.tsb <= -12) {
+      applyState("deload", `Running TSB ${load.tsb.toFixed(1)}`)
+    } else if (load.tsb <= -5) {
+      applyState("hold", `Running TSB ${load.tsb.toFixed(1)}`)
+    }
+  }
+
+  if (Number(inputs.runsPerWeek28 || 0) < 2 || Number(inputs.activeWeeks28 || 0) < 2) {
+    applyState("hold", "Recent run frequency too low to progress")
+  }
+
+  if (runRamp > 1.18 || longestRunRamp > 1.2) {
+    applyState(
+      Number.isFinite(load.tsb) && load.tsb <= -5 ? "deload" : "hold",
+      "Run load increased faster than target build rate"
+    )
+  } else if (runRamp > 1.1) {
+    applyState("hold", "Run load already at weekly build cap")
+  }
+
+  if (runRamp > 1.05 && crossRamp > 1.05) {
+    applyState("hold", "Bike/swim are rising alongside run volume")
+  }
+
+  return {
+    tendon,
+    systemic,
+    load,
+    gate: {
+      progressionReadiness,
+      progressionReasons
+    }
+  }
+}
+
+function buildRunningReadinessController({
+  workouts,
+  ocConstraintState = null
+}) {
+  const inputs = computeEnduranceInputs(workouts)
+
+  const clamp = (value, lo = 0, hi = 100) => Math.min(hi, Math.max(lo, value))
+  const recentCompletedRunMiles = Math.max(
+    Number(inputs.longestRun14 || 0),
+    Number(inputs.longestRun28 || 0) * 0.8,
+    Number(inputs.longestRun84 || 0) * 0.6
+  )
+  const recentLongestRunMiles = Number(inputs.longestRun28 || 0)
+  const recentRunVolume = Number(inputs.weeklyRunMiles28 || 0)
+  const recentRunFrequency = Number(inputs.runsPerWeek28 || 0)
+  const activeWeeks28 = Number(inputs.activeWeeks28 || 0)
+
+  const buildCompletionScore = ({ distanceMiles, volumeThresholds }) => {
+    if (recentCompletedRunMiles >= distanceMiles) return 100
+
+    const longestRatio = distanceMiles > 0 ? recentLongestRunMiles / distanceMiles : 0
+    const longestScore = scoreThreshold(longestRatio, [
+      [0.9, 90],
+      [0.75, 75],
+      [0.6, 55],
+      [0.45, 35]
+    ], 15)
+
+    const volumeScore = scoreThreshold(recentRunVolume, volumeThresholds, 15)
+
+    const consistencyScore =
+      activeWeeks28 >= 4 && recentRunFrequency >= 3 ? 95 :
+      activeWeeks28 >= 3 && recentRunFrequency >= 2.5 ? 80 :
+      activeWeeks28 >= 3 && recentRunFrequency >= 2 ? 65 :
+      activeWeeks28 >= 2 && recentRunFrequency >= 1.5 ? 45 :
+      activeWeeks28 >= 1 ? 25 :
+      10
+
+    return clamp(Math.round(
+      longestScore * 0.65 +
+      volumeScore * 0.20 +
+      consistencyScore * 0.15
+    ))
+  }
+
+  const completionReadiness = {
+    fiveK: buildCompletionScore({
+      distanceMiles: 3.1069,
+      volumeThresholds: [
+        [9, 95],
+        [7, 82],
+        [5, 68],
+        [3, 50]
+      ]
+    }),
+    tenK: buildCompletionScore({
+      distanceMiles: 6.2137,
+      volumeThresholds: [
+        [18, 95],
+        [14, 82],
+        [10, 65],
+        [7, 48]
+      ]
+    }),
+    half: buildCompletionScore({
+      distanceMiles: 13.1094,
+      volumeThresholds: [
+        [30, 95],
+        [24, 82],
+        [18, 65],
+        [12, 48]
+      ]
+    })
+  }
+
+  const nextEventTargetMiles =
+    completionReadiness.fiveK >= 100
+      ? completionReadiness.tenK >= 100
+        ? 13.1094
+        : 6.2137
+      : 3.1069
+
+  return {
+    completionReadiness,
+    progressionReadiness: ocConstraintState?.gate?.progressionReadiness ?? "hold",
+    progressionReasons: ocConstraintState?.gate?.progressionReasons ?? [],
+    signals: {
+      recentCompletedRunMiles: Number(recentCompletedRunMiles.toFixed(1)),
+      recentLongestRunMiles: Number(recentLongestRunMiles.toFixed(1)),
+      nextEventTargetMiles: Number(nextEventTargetMiles.toFixed(1)),
+      recentRunVolume: Number(recentRunVolume.toFixed(1)),
+      recentRunFrequency: Number(recentRunFrequency.toFixed(1)),
+      activeWeeks28
+    },
+    tendonStatus: ocConstraintState?.tendon ?? { painScore: 0, stiffness: false, override: null }
   }
 }
 
@@ -7066,6 +7442,7 @@ const [biometricRecords, setBiometricRecords] = useState(() => { try { return JS
 const [sleepRecords, setSleepRecords] = useState(() => { try { return JSON.parse(localStorage.getItem("lift_sleep_records") || "[]") } catch { return [] } })
 const [schedLog, setSchedLog] = useState(() => { try { return JSON.parse(localStorage.getItem('wt-log') || '[]') } catch { return [] } })
 const [ocItems, setOcItems] = useState(() => { try { return JSON.parse(localStorage.getItem('oc-items') || '[]') } catch { return [] } })
+const [tendonStatus, setTendonStatus] = useState({ painScore: 0, stiffness: false, override: null })
 const [baseDataLoaded, setBaseDataLoaded] = useState(false)
 
 const scheduleStrengthCanonicalSeeds = useMemo(() => {
@@ -8112,10 +8489,19 @@ const overviewWeightDomain = useMemo(() => {
 
   if (!vals.length) return [140, 190]
 
-  return [
-    Math.floor(Math.min(...vals)) - 2,
-    Math.ceil(Math.max(...vals)) + 2
-  ]
+  const minVal = Math.min(...vals)
+  const maxVal = Math.max(...vals)
+  let low = Math.floor(minVal) - 3
+  let high = Math.ceil(maxVal) + 3
+  const minSpan = 18
+
+  if ((high - low) < minSpan) {
+    const mid = (high + low) / 2
+    low = Math.floor(mid - minSpan / 2)
+    high = Math.ceil(mid + minSpan / 2)
+  }
+
+  return [low, high]
 }, [weightSmoothed])
   const dexaSeries = useMemo(() => {
     if (!dexa.length) return []
@@ -8952,6 +9338,17 @@ const computedTSB = useMemo(() => {
   };
 }, [unifiedCanonicalSessions])
 
+const ocConstraintState = useMemo(() => {
+  return buildOcConstraintState({
+    ocItems,
+    sleepRecords,
+    healthFitDaily,
+    computedTSB,
+    weeklyTrainingBuckets,
+    workouts: operationalWorkouts
+  })
+}, [ocItems, sleepRecords, healthFitDaily, computedTSB, weeklyTrainingBuckets, operationalWorkouts])
+
 const tsbV2Panel = useMemo(() => {
   const tau1 = LIFT_CONFIG.tau1, tau2 = LIFT_CONFIG.tau2, lookbackDays = selectedRangePoints ?? 90, warmupDays = 42
   const now = new Date(); now.setHours(0,0,0,0)
@@ -9145,8 +9542,14 @@ const enduranceForecast = useMemo(() => {
 const racePrediction = useMemo(() => {
   return buildRacePrediction(enduranceForecast)
 }, [enduranceForecast])
+const runningReadiness = useMemo(() => {
+  return buildRunningReadinessController({
+    workouts: operationalWorkouts,
+    ocConstraintState
+  })
+}, [operationalWorkouts, ocConstraintState])
 const readinessProjectionData = useMemo(() => {
-  if (!enduranceForecast) return []
+  if (!enduranceForecast || !runningReadiness) return []
 
   const rNow = Number(enduranceForecast.readinessNow ?? 0) > 0 ? Number(enduranceForecast.readinessNow) : 50
   const anchors = [
@@ -9196,15 +9599,15 @@ const readinessProjectionData = useMemo(() => {
       month,
       label: month === 0 ? "Now" : `${month}M`,
       baseReadiness,
-      fiveK: Number(clamp(baseReadiness + eventAdjustments.fiveK).toFixed(1)),
-      tenK:  Number(clamp(baseReadiness + eventAdjustments.tenK).toFixed(1)),
-      half:  Number(clamp(baseReadiness + eventAdjustments.half).toFixed(1)),
+      fiveK: Number(clamp(runningReadiness.completionReadiness?.fiveK ?? 0).toFixed(1)),
+      tenK:  Number(clamp(runningReadiness.completionReadiness?.tenK ?? 0).toFixed(1)),
+      half:  Number(clamp(runningReadiness.completionReadiness?.half ?? 0).toFixed(1)),
       tri:   Number(clamp(baseReadiness + eventAdjustments.tri).toFixed(1)),
     })
   }
 
   return series
-}, [enduranceForecast])
+}, [enduranceForecast, runningReadiness])
 const eventReadinessMarkers = useMemo(() => {
   if (!readinessProjectionData?.length) return []
 
@@ -9429,6 +9832,16 @@ const calorieChartData = useMemo(() => {
   }
   return rows
 }, [filteredNutrition, calorieTarget, templateTotals, selectedRangePoints])
+const overviewCaloriesDomain = useMemo(() => {
+  const vals = calorieChartData
+    .flatMap(row => [Number(row.calories), Number(row.target), Number(row.calories_7d)])
+    .filter(v => Number.isFinite(v) && v > 0)
+
+  if (!vals.length) return [1200, 3000]
+
+  const upper = Math.max(3000, Math.ceil(Math.max(...vals) / 250) * 250)
+  return [1200, upper]
+}, [calorieChartData])
 
 const tsbOverviewData = useMemo(() => {
   const arr = Array.isArray(healthFitDaily) ? healthFitDaily : []
@@ -9855,7 +10268,7 @@ return (
           <ComposedChart data={panel.rows} margin={{ top:12, right:16, left:45, bottom:20 }}>
             <CartesianGrid stroke="#1a1b2e" />
             <XAxis dataKey="label" tick={{ fontSize:10 }} interval={Math.max(1, Math.floor((panel.rows.length||1)/12)-1)} />
-            <YAxis domain={['auto','auto']} label={{ value:'TSB', angle:-90, position:'insideLeft', fill:'#9ca3af', style:{ textAnchor:'middle' } }} />
+            <YAxis domain={[-40, 20]} label={{ value:'TSB', angle:-90, position:'insideLeft', fill:'#9ca3af', style:{ textAnchor:'middle' } }} />
             <ReferenceLine y={0} stroke="#444" strokeDasharray="3 3" />
             <Tooltip formatter={(v,n) => [Number(v).toFixed(2), n]} />
             {/* Icon legend — replaces Recharts Legend */}
@@ -10011,7 +10424,7 @@ return (
   }}
 />
             <YAxis
-  domain={[0, chartMaxCalories]}
+  domain={overviewCaloriesDomain}
   label={{
     value: "Calories (kcal/day)",
     angle: -90,
@@ -10041,7 +10454,7 @@ return (
             />
             <Line
               type="monotone"
-              dataKey="calories7"
+              dataKey="calories_7d"
               stroke="#ffffff"
               strokeWidth={2}
               dot={false}
@@ -10810,6 +11223,9 @@ return (
     latestHealthFit={latestHealthFit}
     ocItems={ocItems}
     computedTSB={computedTSBFromSessions ?? computedTSB}
+    progressionReadiness={ocConstraintState?.gate?.progressionReadiness ?? "hold"}
+    progressionReasons={ocConstraintState?.gate?.progressionReasons ?? []}
+    tendonStatus={ocConstraintState?.tendon ?? { painScore: 0, stiffness: false, override: null }}
   />
 )}
 
@@ -11062,8 +11478,47 @@ return (
           <Line type="monotone" dataKey="half"          name="Half readiness" stroke="#facc15" strokeWidth={1} strokeDasharray="4 3" dot={false} />
         </LineChart>
       </ResponsiveContainer>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "10px", marginTop: "12px", marginBottom: "12px" }}>
+        <label style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "12px" }}>
+          <span>Tendon pain: {tendonStatus.painScore}/10</span>
+          <input
+            type="range"
+            min={0}
+            max={10}
+            step={1}
+            value={tendonStatus.painScore}
+            onChange={e => setTendonStatus(prev => ({ ...prev, painScore: Number(e.target.value) || 0 }))}
+          />
+        </label>
+        <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px" }}>
+          <input
+            type="checkbox"
+            checked={tendonStatus.stiffness}
+            onChange={e => setTendonStatus(prev => ({ ...prev, stiffness: e.target.checked }))}
+          />
+          <span>Morning stiffness</span>
+        </label>
+        <label style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "12px" }}>
+          <span>Tendon override</span>
+          <select
+            value={tendonStatus.override ?? ""}
+            onChange={e => setTendonStatus(prev => ({ ...prev, override: e.target.value || null }))}
+            style={{ background: "#0d0e1c", color: "#e5e7eb", border: "1px solid #2a2d44", borderRadius: "6px", padding: "6px 8px" }}
+          >
+            <option value="">None</option>
+            <option value="hold">Hold</option>
+            <option value="deload">Deload</option>
+          </select>
+        </label>
+      </div>
+      <div style={{ fontSize: "12px", opacity: 0.75, marginTop: "8px" }}>
+        Tendon: pain {tendonStatus.painScore}/10 · stiffness {tendonStatus.stiffness ? "yes" : "no"} · override {tendonStatus.override || "none"} · progression {runningReadiness?.progressionReadiness ?? "hold"}
+      </div>
+      <div style={{ fontSize: "12px", opacity: 0.75, marginTop: "6px" }}>
+        Reasons: {runningReadiness?.progressionReasons?.length ? runningReadiness.progressionReasons.join(" · ") : "none"}
+      </div>
       <div style={{ fontSize: "12px", opacity: 0.7, marginTop: "8px" }}>
-        Running: {enduranceForecast.weeklyRunMiles28} mi/week · pace {enduranceForecast.avgPace28 || "NA"} min/mi · cardio {Math.round(enduranceForecast.cardioMinutesWeekly)} min/week · run modifier {((enduranceForecast.runPenalty ?? 1) * 100).toFixed(0)}%
+        Running: {enduranceForecast.weeklyRunMiles28} mi/week · longest {runningReadiness?.signals?.recentLongestRunMiles ?? "NA"} mi · frequency {runningReadiness?.signals?.recentRunFrequency ?? "NA"}/week · progression {runningReadiness?.progressionReadiness ?? "hold"} · pace {enduranceForecast.avgPace28 || "NA"} min/mi · cardio {Math.round(enduranceForecast.cardioMinutesWeekly)} min/week · run modifier {((enduranceForecast.runPenalty ?? 1) * 100).toFixed(0)}%
       </div>
     </div>
 
