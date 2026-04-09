@@ -9548,16 +9548,23 @@ const runningReadiness = useMemo(() => {
     ocConstraintState
   })
 }, [operationalWorkouts, ocConstraintState])
+const displayedTendonStatus = ocConstraintState?.tendon ?? tendonStatus
+const ocProgressionReadiness = ocConstraintState?.gate?.progressionReadiness ?? "progress"
+const ocProgressionReasons = ocConstraintState?.gate?.progressionReasons ?? []
+const currentOcReadiness = Number.isFinite(Number(readinessScore)) ? Number(readinessScore) : null
 const readinessProjectionData = useMemo(() => {
   if (!enduranceForecast || !runningReadiness) return []
 
-  const rNow = Number(enduranceForecast.readinessNow ?? 0) > 0 ? Number(enduranceForecast.readinessNow) : 50
+  const fallbackNow =
+    Number(enduranceForecast.readinessNow ?? 0) > 0 ? Number(enduranceForecast.readinessNow) : 50
+  const rNow = currentOcReadiness != null ? currentOcReadiness : fallbackNow
+  const lockProjection = ocProgressionReadiness !== "progress"
   const anchors = [
     { month: 0,  readiness: rNow },
-    { month: 1,  readiness: Number(enduranceForecast.readiness1m  ?? 0) > 0 ? Number(enduranceForecast.readiness1m)  : rNow },
-    { month: 3,  readiness: Number(enduranceForecast.readiness3m  ?? 0) > 0 ? Number(enduranceForecast.readiness3m)  : rNow },
-    { month: 6,  readiness: Number(enduranceForecast.readiness6m  ?? 0) > 0 ? Number(enduranceForecast.readiness6m)  : rNow },
-    { month: 12, readiness: Number(enduranceForecast.readiness12m ?? 0) > 0 ? Number(enduranceForecast.readiness12m) : rNow }
+    { month: 1,  readiness: lockProjection ? rNow : (Number(enduranceForecast.readiness1m  ?? 0) > 0 ? Number(enduranceForecast.readiness1m)  : rNow) },
+    { month: 3,  readiness: lockProjection ? rNow : (Number(enduranceForecast.readiness3m  ?? 0) > 0 ? Number(enduranceForecast.readiness3m)  : rNow) },
+    { month: 6,  readiness: lockProjection ? rNow : (Number(enduranceForecast.readiness6m  ?? 0) > 0 ? Number(enduranceForecast.readiness6m)  : rNow) },
+    { month: 12, readiness: lockProjection ? rNow : (Number(enduranceForecast.readiness12m ?? 0) > 0 ? Number(enduranceForecast.readiness12m) : rNow) }
   ].filter(d => Number.isFinite(d.readiness))
 
   if (!anchors.length) return []
@@ -9607,7 +9614,17 @@ const readinessProjectionData = useMemo(() => {
   }
 
   return series
-}, [enduranceForecast, runningReadiness])
+}, [enduranceForecast, runningReadiness, currentOcReadiness, ocProgressionReadiness])
+const forecastReadinessCards = useMemo(() => {
+  const byMonth = new Map(readinessProjectionData.map(row => [row.month, row.baseReadiness]))
+  return [
+    { label: "Now", value: byMonth.get(0) ?? enduranceForecast.readinessNow },
+    { label: "1 month", value: byMonth.get(1) ?? enduranceForecast.readiness1m },
+    { label: "3 months", value: byMonth.get(3) ?? enduranceForecast.readiness3m },
+    { label: "6 months", value: byMonth.get(6) ?? enduranceForecast.readiness6m },
+    { label: "12 months", value: byMonth.get(12) ?? enduranceForecast.readiness12m }
+  ]
+}, [readinessProjectionData, enduranceForecast])
 const eventReadinessMarkers = useMemo(() => {
   if (!readinessProjectionData?.length) return []
 
@@ -11449,13 +11466,7 @@ return (
         </div>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: "10px", marginBottom: "14px" }}>
-        {[
-          { label: "Now",      value: enduranceForecast.readinessNow  },
-          { label: "1 month",  value: enduranceForecast.readiness1m   },
-          { label: "3 months", value: enduranceForecast.readiness3m   },
-          { label: "6 months", value: enduranceForecast.readiness6m   },
-          { label: "12 months",value: enduranceForecast.readiness12m  }
-        ].map(({ label, value }) => (
+        {forecastReadinessCards.map(({ label, value }) => (
           <div key={label} style={{ background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: "8px", padding: "10px", textAlign: "center" }}>
             <div style={{ fontSize: "11px", opacity: 0.6, marginBottom: "4px" }}>{label}</div>
             <div style={{ fontSize: "22px", fontWeight: "700",
@@ -11480,20 +11491,20 @@ return (
       </ResponsiveContainer>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "10px", marginTop: "12px", marginBottom: "12px" }}>
         <label style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "12px" }}>
-          <span>Tendon pain: {tendonStatus.painScore}/10</span>
+          <span>Tendon pain: {displayedTendonStatus.painScore}/10</span>
           <input
             type="range"
             min={0}
             max={10}
             step={1}
-            value={tendonStatus.painScore}
+            value={displayedTendonStatus.painScore}
             onChange={e => setTendonStatus(prev => ({ ...prev, painScore: Number(e.target.value) || 0 }))}
           />
         </label>
         <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px" }}>
           <input
             type="checkbox"
-            checked={tendonStatus.stiffness}
+            checked={displayedTendonStatus.stiffness}
             onChange={e => setTendonStatus(prev => ({ ...prev, stiffness: e.target.checked }))}
           />
           <span>Morning stiffness</span>
@@ -11501,7 +11512,7 @@ return (
         <label style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "12px" }}>
           <span>Tendon override</span>
           <select
-            value={tendonStatus.override ?? ""}
+            value={displayedTendonStatus.override ?? ""}
             onChange={e => setTendonStatus(prev => ({ ...prev, override: e.target.value || null }))}
             style={{ background: "#0d0e1c", color: "#e5e7eb", border: "1px solid #2a2d44", borderRadius: "6px", padding: "6px 8px" }}
           >
@@ -11512,10 +11523,10 @@ return (
         </label>
       </div>
       <div style={{ fontSize: "12px", opacity: 0.75, marginTop: "8px" }}>
-        Tendon: pain {tendonStatus.painScore}/10 · stiffness {tendonStatus.stiffness ? "yes" : "no"} · override {tendonStatus.override || "none"} · progression {runningReadiness?.progressionReadiness ?? "hold"}
+        Tendon: pain {displayedTendonStatus.painScore}/10 · stiffness {displayedTendonStatus.stiffness ? "yes" : "no"} · override {displayedTendonStatus.override || "none"} · progression {runningReadiness?.progressionReadiness ?? "hold"}
       </div>
       <div style={{ fontSize: "12px", opacity: 0.75, marginTop: "6px" }}>
-        Reasons: {runningReadiness?.progressionReasons?.length ? runningReadiness.progressionReasons.join(" · ") : "none"}
+        Reasons: {ocProgressionReasons.length ? ocProgressionReasons.join(" · ") : "none"}
       </div>
       <div style={{ fontSize: "12px", opacity: 0.7, marginTop: "8px" }}>
         Running: {enduranceForecast.weeklyRunMiles28} mi/week · longest {runningReadiness?.signals?.recentLongestRunMiles ?? "NA"} mi · frequency {runningReadiness?.signals?.recentRunFrequency ?? "NA"}/week · progression {runningReadiness?.progressionReadiness ?? "hold"} · pace {enduranceForecast.avgPace28 || "NA"} min/mi · cardio {Math.round(enduranceForecast.cardioMinutesWeekly)} min/week · run modifier {((enduranceForecast.runPenalty ?? 1) * 100).toFixed(0)}%
