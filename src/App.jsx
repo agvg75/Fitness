@@ -583,6 +583,13 @@ const TENDON_EXERCISE_PATTERNS = [
 ]
 
 const TENDON_GROUP_META = {
+  combined: {
+    label: "Combined",
+    color: "#f97316",
+    safe: 0.85,
+    caution: 1.0,
+    overload: 1.15,
+  },
   achilles_calf: {
     label: "Achilles / Calf",
     color: "#f59e0b",
@@ -5357,6 +5364,7 @@ function buildAdaptiveTrainingState({
     patellar_knee: 22
   }
   const tendonSeries = {
+    combined: [],
     achilles_calf: [],
     forefoot_toe_extensor: [],
     patellar_knee: []
@@ -5428,6 +5436,11 @@ function buildAdaptiveTrainingState({
     )
 
     const tendonSnapshot = {
+      combined: {
+        load: 0,
+        capacity: 0,
+        risk: 0
+      },
       achilles_calf: {
         load: Number(achillesLoad.toFixed(2)),
         capacity: Number(tendonCapacities.achilles_calf.toFixed(2)),
@@ -5443,6 +5456,16 @@ function buildAdaptiveTrainingState({
         capacity: Number(tendonCapacities.patellar_knee.toFixed(2)),
         risk: Number((patellarLoad / Math.max(1, tendonCapacities.patellar_knee)).toFixed(2))
       }
+    }
+    const combinedLoad = achillesLoad + forefootLoad + patellarLoad
+    const combinedCapacity =
+      tendonCapacities.achilles_calf +
+      tendonCapacities.forefoot_toe_extensor +
+      tendonCapacities.patellar_knee
+    tendonSnapshot.combined = {
+      load: Number(combinedLoad.toFixed(2)),
+      capacity: Number(combinedCapacity.toFixed(2)),
+      risk: Number((combinedLoad / Math.max(1, combinedCapacity)).toFixed(2))
     }
     week.tendon = tendonSnapshot
     week.capital = {
@@ -5529,6 +5552,7 @@ function buildAdaptiveTrainingState({
       ? latestWeek.capital
       : { running: 0, strength: 0, tendon: 0, cardio: 0 },
     tendonSeries: {
+      combined: Array.isArray(tendonSeries.combined) ? tendonSeries.combined : [],
       achilles_calf: Array.isArray(tendonSeries.achilles_calf) ? tendonSeries.achilles_calf : [],
       forefoot_toe_extensor: Array.isArray(tendonSeries.forefoot_toe_extensor) ? tendonSeries.forefoot_toe_extensor : [],
       patellar_knee: Array.isArray(tendonSeries.patellar_knee) ? tendonSeries.patellar_knee : [],
@@ -8695,7 +8719,7 @@ const [sleepRecords, setSleepRecords] = useState(() => { try { return JSON.parse
 const [schedLog, setSchedLog] = useState(() => { try { return JSON.parse(localStorage.getItem('wt-log') || '[]') } catch { return [] } })
 const [ocItems, setOcItems] = useState(() => { try { return JSON.parse(localStorage.getItem('oc-items') || '[]') } catch { return [] } })
 const [tendonStatus, setTendonStatus] = useState({ painScore: 0, stiffness: false, override: null })
-const [selectedTendonGroup, setSelectedTendonGroup] = useState("achilles_calf")
+const [selectedTendonGroup, setSelectedTendonGroup] = useState("combined")
 const [baseDataLoaded, setBaseDataLoaded] = useState(false)
 const [readinessInputsHydrated, setReadinessInputsHydrated] = useState(false)
 const [readinessRemoteInputsHydrated, setReadinessRemoteInputsHydrated] = useState(false)
@@ -10350,20 +10374,26 @@ const acwrSeries = useMemo(() => {
       dailyTrimp[date] = (dailyTrimp[date] || 0) + trimp
   })
 
-  // Generate a day-by-day series for the last 180 days
+  const sessionDates = sessions
+    .map(s => (s.start_date || s.dateTime || s.date || "").slice(0, 10))
+    .filter(Boolean)
+    .sort()
+  if (!sessionDates.length) return []
+
+  // Generate a day-by-day series from the first logged session to today
+  const firstDate = new Date(`${sessionDates[0]}T12:00:00`)
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const rows = []
 
-  for (let i = 179; i >= 0; i--) {
-    const d = new Date(today)
-    d.setDate(d.getDate() - i)
+  for (let d = new Date(firstDate); d <= today; d.setDate(d.getDate() + 1)) {
+    const current = new Date(d)
     const key = d.toISOString().slice(0, 10)
 
     // ATL = 7-day rolling average, CTL = 28-day rolling average
     let atl = 0, ctl = 0, atlCount = 0, ctlCount = 0
     for (let j = 0; j < 28; j++) {
-      const dd = new Date(d)
+      const dd = new Date(current)
       dd.setDate(dd.getDate() - j)
       const dk = dd.toISOString().slice(0, 10)
       const t = dailyTrimp[dk] || 0
@@ -10570,6 +10600,45 @@ const vo2ProxySummary = useMemo(() => {
     bestSmoothed: smoothVals.length ? Math.max(...smoothVals) : null
   }
 }, [vo2ProxySmoothed])
+const vo2SourceSummary = useMemo(() => {
+  const records = Array.isArray(biometricRecords) ? biometricRecords : []
+  const byDateDesc = (a, b) => String(b?.date || b?.measured_date || b?.timestamp || "").localeCompare(String(a?.date || a?.measured_date || a?.timestamp || ""))
+  const normalizeRow = (row, sourceLabel) => {
+    const value = Number(
+      row?.vo2_max ??
+      row?.vo2 ??
+      row?.value
+    )
+    if (!Number.isFinite(value) || value <= 0) return null
+    return {
+      value: Number(value.toFixed(1)),
+      date: String(row?.date || row?.measured_date || row?.measured_at || row?.timestamp || "").slice(0, 10) || null,
+      source: sourceLabel
+    }
+  }
+
+  const labLike = records
+    .filter(row => /knr|lab/i.test(String(row?.source || "")))
+    .sort(byDateDesc)
+    .map(row => normalizeRow(row, /knr/i.test(String(row?.source || "")) ? "Lab / KNR" : "Lab"))
+    .find(Boolean) || null
+
+  const apple = records
+    .filter(row => /apple/i.test(String(row?.source || "")))
+    .sort(byDateDesc)
+    .map(row => normalizeRow(row, "Apple"))
+    .find(Boolean) || null
+
+  const proxy = vo2ProxySummary?.latestSmoothed != null
+    ? {
+        value: Number(vo2ProxySummary.latestSmoothed.toFixed(1)),
+        date: vo2ProxySmoothed[vo2ProxySmoothed.length - 1]?.date || null,
+        source: "LIFT proxy"
+      }
+    : null
+
+  return { labLike, apple, proxy }
+}, [biometricRecords, vo2ProxySummary, vo2ProxySmoothed])
 
 useEffect(() => {
   const runLike = (operationalWorkouts || []).filter(w => {
@@ -10852,7 +10921,7 @@ const tsbV2Panel = useMemo(() => {
   const dayKeys = []
   for (let d = new Date(start); d <= now; d.setDate(d.getDate() + 1))
     dayKeys.push(d.toISOString().slice(0,10))
-  const mkL = () => ({ overall:0, running:0, cycling:0, swimming:0, strength:0 })
+  const mkL = () => ({ overall:0, running:0, cycling:0, swimming:0, strength:0, anyWorkout:false })
   const dailyLoads = Object.fromEntries(dayKeys.map(k => [k, mkL()]))
   const wkts = Array.isArray(operationalWorkouts) ? operationalWorkouts : []
   wkts.forEach(w => {
@@ -10863,6 +10932,7 @@ const tsbV2Panel = useMemo(() => {
     const hr = Number(w.preferred_metrics?.hr?.value ?? w.hr ?? 0) || 0
     const load = Math.max(0, dur * (hr > 0 ? Math.max(0.75, Math.min(1.35, hr/145)) : 1))
     if (load <= 0) return
+    dailyLoads[date].anyWorkout = true
     dailyLoads[date].overall += load
     if (cat === 'Running' || cat === 'Walking') dailyLoads[date].running += load
     if (cat === 'Cycling') dailyLoads[date].cycling += load
@@ -10882,13 +10952,18 @@ const tsbV2Panel = useMemo(() => {
       row[`${k}Tsb`] = Number((chronic[k] - acute[k]).toFixed(2))
     })
     row.strengthLoad = Number((load.strength || 0).toFixed(2))
+    row.hasAnyWorkout = Boolean(load.anyWorkout)
     return row
   })
   const rows = allRows.slice(-lookbackDays).map(r => ({ ...r, label: String(r.date).slice(5) }))
   const sVals = rows.map(r => r.strengthLoad).filter(v => Number.isFinite(v))
   const sMin = sVals.length ? Math.min(...sVals) : 0
   const sMax = sVals.length ? Math.max(...sVals) : 1
-  rows.forEach(r => { r.strengthNorm = sMax > sMin ? Number((((r.strengthLoad-sMin)/(sMax-sMin))*100).toFixed(1)) : 0 })
+  rows.forEach(r => {
+    r.strengthNorm = sMax > sMin ? Number((((r.strengthLoad-sMin)/(sMax-sMin))*100).toFixed(1)) : 0
+    r.strengthNormDisplay = !r.hasAnyWorkout && r.strengthLoad === 0 ? null : r.strengthNorm
+    r.strengthZeroMarker = r.hasAnyWorkout && r.strengthLoad === 0 ? 4 : null
+  })
   const cur = rows[rows.length-1] || {}
   const tsbNow = cur.overallTsb ?? 0
   const riskFromOC = readinessScore != null
@@ -11317,6 +11392,39 @@ const safeTendonSeries = Array.isArray(adaptiveTrainingState?.tendonSeries?.[sel
 const safeEventReadinessMarkers = Array.isArray(eventReadinessMarkers) ? eventReadinessMarkers : []
 const safeTargetableRaces = Array.isArray(targetableRaces) ? targetableRaces : []
 const safeTargetableRaceMarkers = Array.isArray(targetableRaceMarkers) ? targetableRaceMarkers : []
+const currentTendonSnapshot = adaptiveTrainingState?.latestWeek?.tendon?.[selectedTendonGroup] || null
+const tendonPlotCeiling = useMemo(() => {
+  const values = safeTendonSeries.flatMap(row => [Number(row?.capacity), Number(row?.load)])
+    .filter(Number.isFinite)
+  return values.length ? Math.max(...values) * 1.15 : 1.5
+}, [safeTendonSeries])
+const complianceOverviewRows = useMemo(() => {
+  const recentRows = safeWeeklyRows.slice(-8)
+  return ["running", "tendon", "strength", "cardio"].map(domain => {
+    const planned = recentRows.reduce((sum, row) => sum + Number(row.domains?.[domain]?.plannedDose || 0), 0)
+    const completed = recentRows.reduce((sum, row) => sum + Number(row.domains?.[domain]?.completedDose || 0), 0)
+    const absorbed = recentRows.reduce((sum, row) => sum + Number(row.domains?.[domain]?.absorbedDose || 0), 0)
+    const compliance = Number(adaptiveTrainingState?.complianceScores?.[domain] || 0)
+    const absorption = Number(adaptiveTrainingState?.absorptionScores?.[domain] || 0)
+    return {
+      domain,
+      planned: Math.round(planned),
+      completed: Math.round(completed),
+      absorbed: Math.round(absorbed),
+      compliancePct: Math.round(compliance * 100),
+      absorptionPct: Math.round(absorption * 100)
+    }
+  })
+}, [safeWeeklyRows, adaptiveTrainingState])
+const trainingCapitalChartData = useMemo(() => {
+  return safeWeeklyRows.slice(-12).map(row => ({
+    label: row.label,
+    runCapital: row.capital?.running || 0,
+    tendonCapital: row.capital?.tendon || 0,
+    strengthCapital: row.capital?.strength || 0,
+    cardioCapital: row.capital?.cardio || 0,
+  }))
+}, [safeWeeklyRows])
 const readinessProjectionMaxMonth = useMemo(() => {
   const dataMax = readinessProjectionData.length
     ? Math.max(...readinessProjectionData.map(d => Number(d.month || 0)))
@@ -11548,6 +11656,29 @@ const tsbOverviewData = useMemo(() => {
       tsb:  r.tsb  != null ? Number(r.tsb)  : null,
     }))
 }, [healthFitDaily, selectedRangePoints])
+const acwrOverviewData = useMemo(() => {
+  const arr = Array.isArray(acwrSeries) ? acwrSeries : []
+  if (selectedRangePoints == null) return arr
+
+  const cutoff = new Date()
+  cutoff.setDate(cutoff.getDate() - selectedRangePoints)
+  cutoff.setHours(0, 0, 0, 0)
+
+  return arr.filter(row => row.date && new Date(`${row.date}T12:00:00`) >= cutoff)
+}, [acwrSeries, selectedRangePoints])
+const acwrOverviewDomain = useMemo(() => {
+  const vals = acwrOverviewData
+    .map(row => Number(row?.acwr))
+    .filter(Number.isFinite)
+
+  if (!vals.length) return [0, 2]
+
+  const minVal = Math.min(...vals)
+  const maxVal = Math.max(...vals)
+  const lower = Math.max(0, Math.floor((Math.min(0.8, minVal) - 0.1) * 10) / 10)
+  const upper = Math.max(1.6, Math.ceil((maxVal + 0.15) * 10) / 10)
+  return [lower, upper]
+}, [acwrOverviewData])
 return (
   <ErrorBoundary>
   <div
@@ -11744,14 +11875,26 @@ return (
       </div>
 
 <div style={{ ...cardStyle(), minWidth: 0 }}>
-  <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "8px" }}>VO₂ Proxy</div>
+  <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "8px" }}>VO₂ Sources</div>
   <div style={{ fontSize: "30px", fontWeight: "bold" }}>
     {vo2ProxySummary?.latestSmoothed != null ? f1(vo2ProxySummary.latestSmoothed) : "NA"}
   </div>
-  <div style={{ fontSize: "12px", opacity: 0.7, marginTop: "8px" }}>
-    {vo2ProxySummary?.count
-      ? `latest raw ${f1(vo2ProxySummary.latestRaw)}, best ${f1(vo2ProxySummary.bestSmoothed)}, n=${vo2ProxySummary.count}`
-      : "rolling run-based aerobic estimate"}
+  <div style={{ fontSize: "12px", opacity: 0.7, marginTop: "8px", lineHeight: 1.5 }}>
+    LIFT proxy from run pace and duration. Do not treat this as interchangeable with Apple Cardio Fitness or lab-measured VO2 max.
+  </div>
+  <div style={{ marginTop: 8, display: "grid", gap: 4 }}>
+    {[
+      ["Lab / KNR", vo2SourceSummary?.labLike],
+      ["Apple", vo2SourceSummary?.apple],
+      ["LIFT proxy", vo2SourceSummary?.proxy]
+    ].map(([label, sourceRow]) => (
+      <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 11, color: "#cbd5e1" }}>
+        <span style={{ color: "#94a3b8" }}>{label}</span>
+        <span>
+          {sourceRow?.value != null ? `${f1(sourceRow.value)}${sourceRow?.date ? ` · ${fmtShortDate(sourceRow.date)}` : ""}` : "not available"}
+        </span>
+      </div>
+    ))}
   </div>
 </div>
 
@@ -11949,226 +12092,85 @@ return (
       )
     })()}
 
-    <div style={{ display: "grid", gridTemplateColumns: window.innerWidth < 1024 ? "1fr" : "1.15fr 0.85fr", gap: 16, marginBottom: 16 }}>
-      <div style={{ ...cardStyle(), minWidth: 0 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-          <div>
-            <div style={{ fontWeight: "bold" }}>Tendon Capacity</div>
-            <div style={{ fontSize: 11, color: "#667", marginTop: 2 }}>Load vs capacity over the last 12 weeks with current risk zones.</div>
-          </div>
-          <select
-            value={selectedTendonGroup}
-            onChange={e => setSelectedTendonGroup(e.target.value)}
-            style={{ background: "#0d0e1c", color: "#ced2f0", border: "1px solid #1a1b2e", borderRadius: 6, padding: "6px 8px", fontSize: 12 }}
-          >
-            {Object.entries(TENDON_GROUP_META).map(([key, meta]) => (
-              <option key={key} value={key}>{meta.label}</option>
-            ))}
-          </select>
-        </div>
-        {safeTendonSeries.length ? (
-          <>
-            <ResponsiveContainer width="100%" height={260}>
-              <ComposedChart data={safeTendonSeries} margin={{ top: 10, right: 14, left: 8, bottom: 8 }}>
-                <CartesianGrid stroke="#1a1b2e" />
-                <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-                <YAxis tick={{ fontSize: 10 }} />
-                <Tooltip formatter={(value, name) => [Number(value).toFixed(2), name]} />
-                <ReferenceArea y1={0} y2={TENDON_GROUP_META[selectedTendonGroup].safe * (adaptiveTrainingState.latestWeek?.tendon?.[selectedTendonGroup]?.capacity || 1)} fill="rgba(34,197,94,0.08)" />
-                <ReferenceArea y1={TENDON_GROUP_META[selectedTendonGroup].safe * (adaptiveTrainingState.latestWeek?.tendon?.[selectedTendonGroup]?.capacity || 1)} y2={TENDON_GROUP_META[selectedTendonGroup].caution * (adaptiveTrainingState.latestWeek?.tendon?.[selectedTendonGroup]?.capacity || 1)} fill="rgba(245,158,11,0.08)" />
-                <ReferenceArea y1={TENDON_GROUP_META[selectedTendonGroup].caution * (adaptiveTrainingState.latestWeek?.tendon?.[selectedTendonGroup]?.capacity || 1)} y2={Math.max(...safeTendonSeries.map(row => Math.max(row.capacity, row.load))) * 1.15} fill="rgba(239,68,68,0.08)" />
-                <Area type="monotone" dataKey="capacity" fill={`${TENDON_GROUP_META[selectedTendonGroup].color}22`} stroke={TENDON_GROUP_META[selectedTendonGroup].color} strokeWidth={2} name="Capacity" />
-                <Line type="monotone" dataKey="load" stroke="#f8fafc" strokeWidth={2} dot={false} name="Load" />
-              </ComposedChart>
-            </ResponsiveContainer>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 10, marginTop: 10 }}>
-              <div style={{ background: "#07080e", border: "1px solid #1a1b2e", borderRadius: 8, padding: 10 }}>
-                <div style={{ fontSize: 10, color: "#667" }}>Current risk</div>
-                <div style={{ fontSize: 24, fontWeight: 800 }}>{adaptiveTrainingState.latestWeek?.tendon?.[selectedTendonGroup]?.risk?.toFixed?.(2) ?? "NA"}x</div>
-              </div>
-              <div style={{ background: "#07080e", border: "1px solid #1a1b2e", borderRadius: 8, padding: 10 }}>
-                <div style={{ fontSize: 10, color: "#667" }}>4-week trajectory</div>
-                <div style={{ fontSize: 13, lineHeight: 1.5, color: "#ced2f0" }}>
-                  {(() => {
-                    const series = safeTendonSeries
-                    const last4 = series.slice(-4)
-                    const avgRisk = last4.length
-                      ? last4.reduce((sum, row) => sum + Number(row?.risk || 0), 0) / last4.length
-                      : null
-                    return Number.isFinite(avgRisk) ? `${avgRisk.toFixed(2)}x if current pattern holds` : "Not enough data"
-                  })()}
-                </div>
-              </div>
-              <div style={{ background: "#07080e", border: "1px solid #1a1b2e", borderRadius: 8, padding: 10 }}>
-                <div style={{ fontSize: 10, color: "#667" }}>12-week trajectory</div>
-                <div style={{ fontSize: 13, lineHeight: 1.5, color: "#ced2f0" }}>
-                  {(() => {
-                    const current = adaptiveTrainingState.latestWeek?.tendon?.[selectedTendonGroup]
-                    if (!current) return "Not enough data"
-                    const risk = clampNumber(current.risk - ((adaptiveTrainingState.complianceScores?.tendon || 0) * 0.12), 0, 2)
-                    return `${risk.toFixed(2)}x if tendon work and run pattern stay similar`
-                  })()}
-                </div>
-              </div>
-            </div>
-            {safeTendonAlerts.length > 0 && (
-              <div style={{ marginTop: 10, display: "grid", gap: 6 }}>
-                {safeTendonAlerts.map(alert => (
-                  <div key={alert} style={{ padding: "9px 10px", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", borderLeft: "3px solid #ef4444", borderRadius: 6, fontSize: 12, color: "#fca5a5" }}>
-                    {alert}
-                  </div>
-                ))}
-              </div>
-            )}
-          </>
-        ) : (
-          <div style={{ color: "#666", fontSize: 12, padding: "28px 0" }}>No tendon trend available yet.</div>
-        )}
-      </div>
-
-      <div style={{ ...cardStyle(), minWidth: 0 }}>
-        <div style={{ fontWeight: "bold", marginBottom: 10 }}>Compliance and Adaptation</div>
-        <div style={{ fontSize: 11, color: "#667", marginBottom: 10 }}>Planned vs completed vs absorbed over the last 12 weeks.</div>
-        {["running", "tendon", "strength", "cardio"].map(domain => (
-          <div key={domain} style={{ marginBottom: 10, paddingBottom: 10, borderBottom: domain !== "cardio" ? "1px solid #151515" : "none" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, textTransform: "capitalize" }}>{domain}</div>
-              <div style={{ fontSize: 11, color: "#667" }}>
-                compliance {(adaptiveTrainingState?.complianceScores?.[domain] * 100 || 0).toFixed(0)}% · absorbed {(adaptiveTrainingState?.absorptionScores?.[domain] * 100 || 0).toFixed(0)}%
-              </div>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0,1fr))", gap: 6 }}>
-              {[
-                ["Planned", safeWeeklyRows.slice(-8).reduce((sum, row) => sum + Number(row.domains?.[domain]?.plannedDose || 0), 0)],
-                ["Completed", safeWeeklyRows.slice(-8).reduce((sum, row) => sum + Number(row.domains?.[domain]?.completedDose || 0), 0)],
-                ["Absorbed", safeWeeklyRows.slice(-8).reduce((sum, row) => sum + Number(row.domains?.[domain]?.absorbedDose || 0), 0)],
-              ].map(([label, value]) => (
-                <div key={label} style={{ background: "#07080e", border: "1px solid #1a1b2e", borderRadius: 6, padding: 8 }}>
-                  <div style={{ fontSize: 10, color: "#667" }}>{label}</div>
-                  <div style={{ fontSize: 18, fontWeight: 700 }}>{Number(value || 0).toFixed(1)}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
-        {safeWeeklyRows.length > 0 && (
-          <div style={{ marginTop: 8 }}>
-            <div style={{ fontSize: 11, color: "#667", marginBottom: 6 }}>Training capital trend</div>
-            <ResponsiveContainer width="100%" height={140}>
-              <LineChart data={safeWeeklyRows.slice(-12).map(row => ({
-                label: row.label,
-                runCapital: row.capital?.running || 0,
-                tendonCapital: row.capital?.tendon || 0,
-                strengthCapital: row.capital?.strength || 0,
-                cardioCapital: row.capital?.cardio || 0,
-              }))} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
-                <CartesianGrid stroke="#1a1b2e" />
-                <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-                <YAxis tick={{ fontSize: 10 }} />
-                <Tooltip formatter={(value, name) => [Number(value).toFixed(1), name]} />
-                <Line type="monotone" dataKey="runCapital" stroke="#ef4444" dot={false} name="Run capital" />
-                <Line type="monotone" dataKey="tendonCapital" stroke="#f59e0b" dot={false} name="Tendon capital" />
-                <Line type="monotone" dataKey="strengthCapital" stroke="#38bdf8" dot={false} name="Strength capital" />
-                <Line type="monotone" dataKey="cardioCapital" stroke="#22c55e" dot={false} name="Cardio capital" />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        )}
-        <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
-          {safeAdaptiveFeedback.map(message => (
-            <div key={message} style={{ fontSize: 12, color: "#cbd5e1", lineHeight: 1.5, padding: "8px 10px", background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: 6 }}>
-              {message}
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-
     <div style={{ ...cardStyle(), minWidth: 0, marginBottom: 16 }}>
 {(() => {
-  const riskPalette = {
-    green: { fill: 'rgba(34,197,94,0.10)', accent: '#4ade80', label: 'Green' },
-    yellow: { fill: 'rgba(250,204,21,0.11)', accent: '#facc15', label: 'Yellow' },
-    orange: { fill: 'rgba(249,115,22,0.12)', accent: '#fb923c', label: 'Orange' },
-    red: { fill: 'rgba(239,68,68,0.13)', accent: '#ef4444', label: 'Red' }
-  }
-  const panel = tsbV2Panel || { rows: [], alerts: [], readinessRiskLabel: 'green', readinessDetail: { score: 'NA' } }
-  const badge = riskPalette[panel.readinessRiskLabel] || riskPalette.green
+  const panel = tsbV2Panel || { rows: [], readinessDetail: { score: "NA" } }
   return (
     <>
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10, marginBottom:10 }}>
-        <div style={{ fontWeight:'bold', minHeight:'20px' }}>Training Readiness</div>
-        <div style={{ fontSize:'10px', color:'#445', textAlign:'right', lineHeight:1.5 }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:10, flexWrap:"wrap", marginBottom:10 }}>
+        <div>
+          <div style={{ fontWeight:"bold", minHeight:"20px" }}>Training Readiness</div>
+          <div style={{ fontSize:11, color:"#667", marginTop:2 }}>TSB by modality across the selected window. Positive values suggest usable freshness; negative values suggest accumulating fatigue.</div>
+        </div>
+        <div style={{ fontSize:"10px", color:"#445", textAlign:"right", lineHeight:1.5 }}>
           tau1={LIFT_CONFIG.tau1}d (fitness) · tau2={LIFT_CONFIG.tau2}d (fatigue) · DEXA anchor {LIFT_CONFIG.dexa_anchor_date}
         </div>
       </div>
-{(() => {
-  const tsb = panel.readinessDetail?.score ?? 0
-  let borderColor = '#4ade80', msg = ''
-  if (tsb < -20)
-    { borderColor = '#ef4444'; msg = 'Acute fatigue. Substitute today\'s session with recovery swim or complete rest.' }
-  else if (tsb < -10)
-    { borderColor = '#fb923c'; msg = 'Moderate fatigue. Reduce intensity; replace run with easy bike or swim.' }
-  else if (tsb > 10)
-    { borderColor = '#4ade80'; msg = 'Form is positive. Good window for quality work or long run.' }
-  else
-    { borderColor = '#facc15'; msg = 'Neutral form. Proceed with scheduled session at controlled effort.' }
-  return (
-    <div style={{ borderLeft:`3px solid ${borderColor}`, paddingLeft:9, fontSize:11, color:'#ccc', lineHeight:1.5 }}>
-      {msg}
-    </div>
-  )
-})()}
+      {(() => {
+        const tsb = panel.readinessDetail?.score ?? 0
+        let borderColor = "#4ade80"
+        let msg = ""
+        if (tsb < -20) { borderColor = "#ef4444"; msg = "Acute fatigue. Substitute today's session with recovery swim or complete rest." }
+        else if (tsb < -10) { borderColor = "#fb923c"; msg = "Moderate fatigue. Reduce intensity; replace run with easy bike or swim." }
+        else if (tsb > 10) { borderColor = "#4ade80"; msg = "Form is positive. Good window for quality work or long run." }
+        else { borderColor = "#facc15"; msg = "Neutral form. Proceed with scheduled session at controlled effort." }
+        return (
+          <div style={{ borderLeft:`3px solid ${borderColor}`, paddingLeft:9, fontSize:11, color:"#ccc", lineHeight:1.5, marginBottom:10 }}>
+            {msg}
+          </div>
+        )
+      })()}
       {readinessChartsReady && panel.rows.length > 0 ? (
         <>
-        {/* Icon legend row */}
-        <div style={{ display:'flex', gap:14, alignItems:'center', marginBottom:6, flexWrap:'wrap' }}>
-          {[
-            { label:'Overall', color:'#e5e7eb', icon: <svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5" stroke="#e5e7eb" strokeWidth="2" fill="none"/></svg> },
-            { label:'Run', color:'#ef4444', icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="#ef4444"><path d="M13.5 5.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM9.9 8.4l-3.4 3.5 1.4 1.4 2.3-2.4.9 2.1-2.5 2.5V20h2v-4l2.4-2.3 2.1 5.3H17l-3.1-7.8L16 9h-2.4l-2 2-1.5-3.5-.2.9z"/></svg> },
-            { label:'Cycle', color:'#22d3ee', icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="#22d3ee"><path d="M15.5 5.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM5 12.5A4.5 4.5 0 109.5 17 4.5 4.5 0 005 12.5zm14 0a4.5 4.5 0 10-4.5 4.5 4.5 4.5 0 004.5-4.5zM12 9.8l-1.5 2.7H14l-1.5-2.7z"/></svg> },
-            { label:'Swim', color:'#a78bfa', icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="#a78bfa"><path d="M2 15.5C3.5 17 5 17 6.5 15.5S9.5 14 11 15.5 13.5 17 15 15.5 17.5 14 19 15.5 21.5 17 23 15.5V13c-1.5 1.5-3 1.5-4.5 0S16 11.5 14.5 13 12 14.5 10.5 13 8 11.5 6.5 13 4 14.5 2.5 13V15.5zm0-5C3.5 12 5 12 6.5 10.5S9.5 9 11 10.5 13.5 12 15 10.5 17.5 9 19 10.5 21.5 12 23 10.5V8c-1.5 1.5-3 1.5-4.5 0S16 6.5 14.5 8 12 9.5 10.5 8 8 6.5 6.5 8 4 9.5 2.5 8V10.5zM11.5 3a1.5 1.5 0 101.5 1.5A1.5 1.5 0 0011.5 3z"/></svg> },
-            { label:'Strength', color:'#ffd166', dash:true, icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="#ffd166"><path d="M20.57 14.86L22 13.43 20.57 12 17 15.57 8.43 7 12 3.43 10.57 2 9.14 3.43 7.71 2 5.57 4.14 4.14 2.71 2.71 4.14l1.43 1.43L2 7.71l1.43 1.43L2 10.57 3.43 12 7 8.43 15.57 17 12 20.57 13.43 22l1.43-1.43L16.29 22l2.14-2.14 1.43 1.43 1.43-1.43-1.43-1.43L22 16.29l-1.43-1.43z"/></svg> },
-          ].map(({ label, color, icon, dash }) => (
-            <div key={label} style={{ display:'flex', alignItems:'center', gap:4, fontSize:10, color:'#999' }}>
-              {icon}
-              <span style={{ color }}>{label}</span>
-              {dash && <span style={{ fontSize:8, color:'#555', marginLeft:-2 }}>- -</span>}
-            </div>
-          ))}
-        </div>
-        <ResponsiveContainer width="100%" height={270}>
-          <ComposedChart data={panel.rows} margin={{ top:12, right:16, left:45, bottom:20 }}>
-            <CartesianGrid stroke="#1a1b2e" />
-            <XAxis dataKey="label" tick={{ fontSize:10 }} interval={Math.max(1, Math.floor((panel.rows.length||1)/12)-1)} />
-            <YAxis domain={panel.tsbDomain || [-15, 10]} tick={{ fontSize: 10 }} label={{ value:'TSB', angle:-90, position:'insideLeft', fill:'#9ca3af', style:{ textAnchor:'middle' } }} />
-            <ReferenceLine y={0} stroke="#444" strokeDasharray="3 3" />
-            <Tooltip formatter={(v,n) => [Number(v).toFixed(2), n]} />
-            {/* Icon legend — replaces Recharts Legend */}
-            <Legend verticalAlign="top" height={0} content={() => null} />
-            <Line type="monotone" dataKey="overallTsb"  name="Overall TSB"  stroke="#e5e7eb" strokeWidth={2.2} dot={false} connectNulls isAnimationActive={false} />
-            <Line type="monotone" dataKey="runningTsb"  name="Running TSB"  stroke="#ef4444" strokeWidth={1.8} dot={false} connectNulls isAnimationActive={false} />
-            <Line type="monotone" dataKey="cyclingTsb"  name="Cycling TSB"  stroke="#22d3ee" strokeWidth={1.8} dot={false} connectNulls isAnimationActive={false} />
-            <Line type="monotone" dataKey="swimmingTsb" name="Swimming TSB" stroke="#a78bfa" strokeWidth={1.8} dot={false} connectNulls isAnimationActive={false} />
-            <Line type="monotone" dataKey="strengthTsb" name="Strength TSB" stroke="#ffd166" strokeWidth={1.8} dot={false} connectNulls strokeDasharray="4 2" isAnimationActive={false} />
-          </ComposedChart>
-        </ResponsiveContainer>
+          <div style={{ display:"flex", gap:14, alignItems:"center", marginBottom:8, flexWrap:"wrap" }}>
+            {[
+              ["Overall", "#e5e7eb"],
+              ["Run", "#ef4444"],
+              ["Cycle", "#22d3ee"],
+              ["Swim", "#a78bfa"],
+              ["Strength", "#ffd166"]
+            ].map(([label, color]) => (
+              <div key={label} style={{ display:"flex", alignItems:"center", gap:5, fontSize:10, color:"#999" }}>
+                <div style={{ width:14, height:2, background:color, borderRadius:999, opacity:0.95 }} />
+                <span style={{ color }}>{label}</span>
+              </div>
+            ))}
+          </div>
+          <ResponsiveContainer width="100%" height={230}>
+            <ComposedChart data={panel.rows} margin={{ top:8, right:14, left:12, bottom:14 }}>
+              <CartesianGrid stroke="#1a1b2e" />
+              <XAxis dataKey="label" tick={{ fontSize:10 }} interval={Math.max(1, Math.floor((panel.rows.length || 1) / 12) - 1)} />
+              <YAxis domain={panel.tsbDomain || [-15, 10]} tick={{ fontSize:10 }} width={28} />
+              <ReferenceLine y={0} stroke="#444" strokeDasharray="3 3" />
+              <Tooltip formatter={(v, n) => [Number(v).toFixed(2), n]} />
+              <Line type="monotone" dataKey="overallTsb" name="Overall TSB" stroke="#e5e7eb" strokeWidth={2.2} dot={false} connectNulls isAnimationActive={false} />
+              <Line type="monotone" dataKey="runningTsb" name="Running TSB" stroke="#ef4444" strokeWidth={1.8} dot={false} connectNulls isAnimationActive={false} />
+              <Line type="monotone" dataKey="cyclingTsb" name="Cycling TSB" stroke="#22d3ee" strokeWidth={1.8} dot={false} connectNulls isAnimationActive={false} />
+              <Line type="monotone" dataKey="swimmingTsb" name="Swimming TSB" stroke="#a78bfa" strokeWidth={1.8} dot={false} connectNulls isAnimationActive={false} />
+              <Line type="monotone" dataKey="strengthTsb" name="Strength TSB" stroke="#ffd166" strokeWidth={1.8} dot={false} connectNulls strokeDasharray="4 2" isAnimationActive={false} />
+            </ComposedChart>
+          </ResponsiveContainer>
         </>
       ) : (
-        <div style={{ color:'#666', fontSize:12, padding:'20px 0' }}>
+        <div style={{ color:"#666", fontSize:12, padding:"20px 0" }}>
           {readinessChartsReady
-            ? `CTL ${computedTSB?.global?.ctl?.toFixed(1) ?? '—'} · ATL ${computedTSB?.global?.atl?.toFixed(1) ?? '—'} · TSB ${computedTSB?.global?.tsb?.toFixed(1) ?? '—'} (computed from workouts)`
-            : 'Loading readiness chart...'}
+            ? `CTL ${computedTSB?.global?.ctl?.toFixed(1) ?? "—"} · ATL ${computedTSB?.global?.atl?.toFixed(1) ?? "—"} · TSB ${computedTSB?.global?.tsb?.toFixed(1) ?? "—"} (computed from workouts)`
+            : "Loading readiness chart..."}
         </div>
       )}
-      <div style={{ marginTop: 6 }}>
-        <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 4 }}>Strength load (normalized)</div>
-        <ResponsiveContainer width="100%" height={56}>
-          <BarChart data={panel.rows} margin={{ top: 0, right: 8, left: 8, bottom: 0 }}>
+      <div style={{ marginTop:10 }}>
+        <div style={{ fontWeight:"bold", fontSize:12 }}>Weekly Strength Load, relative</div>
+        <div style={{ fontSize:11, color:"#667", margin:"2px 0 6px" }}>Purple bars normalize each day's logged strength load to the highest logged strength day in the selected window. Gaps mean no training data; baseline ticks mean training was logged but strength load was zero.</div>
+        <ResponsiveContainer width="100%" height={76}>
+          <BarChart data={panel.rows} margin={{ top:0, right:8, left:8, bottom:0 }}>
             <XAxis dataKey="label" hide />
             <YAxis hide domain={[0, 100]} />
-            <Tooltip formatter={v => [`${Number(v).toFixed(0)}`, "Strength load"]} />
-            <Bar dataKey="strengthNorm" name="Strength load" fill="#7c3aed" fillOpacity={0.45} radius={[2, 2, 0, 0]} />
+            <Tooltip formatter={(value, name) => {
+              if (name === "Zero logged strength") return ["0", "Zero logged strength"]
+              return [`${Number(value).toFixed(0)}`, "Relative strength load"]
+            }} />
+            <Bar dataKey="strengthNormDisplay" name="Relative strength load" fill="#7c3aed" fillOpacity={0.5} radius={[2, 2, 0, 0]} />
+            <Bar dataKey="strengthZeroMarker" name="Zero logged strength" fill="#c4b5fd" radius={[2, 2, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -12178,296 +12180,282 @@ return (
 </div>
 
     <div style={{ ...cardStyle(), minWidth: 0, marginBottom: 16 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-        <div style={{ fontWeight: "bold" }}>Acute:Chronic Workload Ratio (ACWR)</div>
-        <div style={{ fontSize: 10, color: "#445" }}>ATL 7-day avg / CTL 28-day avg · injury risk signal</div>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:10, flexWrap:"wrap", marginBottom:10 }}>
+        <div>
+          <div style={{ fontWeight:"bold" }}>Acute:Chronic Workload Ratio (ACWR)</div>
+          <div style={{ fontSize:11, color:"#667", marginTop:2 }}>ATL 7-day average divided by CTL 28-day average. This chart now follows the same selected time window as the rest of Overview.</div>
+        </div>
+        <div style={{ fontSize:10, color:"#445" }}>{rangeOptions.find(r => r.key === rangeKey)?.label ?? rangeKey}</div>
       </div>
       {(() => {
-        const latest = acwrSeries.length ? acwrSeries[acwrSeries.length - 1] : null
+        const latest = acwrOverviewData.length ? acwrOverviewData[acwrOverviewData.length - 1] : null
         const acwrVal = latest?.acwr ?? null
         const acwrColor = acwrVal == null ? "#555"
-          : acwrVal > 1.5  ? "#ef4444"
-          : acwrVal > 1.3  ? "#f97316"
-          : acwrVal > 0.8  ? "#4ade80"
+          : acwrVal > 1.5 ? "#ef4444"
+          : acwrVal > 1.3 ? "#f97316"
+          : acwrVal > 0.8 ? "#4ade80"
           : "#fbbf24"
         const acwrLabel = acwrVal == null ? "No data"
-          : acwrVal > 1.5  ? "High risk — load spike detected"
-          : acwrVal > 1.3  ? "Caution — approaching overreach zone"
-          : acwrVal > 0.8  ? "Optimal training zone"
+          : acwrVal > 1.5 ? "High risk — load spike detected"
+          : acwrVal > 1.3 ? "Caution — approaching overreach zone"
+          : acwrVal > 0.8 ? "Optimal training zone"
           : "Low — undertraining or deload"
         return (
-          <div style={{ borderLeft: `3px solid ${acwrColor}`, paddingLeft: 9, fontSize: 11, color: "#ccc", lineHeight: 1.5, marginBottom: 12 }}>
-            {acwrVal != null && (
-              <span style={{ fontSize: 20, fontWeight: 800, color: acwrColor, marginRight: 8 }}>
-                {acwrVal.toFixed(2)}
-              </span>
-            )}
+          <div style={{ borderLeft:`3px solid ${acwrColor}`, paddingLeft:9, fontSize:11, color:"#ccc", lineHeight:1.5, marginBottom:12 }}>
+            {acwrVal != null && <span style={{ fontSize:20, fontWeight:800, color:acwrColor, marginRight:8 }}>{acwrVal.toFixed(2)}</span>}
             {acwrLabel}
           </div>
         )
       })()}
-      {acwrSeries.length > 0 ? (
-        <ResponsiveContainer width="100%" height={180}>
-          <ComposedChart data={acwrSeries.slice(-90)} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+      {acwrOverviewData.length > 0 ? (
+        <ResponsiveContainer width="100%" height={190}>
+          <ComposedChart data={acwrOverviewData} margin={{ top:8, right:10, left:6, bottom:8 }}>
             <CartesianGrid stroke="#1a1b2e" />
-            <XAxis dataKey="label" tick={{ fontSize: 9 }} interval="preserveStartEnd" />
-            <YAxis domain={[0, 2.5]} tick={{ fontSize: 10 }} />
+            <XAxis dataKey="label" tick={{ fontSize:9 }} interval="preserveStartEnd" minTickGap={20} />
+            <YAxis domain={acwrOverviewDomain} tick={{ fontSize:10 }} width={28} />
             <Tooltip formatter={(v, n) => [Number(v).toFixed(2), n]} />
             <ReferenceArea y1={1.3} y2={1.5} fill="rgba(249,115,22,0.10)" />
-            <ReferenceArea y1={1.5} y2={2.5} fill="rgba(239,68,68,0.10)" />
-            <ReferenceLine y={1.3} stroke="#f97316" strokeDasharray="4 3"
-              label={{ value: "1.3 caution", fill: "#f97316", fontSize: 9, position: "insideTopRight" }} />
-            <ReferenceLine y={1.5} stroke="#ef4444" strokeDasharray="4 3"
-              label={{ value: "1.5 risk", fill: "#ef4444", fontSize: 9, position: "insideTopRight" }} />
+            <ReferenceArea y1={1.5} y2={Math.max(2.5, acwrOverviewDomain[1])} fill="rgba(239,68,68,0.10)" />
+            <ReferenceLine y={1.3} stroke="#f97316" strokeDasharray="4 3" />
+            <ReferenceLine y={1.5} stroke="#ef4444" strokeDasharray="4 3" />
             <Line dataKey="acwr" stroke="#fbbf24" strokeWidth={2} dot={false} name="ACWR" connectNulls />
           </ComposedChart>
         </ResponsiveContainer>
       ) : (
-        <div style={{ color: "#555", fontSize: 12, padding: "20px 0" }}>
-          No session data available for ACWR computation.
-        </div>
+        <div style={{ color:"#555", fontSize:12, padding:"20px 0" }}>No session data available for ACWR computation.</div>
       )}
-      <div style={{ fontSize: 10, color: "#445", marginTop: 6, lineHeight: 1.6 }}>
+      <div style={{ fontSize:10, color:"#445", marginTop:6, lineHeight:1.6 }}>
         ACWR below 0.8 indicates undertraining. 0.8 to 1.3 is optimal. Above 1.3 is caution. Above 1.5 is high injury risk.
         Based on all modalities combined. November 2025 overreach peaked at 2.15.
       </div>
     </div>
 
-    <div style={{ display: "grid", gridTemplateColumns: window.innerWidth < 768 ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: "16px", marginBottom: "20px", alignItems: "start" }}>
-      <div style={{ ...cardStyle(), minWidth: "0" }}>
-  <div style={{ fontWeight: "bold", marginBottom: "12px", minHeight: "20px" }}>
-    Performance Readiness
-  </div>
-
-  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-    <div style={{ fontSize: 11, color: "#9ca3af" }}>Readiness confidence {(readinessConfidenceSummary.readinessConfidence * 100).toFixed(0)}%</div>
-    <div style={{ fontSize: 11, color: "#9ca3af" }}>Recommendation confidence {(readinessConfidenceSummary.recommendationConfidence * 100).toFixed(0)}%</div>
-    <div style={{ fontSize: 11, color: "#9ca3af" }}>Tri confidence {(readinessConfidenceSummary.triConfidence * 100).toFixed(0)}%</div>
-  </div>
-
-  <div style={{ marginBottom: "14px" }}>
-
-{readinessChartsReady ? (
-<ResponsiveContainer width="100%" height={300}>
-      <LineChart
-  data={readinessProjectionData}
-  margin={{ top: 20, right: 20, left: 55, bottom: 35 }}
->
-        <CartesianGrid stroke="#1a1b2e" />
-        <XAxis
-          type="number"
-          dataKey="month"
-          domain={[0, readinessProjectionMaxMonth]}
-          allowDecimals={false}
-          tickCount={Math.min(readinessProjectionMaxMonth + 1, 8)}
-          label={{
-  value: "Months from now",
-  position: "bottom",
-  offset: 10,
-  fill: "#ced2f0"
-}}
-        />
-        <YAxis
-          domain={[0, 100]}
-          label={{
-  value: "Completion readiness (%)",
-  angle: -90,
-  position: "insideLeft",
-  offset: 15,
-  fill: "#ced2f0",
-  style: { textAnchor: "middle" }
-}}
-        />
-        <Tooltip
-          formatter={(value, name) => [`${Number(value).toFixed(1)}%`, name]}
-          labelFormatter={value => `${value} months`}
-        />
-        <Legend verticalAlign="top" height={36} />
-
-        <Line
-          type="monotone"
-          dataKey="fiveK"
-          stroke="#ef4444"
-          strokeWidth={2}
-          dot={false}
-          name="5K"
-          isAnimationActive={false}
-        />
-
-        <Line
-          type="monotone"
-          dataKey="tenK"
-          stroke="#22c55e"
-          strokeWidth={2}
-          dot={false}
-          name="10K"
-          isAnimationActive={false}
-        />
-
-        <Line
-          type="monotone"
-          dataKey="half"
-          stroke="#facc15"
-          strokeWidth={2}
-          dot={false}
-          name="Half marathon"
-          isAnimationActive={false}
-        />
-
-        <Line
-          type="monotone"
-          dataKey="tri"
-          stroke="#a78bfa"
-          strokeWidth={3}
-          dot={false}
-          name="Olympic triathlon"
-          isAnimationActive={false}
-        />
-
-        {safeEventReadinessMarkers
-          .filter(marker => marker.month != null)
-          .map(marker => (
-            <ReferenceLine
-              key={marker.key}
-              x={marker.month}
-              stroke={marker.color}
-              strokeDasharray="6 4"
-              label={{
-  value: marker.label,
-  angle: -90,
-  position: "top",
-  fill: marker.color
-              }}
-            />
-          ))}
-        {safeTargetableRaceMarkers.map(race => (
-          <ReferenceLine
-            key={`${race.name}_${race.date}`}
-            x={race.month}
-            stroke="#94a3b8"
-            strokeDasharray="2 4"
-            label={{
-              value: race.name,
-              angle: -90,
-              position: "insideTop",
-              fill: "#94a3b8",
-              fontSize: 9
-            }}
-          />
+    <div style={{ ...cardStyle(), minWidth:"0", marginBottom:16 }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:10, flexWrap:"wrap", marginBottom:10 }}>
+        <div>
+          <div style={{ fontWeight:"bold", marginBottom:"4px", minHeight:"20px" }}>Performance Readiness</div>
+          <div style={{ fontSize:11, color:"#667" }}>Completion-readiness projection by event type. Vertical race markers stay in the plot; race names move into the unused left margin for easier scanning.</div>
+        </div>
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap", justifyContent:"flex-end" }}>
+          <div style={{ fontSize:11, color:"#9ca3af" }}>Readiness confidence {(readinessConfidenceSummary.readinessConfidence * 100).toFixed(0)}%</div>
+          <div style={{ fontSize:11, color:"#9ca3af" }}>Recommendation confidence {(readinessConfidenceSummary.recommendationConfidence * 100).toFixed(0)}%</div>
+          <div style={{ fontSize:11, color:"#9ca3af" }}>Tri confidence {(readinessConfidenceSummary.triConfidence * 100).toFixed(0)}%</div>
+        </div>
+      </div>
+      <div style={{ display:"flex", gap:14, alignItems:"center", marginBottom:8, flexWrap:"wrap" }}>
+        {[
+          ["5K", "#ef4444"],
+          ["10K", "#22c55e"],
+          ["Half marathon", "#facc15"],
+          ["Olympic triathlon", "#a78bfa"]
+        ].map(([label, color]) => (
+          <div key={label} style={{ display:"flex", alignItems:"center", gap:5, fontSize:10, color:"#999" }}>
+            <div style={{ width:14, height:2, background:color, borderRadius:999 }} />
+            <span style={{ color }}>{label}</span>
+          </div>
         ))}
-      </LineChart>
-    </ResponsiveContainer>
-) : (
-  <div style={{ color:'#666', fontSize:12, padding:'40px 0', textAlign:'center' }}>Loading readiness chart...</div>
-)}
-  </div>
-  <div style={{ display: "grid", gap: 6 }}>
-    {safeTargetableRaces.slice(0, 4).map(race => (
-      <div key={`${race.name}_${race.date}`} style={{ padding: "8px 10px", background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: 6, fontSize: 12, color: "#cbd5e1" }}>
-        {race.name} · {race.city} · {fmtShortDate(race.date)} · ready by {fmtShortDate(race.thresholdDate)} · buffer {race.bufferDays} days
       </div>
-    ))}
-    {!safeTargetableRaces.length && (
-      <div style={{ fontSize: 12, color: "#666" }}>
-        No currently targetable local races after the projected readiness thresholds.
-      </div>
-    )}
-  </div>
-</div>
-
-      <div style={{ ...cardStyle(), minWidth: "0" }}>
-        <div style={{ fontWeight: "bold", marginBottom: "12px" }}>Calories Trend ({rangeOptions.find(r => r.key === rangeKey)?.label ?? rangeKey})</div>
-        {calorieChartData.length === 0 ? (
-          <div style={{ color: '#555', padding: '40px 0', textAlign: 'center', fontSize: 12 }}>No nutrition data logged for this period.</div>
+      <div style={{ marginBottom:"6px", position:"relative" }}>
+        {readinessChartsReady ? (
+          <div style={{ position:"relative" }}>
+            {safeTargetableRaceMarkers.length > 0 && (
+              <div style={{
+                position:"absolute",
+                left:0,
+                top:6,
+                width: window.innerWidth < 768 ? "100%" : 132,
+                display:"grid",
+                gap:4,
+                zIndex:1,
+                pointerEvents:"none"
+              }}>
+                {safeTargetableRaceMarkers.slice(0, 4).map(race => (
+                  <div key={`${race.name}_${race.date}_label`} style={{ fontSize:10, color:"#94a3b8", lineHeight:1.3, background:"rgba(13,14,28,0.82)", border:"1px solid #1a1b2e", borderRadius:6, padding:"4px 6px" }}>
+                    {race.name}
+                  </div>
+                ))}
+              </div>
+            )}
+            <ResponsiveContainer width="100%" height={290}>
+              <LineChart data={readinessProjectionData} margin={{ top:8, right:14, left:window.innerWidth < 768 ? 10 : 120, bottom:18 }}>
+                <CartesianGrid stroke="#1a1b2e" />
+                <XAxis type="number" dataKey="month" domain={[0, readinessProjectionMaxMonth]} allowDecimals={false} tickCount={Math.min(readinessProjectionMaxMonth + 1, 8)} tick={{ fontSize:10 }} />
+                <YAxis domain={[0, 100]} tick={{ fontSize:10 }} width={30} />
+                <Tooltip formatter={(value, name) => [`${Number(value).toFixed(1)}%`, name]} labelFormatter={value => `${value} months`} />
+                <Line type="monotone" dataKey="fiveK" stroke="#ef4444" strokeWidth={2} dot={false} name="5K" isAnimationActive={false} />
+                <Line type="monotone" dataKey="tenK" stroke="#22c55e" strokeWidth={2} dot={false} name="10K" isAnimationActive={false} />
+                <Line type="monotone" dataKey="half" stroke="#facc15" strokeWidth={2} dot={false} name="Half marathon" isAnimationActive={false} />
+                <Line type="monotone" dataKey="tri" stroke="#a78bfa" strokeWidth={3} dot={false} name="Olympic triathlon" isAnimationActive={false} />
+                {safeEventReadinessMarkers.filter(marker => marker.month != null).map(marker => (
+                  <ReferenceLine key={marker.key} x={marker.month} stroke={marker.color} strokeDasharray="6 4" />
+                ))}
+                {safeTargetableRaceMarkers.map(race => (
+                  <ReferenceLine key={`${race.name}_${race.date}`} x={race.month} stroke="#94a3b8" strokeDasharray="2 4" />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         ) : (
-        <ResponsiveContainer width="100%" height={320}>
-          <LineChart
-  data={calorieChartData}
-  margin={{ top: 20, right: 20, left: 55, bottom: 35 }}
->
-            <CartesianGrid stroke="#1a1b2e" />
-            <XAxis
-  dataKey="label"
-  interval="preserveStartEnd"
-  tickCount={6}
-  label={{
-    value: "Date",
-    position: "bottom",
-    offset: 10,
-    fill: "#ced2f0"
-  }}
-/>
-            <YAxis
-  domain={overviewCaloriesDomain}
-  label={{
-    value: "Calories (kcal/day)",
-    angle: -90,
-    position: "insideLeft",
-    offset: 15,
-    fill: "#ced2f0",
-    style: { textAnchor: "middle" }
-  }}
-/>
-            <Tooltip />
-            <Legend verticalAlign="top" height={36} />
-            <Line
-              type="monotone"
-              dataKey="calories"
-              stroke="#4acfe8"
-              strokeWidth={2}
-              dot={false}
-              name="Calories"
-            />
-            <Line
-              type="monotone"
-              dataKey="target"
-              stroke="#ffd166"
-              strokeDasharray="6 6"
-              dot={false}
-              name="Target"
-            />
-            <Line
-              type="monotone"
-              dataKey="calories_7d"
-              stroke="#ffffff"
-              strokeWidth={2}
-              dot={false}
-              name="7 day avg"
-            />
-          </LineChart>
-        </ResponsiveContainer>
+          <div style={{ color:"#666", fontSize:12, padding:"40px 0", textAlign:"center" }}>Loading readiness chart...</div>
         )}
+      </div>
+      {!safeTargetableRaces.length && (
+        <div style={{ fontSize:12, color:"#666" }}>
+          No currently targetable local races after the projected readiness thresholds.
+        </div>
+      )}
+    </div>
+
+    <div style={{ display:"grid", gridTemplateColumns: window.innerWidth < 1024 ? "1fr" : "1.05fr 0.95fr", gap:16, marginBottom:20, alignItems:"start" }}>
+      <div style={{ ...cardStyle(), minWidth:0 }}>
+        <div style={{ fontWeight:"bold", marginBottom:6 }}>Compliance and Adaptation</div>
+        <div style={{ fontSize:11, color:"#667", marginBottom:10 }}>Compact 8-week rollup of planned work, completed work, absorbed work, and compliance by domain.</div>
+        <div style={{ display:"grid", gap:8 }}>
+          {complianceOverviewRows.map(row => (
+            <div key={row.domain} style={{ display:"grid", gridTemplateColumns: window.innerWidth < 768 ? "68px repeat(4, minmax(0, 1fr))" : "82px repeat(4, minmax(0, 1fr))", gap:6, alignItems:"stretch" }}>
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"center", background:"#0d0e1c", border:"1px solid #1a1b2e", borderRadius:6, fontSize:11, fontWeight:800, textTransform:"uppercase", letterSpacing:"0.08em", color:"#cbd5e1", padding:"8px 4px", textAlign:"center" }}>
+                {row.domain}
+              </div>
+              {[
+                ["Planned", row.planned],
+                ["Completed", row.completed],
+                ["Absorbed", row.absorbed],
+                ["Compliance", `${row.compliancePct}% / ${row.absorptionPct}%`]
+              ].map(([label, value]) => (
+                <div key={label} style={{ background:"#07080e", border:"1px solid #1a1b2e", borderRadius:6, padding:"8px 6px", minHeight:58, display:"flex", flexDirection:"column", justifyContent:"space-between" }}>
+                  <div style={{ fontSize:10, color:"#667" }}>{label}</div>
+                  <div style={{ fontSize: window.innerWidth < 768 ? 13 : 16, fontWeight:700, lineHeight:1.15 }}>{value}</div>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+        <div style={{ marginTop:10, display:"grid", gap:6 }}>
+          {safeAdaptiveFeedback.map(message => (
+            <div key={message} style={{ fontSize:12, color:"#cbd5e1", lineHeight:1.5, padding:"8px 10px", background:"#0d0e1c", border:"1px solid #1a1b2e", borderRadius:6 }}>
+              {message}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ display:"grid", gap:16 }}>
+        <div style={{ ...cardStyle(), minWidth:0 }}>
+          <div style={{ fontWeight:"bold", marginBottom:4 }}>Training Capital Trend</div>
+          <div style={{ fontSize:11, color:"#667", marginBottom:8 }}>Slow-moving adaptive support signal, not acute load. Higher values reflect deeper recent support across each domain.</div>
+          {trainingCapitalChartData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={96}>
+              <LineChart data={trainingCapitalChartData} margin={{ top:6, right:8, left:18, bottom:8 }}>
+                <CartesianGrid stroke="#1a1b2e" />
+                <XAxis dataKey="label" tick={{ fontSize:10 }} />
+                <YAxis tick={{ fontSize:10 }} width={30} label={{ value:"Capital (AU)", angle:-90, position:"insideLeft", offset:-2, fill:"#94a3b8", style:{ textAnchor:"middle" }, fontSize:10 }} />
+                <Tooltip formatter={(value, name) => [Number(value).toFixed(1), name]} />
+                <Line type="monotone" dataKey="runCapital" stroke="#ef4444" dot={false} name="Run capital" />
+                <Line type="monotone" dataKey="tendonCapital" stroke="#f59e0b" dot={false} name="Tendon capital" />
+                <Line type="monotone" dataKey="strengthCapital" stroke="#38bdf8" dot={false} name="Strength capital" />
+                <Line type="monotone" dataKey="cardioCapital" stroke="#22c55e" dot={false} name="Cardio capital" />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <div style={{ color:"#666", fontSize:12, padding:"24px 0" }}>No training capital trend available yet.</div>
+          )}
+        </div>
+
+        <div style={{ ...cardStyle(), minWidth:0 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:8, flexWrap:"wrap", marginBottom:8 }}>
+            <div>
+              <div style={{ fontWeight:"bold" }}>Tendon Capacity</div>
+              <div style={{ fontSize:11, color:"#667", marginTop:2 }}>Combined view defaults to all modeled tendon systems together. Drill down for Achilles/Calf, Forefoot/Toe Extensor, or Patellar/Knee.</div>
+            </div>
+            <select
+              value={selectedTendonGroup}
+              onChange={e => setSelectedTendonGroup(e.target.value)}
+              style={{ background:"#0d0e1c", color:"#ced2f0", border:"1px solid #1a1b2e", borderRadius:6, padding:"6px 8px", fontSize:12 }}
+            >
+              {Object.entries(TENDON_GROUP_META).map(([key, meta]) => (
+                <option key={key} value={key}>{meta.label}</option>
+              ))}
+            </select>
+          </div>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:8 }}>
+            <div style={{ fontSize:11, color:"#f8fafc" }}>white = load</div>
+            <div style={{ fontSize:11, color:"#f97316" }}>orange = capacity</div>
+            <div style={{ fontSize:11, color:"#cbd5e1" }}>risk = load / capacity</div>
+            <div style={{ fontSize:11, color:"#9ca3af" }}>1.0x means load equals modeled tolerance</div>
+          </div>
+          {safeTendonSeries.length ? (
+            <>
+              <ResponsiveContainer width="100%" height={220}>
+                <ComposedChart data={safeTendonSeries} margin={{ top:8, right:12, left:20, bottom:8 }}>
+                  <CartesianGrid stroke="#1a1b2e" />
+                  <XAxis dataKey="label" tick={{ fontSize:10 }} />
+                  <YAxis tick={{ fontSize:10 }} width={32} label={{ value:"Relative load / capacity (AU)", angle:-90, position:"insideLeft", offset:-4, fill:"#94a3b8", style:{ textAnchor:"middle" }, fontSize:10 }} />
+                  <Tooltip formatter={(value, name) => [Number(value).toFixed(2), name]} />
+                  <ReferenceArea y1={0} y2={TENDON_GROUP_META[selectedTendonGroup].safe * (currentTendonSnapshot?.capacity || 1)} fill="rgba(34,197,94,0.08)" />
+                  <ReferenceArea y1={TENDON_GROUP_META[selectedTendonGroup].safe * (currentTendonSnapshot?.capacity || 1)} y2={TENDON_GROUP_META[selectedTendonGroup].caution * (currentTendonSnapshot?.capacity || 1)} fill="rgba(245,158,11,0.08)" />
+                  <ReferenceArea y1={TENDON_GROUP_META[selectedTendonGroup].caution * (currentTendonSnapshot?.capacity || 1)} y2={tendonPlotCeiling} fill="rgba(239,68,68,0.08)" />
+                  <Area type="monotone" dataKey="capacity" fill="rgba(249,115,22,0.18)" stroke="#f97316" strokeWidth={2} name="Capacity" />
+                  <Line type="monotone" dataKey="load" stroke="#f8fafc" strokeWidth={2} dot={false} name="Load" />
+                </ComposedChart>
+              </ResponsiveContainer>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(120px, 1fr))", gap:10, marginTop:10 }}>
+                <div style={{ background:"#07080e", border:"1px solid #1a1b2e", borderRadius:8, padding:10 }}>
+                  <div style={{ fontSize:10, color:"#667" }}>Current risk</div>
+                  <div style={{ fontSize:24, fontWeight:800 }}>{currentTendonSnapshot?.risk?.toFixed?.(2) ?? "NA"}x</div>
+                </div>
+                <div style={{ background:"#07080e", border:"1px solid #1a1b2e", borderRadius:8, padding:10 }}>
+                  <div style={{ fontSize:10, color:"#667" }}>4-week trajectory</div>
+                  <div style={{ fontSize:13, lineHeight:1.5, color:"#ced2f0" }}>
+                    {(() => {
+                      const last4 = safeTendonSeries.slice(-4)
+                      const avgRisk = last4.length ? last4.reduce((sum, row) => sum + Number(row?.risk || 0), 0) / last4.length : null
+                      return Number.isFinite(avgRisk) ? `${avgRisk.toFixed(2)}x if current pattern holds` : "Not enough data"
+                    })()}
+                  </div>
+                </div>
+                <div style={{ background:"#07080e", border:"1px solid #1a1b2e", borderRadius:8, padding:10 }}>
+                  <div style={{ fontSize:10, color:"#667" }}>12-week trajectory</div>
+                  <div style={{ fontSize:13, lineHeight:1.5, color:"#ced2f0" }}>
+                    {(() => {
+                      if (!currentTendonSnapshot) return "Not enough data"
+                      const risk = clampNumber(currentTendonSnapshot.risk - ((adaptiveTrainingState.complianceScores?.tendon || 0) * 0.12), 0, 2)
+                      return `${risk.toFixed(2)}x if tendon work and run pattern stay similar`
+                    })()}
+                  </div>
+                </div>
+              </div>
+              {safeTendonAlerts.length > 0 && (
+                <div style={{ marginTop:10, display:"grid", gap:6 }}>
+                  {safeTendonAlerts.map(alert => (
+                    <div key={alert} style={{ padding:"9px 10px", background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.2)", borderLeft:"3px solid #ef4444", borderRadius:6, fontSize:12, color:"#fca5a5" }}>
+                      {alert}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            <div style={{ color:"#666", fontSize:12, padding:"28px 0" }}>No tendon trend available yet.</div>
+          )}
+        </div>
       </div>
     </div>
 
     <div style={{ display: "grid", gridTemplateColumns: window.innerWidth < 768 ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: "16px", marginBottom: "20px", alignItems: "start" }}>
       <div style={{ ...cardStyle(), minWidth: "0" }}>
         <div style={{ fontWeight: "bold", marginBottom: "12px" }}>Weight Trend, actual and 7 day average ({rangeOptions.find(r => r.key === rangeKey)?.label ?? rangeKey})</div>
+        <div style={{ fontSize: 11, color: "#667", marginBottom: 10 }}>Daily scale weight and 7-day smoothing.</div>
         <ResponsiveContainer width="100%" height={320}>
           <LineChart
   data={weightSmoothed}
-  margin={{ top: 20, right: 20, left: 55, bottom: 35 }}
+  margin={{ top: 8, right: 14, left: 10, bottom: 18 }}
 >
             <CartesianGrid stroke="#1a1b2e" />
-            <XAxis
-  dataKey="label"
-  label={{
-    value: "Date",
-    position: "bottom",
-    offset: 10,
-    fill: "#ced2f0"
-  }}
-/>
+            <XAxis dataKey="label" tick={{ fontSize: 10 }} />
             <YAxis
               domain={overviewWeightDomain}
-              label={{
-  value: "Body weight (lb)",
-  angle: -90,
-  position: "insideLeft",
-  offset: 15,
-  fill: "#ced2f0",
-  style: { textAnchor: "middle" }
-}}
+              tick={{ fontSize: 10 }}
+              width={38}
             />
             <Tooltip
               formatter={(value, name) => {
@@ -12520,43 +12508,23 @@ return (
         <ResponsiveContainer width="100%" height={300}>
           <ComposedChart
   data={trainingLoadChartData}
-  margin={{ top: 20, right: 20, left: 55, bottom: 35 }}
+  margin={{ top: 8, right: 14, left: 10, bottom: 18 }}
 >
             <CartesianGrid stroke="#1a1b2e" />
-            <XAxis
-  dataKey="label"
-  label={{
-    value: "Date",
-    position: "bottom",
-    offset: 10,
-    fill: "#ced2f0"
-  }}
-/>
+            <XAxis dataKey="label" tick={{ fontSize: 10 }} />
             <YAxis
               yAxisId="distance"
               orientation="left"
               domain={[0, trainingLoadDistanceMax]}
-              label={{
-  value: "Miles / sessions",
-  angle: -90,
-  position: "insideLeft",
-  offset: 15,
-  fill: "#ced2f0",
-  style: { textAnchor: "middle" }
-}}
+              tick={{ fontSize: 10 }}
+              width={34}
             />
             <YAxis
               yAxisId="loadpct"
               orientation="right"
               domain={[0, 100]}
-              label={{
-  value: "Load %",
-  angle: 90,
-  position: "insideRight",
-  offset: -15,
-  fill: "#6b7280",
-  style: { textAnchor: "middle" }
-}}
+              tick={{ fontSize: 10 }}
+              width={30}
               allowDecimals={false}
             />
             <Tooltip />
@@ -12622,32 +12590,19 @@ return (
   <div style={{ fontWeight: "bold", marginBottom: "12px", minHeight: "20px" }}>
     Body Composition
   </div>
+  <div style={{ fontSize: 11, color: "#667", marginBottom: 10 }}>DEXA anchor vs current estimated body-fat trend.</div>
 
   <ResponsiveContainer width="100%" height={300}>
     <LineChart
       data={bodyCompositionOverviewData}
-      margin={{ top: 20, right: 20, left: 55, bottom: 35 }}
+      margin={{ top: 8, right: 14, left: 10, bottom: 18 }}
     >
       <CartesianGrid stroke="#1a1b2e" />
-      <XAxis
-        dataKey="label"
-        label={{
-          value: "Date",
-          position: "bottom",
-          offset: 10,
-          fill: "#ced2f0"
-        }}
-      />
+      <XAxis dataKey="label" tick={{ fontSize: 10 }} />
       <YAxis
         domain={bodyCompositionOverviewDomain}
-        label={{
-          value: "Body fat (%)",
-          angle: -90,
-          position: "insideLeft",
-          offset: 15,
-          fill: "#ced2f0",
-          style: { textAnchor: "middle" }
-        }}
+        tick={{ fontSize: 10 }}
+        width={34}
       />
       <Tooltip
         formatter={(value, name) => {
@@ -12679,34 +12634,53 @@ return (
   </ResponsiveContainer>
 </div>
 
-	<div style={{ ...cardStyle(), minWidth: "0" }}>
-	  <div style={{ fontWeight: "bold", marginBottom: "12px", minHeight: "20px" }}>
-	    Operational Capacity Projection
-	  </div>
-	  {(!operationalCapacityData || operationalCapacityData.length === 0) ? (
-	    <div style={{ fontSize: "12px", color: "#444", textAlign: "center", padding: "40px 0" }}>
-	      No current OC issues — true historical snapshots are not stored yet.
-	    </div>
-  ) : (
-    <ResponsiveContainer width="100%" height={300}>
-      <LineChart data={operationalCapacityData} margin={{ top: 20, right: 20, left: 55, bottom: 35 }}>
-        <CartesianGrid stroke="#1a1b2e" />
-        <XAxis dataKey="label" label={{ value: "Date", position: "bottom", offset: 10, fill: "#ced2f0" }} />
-        <YAxis domain={[0, 100]} label={{ value: "Operational capacity (%)", angle: -90, position: "insideLeft", offset: 15, fill: "#ced2f0", style: { textAnchor: "middle" } }} />
-        <Tooltip formatter={(v, n) => {
-          const lbl = { operationalPct: "Operational", acuteLossPct: "Acute burden", diseaseLossPct: "Disease burden", fatigueLossPct: "Fatigue burden" }
-          return [`${Number(v).toFixed(1)}%`, lbl[n] || n]
-        }} />
-        <Legend verticalAlign="top" height={36} />
-        <Line type="monotone" dataKey="operationalPct" stroke="#e5e7eb" strokeWidth={3} dot={false} name="Operational" />
-        <Line type="monotone" dataKey="acuteLossPct"   stroke="#ef4444" strokeWidth={2} dot={false} name="Acute" />
-        <Line type="monotone" dataKey="diseaseLossPct" stroke="#f59e0b" strokeWidth={2} dot={false} name="Disease" />
-        <Line type="monotone" dataKey="fatigueLossPct" stroke="#a78bfa" strokeWidth={2} dot={false} name="Fatigue" />
-      </LineChart>
-    </ResponsiveContainer>
-  )}
-</div>
+      <div style={{ ...cardStyle(), minWidth: "0" }}>
+        <div style={{ fontWeight: "bold", marginBottom: "6px" }}>Calories Trend ({rangeOptions.find(r => r.key === rangeKey)?.label ?? rangeKey})</div>
+        <div style={{ fontSize: 11, color: "#667", marginBottom: 10 }}>Daily intake, target, and 7-day average. Moved lower so readiness and load decisions lead the page.</div>
+        {calorieChartData.length === 0 ? (
+          <div style={{ color: "#555", padding: "40px 0", textAlign: "center", fontSize: 12 }}>No nutrition data logged for this period.</div>
+        ) : (
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={calorieChartData} margin={{ top: 8, right: 14, left: 10, bottom: 18 }}>
+              <CartesianGrid stroke="#1a1b2e" />
+              <XAxis dataKey="label" interval="preserveStartEnd" tickCount={6} tick={{ fontSize: 10 }} />
+              <YAxis domain={overviewCaloriesDomain} tick={{ fontSize: 10 }} width={36} />
+              <Tooltip />
+              <Line type="monotone" dataKey="calories" stroke="#4acfe8" strokeWidth={2} dot={false} name="Calories" />
+              <Line type="monotone" dataKey="target" stroke="#ffd166" strokeDasharray="6 6" dot={false} name="Target" />
+              <Line type="monotone" dataKey="calories_7d" stroke="#ffffff" strokeWidth={2} dot={false} name="7 day avg" />
+            </LineChart>
+          </ResponsiveContainer>
+        )}
+      </div>
 
+    </div>
+    <div style={{ ...cardStyle(), minWidth: "0", marginBottom: "20px" }}>
+      <div style={{ fontWeight: "bold", marginBottom: "12px", minHeight: "20px" }}>
+        Operational Capacity Projection
+      </div>
+      {(!operationalCapacityData || operationalCapacityData.length === 0) ? (
+        <div style={{ fontSize: "12px", color: "#444", textAlign: "center", padding: "40px 0" }}>
+          No current OC issues — true historical snapshots are not stored yet.
+        </div>
+      ) : (
+        <ResponsiveContainer width="100%" height={240}>
+          <LineChart data={operationalCapacityData} margin={{ top: 8, right: 14, left: 10, bottom: 18 }}>
+            <CartesianGrid stroke="#1a1b2e" />
+            <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+            <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} width={34} />
+            <Tooltip formatter={(v, n) => {
+              const lbl = { operationalPct: "Operational", acuteLossPct: "Acute burden", diseaseLossPct: "Disease burden", fatigueLossPct: "Fatigue burden" }
+              return [`${Number(v).toFixed(1)}%`, lbl[n] || n]
+            }} />
+            <Legend verticalAlign="top" height={28} />
+            <Line type="monotone" dataKey="operationalPct" stroke="#e5e7eb" strokeWidth={3} dot={false} name="Operational" />
+            <Line type="monotone" dataKey="acuteLossPct" stroke="#ef4444" strokeWidth={2} dot={false} name="Acute" />
+            <Line type="monotone" dataKey="diseaseLossPct" stroke="#f59e0b" strokeWidth={2} dot={false} name="Disease" />
+            <Line type="monotone" dataKey="fatigueLossPct" stroke="#a78bfa" strokeWidth={2} dot={false} name="Fatigue" />
+          </LineChart>
+        </ResponsiveContainer>
+      )}
     </div>
   </div>
 )}
