@@ -10763,7 +10763,7 @@ cutoff.setDate(cutoff.getDate() - selectedRangePoints)
     }
 
     setAuthMsg("")
-    const e = String(email || "").trim()
+    const e = String(email || session?.user?.email || "").trim()
     if (!e.includes("@")) {
       setAuthMsg("Enter a valid email.")
       return
@@ -12471,7 +12471,72 @@ return (
 
         <div style={{ ...cardStyle(), minWidth: "0", flex: "1 1 280px", maxWidth: "420px" }}>
           <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "8px" }}>Sync</div>
-          {session ? (
+          {recoveryStatus === "ready" ? (
+            <>
+              <div style={{ fontSize: "14px", marginBottom: "10px" }}>
+                {session ? (
+                  <>
+                    Signed in as <span style={{ color: "#4a9ee8" }}>{session.user.email}</span>
+                  </>
+                ) : (
+                  "Complete password recovery"
+                )}
+              </div>
+              <div style={{ display: "grid", gap: "8px" }}>
+                <div
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: 8,
+                    background: "rgba(245,158,11,0.12)",
+                    border: "1px solid rgba(245,158,11,0.3)",
+                    fontSize: "12px",
+                    color: "#fcd34d",
+                    lineHeight: 1.5
+                  }}
+                >
+                  Password recovery detected. Set a new password to complete recovery.
+                </div>
+                <input
+                  type="password"
+                  value={recoveryPassword}
+                  onChange={e => setRecoveryPassword(e.target.value)}
+                  placeholder="new password"
+                  autoComplete="new-password"
+                  style={inputStyle()}
+                />
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  <button onClick={completePasswordRecovery} style={buttonStyle(true)}>Set new password</button>
+                  {session && <button onClick={doSignOut} style={buttonStyle(false)}>Sign out</button>}
+                </div>
+              </div>
+            </>
+          ) : recoveryStatus === "expired" ? (
+            <>
+              {session && (
+                <div style={{ fontSize: "14px", marginBottom: "10px" }}>
+                  Signed in as <span style={{ color: "#4a9ee8" }}>{session.user.email}</span>
+                </div>
+              )}
+              <div style={{ display: "grid", gap: "8px" }}>
+                <div
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: 8,
+                    background: "rgba(239,68,68,0.12)",
+                    border: "1px solid rgba(239,68,68,0.3)",
+                    fontSize: "12px",
+                    color: "#fca5a5",
+                    lineHeight: 1.5
+                  }}
+                >
+                  Recovery link expired, request a new one.
+                </div>
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  <button onClick={sendPasswordRecovery} style={buttonStyle(true)}>Request new recovery link</button>
+                </div>
+              </div>
+            </>
+          ) : session ? (
             <>
               <div style={{ fontSize: "14px", marginBottom: "10px" }}>
                 Signed in as <span style={{ color: "#4a9ee8" }}>{session.user.email}</span>
