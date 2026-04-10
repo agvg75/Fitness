@@ -5337,7 +5337,7 @@ function buildAdaptiveTrainingState({
     const weekStart = getWeekStartIso(date)
     const week = weekMap.get(weekStart)
     if (!week) return
-    const category = normalizeWorkoutType(workout?.type, workout)
+    const category = getWorkoutCategoryForSummary(workout)
     const dur = Number(workout?.dur || workout?.duration_min || 0) || 0
     if (category === "Running") {
       week.domains.running.completedDose += (getWorkoutDistanceMiles(workout) * 8) + dur * 0.35
