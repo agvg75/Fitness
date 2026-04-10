@@ -42,8 +42,16 @@ import { createClient } from "@supabase/supabase-js"
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
 const ANTHROPIC_API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY
+const SUPABASE_AUTH_STORAGE_KEY = "lift-supabase-auth"
 const supabase = SUPABASE_URL && SUPABASE_ANON_KEY
-  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        storageKey: SUPABASE_AUTH_STORAGE_KEY
+      }
+    })
   : null
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
@@ -59,6 +67,62 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
 let STORE_USER_ID = null
 const setStoreUser = userId => {
   STORE_USER_ID = userId || null
+}
+
+const AUTH_URL_KEYS = [
+  "access_token",
+  "refresh_token",
+  "expires_at",
+  "expires_in",
+  "token_type",
+  "type",
+  "code"
+]
+
+function getAuthRedirectContext() {
+  if (typeof window === "undefined") {
+    return { hasAuthParams: false, isRecovery: false }
+  }
+
+  const url = new URL(window.location.href)
+  const searchParams = new URLSearchParams(url.search)
+  const hash = url.hash.startsWith("#") ? url.hash.slice(1) : url.hash
+  const hashParams = new URLSearchParams(hash)
+  const hasAuthParams = AUTH_URL_KEYS.some(key => searchParams.has(key) || hashParams.has(key))
+  const recoveryType = searchParams.get("type") || hashParams.get("type")
+
+  return {
+    hasAuthParams,
+    isRecovery: recoveryType === "recovery"
+  }
+}
+
+function cleanAuthRedirectUrl() {
+  if (typeof window === "undefined") return
+
+  const url = new URL(window.location.href)
+  const searchParams = new URLSearchParams(url.search)
+  const hash = url.hash.startsWith("#") ? url.hash.slice(1) : url.hash
+  const hashParams = new URLSearchParams(hash)
+
+  let changed = false
+  AUTH_URL_KEYS.forEach(key => {
+    if (searchParams.has(key)) {
+      searchParams.delete(key)
+      changed = true
+    }
+    if (hashParams.has(key)) {
+      hashParams.delete(key)
+      changed = true
+    }
+  })
+
+  if (!changed) return
+
+  const nextSearch = searchParams.toString()
+  const nextHash = hashParams.toString()
+  const nextUrl = `${url.pathname}${nextSearch ? `?${nextSearch}` : ""}${nextHash ? `#${nextHash}` : ""}`
+  window.history.replaceState({}, document.title, nextUrl)
 }
 
 const SYNC_KEYS = new Set([
@@ -1187,6 +1251,7 @@ const OC_KEY_META = {
 }
 
 const OC_BODY_REGIONS = [
+  "Tendon System",
   "Head", "Neck",
   "Shoulder L", "Shoulder R", "Upper Arm L", "Upper Arm R",
   "Elbow L", "Elbow R", "Forearm L", "Forearm R", "Wrist L", "Wrist R",
@@ -1324,6 +1389,7 @@ function computeOcRecoveryDate(item) {
 function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapacityData, healthFitDaily, sleepRecords, tsbFallback = null, runSessions = [] }) {
   const [selectedId, setSelectedId] = useState(null)
   const [addForm, setAddForm] = useState({ key: "muscleStatus", location: "Quad L", currentScore: 1, halfLifeHours: null })
+  const [capacityInfoOpen, setCapacityInfoOpen] = useState({ tendonPain: false })
 
   const selectedItem = ocItems.find(i => i.id === selectedId) || null
   const rd = computeReadinessDetail(ocItems, sleepRecords, healthFitDaily, tsbFallback)
@@ -1341,6 +1407,66 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
         { onConflict: "user_id,key" }
       )
     }
+  }
+
+  const tendonControlItem = [...ocItems]
+    .filter(item => item.key === "tendonStatus")
+    .sort((a, b) => String(b.startDate || "").localeCompare(String(a.startDate || "")))[0] || null
+
+  const tendonPainTenPoint = Number(
+    tendonControlItem?.painScore10 ??
+    (Number.isFinite(Number(tendonControlItem?.currentScore))
+      ? Number(tendonControlItem.currentScore) * 2
+      : 0)
+  )
+
+  const updateTendonPain = nextPainValue => {
+    const nextPainScore = Math.max(0, Math.min(10, Number(nextPainValue || 0)))
+    const nextOcScore = Math.round(nextPainScore / 2)
+    const nowIso = new Date().toISOString()
+
+    if (tendonControlItem) {
+      const updated = ocItems.map(item => {
+        if (item.id !== tendonControlItem.id) return item
+
+        return {
+          ...item,
+          location: item.location || "Tendon System",
+          label: item.label || "Tendon — Tendon System",
+          currentScore: nextOcScore,
+          initialScore: nextOcScore > Number(item.initialScore || 0)
+            ? nextOcScore
+            : Number(item.initialScore || nextOcScore),
+          startDate: nextOcScore > 0 && Number(item.currentScore || 0) === 0 ? nowIso : item.startDate,
+          lastResolvedDate: nextOcScore === 0 ? nowIso : item.lastResolvedDate,
+          painScore10: nextPainScore
+        }
+      })
+      setOcItems(updated)
+      saveOcItems(updated)
+      return
+    }
+
+    if (nextOcScore <= 0) return
+
+    const item = {
+      id: Date.now(),
+      key: "tendonStatus",
+      location: "Tendon System",
+      label: "Tendon — Tendon System",
+      currentScore: nextOcScore,
+      initialScore: nextOcScore,
+      startDate: nowIso,
+      halfLifeHours: OC_KEY_META.tendonStatus.halfLifeHours,
+      episodeCount: 0,
+      lastResolvedDate: null,
+      chronicity: "acute",
+      painScore10: nextPainScore
+    }
+
+    const updated = [item, ...ocItems]
+    setOcItems(updated)
+    saveOcItems(updated)
   }
 
   const addItem = () => {
@@ -1388,6 +1514,27 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
     updateItem(id, { currentScore: 0, episodeCount, lastResolvedDate, chronicity })
     setSelectedId(null)
   }
+
+  const infoButton = key => (
+    <button
+      type="button"
+      onClick={() => setCapacityInfoOpen(prev => ({ ...prev, [key]: !prev[key] }))}
+      style={{
+        width: 22,
+        height: 22,
+        borderRadius: 999,
+        border: "1px solid #2a2d45",
+        background: capacityInfoOpen[key] ? "#252640" : "#0d0e1c",
+        color: "#cbd5e1",
+        fontSize: 12,
+        fontWeight: 700,
+        cursor: "pointer",
+        flex: "0 0 auto"
+      }}
+    >
+      {capacityInfoOpen[key] ? "×" : "i"}
+    </button>
+  )
 
   const renderSilhouette = side => {
     const ck = side === "front" ? "f" : "b"
@@ -1469,6 +1616,44 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
             </div>
           </div>
         </div>
+      </div>
+
+      <div style={{ ...cardStyle(), marginBottom: "16px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px", marginBottom: "10px" }}>
+          <div>
+            <div style={{ fontSize: "12px", fontWeight: "700" }}>Tendon Pain</div>
+            {!capacityInfoOpen.tendonPain && (
+              <div style={{ fontSize: "11px", color: "#667", marginTop: "2px" }}>
+                OC-backed tendon control for readiness and progression gating.
+              </div>
+            )}
+          </div>
+          {infoButton("tendonPain")}
+        </div>
+        {capacityInfoOpen.tendonPain ? (
+          <div style={{ fontSize: "12px", lineHeight: 1.5, color: "#cbd5e1" }}>
+            This slider updates the tendon operational-capacity state directly. It feeds the tendon gate used by Readiness and Schedule recommendations, and a zero value clears the active tendon burden without showing extra UI by default.
+          </div>
+        ) : (
+          <div style={{ display: "grid", gap: "8px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", fontSize: "12px" }}>
+              <span style={{ color: "#ced2f0" }}>Current tendon pain</span>
+              <span style={{ fontWeight: "700", color: "#f59e0b" }}>{tendonPainTenPoint}/10</span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={10}
+              step={1}
+              value={tendonPainTenPoint}
+              onChange={e => updateTendonPain(e.target.value)}
+              style={{ width: "100%", accentColor: "#f59e0b" }}
+            />
+            <div style={{ fontSize: "11px", color: "#667" }}>
+              Tendon gate: {rd.active.filter(item => item.key === "tendonStatus").length ? `${Math.max(...rd.active.filter(item => item.key === "tendonStatus").map(item => Number(item.currentScore || 0)))}/5 OC` : "clear"}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── MTP Progression Counter ───────────────────────────────── */}
@@ -1813,7 +1998,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const [toast, setToast] = useState(null)
   const [openSections, setOpenSections] = useState(() => {
     const mobile = typeof window !== "undefined" ? window.innerWidth < 768 : true
-    return { stretch: false, warmup: false, tendon: true, main: !mobile, core: false, cardio: false, diagnostics: false }
+    return { stretch: false, warmup: false, tendon: false, main: !mobile, core: false, cardio: false, diagnostics: false }
   })
   const [variants, setVariants] = useState({})
   const [fields, setFields] = useState({})
@@ -1837,6 +2022,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const [showSetTimer, setShowSetTimer] = useState(false)
   const [expandedCards, setExpandedCards] = useState({})
   const [isMobileLayout, setIsMobileLayout] = useState(() => typeof window !== "undefined" ? window.innerWidth < 768 : true)
+  const [scheduleInfoOpen, setScheduleInfoOpen] = useState({ tendon: false })
   const logEntryRefs = useRef({})
 
   const SPLIT_DAYS = ["Tue", "Thu"]
@@ -2906,9 +3092,32 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
 
     return (
       <div style={{ padding: "12px 14px" }}>
-        <div style={{ marginBottom: 10, padding: "8px 10px", background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.24)", borderRadius: 6, fontSize: 11, color: "#fcd34d", lineHeight: 1.5 }}>
-          Tendon work counts as structural training. It supports Achilles, forefoot, and knee capacity and should be logged explicitly.
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 10 }}>
+          <div style={{ fontSize: 11, color: "#fcd34d", fontWeight: 700 }}>Structural tendon work</div>
+          <button
+            type="button"
+            onClick={() => setScheduleInfoOpen(prev => ({ ...prev, tendon: !prev.tendon }))}
+            style={{
+              width: 22,
+              height: 22,
+              borderRadius: 999,
+              border: "1px solid #5a4516",
+              background: scheduleInfoOpen.tendon ? "rgba(245,158,11,0.18)" : "transparent",
+              color: "#fcd34d",
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: "pointer",
+              flex: "0 0 auto"
+            }}
+          >
+            {scheduleInfoOpen.tendon ? "×" : "i"}
+          </button>
         </div>
+        {scheduleInfoOpen.tendon && (
+          <div style={{ marginBottom: 10, padding: "8px 10px", background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.24)", borderRadius: 6, fontSize: 11, color: "#fcd34d", lineHeight: 1.5 }}>
+            Tendon work counts as structural training. It supports Achilles, forefoot, and knee capacity and should be logged explicitly.
+          </div>
+        )}
         {entries.map((entry, idx) => {
           const checked = isChecked(day, "tendon", idx)
           return (
@@ -9567,8 +9776,30 @@ useEffect(() => {
 
 const [session, setSession] = useState(null)
 const [email, setEmail] = useState("avidal@ilstu.edu")
+const [password, setPassword] = useState("")
+const [recoveryPassword, setRecoveryPassword] = useState("")
 const [authMsg, setAuthMsg] = useState("")
+const [authEvents, setAuthEvents] = useState([])
+const [sessionRestoredFromStorage, setSessionRestoredFromStorage] = useState(false)
+const [authInitialized, setAuthInitialized] = useState(false)
+const [isRecoveryMode, setIsRecoveryMode] = useState(() => getAuthRedirectContext().isRecovery)
+const isRecoveryModeRef = useRef(isRecoveryMode)
   const [hydrated, setHydrated] = useState(false)
+
+const pushAuthEvent = useCallback((eventName, currentSession, details = "") => {
+  const summary = [
+    new Date().toISOString(),
+    eventName,
+    currentSession?.user?.email || "no-user",
+    details
+  ].filter(Boolean).join(" | ")
+
+  setAuthEvents(prev => [...prev.slice(-7), summary])
+}, [])
+
+useEffect(() => {
+  isRecoveryModeRef.current = isRecoveryMode
+}, [isRecoveryMode])
 
   const [mealEntries, setMealEntries] = useState([])
   const [mealPresets, setMealPresets] = useState(defaultMealPresets)
@@ -9891,13 +10122,65 @@ useEffect(() => {
 useEffect(() => {
   if (!supabase) return
 
+  let cancelled = false
+
   ;(async () => {
-    const { data } = await supabase.auth.getSession()
-    setSession(data?.session ?? null)
+    try {
+      const redirectContext = getAuthRedirectContext()
+      const { data, error } = await supabase.auth.getSession()
+      if (cancelled) return
+
+      const restoredFromStorage = Boolean(data?.session) && !redirectContext.hasAuthParams
+
+      setSession(data?.session ?? null)
+      setSessionRestoredFromStorage(restoredFromStorage)
+      setIsRecoveryMode(redirectContext.isRecovery)
+      setAuthInitialized(true)
+
+      if (error) {
+        pushAuthEvent("GET_SESSION_ERROR", data?.session ?? null, error.message || "Unknown error")
+      } else {
+        pushAuthEvent(
+          "GET_SESSION",
+          data?.session ?? null,
+          restoredFromStorage ? "restored-from-storage" : "no-stored-session"
+        )
+      }
+
+      if (data?.session && !redirectContext.isRecovery) {
+        cleanAuthRedirectUrl()
+      }
+    } catch (err) {
+      if (cancelled) return
+      setAuthInitialized(true)
+      pushAuthEvent("GET_SESSION_THROWN", null, err?.message || "Unknown error")
+    }
   })()
 
   const sub = supabase.auth.onAuthStateChange(async (evt, sess) => {
+    const redirectContext = getAuthRedirectContext()
+
     setSession(sess)
+    pushAuthEvent(evt, sess, redirectContext.isRecovery ? "recovery-url" : "")
+
+    if (evt === "INITIAL_SESSION") {
+      setSessionRestoredFromStorage(Boolean(sess) && !redirectContext.hasAuthParams)
+      setAuthInitialized(true)
+      if (redirectContext.isRecovery) setIsRecoveryMode(true)
+    }
+
+    if (evt === "PASSWORD_RECOVERY") {
+      setIsRecoveryMode(true)
+      setAuthMsg("Enter a new password to finish password recovery.")
+      cleanAuthRedirectUrl()
+    }
+
+    if (evt === "SIGNED_OUT") {
+      setIsRecoveryMode(false)
+      setSessionRestoredFromStorage(false)
+      setPassword("")
+      setRecoveryPassword("")
+    }
 
     if (evt === "SIGNED_IN" && sess?.user?.id) {
       const localMeals = JSON.parse(localStorage.getItem("ufd-meal-entries") || "[]")
@@ -9912,11 +10195,26 @@ useEffect(() => {
           if (process.env.NODE_ENV === "development") console.error("Meal migration failed:", err)
         }
       }
+
+      if (!redirectContext.isRecovery) {
+        setIsRecoveryMode(false)
+        cleanAuthRedirectUrl()
+      }
+    }
+
+    if (evt === "USER_UPDATED" && isRecoveryModeRef.current) {
+      setIsRecoveryMode(false)
+      setRecoveryPassword("")
+      setPassword("")
+      cleanAuthRedirectUrl()
     }
   })
 
-  return () => sub.data.subscription.unsubscribe()
-}, [])
+  return () => {
+    cancelled = true
+    sub.data.subscription.unsubscribe()
+  }
+}, [pushAuthEvent])
 
   useEffect(() => {
     setHydrated(false)
@@ -10367,7 +10665,7 @@ cutoff.setDate(cutoff.getDate() - selectedRangePoints)
     return Object.values(map).sort((a, b) => a.date.localeCompare(b.date))
   }, [mergedDailyWeights, nutritionSeries])
 
-  const sendLink = async () => {
+  const signInWithPassword = async () => {
     if (!supabase) {
       setAuthMsg("Supabase env vars are missing.")
       return
@@ -10380,12 +10678,67 @@ cutoff.setDate(cutoff.getDate() - selectedRangePoints)
       return
     }
 
-    const { error: authError } = await supabase.auth.signInWithOtp({
-      email: e
+    if (!password) {
+      setAuthMsg("Enter your password.")
+      return
+    }
+
+    const { error: authError } = await supabase.auth.signInWithPassword({
+      email: e,
+      password
     })
 
     if (authError) setAuthMsg(`Login failed: ${authError.message}`)
-    else setAuthMsg("Magic link sent. Open your email and click the link.")
+    else {
+      setAuthMsg("Signed in.")
+      cleanAuthRedirectUrl()
+    }
+  }
+
+  const sendPasswordRecovery = async () => {
+    if (!supabase) {
+      setAuthMsg("Supabase env vars are missing.")
+      return
+    }
+
+    setAuthMsg("")
+    const e = String(email || "").trim()
+    if (!e.includes("@")) {
+      setAuthMsg("Enter a valid email.")
+      return
+    }
+
+    const redirectTo = `${window.location.origin}${window.location.pathname}`
+    const { error } = await supabase.auth.resetPasswordForEmail(e, { redirectTo })
+
+    if (error) setAuthMsg(`Password reset failed: ${error.message}`)
+    else setAuthMsg("Password reset email sent.")
+  }
+
+  const completePasswordRecovery = async () => {
+    if (!supabase) {
+      setAuthMsg("Supabase env vars are missing.")
+      return
+    }
+
+    setAuthMsg("")
+    if (!recoveryPassword || recoveryPassword.length < 8) {
+      setAuthMsg("Enter a new password with at least 8 characters.")
+      return
+    }
+
+    const { error } = await supabase.auth.updateUser({ password: recoveryPassword })
+
+    if (error) {
+      setAuthMsg(`Password update failed: ${error.message}`)
+      return
+    }
+
+    setRecoveryPassword("")
+    setPassword("")
+    setIsRecoveryMode(false)
+    setAuthMsg("Password updated. You can now sign in normally.")
+    cleanAuthRedirectUrl()
   }
 
   const doSignOut = async () => {
@@ -10605,7 +10958,6 @@ const acwrSeries = useMemo(() => {
   const sessions = Array.isArray(unifiedCanonicalSessions) ? unifiedCanonicalSessions : []
   if (!sessions.length) return []
 
-  // Build daily TRIMP map
   const dailyTrimp = {}
   sessions.forEach(s => {
     const date = (s.start_date || s.dateTime || s.date || "").slice(0, 10)
@@ -10619,23 +10971,41 @@ const acwrSeries = useMemo(() => {
       dailyTrimp[date] = (dailyTrimp[date] || 0) + trimp
   })
 
-  const sessionDates = sessions
-    .map(s => (s.start_date || s.dateTime || s.date || "").slice(0, 10))
-    .filter(Boolean)
-    .sort()
+  const sessionDates = Object.keys(dailyTrimp).sort()
   if (!sessionDates.length) return []
 
-  // Generate a day-by-day series from the first logged session to today
+  const sessionDateSet = new Set(sessionDates)
   const firstDate = new Date(`${sessionDates[0]}T12:00:00`)
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const rows = []
+  const minChronicActiveDays = 6
+  const minChronicSpanDays = 14
+  const maxSparseGapDays = 10
+
+  const getWindowSessionOffsets = (current, days) => {
+    const offsets = []
+    for (let j = 0; j < days; j++) {
+      const dd = new Date(current)
+      dd.setDate(dd.getDate() - j)
+      const dk = dd.toISOString().slice(0, 10)
+      if (sessionDateSet.has(dk)) offsets.push(j)
+    }
+    return offsets
+  }
+
+  const getLargestGapFromOffsets = offsets => {
+    if (offsets.length <= 1) return 0
+    let largestGap = 0
+    for (let i = 1; i < offsets.length; i++) {
+      largestGap = Math.max(largestGap, offsets[i] - offsets[i - 1] - 1)
+    }
+    return largestGap
+  }
 
   for (let d = new Date(firstDate); d <= today; d.setDate(d.getDate() + 1)) {
     const current = new Date(d)
     const key = d.toISOString().slice(0, 10)
-
-    // ATL = 7-day rolling average, CTL = 28-day rolling average
     let atl = 0, ctl = 0, atlCount = 0, ctlCount = 0
     for (let j = 0; j < 28; j++) {
       const dd = new Date(current)
@@ -10647,14 +11017,34 @@ const acwrSeries = useMemo(() => {
     }
     atl = atlCount > 0 ? atl / atlCount : 0
     ctl = ctlCount > 0 ? ctl / ctlCount : 0
-    const acwr = ctl > 0 ? Number((atl / ctl).toFixed(3)) : null
+
+    const acuteOffsets = getWindowSessionOffsets(current, 7)
+    const chronicOffsets = getWindowSessionOffsets(current, 28)
+    const chronicActiveDays = chronicOffsets.length
+    const chronicSpanDays = chronicOffsets.length > 1 ? chronicOffsets[chronicOffsets.length - 1] - chronicOffsets[0] : 0
+    const largestChronicGap = getLargestGapFromOffsets(chronicOffsets)
+    const daysSinceLastSession = chronicOffsets.length ? chronicOffsets[0] : Number.POSITIVE_INFINITY
+
+    const hasChronicCoverage =
+      chronicActiveDays >= minChronicActiveDays &&
+      chronicSpanDays >= minChronicSpanDays &&
+      largestChronicGap <= maxSparseGapDays
+
+    const hasEnoughAcuteCoverage =
+      acuteOffsets.length >= 2 ||
+      (acuteOffsets.length === 1 && hasChronicCoverage && daysSinceLastSession <= 7) ||
+      (acuteOffsets.length === 0 && hasChronicCoverage && daysSinceLastSession <= 7)
+
+    const hasSufficientData = hasChronicCoverage && hasEnoughAcuteCoverage
+    const acwr = hasSufficientData && ctl > 0 ? Number((atl / ctl).toFixed(3)) : null
 
     rows.push({
       date:  key,
       label: fmtShortDate(key),
       atl:   Number(atl.toFixed(1)),
       ctl:   Number(ctl.toFixed(1)),
-      acwr
+      acwr,
+      hasSufficientData
     })
   }
 
@@ -11215,16 +11605,32 @@ const tsbV2Panel = useMemo(() => {
     ? (readinessScore >= 75 ? 'green' : readinessScore >= 50 ? 'yellow' : readinessScore >= 25 ? 'orange' : 'red')
     : null
   const risk = riskFromOC ?? (tsbNow < -25 ? 'red' : tsbNow < -15 ? 'orange' : tsbNow < -8 ? 'yellow' : 'green')
-  // Compute tight Y-axis domain from actual TSB values in the rows
-  const tsbVals = rows.map(r => r.overallTsb).filter(v => Number.isFinite(v))
+  const tsbVals = rows.flatMap(r => [
+    r.overallTsb,
+    r.runningTsb,
+    r.cyclingTsb,
+    r.swimmingTsb,
+    r.strengthTsb
+  ]).filter(v => Number.isFinite(v))
   const rawMin = tsbVals.length ? Math.min(...tsbVals) : -15
   const rawMax = tsbVals.length ? Math.max(...tsbVals) : 10
-  // Add padding, enforce a minimum readable span of 12 units,
-  // and always include 0 in the visible range
-  const domLow  = Math.floor(Math.min(rawMin - 3, -2))
-  const domHigh = Math.ceil(Math.max(rawMax + 3,  5))
+  const minSpan = selectedRangePoints == null || selectedRangePoints >= 365 ? 24 : 16
+  let domLow = Math.floor(Math.min(rawMin - 3, -2))
+  let domHigh = Math.ceil(Math.max(rawMax + 3, 5))
+  if (domHigh - domLow < minSpan) {
+    const midpoint = (domHigh + domLow) / 2
+    domLow = Math.floor(midpoint - minSpan / 2)
+    domHigh = Math.ceil(midpoint + minSpan / 2)
+  }
   const tsbDomain = [domLow, domHigh]
-  return { rows, alerts: [], readinessRiskLabel: risk, readinessDetail: { score: readinessScore ?? Math.round(50 + tsbNow) }, tsbDomain }
+  return {
+    rows,
+    alerts: [],
+    readinessRiskLabel: risk,
+    readinessDetail: { score: readinessScore ?? Math.round(50 + tsbNow) },
+    currentOverallTsb: tsbNow,
+    tsbDomain
+  }
 }, [operationalWorkouts, schedLog, ocItems, readinessScore, selectedRangePoints])
 
 const adaptiveTrainingState = useMemo(() => {
@@ -11520,6 +11926,7 @@ const readinessChartsReady =
   baseDataLoaded &&
   readinessInputsHydrated &&
   readinessRemoteInputsHydrated
+const showDeveloperPanels = import.meta.env.DEV
 const readinessDebugData = useMemo(() => {
   const now = Date.now()
   const cutoff = now - 30 * 24 * 3600000
@@ -11661,6 +12068,21 @@ const complianceOverviewRows = useMemo(() => {
     }
   })
 }, [safeWeeklyRows, adaptiveTrainingState])
+const complianceValueFontSize = useMemo(() => {
+  const values = complianceOverviewRows.flatMap(row => [
+    row.planned,
+    row.completed,
+    row.absorbed,
+    `${row.compliancePct} / ${row.absorptionPct}`
+  ]).map(value => String(value))
+  const longestValueLength = values.reduce((max, value) => Math.max(max, value.length), 1)
+  const isCompactViewport = typeof window !== "undefined" ? window.innerWidth < 768 : true
+  const maxFont = isCompactViewport ? 18 : 22
+  const minFont = isCompactViewport ? 11 : 13
+  const penaltyPerChar = isCompactViewport ? 1.25 : 1.5
+
+  return Math.max(minFont, Math.min(maxFont, maxFont - Math.max(0, longestValueLength - 3) * penaltyPerChar))
+}, [complianceOverviewRows])
 const trainingCapitalChartData = useMemo(() => {
   return safeWeeklyRows.slice(-12).map(row => ({
     label: row.label,
@@ -11998,21 +12420,75 @@ return (
           ) : (
             <>
               <div style={{ fontSize: "13px", opacity: 0.8, marginBottom: "8px" }}>
-                Sign in to sync meal entries and presets across phone and desktop.
+                Sign in with email and password to keep sync stable across phone, desktop, and Home Screen launches.
               </div>
-              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              <div style={{ display: "grid", gap: "8px" }}>
                 <input
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   placeholder="email"
-                  style={{ ...inputStyle(), maxWidth: "230px" }}
+                  autoComplete="email"
+                  inputMode="email"
+                  style={inputStyle()}
                 />
-                <button onClick={sendLink} style={buttonStyle(true)}>Send link</button>
+                {!isRecoveryMode && (
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    placeholder="password"
+                    autoComplete="current-password"
+                    style={inputStyle()}
+                  />
+                )}
+                {isRecoveryMode && (
+                  <>
+                    <div style={{ fontSize: "12px", color: "#ffd166" }}>
+                      Password recovery detected. Set a new password to finish recovery.
+                    </div>
+                    <input
+                      type="password"
+                      value={recoveryPassword}
+                      onChange={e => setRecoveryPassword(e.target.value)}
+                      placeholder="new password"
+                      autoComplete="new-password"
+                      style={inputStyle()}
+                    />
+                  </>
+                )}
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  {isRecoveryMode ? (
+                    <button onClick={completePasswordRecovery} style={buttonStyle(true)}>Set new password</button>
+                  ) : (
+                    <>
+                      <button onClick={signInWithPassword} style={buttonStyle(true)}>Sign in</button>
+                      <button onClick={sendPasswordRecovery} style={buttonStyle(false)}>Reset password</button>
+                    </>
+                  )}
+                </div>
               </div>
             </>
           )}
           {authMsg && <div style={{ marginTop: "8px", fontSize: "12px", color: "#ffd166" }}>{authMsg}</div>}
           {!supabase && <div style={{ marginTop: "8px", fontSize: "12px", color: "#ff8a8a" }}>Supabase env vars not found. Sync is disabled.</div>}
+          <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px solid #1a1b2e", fontSize: "11px", lineHeight: 1.5 }}>
+            <div style={{ opacity: 0.7, marginBottom: "6px" }}>Auth Debug</div>
+            <div>session exists: {String(Boolean(session))}</div>
+            <div>current user email: {session?.user?.email || "none"}</div>
+            <div>restored from storage on load: {String(sessionRestoredFromStorage)}</div>
+            <div>auth initialized: {String(authInitialized)}</div>
+            <div>recovery mode: {String(isRecoveryMode)}</div>
+            <div style={{ marginTop: "6px", opacity: 0.7 }}>auth events</div>
+            <div style={{ display: "grid", gap: "4px", marginTop: "4px", maxHeight: "100px", overflowY: "auto" }}>
+              {authEvents.length ? authEvents.slice().reverse().map(eventLine => (
+                <div key={eventLine} style={{ fontFamily: "monospace", fontSize: "10px", opacity: 0.85 }}>
+                  {eventLine}
+                </div>
+              )) : (
+                <div style={{ opacity: 0.6 }}>No auth events yet.</div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -12382,6 +12858,14 @@ return (
     <div style={{ ...cardStyle(), minWidth: 0, marginBottom: 16 }}>
 {(() => {
   const panel = tsbV2Panel || { rows: [], readinessDetail: { score: "NA" } }
+  const isLongWindow = rangeKey === "1Y" || rangeKey === "ALL"
+  const modalityStrokeWidth = isLongWindow ? 1.2 : 1.8
+  const tooltipStyle = {
+    backgroundColor: "rgba(248, 250, 252, 0.96)",
+    border: "1px solid rgba(148, 163, 184, 0.4)",
+    borderRadius: 8,
+    color: "#0f172a"
+  }
   return (
     <>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:10, flexWrap:"wrap", marginBottom:10 }}>
@@ -12394,7 +12878,7 @@ return (
         </div>
       </div>
       {(() => {
-        const tsb = panel.readinessDetail?.score ?? 0
+        const tsb = panel.currentOverallTsb ?? 0
         let borderColor = "#4ade80"
         let msg = ""
         if (tsb < -20) { borderColor = "#ef4444"; msg = "Acute fatigue. Substitute today's session with recovery swim or complete rest." }
@@ -12426,15 +12910,15 @@ return (
           <ResponsiveContainer width="100%" height={230}>
             <ComposedChart data={panel.rows} margin={{ top:8, right:14, left:12, bottom:14 }}>
               <CartesianGrid stroke="#1a1b2e" />
-              <XAxis dataKey="label" tick={{ fontSize:10 }} interval={Math.max(1, Math.floor((panel.rows.length || 1) / 12) - 1)} />
-              <YAxis domain={panel.tsbDomain || [-15, 10]} tick={{ fontSize:10 }} width={28} />
+              <XAxis dataKey="label" tick={{ fontSize:10 }} interval={Math.max(1, Math.floor((panel.rows.length || 1) / (isLongWindow ? 10 : 12)) - 1)} />
+              <YAxis domain={panel.tsbDomain || [-15, 10]} tick={{ fontSize:10 }} width={34} tickFormatter={value => Number(value).toFixed(0)} />
               <ReferenceLine y={0} stroke="#444" strokeDasharray="3 3" />
-              <Tooltip formatter={(v, n) => [Number(v).toFixed(2), n]} />
-              <Line type="monotone" dataKey="overallTsb" name="Overall TSB" stroke="#e5e7eb" strokeWidth={2.2} dot={false} connectNulls isAnimationActive={false} />
-              <Line type="monotone" dataKey="runningTsb" name="Running TSB" stroke="#ef4444" strokeWidth={1.8} dot={false} connectNulls isAnimationActive={false} />
-              <Line type="monotone" dataKey="cyclingTsb" name="Cycling TSB" stroke="#22d3ee" strokeWidth={1.8} dot={false} connectNulls isAnimationActive={false} />
-              <Line type="monotone" dataKey="swimmingTsb" name="Swimming TSB" stroke="#a78bfa" strokeWidth={1.8} dot={false} connectNulls isAnimationActive={false} />
-              <Line type="monotone" dataKey="strengthTsb" name="Strength TSB" stroke="#ffd166" strokeWidth={1.8} dot={false} connectNulls strokeDasharray="4 2" isAnimationActive={false} />
+              <Tooltip contentStyle={tooltipStyle} formatter={(v, n) => [Number(v).toFixed(2), n]} />
+              <Line type="monotone" dataKey="overallTsb" name="Overall TSB" stroke="#e5e7eb" strokeWidth={isLongWindow ? 2 : 2.2} dot={false} connectNulls isAnimationActive={false} />
+              <Line type="monotone" dataKey="runningTsb" name="Running TSB" stroke="#ef4444" strokeWidth={modalityStrokeWidth} strokeOpacity={isLongWindow ? 0.78 : 1} dot={false} connectNulls isAnimationActive={false} />
+              <Line type="monotone" dataKey="cyclingTsb" name="Cycling TSB" stroke="#22d3ee" strokeWidth={modalityStrokeWidth} strokeOpacity={isLongWindow ? 0.78 : 1} dot={false} connectNulls isAnimationActive={false} />
+              <Line type="monotone" dataKey="swimmingTsb" name="Swimming TSB" stroke="#a78bfa" strokeWidth={modalityStrokeWidth} strokeOpacity={isLongWindow ? 0.78 : 1} dot={false} connectNulls isAnimationActive={false} />
+              <Line type="monotone" dataKey="strengthTsb" name="Strength TSB" stroke="#ffd166" strokeWidth={modalityStrokeWidth} strokeOpacity={isLongWindow ? 0.78 : 1} dot={false} connectNulls strokeDasharray="4 2" isAnimationActive={false} />
             </ComposedChart>
           </ResponsiveContainer>
         </>
@@ -12515,12 +12999,13 @@ return (
           {(() => {
             const latest = acwrOverviewData.length ? acwrOverviewData[acwrOverviewData.length - 1] : null
             const acwrVal = latest?.acwr ?? null
-            const acwrColor = acwrVal == null ? "#555"
+            const acwrColor = latest && !latest.hasSufficientData ? "#64748b" : acwrVal == null ? "#555"
               : acwrVal > 1.5 ? "#ef4444"
               : acwrVal > 1.3 ? "#f97316"
               : acwrVal > 0.8 ? "#4ade80"
               : "#fbbf24"
-            const acwrLabel = acwrVal == null ? "No data"
+            const acwrLabel = latest && !latest.hasSufficientData ? "Insufficient recent data for an honest ACWR"
+              : acwrVal == null ? "No data"
               : acwrVal > 1.5 ? "High risk — load spike detected"
               : acwrVal > 1.3 ? "Caution — approaching overreach zone"
               : acwrVal > 0.8 ? "Optimal training zone"
@@ -12538,12 +13023,30 @@ return (
                 <CartesianGrid stroke="#1a1b2e" />
                 <XAxis dataKey="label" tick={{ fontSize:9 }} interval="preserveStartEnd" minTickGap={20} />
                 <YAxis domain={acwrOverviewDomain} tick={{ fontSize:10 }} width={24} />
-                <Tooltip formatter={(v, n) => [Number(v).toFixed(2), n]} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "rgba(248, 250, 252, 0.96)",
+                    border: "1px solid rgba(148, 163, 184, 0.4)",
+                    borderRadius: 8,
+                    color: "#0f172a"
+                  }}
+                  formatter={(v, n, item) => {
+                    if (!Number.isFinite(Number(v))) return ["Insufficient data", n]
+                    return [Number(v).toFixed(2), n]
+                  }}
+                  labelFormatter={(label, payload) => {
+                    const row = payload?.[0]?.payload
+                    if (row && row.hasSufficientData === false) {
+                      return `${label} · insufficient data`
+                    }
+                    return label
+                  }}
+                />
                 <ReferenceArea y1={1.3} y2={1.5} fill="rgba(249,115,22,0.10)" />
                 <ReferenceArea y1={1.5} y2={Math.max(2.5, acwrOverviewDomain[1])} fill="rgba(239,68,68,0.10)" />
                 <ReferenceLine y={1.3} stroke="#f97316" strokeDasharray="4 3" />
                 <ReferenceLine y={1.5} stroke="#ef4444" strokeDasharray="4 3" />
-                <Line dataKey="acwr" stroke="#fbbf24" strokeWidth={2} dot={false} name="ACWR" connectNulls />
+                <Line dataKey="acwr" stroke="#fbbf24" strokeWidth={2} dot={false} name="ACWR" connectNulls={false} />
               </ComposedChart>
             </ResponsiveContainer>
           ) : (
@@ -12682,7 +13185,7 @@ return (
                     `${row.compliancePct} / ${row.absorptionPct}`
                   ].map((value, idx) => (
                     <div key={`${row.domain}_${idx}`} style={{ background:"#07080e", border:"1px solid #1a1b2e", borderRadius:6, padding:"8px 6px", minHeight:56, display:"flex", alignItems:"center", justifyContent:"center", textAlign:"center" }}>
-                      <div style={{ fontSize: window.innerWidth < 768 ? 13 : 15, fontWeight:700, lineHeight:1.1 }}>{value}</div>
+                      <div style={{ fontSize: complianceValueFontSize, fontWeight:700, lineHeight:0.95, width:"100%", whiteSpace:"nowrap" }}>{value}</div>
                     </div>
                   ))}
                 </div>
@@ -13795,8 +14298,11 @@ return (
     <div style={{ ...cardStyle(), marginBottom: "20px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px", marginBottom: "12px" }}>
         <div style={{ fontWeight: "bold" }}>Endurance Readiness</div>
-        <div style={{ fontSize: "12px", opacity: 0.7 }}>
-          Composite: aerobic volume (multi-modal) · running pace · cardio consistency
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <div style={{ fontSize: "12px", opacity: 0.7 }}>
+            Composite: aerobic volume (multi-modal) · running pace · cardio consistency
+          </div>
+          {showDeveloperPanels && overviewExplainButton("readinessDebug")}
         </div>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: "10px", marginBottom: "14px" }}>
@@ -13810,27 +14316,29 @@ return (
           </div>
         ))}
       </div>
-      <div style={{ background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: "8px", padding: "12px", marginBottom: "14px" }}>
-        <div style={{ fontWeight: "bold", marginBottom: "8px" }}>Readiness Debug</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "8px", fontSize: "12px" }}>
-          <div>operationalWorkouts total: {readinessDebugData.operationalWorkoutsTotal}</div>
-          <div>operationalWorkouts last 30d: {readinessDebugData.operationalWorkoutsLast30d}</div>
-          <div>cycling workouts last 30d: {readinessDebugData.cyclingWorkoutsLast30d}</div>
-          <div>normalizedActiveWorkouts: {readinessDebugData.normalizedActiveWorkouts}</div>
-          <div>normalizedStoredWorkouts: {readinessDebugData.normalizedStoredWorkouts}</div>
-          <div>computedTSBFromSessions.tsb: {readinessDebugData.computedTsb ?? "—"}</div>
-          <div>latest HealthFit TSB: {readinessDebugData.healthFitTsb ?? "—"}</div>
-          <div>TSB used by readiness: {readinessDebugData.readinessTsbUsed ?? "—"}</div>
-          <div>readinessInputsHydrated: {String(readinessDebugData.readinessInputsHydrated)}</div>
-          <div>readinessRemoteInputsHydrated: {String(readinessDebugData.readinessRemoteInputsHydrated)}</div>
-          <div>readinessChartsReady: {String(readinessDebugData.readinessChartsReady)}</div>
+      {showDeveloperPanels && isOverviewExplainOpen("readinessDebug") && (
+        <div style={{ background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: "8px", padding: "12px", marginBottom: "14px" }}>
+          <div style={{ fontWeight: "bold", marginBottom: "8px" }}>Readiness Debug</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "8px", fontSize: "12px" }}>
+            <div>operationalWorkouts total: {readinessDebugData.operationalWorkoutsTotal}</div>
+            <div>operationalWorkouts last 30d: {readinessDebugData.operationalWorkoutsLast30d}</div>
+            <div>cycling workouts last 30d: {readinessDebugData.cyclingWorkoutsLast30d}</div>
+            <div>normalizedActiveWorkouts: {readinessDebugData.normalizedActiveWorkouts}</div>
+            <div>normalizedStoredWorkouts: {readinessDebugData.normalizedStoredWorkouts}</div>
+            <div>computedTSBFromSessions.tsb: {readinessDebugData.computedTsb ?? "—"}</div>
+            <div>latest HealthFit TSB: {readinessDebugData.healthFitTsb ?? "—"}</div>
+            <div>TSB used by readiness: {readinessDebugData.readinessTsbUsed ?? "—"}</div>
+            <div>readinessInputsHydrated: {String(readinessDebugData.readinessInputsHydrated)}</div>
+            <div>readinessRemoteInputsHydrated: {String(readinessDebugData.readinessRemoteInputsHydrated)}</div>
+            <div>readinessChartsReady: {String(readinessDebugData.readinessChartsReady)}</div>
+          </div>
+          <div style={{ fontSize: "12px", opacity: 0.8, marginTop: "10px" }}>
+            Latest 5 operational workouts: {readinessDebugData.latestOperationalWorkouts.length
+              ? readinessDebugData.latestOperationalWorkouts.map(w => `${w.date} ${w.category}`).join(" · ")
+              : "none"}
+          </div>
         </div>
-        <div style={{ fontSize: "12px", opacity: 0.8, marginTop: "10px" }}>
-          Latest 5 operational workouts: {readinessDebugData.latestOperationalWorkouts.length
-            ? readinessDebugData.latestOperationalWorkouts.map(w => `${w.date} ${w.category}`).join(" · ")
-            : "none"}
-        </div>
-      </div>
+      )}
       {readinessChartsReady ? (
       <ResponsiveContainer width="100%" height={240}>
         <LineChart data={readinessProjectionData} margin={{ top: 10, right: 20, left: 55, bottom: 20 }}>
@@ -13848,29 +14356,7 @@ return (
       ) : (
         <div style={{ color:'#666', fontSize:12, padding:'40px 0', textAlign:'center' }}>Loading readiness chart...</div>
       )}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "10px", marginTop: "12px", marginBottom: "12px" }}>
-        <label style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "12px" }}>
-          <span>Tendon pain: {displayedTendonStatus.painScore}/10</span>
-          <input
-            type="range"
-            min={0}
-            max={10}
-            step={1}
-            value={displayedTendonStatus.painScore}
-            disabled
-          />
-        </label>
-      </div>
-      <div style={{ fontSize: "12px", opacity: 0.65, marginTop: "-2px", marginBottom: "10px" }}>
-        Edit tendon and injury state in Capacity
-      </div>
       <div style={{ fontSize: "12px", opacity: 0.75, marginTop: "8px" }}>
-        Tendon: pain {displayedTendonStatus.painScore}/10 · stiffness {displayedTendonStatus.stiffness ? "yes" : "no"} · override {displayedTendonStatus.override || "none"} · progression {runningReadiness?.progressionReadiness ?? "hold"}
-      </div>
-      <div style={{ fontSize: "12px", opacity: 0.75, marginTop: "6px" }}>
-        Reasons: {ocProgressionReasons.length ? ocProgressionReasons.join(" · ") : "none"}
-      </div>
-      <div style={{ fontSize: "12px", opacity: 0.7, marginTop: "8px" }}>
         Running: {enduranceForecast.weeklyRunMiles28} mi/week · longest {runningReadiness?.signals?.recentLongestRunMiles ?? "NA"} mi · frequency {runningReadiness?.signals?.recentRunFrequency ?? "NA"}/week · progression {runningReadiness?.progressionReadiness ?? "hold"} · pace {enduranceForecast.avgPace28 || "NA"} min/mi · cardio {Math.round(enduranceForecast.cardioMinutesWeekly)} min/week · run modifier {((enduranceForecast.runPenalty ?? 1) * 100).toFixed(0)}%
       </div>
     </div>
