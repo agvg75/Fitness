@@ -1630,6 +1630,7 @@ function DailyReadinessPanel({ readinessScore, latestHealthFit, ocItems, compute
 
 // ─── TabSchedule ──────────────────────────────────────────────────────────────
 function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, setSchedLog, readinessScore, latestHealthFit = null, ocItems = [], computedTSB = null, progressionReadiness = "progress", progressionReasons = [], tendonStatus = { painScore: 0, stiffness: false, override: null }, scheduleFeedback = [] }) {
+  const safeScheduleFeedback = Array.isArray(scheduleFeedback) ? scheduleFeedback : []
   const [activeDay, setActiveDay] = useState(todayDayKey())
   const [schedView, setSchedView] = useState("schedule")
   const [expandedLog, setExpandedLog] = useState({})
@@ -2908,7 +2909,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       <input ref={importRef} type="file" accept=".json" style={{ display: "none" }} onChange={importLog} />
       {Array.isArray(scheduleFeedback) && scheduleFeedback.length > 0 && (
         <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
-          {scheduleFeedback.slice(0, 3).map(message => (
+          {safeScheduleFeedback.slice(0, 3).map(message => (
             <div key={message} style={{ padding: "10px 12px", background: "rgba(56,189,248,0.08)", border: "1px solid rgba(56,189,248,0.18)", borderLeft: "3px solid #38bdf8", borderRadius: 8, fontSize: 12, color: "#cbd5e1", lineHeight: 1.5 }}>
               {message}
             </div>
@@ -5255,6 +5256,11 @@ function buildAdaptiveTrainingState({
   readinessScore,
   weeklyTrainingBuckets
 }) {
+  const safeSchedLog = Array.isArray(schedLog) ? schedLog : []
+  const safeOperationalWorkouts = Array.isArray(operationalWorkouts) ? operationalWorkouts : []
+  const safeAcwrSeries = Array.isArray(acwrSeries) ? acwrSeries : []
+  const safeTsbRows = Array.isArray(tsbRows) ? tsbRows : []
+  const safeWeeklyTrainingBuckets = Array.isArray(weeklyTrainingBuckets) ? weeklyTrainingBuckets : []
   const weekKeys = enumerateRecentWeeks(12)
   const weekMap = new Map(weekKeys.map(weekStart => [weekStart, {
     weekStart,
@@ -5278,14 +5284,16 @@ function buildAdaptiveTrainingState({
       const cardioPlan = CARDIO[dayKey]
       const plan = PROG[dayKey] || {}
       const week = weekMap.get(weekStart)
-      ;(cardioPlan?.sessions || []).forEach(session => {
+      const cardioSessions = Array.isArray(cardioPlan?.sessions) ? cardioPlan.sessions : []
+      cardioSessions.forEach(session => {
         const domain = session.mod === "run" ? "running" : "cardio"
         week.domains[domain].plannedSessions += 1
         week.domains[domain].plannedDose += averageCardioPrescriptionDose(session)
       })
-      if ((plan.exercises || []).length > 0) {
+      const planExercises = Array.isArray(plan?.exercises) ? plan.exercises : []
+      if (planExercises.length > 0) {
         week.domains.strength.plannedSessions += 1
-        week.domains.strength.plannedDose += Math.max(1, (plan.exercises || []).length * 1.35)
+        week.domains.strength.plannedDose += Math.max(1, planExercises.length * 1.35)
       }
       const tendonPlan = getDefaultTendonWork(dayKey)
       if (tendonPlan.length > 0) {
@@ -5295,13 +5303,13 @@ function buildAdaptiveTrainingState({
     }
   })
 
-  ;(Array.isArray(schedLog) ? schedLog : []).forEach(entry => {
+  safeSchedLog.forEach(entry => {
     const date = String(entry?.date || entry?.logged_at || "").slice(0, 10)
     const weekStart = getWeekStartIso(date)
     const week = weekMap.get(weekStart)
     if (!week) return
 
-    const strengthExercises = (entry?.exercises || []).filter(ex => ex?.variant !== "cardio")
+    const strengthExercises = (Array.isArray(entry?.exercises) ? entry.exercises : []).filter(ex => ex?.variant !== "cardio")
     if (strengthExercises.length > 0) {
       week.domains.strength.completedSessions += 1
       week.domains.strength.completedDose += summarizeStrengthDose(strengthExercises)
@@ -5314,7 +5322,8 @@ function buildAdaptiveTrainingState({
       week.domains.tendon.completedDose += summarizeTendonDose(tendonWork) + summarizeStrengthDose(tendonFromExercises) * 0.4
     }
 
-    ;(entry?.cardio || []).forEach(cardio => {
+    const entryCardio = Array.isArray(entry?.cardio) ? entry.cardio : []
+    entryCardio.forEach(cardio => {
       const domain = String(cardio?.modality || "").toLowerCase() === "run" ? "running" : "cardio"
       const distance = parseScheduleDistanceMiles(cardio?.distance, cardio?.modality) || 0
       const duration = parseScheduleDurationMinutes(cardio?.duration) || 0
@@ -5323,7 +5332,7 @@ function buildAdaptiveTrainingState({
     })
   })
 
-  ;(Array.isArray(operationalWorkouts) ? operationalWorkouts : []).forEach(workout => {
+  safeOperationalWorkouts.forEach(workout => {
     const date = String(workout?.date || workout?.dateTime || workout?.start_date || "").slice(0, 10)
     const weekStart = getWeekStartIso(date)
     const week = weekMap.get(weekStart)
@@ -5337,9 +5346,9 @@ function buildAdaptiveTrainingState({
     }
   })
 
-  const acwrByWeek = new Map((Array.isArray(acwrSeries) ? acwrSeries : []).map(row => [getWeekStartIso(row.date), row]))
-  const tsbByWeek = new Map((Array.isArray(tsbRows) ? tsbRows : []).map(row => [getWeekStartIso(row.date), row]))
-  const weeklyRunBuckets = new Map((Array.isArray(weeklyTrainingBuckets) ? weeklyTrainingBuckets : []).map(row => [row.weekStart, row]))
+  const acwrByWeek = new Map(safeAcwrSeries.map(row => [getWeekStartIso(row.date), row]))
+  const tsbByWeek = new Map(safeTsbRows.map(row => [getWeekStartIso(row.date), row]))
+  const weeklyRunBuckets = new Map(safeWeeklyTrainingBuckets.map(row => [row.weekStart, row]))
 
   const capitals = { running: 35, strength: 35, tendon: 22, cardio: 35 }
   const tendonCapacities = {
@@ -5502,7 +5511,7 @@ function buildAdaptiveTrainingState({
   if ((latestWeek?.tendon?.achilles_calf?.risk || 0) > 1 && avgAbsorption("tendon") < 0.7) tendonAlerts.push("Current week counts against tendon readiness, not for it.")
 
   return {
-    weeklyRows,
+    weeklyRows: Array.isArray(weeklyRows) ? weeklyRows : [],
     latestWeek,
     complianceScores: {
       running: averageCompliance("running"),
@@ -5516,10 +5525,16 @@ function buildAdaptiveTrainingState({
       tendon: avgAbsorption("tendon"),
       cardio: avgAbsorption("cardio")
     },
-    capitals: latestWeek?.capital || { running: 0, strength: 0, tendon: 0, cardio: 0 },
-    tendonSeries,
-    tendonAlerts,
-    feedback,
+    capitals: latestWeek?.capital && typeof latestWeek.capital === "object"
+      ? latestWeek.capital
+      : { running: 0, strength: 0, tendon: 0, cardio: 0 },
+    tendonSeries: {
+      achilles_calf: Array.isArray(tendonSeries.achilles_calf) ? tendonSeries.achilles_calf : [],
+      forefoot_toe_extensor: Array.isArray(tendonSeries.forefoot_toe_extensor) ? tendonSeries.forefoot_toe_extensor : [],
+      patellar_knee: Array.isArray(tendonSeries.patellar_knee) ? tendonSeries.patellar_knee : [],
+    },
+    tendonAlerts: Array.isArray(tendonAlerts) ? tendonAlerts : [],
+    feedback: Array.isArray(feedback) ? feedback : [],
     forecastConfidence,
     maxTendonRisk
   }
@@ -11252,8 +11267,10 @@ const eventReadinessMarkers = useMemo(() => {
   }))
 }, [readinessProjectionData])
 const targetableRaces = useMemo(() => {
-  const thresholds = Object.fromEntries(eventReadinessMarkers.map(marker => [marker.key, marker.thresholdDate]))
-  const ranked = (RACE_CALENDAR || [])
+  const safeEventReadinessMarkers = Array.isArray(eventReadinessMarkers) ? eventReadinessMarkers : []
+  const safeRaceCalendar = Array.isArray(RACE_CALENDAR) ? RACE_CALENDAR : []
+  const thresholds = Object.fromEntries(safeEventReadinessMarkers.map(marker => [marker.key, marker.thresholdDate]))
+  const ranked = safeRaceCalendar
     .map(race => {
       const type = getRaceDistanceType(race)
       const thresholdDate =
@@ -11279,7 +11296,8 @@ const targetableRaces = useMemo(() => {
   return ranked
 }, [eventReadinessMarkers])
 const targetableRaceMarkers = useMemo(() => {
-  return targetableRaces.slice(0, 8).map(race => {
+  const safeTargetableRaces = Array.isArray(targetableRaces) ? targetableRaces : []
+  return safeTargetableRaces.slice(0, 8).map(race => {
     const month = monthsUntilLocalDate(race.date)
     return { ...race, month }
   })
@@ -11292,6 +11310,13 @@ const readinessConfidenceSummary = useMemo(() => {
     triConfidence: Number((latest?.triConfidence || 0).toFixed(2))
   }
 }, [adaptiveTrainingState, readinessProjectionData])
+const safeAdaptiveFeedback = Array.isArray(adaptiveTrainingState?.feedback) ? adaptiveTrainingState.feedback : []
+const safeTendonAlerts = Array.isArray(adaptiveTrainingState?.tendonAlerts) ? adaptiveTrainingState.tendonAlerts : []
+const safeWeeklyRows = Array.isArray(adaptiveTrainingState?.weeklyRows) ? adaptiveTrainingState.weeklyRows : []
+const safeTendonSeries = Array.isArray(adaptiveTrainingState?.tendonSeries?.[selectedTendonGroup]) ? adaptiveTrainingState.tendonSeries[selectedTendonGroup] : []
+const safeEventReadinessMarkers = Array.isArray(eventReadinessMarkers) ? eventReadinessMarkers : []
+const safeTargetableRaces = Array.isArray(targetableRaces) ? targetableRaces : []
+const safeTargetableRaceMarkers = Array.isArray(targetableRaceMarkers) ? targetableRaceMarkers : []
 const readinessProjectionMaxMonth = useMemo(() => {
   const dataMax = readinessProjectionData.length
     ? Math.max(...readinessProjectionData.map(d => Number(d.month || 0)))
@@ -11941,17 +11966,17 @@ return (
             ))}
           </select>
         </div>
-        {adaptiveTrainingState?.tendonSeries?.[selectedTendonGroup]?.length ? (
+        {safeTendonSeries.length ? (
           <>
             <ResponsiveContainer width="100%" height={260}>
-              <ComposedChart data={adaptiveTrainingState.tendonSeries[selectedTendonGroup]} margin={{ top: 10, right: 14, left: 8, bottom: 8 }}>
+              <ComposedChart data={safeTendonSeries} margin={{ top: 10, right: 14, left: 8, bottom: 8 }}>
                 <CartesianGrid stroke="#1a1b2e" />
                 <XAxis dataKey="label" tick={{ fontSize: 10 }} />
                 <YAxis tick={{ fontSize: 10 }} />
                 <Tooltip formatter={(value, name) => [Number(value).toFixed(2), name]} />
                 <ReferenceArea y1={0} y2={TENDON_GROUP_META[selectedTendonGroup].safe * (adaptiveTrainingState.latestWeek?.tendon?.[selectedTendonGroup]?.capacity || 1)} fill="rgba(34,197,94,0.08)" />
                 <ReferenceArea y1={TENDON_GROUP_META[selectedTendonGroup].safe * (adaptiveTrainingState.latestWeek?.tendon?.[selectedTendonGroup]?.capacity || 1)} y2={TENDON_GROUP_META[selectedTendonGroup].caution * (adaptiveTrainingState.latestWeek?.tendon?.[selectedTendonGroup]?.capacity || 1)} fill="rgba(245,158,11,0.08)" />
-                <ReferenceArea y1={TENDON_GROUP_META[selectedTendonGroup].caution * (adaptiveTrainingState.latestWeek?.tendon?.[selectedTendonGroup]?.capacity || 1)} y2={Math.max(...adaptiveTrainingState.tendonSeries[selectedTendonGroup].map(row => Math.max(row.capacity, row.load))) * 1.15} fill="rgba(239,68,68,0.08)" />
+                <ReferenceArea y1={TENDON_GROUP_META[selectedTendonGroup].caution * (adaptiveTrainingState.latestWeek?.tendon?.[selectedTendonGroup]?.capacity || 1)} y2={Math.max(...safeTendonSeries.map(row => Math.max(row.capacity, row.load))) * 1.15} fill="rgba(239,68,68,0.08)" />
                 <Area type="monotone" dataKey="capacity" fill={`${TENDON_GROUP_META[selectedTendonGroup].color}22`} stroke={TENDON_GROUP_META[selectedTendonGroup].color} strokeWidth={2} name="Capacity" />
                 <Line type="monotone" dataKey="load" stroke="#f8fafc" strokeWidth={2} dot={false} name="Load" />
               </ComposedChart>
@@ -11965,7 +11990,7 @@ return (
                 <div style={{ fontSize: 10, color: "#667" }}>4-week trajectory</div>
                 <div style={{ fontSize: 13, lineHeight: 1.5, color: "#ced2f0" }}>
                   {(() => {
-                    const series = adaptiveTrainingState.tendonSeries[selectedTendonGroup]
+                    const series = safeTendonSeries
                     const last4 = series.slice(-4)
                     const avgRisk = last4.length
                       ? last4.reduce((sum, row) => sum + Number(row?.risk || 0), 0) / last4.length
@@ -11986,9 +12011,9 @@ return (
                 </div>
               </div>
             </div>
-            {(adaptiveTrainingState?.tendonAlerts || []).length > 0 && (
+            {safeTendonAlerts.length > 0 && (
               <div style={{ marginTop: 10, display: "grid", gap: 6 }}>
-                {adaptiveTrainingState.tendonAlerts.map(alert => (
+                {safeTendonAlerts.map(alert => (
                   <div key={alert} style={{ padding: "9px 10px", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", borderLeft: "3px solid #ef4444", borderRadius: 6, fontSize: 12, color: "#fca5a5" }}>
                     {alert}
                   </div>
@@ -12014,9 +12039,9 @@ return (
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0,1fr))", gap: 6 }}>
               {[
-                ["Planned", adaptiveTrainingState?.weeklyRows?.slice(-8).reduce((sum, row) => sum + Number(row.domains?.[domain]?.plannedDose || 0), 0)],
-                ["Completed", adaptiveTrainingState?.weeklyRows?.slice(-8).reduce((sum, row) => sum + Number(row.domains?.[domain]?.completedDose || 0), 0)],
-                ["Absorbed", adaptiveTrainingState?.weeklyRows?.slice(-8).reduce((sum, row) => sum + Number(row.domains?.[domain]?.absorbedDose || 0), 0)],
+                ["Planned", safeWeeklyRows.slice(-8).reduce((sum, row) => sum + Number(row.domains?.[domain]?.plannedDose || 0), 0)],
+                ["Completed", safeWeeklyRows.slice(-8).reduce((sum, row) => sum + Number(row.domains?.[domain]?.completedDose || 0), 0)],
+                ["Absorbed", safeWeeklyRows.slice(-8).reduce((sum, row) => sum + Number(row.domains?.[domain]?.absorbedDose || 0), 0)],
               ].map(([label, value]) => (
                 <div key={label} style={{ background: "#07080e", border: "1px solid #1a1b2e", borderRadius: 6, padding: 8 }}>
                   <div style={{ fontSize: 10, color: "#667" }}>{label}</div>
@@ -12026,11 +12051,11 @@ return (
             </div>
           </div>
         ))}
-        {adaptiveTrainingState?.weeklyRows?.length > 0 && (
+        {safeWeeklyRows.length > 0 && (
           <div style={{ marginTop: 8 }}>
             <div style={{ fontSize: 11, color: "#667", marginBottom: 6 }}>Training capital trend</div>
             <ResponsiveContainer width="100%" height={140}>
-              <LineChart data={adaptiveTrainingState.weeklyRows.slice(-12).map(row => ({
+              <LineChart data={safeWeeklyRows.slice(-12).map(row => ({
                 label: row.label,
                 runCapital: row.capital?.running || 0,
                 tendonCapital: row.capital?.tendon || 0,
@@ -12050,7 +12075,7 @@ return (
           </div>
         )}
         <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
-          {(adaptiveTrainingState?.feedback || []).map(message => (
+          {safeAdaptiveFeedback.map(message => (
             <div key={message} style={{ fontSize: 12, color: "#cbd5e1", lineHeight: 1.5, padding: "8px 10px", background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: 6 }}>
               {message}
             </div>
@@ -12299,7 +12324,7 @@ return (
           isAnimationActive={false}
         />
 
-        {eventReadinessMarkers
+        {safeEventReadinessMarkers
           .filter(marker => marker.month != null)
           .map(marker => (
             <ReferenceLine
@@ -12315,7 +12340,7 @@ return (
               }}
             />
           ))}
-        {targetableRaceMarkers.map(race => (
+        {safeTargetableRaceMarkers.map(race => (
           <ReferenceLine
             key={`${race.name}_${race.date}`}
             x={race.month}
@@ -12337,12 +12362,12 @@ return (
 )}
   </div>
   <div style={{ display: "grid", gap: 6 }}>
-    {targetableRaces.slice(0, 4).map(race => (
+    {safeTargetableRaces.slice(0, 4).map(race => (
       <div key={`${race.name}_${race.date}`} style={{ padding: "8px 10px", background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: 6, fontSize: 12, color: "#cbd5e1" }}>
         {race.name} · {race.city} · {fmtShortDate(race.date)} · ready by {fmtShortDate(race.thresholdDate)} · buffer {race.bufferDays} days
       </div>
     ))}
-    {!targetableRaces.length && (
+    {!safeTargetableRaces.length && (
       <div style={{ fontSize: 12, color: "#666" }}>
         No currently targetable local races after the projected readiness thresholds.
       </div>
@@ -13175,7 +13200,7 @@ return (
     progressionReadiness={ocConstraintState?.gate?.progressionReadiness ?? "hold"}
     progressionReasons={ocConstraintState?.gate?.progressionReasons ?? []}
     tendonStatus={ocConstraintState?.tendon ?? { painScore: 0, stiffness: false, override: null }}
-    scheduleFeedback={adaptiveTrainingState?.feedback || []}
+    scheduleFeedback={Array.isArray(adaptiveTrainingState?.feedback) ? adaptiveTrainingState.feedback : []}
   />
 )}
 
