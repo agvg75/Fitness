@@ -66,6 +66,8 @@ const SYNC_KEYS = new Set([
   "ufd-meal-presets",
   "wt-log",
   "wt-sessions",
+  "wt-tendon-work",
+  "wt-checked-items",
   "ufd-workouts",
   "oc-items"
 ])
@@ -561,6 +563,81 @@ const SDAY_TYPES = {
   Sun: []
 }
 
+const DEFAULT_TENDON_WORK_BY_DAY = {
+  Fri: [
+    { id: "standing_calf_raise", name: "Standing calf raise", sets: "3", reps: "8-12", load: "", notes: "Heavy slow focus. Full range with controlled lowering." },
+    { id: "seated_bent_knee_calf_raise", name: "Seated or bent-knee calf raise", sets: "3", reps: "8-12", load: "", notes: "Soleus-focused. Use seated machine or bent-knee variation." },
+    { id: "tibialis_raise_dorsiflexion", name: "Tibialis raise or dorsiflexion", sets: "2-3", reps: "12-20", load: "", notes: "Controlled dorsiflexion. Band or tib bar both count." },
+    { id: "toe_extensor_intrinsic", name: "Toe extensor or foot intrinsic work", sets: "2-3", reps: "12-20", load: "", notes: "Treat as tendon support, not optional filler." },
+    { id: "lateral_ankle_band", name: "Optional lateral ankle band work", sets: "2", reps: "12-15", load: "", notes: "Useful when ankle stability or forefoot control needs support." },
+  ]
+}
+
+const TENDON_EXERCISE_PATTERNS = [
+  { id: "standing_calf_raise", match: /standing calf raise|standing calf|single-leg calf raise/i, group: "achilles_calf", capacity: 1.2, load: 0.5 },
+  { id: "seated_calf_raise", match: /seated calf raise|bent-knee calf raise|bent knee calf/i, group: "achilles_calf", capacity: 1.15, load: 0.45 },
+  { id: "tibialis_raise", match: /tibialis raise|dorsiflexion|ankle.*dorsiflex/i, group: "achilles_calf", capacity: 0.7, load: 0.2 },
+  { id: "toe_extensor_intrinsic", match: /toe extensor|foot intrinsic|towel scrunch|toe yoga|intrinsic foot/i, group: "forefoot_toe_extensor", capacity: 0.85, load: 0.25 },
+  { id: "lateral_ankle_band", match: /lateral ankle band|ankle band|inversion|eversion/i, group: "achilles_calf", capacity: 0.45, load: 0.15 },
+  { id: "leg_press", match: /leg press/i, group: "patellar_knee", capacity: 0.35, load: 0.85 },
+]
+
+const TENDON_GROUP_META = {
+  achilles_calf: {
+    label: "Achilles / Calf",
+    color: "#f59e0b",
+    safe: 0.85,
+    caution: 1.05,
+    overload: 1.2,
+  },
+  forefoot_toe_extensor: {
+    label: "Forefoot / Toe Extensor",
+    color: "#fb7185",
+    safe: 0.8,
+    caution: 1.0,
+    overload: 1.15,
+  },
+  patellar_knee: {
+    label: "Patellar / Knee",
+    color: "#38bdf8",
+    safe: 0.85,
+    caution: 1.05,
+    overload: 1.2,
+  },
+}
+
+function getDefaultTendonWork(day) {
+  const source = DEFAULT_TENDON_WORK_BY_DAY[day] || []
+  return source.map(item => ({ ...item }))
+}
+
+function normalizeExerciseText(value) {
+  return String(value || "").trim().toLowerCase()
+}
+
+function classifyTendonExercise(name) {
+  const text = normalizeExerciseText(name)
+  return TENDON_EXERCISE_PATTERNS.find(pattern => pattern.match.test(text)) || null
+}
+
+function formatRxSummary(sets, reps, load) {
+  const parts = []
+  if (sets) parts.push(String(sets))
+  if (reps) parts.push(String(reps))
+  const base = parts.length === 2 ? `${parts[0]} x ${parts[1]}` : parts.join(" ")
+  if (load !== "" && load != null) {
+    return base ? `${base} @ ${load}` : `@ ${load}`
+  }
+  return base || "No Rx"
+}
+
+function resolveEditableField(source, key, fallback = "") {
+  if (source && Object.prototype.hasOwnProperty.call(source, key)) {
+    return source[key]
+  }
+  return fallback
+}
+
 const fmtDateTime = iso => {
   const d = new Date(iso)
   return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) +
@@ -771,6 +848,20 @@ function ScheduleLogView({ log, expanded, setExpanded, onDelete, onEdit, highlig
       </div>
     ))}
 
+    {Array.isArray(entry.tendon_work) && entry.tendon_work.length > 0 && (
+      <div style={{ marginBottom: 10, padding: "8px 10px", background: "#171108", border: "1px solid #3a2a0d", borderRadius: 6 }}>
+        <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "#f59e0b", fontWeight: 700, marginBottom: 6 }}>
+          Tendon Work
+        </div>
+        {entry.tendon_work.map((item, idx) => (
+          <div key={`${item.id || item.name}_${idx}`} style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "3px 0", fontSize: 11, color: "#f3d28a", borderBottom: idx < entry.tendon_work.length - 1 ? "1px solid #24190a" : "none" }}>
+            <span>{item.name}</span>
+            <span>{formatRxSummary(item.sets, item.reps, item.load)}</span>
+          </div>
+        ))}
+      </div>
+    )}
+
     {allExercises.length === 0 && <div style={{ fontSize: "12px", color: "#333" }}>No exercise data recorded.</div>}
 
     {programExs.map(ex => {
@@ -843,12 +934,15 @@ function ScheduleLogView({ log, expanded, setExpanded, onDelete, onEdit, highlig
   )
 }
 
-function ScheduleMismatchDiagnostics({ report, onOpenEntry }) {
+function ScheduleMismatchDiagnostics({ report, onOpenEntry, expanded = false, onToggle = null }) {
   const rows = Array.isArray(report) ? report : []
 
   return (
     <div style={{ marginBottom: 12, padding: "10px 12px", background: "#0a0a0a", border: "1px solid #1a1a1a", borderRadius: 8 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", marginBottom: rows.length ? 10 : 0, flexWrap: "wrap" }}>
+      <div
+        onClick={() => onToggle?.()}
+        style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", marginBottom: expanded && rows.length ? 10 : 0, flexWrap: "wrap", cursor: onToggle ? "pointer" : "default" }}
+      >
         <div>
           <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "#777", fontWeight: 700 }}>
             Schedule day/date diagnostics
@@ -857,12 +951,15 @@ function ScheduleMismatchDiagnostics({ report, onOpenEntry }) {
             Read-only legacy wt-log check.
           </div>
         </div>
-        <div style={{ fontSize: 12, fontWeight: 700, color: rows.length ? "#f59e0b" : "#22c55e" }}>
-          {rows.length} {rows.length === 1 ? "mismatch" : "mismatches"}
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: rows.length ? "#f59e0b" : "#22c55e" }}>
+            {rows.length} {rows.length === 1 ? "mismatch" : "mismatches"}
+          </div>
+          <div style={{ fontSize: 10, color: "#555" }}>{expanded ? "▼" : "▶"}</div>
         </div>
       </div>
 
-      {!rows.length ? (
+      {!expanded ? null : !rows.length ? (
         <div style={{ fontSize: 12, color: "#555" }}>No mismatches found.</div>
       ) : (
         <div style={{ overflowX: "auto" }}>
@@ -1532,18 +1629,22 @@ function DailyReadinessPanel({ readinessScore, latestHealthFit, ocItems, compute
 }
 
 // ─── TabSchedule ──────────────────────────────────────────────────────────────
-function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, setSchedLog, readinessScore, latestHealthFit = null, ocItems = [], computedTSB = null, progressionReadiness = "progress", progressionReasons = [], tendonStatus = { painScore: 0, stiffness: false, override: null } }) {
+function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, setSchedLog, readinessScore, latestHealthFit = null, ocItems = [], computedTSB = null, progressionReadiness = "progress", progressionReasons = [], tendonStatus = { painScore: 0, stiffness: false, override: null }, scheduleFeedback = [] }) {
   const [activeDay, setActiveDay] = useState(todayDayKey())
   const [schedView, setSchedView] = useState("schedule")
   const [expandedLog, setExpandedLog] = useState({})
   const [toast, setToast] = useState(null)
-  const [openSections, setOpenSections] = useState({ stretch: false, warmup: false, main: false, core: false, cardio: false })
+  const [openSections, setOpenSections] = useState(() => {
+    const mobile = typeof window !== "undefined" ? window.innerWidth < 768 : true
+    return { stretch: false, warmup: false, tendon: true, main: !mobile, core: false, cardio: false, diagnostics: false }
+  })
   const [variants, setVariants] = useState({})
   const [fields, setFields] = useState({})
   const [cardioEntries, setCardioEntries] = useState({}) // { day: [{modality, duration, notes}] }
   const [checkedItems, setCheckedItems] = useState({})   // { "day_section_index": bool }
   const [customItems, setCustomItems] = useState({})     // { "day_stretch": [{n,d}], "day_warmup": [...], "day_core": [...] }
   const [customExercises, setCustomExercises] = useState({}) // { day: [{id,n,sets,reps,load,notes}] }
+  const [tendonEntries, setTendonEntries] = useState({}) // { day: [{id,name,sets,reps,load,notes}] }
   const [savedEntries, setSavedEntries] = useState({})   // { day: { ymca: entry|null, knr: entry|null } }
   const [justUndone, setJustUndone] = useState(null)    // "ymca" | "knr" | null
   const [sessionDate, setSessionDate] = useState(todayISO())
@@ -1557,6 +1658,8 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const [inlineExName, setInlineExName] = useState("")
   const [highlightedLogEntryId, setHighlightedLogEntryId] = useState(null)
   const [showSetTimer, setShowSetTimer] = useState(false)
+  const [expandedCards, setExpandedCards] = useState({})
+  const [isMobileLayout, setIsMobileLayout] = useState(() => typeof window !== "undefined" ? window.innerWidth < 768 : true)
   const logEntryRefs = useRef({})
 
   const SPLIT_DAYS = ["Tue", "Thu"]
@@ -1568,6 +1671,14 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const writeLocalScheduleKey = (key, value) => {
     try { localStorage.setItem(key, JSON.stringify(value)) } catch {}
   }
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined
+    const onResize = () => setIsMobileLayout(window.innerWidth < 768)
+    onResize()
+    window.addEventListener("resize", onResize)
+    return () => window.removeEventListener("resize", onResize)
+  }, [])
 
   const readScheduleKeyFromSupabase = async key => {
     if (!supabase || !session?.user?.id) return null
@@ -1617,6 +1728,8 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       const ss = await store.get("wt-sessions")
       const ci = await store.get("wt-custom-items")
       const cx = await store.get("wt-custom-exercises")
+      const tw = await store.get("wt-tendon-work")
+      const ck = await store.get("wt-checked-items")
       // Fetch wt-log from Supabase and merge with localStorage
       if (supabase && session?.user?.id) {
         try {
@@ -1653,6 +1766,8 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       }
       if (ci && typeof ci === "object") setCustomItems(ci)
       if (cx && typeof cx === "object") setCustomExercises(cx)
+      if (tw && typeof tw === "object") setTendonEntries(tw)
+      if (ck && typeof ck === "object") setCheckedItems(ck)
     })()
   }, [session?.user?.id])
 
@@ -1794,7 +1909,13 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     if (!ex) return {}
     const vk = getVariant(exId)
     const rx = ex.variants[vk]
-    return fields[k] || { sets: rx.sets, reps: rx.reps, load: rx.load, notes: "" }
+    const existing = fields[k] || {}
+    return {
+      sets: resolveEditableField(existing, "sets", rx.sets),
+      reps: resolveEditableField(existing, "reps", rx.reps),
+      load: resolveEditableField(existing, "load", rx.load),
+      notes: resolveEditableField(existing, "notes", "")
+    }
   }
 
   const setF = (day, exId, fKey, val) => {
@@ -1810,7 +1931,15 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     if (ex) {
       const v = ex.variants[vk]
       const k = `${day}_${exId}`
-      setFields(prev => ({ ...prev, [k]: { sets: v.sets, reps: v.reps, load: v.load, notes: prev[k]?.notes || "" } }))
+      setFields(prev => ({
+        ...prev,
+        [k]: {
+          sets: v.sets,
+          reps: v.reps,
+          load: v.load,
+          notes: resolveEditableField(prev[k], "notes", "")
+        }
+      }))
     }
   }
 
@@ -1824,9 +1953,42 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
 
   // ── Checked items ──────────────────────────────────────────────────────
   const checkKey = (day, section, idx) => `${day}_${section}_${idx}`
-  const isChecked = (day, section, idx) => !!checkedItems[checkKey(day, section, idx)]
+  const getDefaultCheckedState = (section, day) => {
+    if (section === "warmup" || section === "stretch" || section === "core") return false
+    if (section === "tendon") return false
+    if (section === "exercise") return true
+    if (section === "cardio") return !CARDIO[day]?.noCardio
+    return false
+  }
+  const isChecked = (day, section, idx) => {
+    const key = checkKey(day, section, idx)
+    if (Object.prototype.hasOwnProperty.call(checkedItems, key)) return !!checkedItems[key]
+    return getDefaultCheckedState(section, day)
+  }
+  const persistCheckedItems = next => {
+    setCheckedItems(next)
+    saveScheduleKey("wt-checked-items", next)
+  }
   const toggleCheck = (day, section, idx) => {
-    setCheckedItems(prev => ({ ...prev, [checkKey(day, section, idx)]: !prev[checkKey(day, section, idx)] }))
+    const key = checkKey(day, section, idx)
+    const next = {
+      ...checkedItems,
+      [key]: !isChecked(day, section, idx)
+    }
+    persistCheckedItems(next)
+  }
+
+  const getTendonEntries = day => tendonEntries[day]?.length
+    ? tendonEntries[day]
+    : getDefaultTendonWork(day)
+
+  const setTendonEntryField = (day, idx, field, value) => {
+    const entries = getTendonEntries(day).map((entry, entryIdx) =>
+      entryIdx === idx ? { ...entry, [field]: value } : { ...entry }
+    )
+    const next = { ...tendonEntries, [day]: entries }
+    setTendonEntries(next)
+    saveScheduleKey("wt-tendon-work", next)
   }
 
   // ── Custom items (stretch, warmup, core) ───────────────────────────────
@@ -1950,7 +2112,11 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       return {
         exercise_id: ex.id, exercise_name: ex.n, variant: vk, variant_name: rx.n,
         prescribed: { sets: rx.sets, reps: rx.reps, load: rx.load },
-        actual: { sets: f.sets || rx.sets, reps: f.reps || rx.reps, load: f.load || rx.load },
+        actual: {
+          sets: resolveEditableField(f, "sets", rx.sets),
+          reps: resolveEditableField(f, "reps", rx.reps),
+          load: resolveEditableField(f, "load", rx.load)
+        },
         notes: f.notes || "", changed: isChanged(day, ex.id),
       }
     })
@@ -1964,6 +2130,9 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
 
     const filteredExercises = checkedIds != null ? exercises.filter(ex => checkedIds.has(ex.exercise_id)) : exercises
     const filteredCustomExs = checkedIds != null ? customExs.filter(ex => checkedIds.has(ex.exercise_id)) : customExs
+    const completedTendonWork = getTendonEntries(day)
+      .filter((_, idx) => isChecked(day, "tendon", idx))
+      .map(item => ({ ...item }))
 
     const checkedStretch = getProgDay(day).stretch?.map((item, i) => ({ ...item, done: isChecked(day, "stretch", i) }))
     const checkedWarmup = getProgDay(day).warmup?.map((item, i) => ({ ...item, done: isChecked(day, "warmup", i) }))
@@ -1980,6 +2149,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       program: "Kinesiology (primary)",
       rpe: sessionRPE[`${day}_${venue}`] ?? null,
       exercises: [...filteredExercises, ...filteredCustomExs],
+      tendon_work: completedTendonWork,
       cardio: completedCardio,
       stretch_completed: checkedStretch,
       warmup_completed: checkedWarmup,
@@ -2233,10 +2403,13 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
 
   // ── Exercise card ──────────────────────────────────────────────────────
   const exCard = (ex, day, isCustom = false) => {
+    const cardKey = `${day}_${ex.id}`
     const vk = isCustom ? "custom" : getVariant(ex.id)
     const v = isCustom ? ex : ex.variants?.[vk]
     const f = isCustom ? ex : getF(day, ex.id)
     const chg = isCustom ? false : isChanged(day, ex.id)
+    const checked = isChecked(day, "exercise", ex.id)
+    const collapsed = expandedCards[cardKey] == null ? isMobileLayout : !expandedCards[cardKey]
     const vColors = { machine: "#3b82f6", db: "#22c55e", friendly: "#f97316" }
     const vBgs    = { machine: "rgba(59,130,246,0.12)", db: "rgba(34,197,94,0.12)", friendly: "rgba(249,115,22,0.12)" }
     const fl = ex.fi === "toe" ? "Toe-safe" : "Shoulder-safe"
@@ -2257,12 +2430,26 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     )
 
     return (
-      <div key={ex.id} style={{ marginTop: 10, border: `0.5px solid ${chg ? "#d97706" : "#1e1e1e"}`, borderRadius: 7, overflow: "hidden" }}>
-        <div style={{ padding: "8px 12px 7px", display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, flexWrap: "wrap", background: "#0d0d0d" }}>
+      <div key={ex.id} style={{ marginTop: 10, border: `0.5px solid ${chg ? "#d97706" : "#1e1e1e"}`, borderRadius: 7, overflow: "hidden", opacity: checked ? 1 : 0.92 }}>
+        <div
+          onClick={() => setExpandedCards(prev => ({ ...prev, [cardKey]: collapsed }))}
+          style={{ padding: "8px 12px 7px", display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, flexWrap: "wrap", background: "#0d0d0d", cursor: "pointer" }}
+        >
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            <input
+              type="checkbox"
+              checked={checked}
+              onChange={e => {
+                e.stopPropagation()
+                toggleCheck(day, "exercise", ex.id)
+              }}
+              onClick={e => e.stopPropagation()}
+              style={{ accentColor: "#4a9ee8", width: 14, height: 14, cursor: "pointer" }}
+            />
             <span style={{ fontSize: 13, fontWeight: 600, color: "#d8d8d8" }}>{ex.n}</span>
             {chg && <span style={{ fontSize: 9, fontWeight: 700, color: "#d97706", background: "rgba(217,119,6,0.15)", borderRadius: 3, padding: "1px 5px" }}>modified</span>}
             {isCustom && <span style={{ fontSize: 9, color: "#7F77DD", background: "rgba(127,119,221,0.15)", borderRadius: 3, padding: "1px 5px" }}>custom</span>}
+            {!checked && <span style={{ fontSize: 9, fontWeight: 700, color: "#9ca3af", background: "rgba(148,163,184,0.16)", borderRadius: 3, padding: "1px 5px" }}>excluded from log</span>}
             {!isCustom && (() => {
               const hist = getExerciseHistory(ex.n, schedLog)
               if (hist.length < 3) return null
@@ -2283,7 +2470,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
               )
             })()}
           </div>
-          <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 4, alignItems: "center" }} onClick={e => e.stopPropagation()}>
             {!isCustom && Object.keys(ex.variants || {}).length > 1 && ["machine", "db", "friendly"].map(k => {
               if (!ex.variants[k]) return null
               const lbl = k === "machine" ? "Machine" : k === "db" ? "DB" : fl
@@ -2301,9 +2488,17 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
                 Remove
               </button>
             )}
+            <div style={{ fontSize: 11, color: "#555", marginLeft: 4 }}>{collapsed ? "▸" : "▾"}</div>
           </div>
         </div>
-        <div style={{ padding: "4px 12px 10px", background: "#0a0a0a" }}>
+        <div style={{ padding: "0 12px 8px", background: "#0a0a0a", borderTop: "1px solid #151515" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", padding: "8px 0 6px", flexWrap: "wrap" }}>
+            <div style={{ fontSize: 11, color: "#7b8794" }}>{v?.n || ex.sub || "Exercise"}</div>
+            <div style={{ fontSize: 11, color: "#cbd5e1" }}>{formatRxSummary(resolveEditableField(f, "sets", v?.sets), resolveEditableField(f, "reps", v?.reps), resolveEditableField(f, "load", v?.load))}</div>
+          </div>
+        </div>
+        {!collapsed && (
+        <div style={{ padding: "4px 12px 10px", background: "#0a0a0a", borderTop: "1px solid #1a1a1a" }}>
           {!isCustom && <div style={{ fontSize: 11, color: "#555", padding: "4px 0 6px" }}>{v?.n}</div>}
           <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 6 }}>
             Suggested modification: <span style={{ color: "#e5e7eb" }}>{workoutSuggestion.modification}</span>
@@ -2331,6 +2526,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
             placeholder="Session note (optional)" rows={1}
             style={{ width: "100%", marginTop: 4, padding: "4px 7px", border: "0.5px solid #1e1e1e", borderRadius: 5, fontSize: 11, color: "#666", background: "#111", fontFamily: "inherit", resize: "none", outline: "none" }} />
         </div>
+        )}
       </div>
     )
   }
@@ -2448,6 +2644,74 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     )
   }
 
+  const tendonBlock = (day) => {
+    const entries = getTendonEntries(day)
+    if (!entries.length) {
+      return (
+        <div style={{ padding: "12px 14px", fontSize: 12, color: "#777" }}>
+          No tendon-support work assigned for this day yet.
+        </div>
+      )
+    }
+
+    return (
+      <div style={{ padding: "12px 14px" }}>
+        <div style={{ marginBottom: 10, padding: "8px 10px", background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.24)", borderRadius: 6, fontSize: 11, color: "#fcd34d", lineHeight: 1.5 }}>
+          Tendon work counts as structural training. It supports Achilles, forefoot, and knee capacity and should be logged explicitly.
+        </div>
+        {entries.map((entry, idx) => {
+          const checked = isChecked(day, "tendon", idx)
+          return (
+            <div key={`${entry.id}_${idx}`} style={{ marginBottom: 10, padding: "10px 12px", border: "0.5px solid #4a3308", borderRadius: 7, background: "linear-gradient(180deg, rgba(36,23,7,0.95) 0%, rgba(10,10,10,0.96) 100%)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => toggleCheck(day, "tendon", idx)}
+                  style={{ accentColor: "#f59e0b", width: 14, height: 14, cursor: "pointer", flexShrink: 0 }}
+                />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "#f8e3a3" }}>{entry.name}</div>
+                  <div style={{ fontSize: 10, color: "#8b6d2d", marginTop: 2 }}>
+                    {checked ? "Included in session log" : "Planned but not yet included"} · {formatRxSummary(entry.sets, entry.reps, entry.load)}
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                {[
+                  ["Sets", "sets", "3"],
+                  ["Reps", "reps", "8-12"],
+                  ["Load", "load", "optional"],
+                ].map(([label, field, placeholder]) => (
+                  <div key={field}>
+                    <div style={{ fontSize: 9, color: "#8b6d2d", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>{label}</div>
+                    <input
+                      type="text"
+                      value={entry[field] || ""}
+                      onChange={e => setTendonEntryField(day, idx, field, e.target.value)}
+                      placeholder={placeholder}
+                      style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #5a4516", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#f8fafc", background: "#111", fontFamily: "inherit", outline: "none" }}
+                    />
+                  </div>
+                ))}
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <div style={{ fontSize: 9, color: "#8b6d2d", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Notes</div>
+                  <input
+                    type="text"
+                    value={entry.notes || ""}
+                    onChange={e => setTendonEntryField(day, idx, "notes", e.target.value)}
+                    placeholder="tempo, side-to-side differences, symptoms, band used"
+                    style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #5a4516", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#f8fafc", background: "#111", fontFamily: "inherit", outline: "none" }}
+                  />
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
   // ── Log bar ────────────────────────────────────────────────────────────
   const logBar = () => {
     const day = activeDay
@@ -2528,6 +2792,11 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
               ...(prog.exercises || []).map(ex => ({ id: ex.id, name: ex.n, venue: ex.venue || null })),
               ...getCustomExercises(day).map(e => ({ id: e.id, name: e.n, venue: null }))
             ]
+            const selectedExerciseCount = Object.keys(pendingChecked).filter(id => pendingChecked[id]).length
+            const skippedExerciseCount = Math.max(0, allExs.length - selectedExerciseCount)
+            const selectedWarmupCount = (prog.warmup || []).filter((_, idx) => isChecked(day, "warmup", idx)).length
+            const selectedTendonCount = getTendonEntries(day).filter((_, idx) => isChecked(day, "tendon", idx)).length
+            const selectedCardioCount = getCardioEntries(day).filter((_, idx) => isChecked(day, "cardio", idx)).length
             const hasVenueTags = allExs.some(ex => ex.venue != null)
             const ymcaExs = allExs.filter(ex => ex.venue === "YMCA" || ex.venue == null && !hasVenueTags)
             const knrExs  = allExs.filter(ex => ex.venue === "KNR")
@@ -2543,6 +2812,12 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
               <div key={venue} style={{ marginBottom: 10, padding: "14px", border: `0.5px solid ${venue === "knr" ? "#3b82f6" : "#d97706"}`, borderRadius: 8, background: "#0a0a0a" }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: "#ced2f0", marginBottom: 10 }}>
                   Logging: {VENUE_LABELS[venue]}
+                </div>
+                <div style={{ marginBottom: 10, padding: "8px 10px", background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: 6, fontSize: 11, color: "#9ca3af", lineHeight: 1.5 }}>
+                  Checked items will be included in the log.
+                  <div style={{ marginTop: 4, color: "#ced2f0" }}>
+                    Strength {selectedExerciseCount} included{skippedExerciseCount ? ` · ${skippedExerciseCount} skipped` : ""} · Warm-up {selectedWarmupCount} · Tendon {selectedTendonCount} · Cardio {selectedCardioCount}
+                  </div>
                 </div>
                 {grouped.map(group => (
                   <div key={group.groupLabel || "all"}>
@@ -2608,7 +2883,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
               const isYmca = venue === "ymca"
               setPendingChecked(Object.fromEntries(allExs.map(ex => [
                 ex.id,
-                ex.venue == null || (isYmca ? ex.venue === "YMCA" : ex.venue === "KNR")
+                isChecked(day, "exercise", ex.id) && (ex.venue == null || (isYmca ? ex.venue === "YMCA" : ex.venue === "KNR"))
               ])))
               setPendingVenue(venue)
             }}
@@ -2631,8 +2906,22 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   return (
     <div style={{ color: "#d8d8d8", position: "relative" }}>
       <input ref={importRef} type="file" accept=".json" style={{ display: "none" }} onChange={importLog} />
+      {Array.isArray(scheduleFeedback) && scheduleFeedback.length > 0 && (
+        <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
+          {scheduleFeedback.slice(0, 3).map(message => (
+            <div key={message} style={{ padding: "10px 12px", background: "rgba(56,189,248,0.08)", border: "1px solid rgba(56,189,248,0.18)", borderLeft: "3px solid #38bdf8", borderRadius: 8, fontSize: 12, color: "#cbd5e1", lineHeight: 1.5 }}>
+              {message}
+            </div>
+          ))}
+        </div>
+      )}
       <DailyReadinessPanel readinessScore={readinessScore} latestHealthFit={latestHealthFit} ocItems={ocItems} computedTSB={computedTSB} />
-      <ScheduleMismatchDiagnostics report={scheduleMismatchReport} onOpenEntry={openDiagnosticEntry} />
+      <ScheduleMismatchDiagnostics
+        report={scheduleMismatchReport}
+        onOpenEntry={openDiagnosticEntry}
+        expanded={openSections.diagnostics}
+        onToggle={() => toggleSection("diagnostics")}
+      />
       {/* Day navigation */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
         <div style={{ display: "flex", gap: 3, background: "#0a0a0a", borderRadius: 8, padding: 4, border: "1px solid #1a1a1a", flexWrap: "wrap" }}>
@@ -2697,6 +2986,12 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
           {/* Warmup */}
           {prog.warmup?.length > 0 && checklistSection(activeDay, "warmup", prog.warmup, "#BA7517", "Warm-up", "")}
 
+          {/* Tendon work */}
+          <div style={{ border: "0.5px solid #4a3308", borderRadius: 8, marginBottom: 10, overflow: "hidden", boxShadow: "0 0 0 1px rgba(245,158,11,0.08)" }}>
+            {secHdr("tendon", "Tendon Work", "#f59e0b", getTendonEntries(activeDay).length ? `${getTendonEntries(activeDay).filter((_, idx) => isChecked(activeDay, "tendon", idx)).length}/${getTendonEntries(activeDay).length} selected` : "")}
+            {openSections.tendon && tendonBlock(activeDay)}
+          </div>
+
           {/* topNote banner (PLAN) */}
           {prog._topNote && (
             <div style={{ marginBottom: 10, padding: "7px 12px", background: "rgba(59,130,246,0.07)", border: "0.5px solid rgba(59,130,246,0.2)", borderRadius: 6, fontSize: 11, color: "#6a9adf" }}>
@@ -2706,7 +3001,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
 
           {/* Main program */}
           <div style={{ border: "0.5px solid #1a1a1a", borderRadius: 8, marginBottom: 10, overflow: "hidden" }}>
-            {secHdr("main", "Main program", "#185FA5", "")}
+            {secHdr("main", "Main Program", "#185FA5", `${prog.exercises?.filter(ex => isChecked(activeDay, "exercise", ex.id)).length || 0}/${prog.exercises?.length || 0} selected`)}
             {openSections.main && (
               <div style={{ padding: "4px 14px 12px" }}>
                 {prog.exercises?.length > 0
@@ -2762,7 +3057,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
           {/* Cardio */}
           {!CARDIO[activeDay]?.noCardio && (
             <div style={{ border: "0.5px solid #1a1a1a", borderRadius: 8, marginBottom: 16, overflow: "hidden" }}>
-              {secHdr("cardio", "Cardio prescription", "#993C1D", "")}
+              {secHdr("cardio", "Cardio", "#993C1D", "")}
               {openSections.cardio && cardioBlock(activeDay)}
             </div>
           )}
@@ -4801,6 +5096,432 @@ function buildRacePrediction(enduranceForecast) {
     half3m: predictForReadiness(readiness3m),
     half6m: predictForReadiness(readiness6m),
     half12m: predictForReadiness(readiness12m)
+  }
+}
+
+function clampNumber(value, min, max) {
+  return Math.max(min, Math.min(max, value))
+}
+
+function getLocalIsoDateParts(dateValue) {
+  const date = new Date(dateValue)
+  if (Number.isNaN(date.getTime())) return null
+  date.setHours(12, 0, 0, 0)
+  return {
+    date,
+    iso: date.toISOString().slice(0, 10),
+    dayKey: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][date.getDay()]
+  }
+}
+
+function getWeekStartIso(dateValue) {
+  const parts = getLocalIsoDateParts(dateValue)
+  if (!parts) return null
+  const date = new Date(parts.date)
+  const day = date.getDay()
+  const diff = day === 0 ? -6 : 1 - day
+  date.setDate(date.getDate() + diff)
+  date.setHours(12, 0, 0, 0)
+  return date.toISOString().slice(0, 10)
+}
+
+function formatLocalIsoDate(dateValue) {
+  const date = new Date(dateValue)
+  if (Number.isNaN(date.getTime())) return null
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
+}
+
+function addDaysLocalIso(baseDate, days) {
+  const date = new Date(baseDate)
+  if (Number.isNaN(date.getTime())) return null
+  date.setHours(12, 0, 0, 0)
+  date.setDate(date.getDate() + Math.round(days))
+  return formatLocalIsoDate(date)
+}
+
+function monthsUntilLocalDate(isoDate, fromDate = new Date()) {
+  if (!isoDate) return null
+  const start = new Date(fromDate)
+  start.setHours(12, 0, 0, 0)
+  const target = new Date(`${isoDate}T12:00:00`)
+  if (Number.isNaN(target.getTime())) return null
+  return Math.max(0, Number((((target.getTime() - start.getTime()) / 86400000) / 30.44).toFixed(1)))
+}
+
+function enumerateRecentWeeks(count = 12, endDate = new Date()) {
+  const lastWeek = getWeekStartIso(endDate)
+  const base = new Date(`${lastWeek}T12:00:00`)
+  const weeks = []
+  for (let i = count - 1; i >= 0; i -= 1) {
+    const d = new Date(base)
+    d.setDate(d.getDate() - (i * 7))
+    weeks.push(d.toISOString().slice(0, 10))
+  }
+  return weeks
+}
+
+function averageCardioPrescriptionDose(session) {
+  if (!session) return 0
+  const durationMidpoint = Number(session.dMin || 0) && Number(session.dMax || 0)
+    ? (Number(session.dMin) + Number(session.dMax)) / 2
+    : Number(session.dMin || session.dMax || 0)
+  const distance = parseScheduleDistanceMiles(session.dist, session.mod) || 0
+  return Number((durationMidpoint + distance * 6).toFixed(2))
+}
+
+function summarizeStrengthDose(exercises) {
+  return (Array.isArray(exercises) ? exercises : []).reduce((sum, ex) => {
+    const sets = Number.parseFloat(ex?.actual?.sets ?? ex?.sets ?? 0) || 0
+    const reps = Number.parseFloat(ex?.actual?.reps ?? ex?.reps ?? 0) || 0
+    const load = Number.parseFloat(ex?.actual?.load ?? ex?.load ?? 0) || 0
+    const base = sets > 0
+      ? sets * Math.max(1, reps || 8) * (1 + load / 100)
+      : Math.max(1, reps || 8) * (1 + load / 100)
+    return sum + base / 10
+  }, 0)
+}
+
+function summarizeTendonDose(tendonWork) {
+  return (Array.isArray(tendonWork) ? tendonWork : []).reduce((sum, item) => {
+    const sets = Number.parseFloat(item?.sets || 0) || 0
+    const reps = Number.parseFloat(item?.reps || 0) || 0
+    const load = Number.parseFloat(item?.load || 0) || 0
+    return sum + ((sets || 2) * Math.max(1, reps || 10) * (1 + load / 120)) / 16
+  }, 0)
+}
+
+function getTendonGroupKeywords(groupKey) {
+  if (groupKey === "achilles_calf") return ["Calf", "Ankle", "Achilles", "Shin"]
+  if (groupKey === "forefoot_toe_extensor") return ["Toe", "Forefoot", "Ankle"]
+  if (groupKey === "patellar_knee") return ["Knee", "Quad", "Patellar", "Hip"]
+  return []
+}
+
+function estimateOcBurdenForDate(ocItems, isoDate, keywords = []) {
+  const target = new Date(`${isoDate}T12:00:00`).getTime()
+  return (Array.isArray(ocItems) ? ocItems : []).reduce((sum, item) => {
+    const start = item?.startDate ? new Date(item.startDate).getTime() : NaN
+    if (!Number.isFinite(start) || start > target) return sum
+    if (keywords.length && !keywords.some(keyword => String(item?.location || "").includes(keyword))) return sum
+    const initial = Number(item?.initialScore || item?.currentScore || 0)
+    const halfLife = Number(item?.halfLifeHours || 96)
+    if (initial <= 0 || halfLife <= 0) return sum
+    const hours = (target - start) / 3600000
+    const score = initial * Math.pow(0.5, hours / halfLife)
+    return sum + score
+  }, 0)
+}
+
+function getRaceDistanceType(race) {
+  const miles = Number(race?.dist_mi || 0)
+  if (miles >= 12 && miles <= 14) return "half"
+  if (miles >= 5.8 && miles <= 6.4) return "tenK"
+  if (miles >= 2.8 && miles <= 3.3) return "fiveK"
+  if (String(race?.name || "").toLowerCase().includes("tri")) return "olympicTri"
+  return miles > 3.3 && miles < 6.2 ? "fiveK" : "other"
+}
+
+function passesRaceGeographyPolicy(race, type) {
+  const city = String(race?.city || "").toLowerCase()
+  const note = String(race?.note || "").toLowerCase()
+  const locationText = `${city} ${note}`
+  if (type === "fiveK") return city.includes("bloomington") || city.includes("normal")
+  if (type === "tenK") {
+    return [
+      "bloomington", "normal", "peoria", "east peoria", "mclean",
+      "mackinaw", "moraine", "tipton", "lake bloomington",
+      "pontiac", "lincoln", "morton", "washington"
+    ].some(token => locationText.includes(token))
+  }
+  if (type === "half") {
+    return [
+      "bloomington", "normal", "peoria", "east peoria", "springfield",
+      "champaign", "urbana", "decatur", "mclean", "mackinaw",
+      "lincoln", "pontiac", "morton", "washington", "central illinois"
+    ].some(token => locationText.includes(token))
+  }
+  return true
+}
+
+function buildAdaptiveTrainingState({
+  schedLog,
+  operationalWorkouts,
+  acwrSeries,
+  tsbRows,
+  ocItems,
+  readinessScore,
+  weeklyTrainingBuckets
+}) {
+  const weekKeys = enumerateRecentWeeks(12)
+  const weekMap = new Map(weekKeys.map(weekStart => [weekStart, {
+    weekStart,
+    domains: {
+      running: { plannedSessions: 0, completedSessions: 0, plannedDose: 0, completedDose: 0, absorbedDose: 0 },
+      strength: { plannedSessions: 0, completedSessions: 0, plannedDose: 0, completedDose: 0, absorbedDose: 0 },
+      tendon: { plannedSessions: 0, completedSessions: 0, plannedDose: 0, completedDose: 0, absorbedDose: 0 },
+      cardio: { plannedSessions: 0, completedSessions: 0, plannedDose: 0, completedDose: 0, absorbedDose: 0 },
+    },
+    modifiers: { tsb: null, acwr: null, oc: 0 },
+    capital: null,
+    tendon: null
+  }]))
+
+  weekKeys.forEach(weekStart => {
+    const start = new Date(`${weekStart}T12:00:00`)
+    for (let i = 0; i < 7; i += 1) {
+      const d = new Date(start)
+      d.setDate(d.getDate() + i)
+      const dayKey = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()]
+      const cardioPlan = CARDIO[dayKey]
+      const plan = PROG[dayKey] || {}
+      const week = weekMap.get(weekStart)
+      ;(cardioPlan?.sessions || []).forEach(session => {
+        const domain = session.mod === "run" ? "running" : "cardio"
+        week.domains[domain].plannedSessions += 1
+        week.domains[domain].plannedDose += averageCardioPrescriptionDose(session)
+      })
+      if ((plan.exercises || []).length > 0) {
+        week.domains.strength.plannedSessions += 1
+        week.domains.strength.plannedDose += Math.max(1, (plan.exercises || []).length * 1.35)
+      }
+      const tendonPlan = getDefaultTendonWork(dayKey)
+      if (tendonPlan.length > 0) {
+        week.domains.tendon.plannedSessions += 1
+        week.domains.tendon.plannedDose += Math.max(1.5, tendonPlan.length * 1.4)
+      }
+    }
+  })
+
+  ;(Array.isArray(schedLog) ? schedLog : []).forEach(entry => {
+    const date = String(entry?.date || entry?.logged_at || "").slice(0, 10)
+    const weekStart = getWeekStartIso(date)
+    const week = weekMap.get(weekStart)
+    if (!week) return
+
+    const strengthExercises = (entry?.exercises || []).filter(ex => ex?.variant !== "cardio")
+    if (strengthExercises.length > 0) {
+      week.domains.strength.completedSessions += 1
+      week.domains.strength.completedDose += summarizeStrengthDose(strengthExercises)
+    }
+
+    const tendonWork = Array.isArray(entry?.tendon_work) ? entry.tendon_work : []
+    const tendonFromExercises = strengthExercises.filter(ex => classifyTendonExercise(ex?.exercise_name))
+    if (tendonWork.length > 0 || tendonFromExercises.length > 0) {
+      week.domains.tendon.completedSessions += 1
+      week.domains.tendon.completedDose += summarizeTendonDose(tendonWork) + summarizeStrengthDose(tendonFromExercises) * 0.4
+    }
+
+    ;(entry?.cardio || []).forEach(cardio => {
+      const domain = String(cardio?.modality || "").toLowerCase() === "run" ? "running" : "cardio"
+      const distance = parseScheduleDistanceMiles(cardio?.distance, cardio?.modality) || 0
+      const duration = parseScheduleDurationMinutes(cardio?.duration) || 0
+      week.domains[domain].completedSessions += 1
+      week.domains[domain].completedDose += duration + distance * (domain === "running" ? 8 : 5)
+    })
+  })
+
+  ;(Array.isArray(operationalWorkouts) ? operationalWorkouts : []).forEach(workout => {
+    const date = String(workout?.date || workout?.dateTime || workout?.start_date || "").slice(0, 10)
+    const weekStart = getWeekStartIso(date)
+    const week = weekMap.get(weekStart)
+    if (!week) return
+    const category = normalizeWorkoutType(workout?.type, workout)
+    const dur = Number(workout?.dur || workout?.duration_min || 0) || 0
+    if (category === "Running") {
+      week.domains.running.completedDose += (getWorkoutDistanceMiles(workout) * 8) + dur * 0.35
+    } else if (category === "Cycling" || category === "Swimming" || category === "Rowing" || category === "Machine Cardio" || category === "Walking") {
+      week.domains.cardio.completedDose += dur + (getWorkoutDistanceMiles(workout) * 3)
+    }
+  })
+
+  const acwrByWeek = new Map((Array.isArray(acwrSeries) ? acwrSeries : []).map(row => [getWeekStartIso(row.date), row]))
+  const tsbByWeek = new Map((Array.isArray(tsbRows) ? tsbRows : []).map(row => [getWeekStartIso(row.date), row]))
+  const weeklyRunBuckets = new Map((Array.isArray(weeklyTrainingBuckets) ? weeklyTrainingBuckets : []).map(row => [row.weekStart, row]))
+
+  const capitals = { running: 35, strength: 35, tendon: 22, cardio: 35 }
+  const tendonCapacities = {
+    achilles_calf: 24,
+    forefoot_toe_extensor: 18,
+    patellar_knee: 22
+  }
+  const tendonSeries = {
+    achilles_calf: [],
+    forefoot_toe_extensor: [],
+    patellar_knee: []
+  }
+
+  weekKeys.forEach(weekStart => {
+    const week = weekMap.get(weekStart)
+    const acwrRaw = acwrByWeek.get(weekStart)?.acwr ?? acwrByWeek.get(weekStart)?.value ?? null
+    const tsbRaw = tsbByWeek.get(weekStart)?.overallTsb ?? null
+    const acwr = acwrRaw == null ? null : Number(acwrRaw)
+    const tsb = tsbRaw == null ? null : Number(tsbRaw)
+    const ocRun = estimateOcBurdenForDate(ocItems, weekStart, ["Calf", "Ankle", "Toe", "Knee", "Hip"])
+    const ocTendon = estimateOcBurdenForDate(ocItems, weekStart, ["Calf", "Ankle", "Toe", "Knee"])
+    week.modifiers = { tsb, acwr, oc: ocRun }
+
+    const tendonPenaltyBase =
+      (Number.isFinite(tsb) && tsb < -15 ? 0.14 : Number.isFinite(tsb) && tsb < -8 ? 0.08 : 0) +
+      (Number.isFinite(acwr) && acwr > 1.5 ? 0.2 : Number.isFinite(acwr) && acwr > 1.3 ? 0.12 : 0) +
+      clampNumber(ocRun / 20, 0, 0.18)
+
+    Object.entries(week.domains).forEach(([domain, stats]) => {
+      const tendonSensitive = domain === "running" || domain === "tendon"
+      const modifier = clampNumber(
+        1
+          - (Number.isFinite(tsb) && tsb < -20 ? 0.18 : Number.isFinite(tsb) && tsb < -10 ? 0.1 : 0)
+          - (Number.isFinite(acwr) && acwr > 1.5 ? 0.2 : Number.isFinite(acwr) && acwr > 1.3 ? 0.12 : 0)
+          - clampNumber((domain === "strength" ? estimateOcBurdenForDate(ocItems, weekStart, ["Shoulder", "Back", "Knee", "Hip"]) : ocRun) / 22, 0, 0.16)
+          - (tendonSensitive ? clampNumber(ocTendon / 18, 0, 0.12) : 0),
+        0.35,
+        1.02
+      )
+      stats.absorbedDose = Number((stats.completedDose * modifier).toFixed(2))
+      stats.completedSessions = Math.max(stats.completedSessions, stats.completedDose > 0 ? 1 : 0)
+    })
+
+    capitals.running = capitals.running * 0.93 + week.domains.running.absorbedDose * 0.62
+    capitals.strength = capitals.strength * 0.94 + week.domains.strength.absorbedDose * 0.5
+    capitals.tendon = capitals.tendon * 0.975 + week.domains.tendon.absorbedDose * 0.3
+    capitals.cardio = capitals.cardio * 0.94 + week.domains.cardio.absorbedDose * 0.5
+
+    const runBucket = weeklyRunBuckets.get(weekStart) || {}
+    const runMiles = Number(runBucket.running || 0)
+    const runFreqBonus = runMiles > 0 ? clampNumber(runMiles / 12, 0, 1.5) : 0
+    const longRunBonus = runMiles >= 6 ? runMiles * 0.18 : 0
+    const quadStrengthDose = week.domains.strength.completedDose * 0.22
+    const tendonDose = week.domains.tendon.absorbedDose
+
+    const achillesLoad = runMiles * 1.1 + longRunBonus + runFreqBonus
+    const forefootLoad = runMiles * 0.9 + longRunBonus * 0.35 + clampNumber(estimateOcBurdenForDate(ocItems, weekStart, ["Toe"]) / 4, 0, 1.2)
+    const patellarLoad = runMiles * 0.55 + quadStrengthDose
+
+    const acwrPenalty = Number.isFinite(acwr) && acwr > 1.5 ? 1.2 : Number.isFinite(acwr) && acwr > 1.3 ? 0.65 : 0
+    const tsbPenalty = Number.isFinite(tsb) && tsb < -20 ? 0.9 : Number.isFinite(tsb) && tsb < -10 ? 0.45 : 0
+
+    tendonCapacities.achilles_calf = clampNumber(
+      tendonCapacities.achilles_calf * 0.97 + (0.03 * achillesLoad) - acwrPenalty - tsbPenalty - clampNumber(estimateOcBurdenForDate(ocItems, weekStart, getTendonGroupKeywords("achilles_calf")) / 8, 0, 0.8),
+      8,
+      60
+    )
+    tendonCapacities.forefoot_toe_extensor = clampNumber(
+      tendonCapacities.forefoot_toe_extensor * 0.97 + (0.03 * forefootLoad) - acwrPenalty * 0.85 - tsbPenalty * 0.8 - clampNumber(estimateOcBurdenForDate(ocItems, weekStart, getTendonGroupKeywords("forefoot_toe_extensor")) / 7, 0, 0.9),
+      6,
+      50
+    )
+    tendonCapacities.patellar_knee = clampNumber(
+      tendonCapacities.patellar_knee * 0.97 + (0.03 * patellarLoad) - acwrPenalty * 0.75 - tsbPenalty * 0.6 - clampNumber(estimateOcBurdenForDate(ocItems, weekStart, getTendonGroupKeywords("patellar_knee")) / 8, 0, 0.85),
+      7,
+      55
+    )
+
+    const tendonSnapshot = {
+      achilles_calf: {
+        load: Number(achillesLoad.toFixed(2)),
+        capacity: Number(tendonCapacities.achilles_calf.toFixed(2)),
+        risk: Number((achillesLoad / Math.max(1, tendonCapacities.achilles_calf)).toFixed(2))
+      },
+      forefoot_toe_extensor: {
+        load: Number(forefootLoad.toFixed(2)),
+        capacity: Number(tendonCapacities.forefoot_toe_extensor.toFixed(2)),
+        risk: Number((forefootLoad / Math.max(1, tendonCapacities.forefoot_toe_extensor)).toFixed(2))
+      },
+      patellar_knee: {
+        load: Number(patellarLoad.toFixed(2)),
+        capacity: Number(tendonCapacities.patellar_knee.toFixed(2)),
+        risk: Number((patellarLoad / Math.max(1, tendonCapacities.patellar_knee)).toFixed(2))
+      }
+    }
+    week.tendon = tendonSnapshot
+    week.capital = {
+      running: Number(capitals.running.toFixed(1)),
+      strength: Number(capitals.strength.toFixed(1)),
+      tendon: Number(capitals.tendon.toFixed(1)),
+      cardio: Number(capitals.cardio.toFixed(1))
+    }
+    Object.entries(tendonSnapshot).forEach(([groupKey, snapshot]) => {
+      tendonSeries[groupKey].push({
+        weekStart,
+        label: String(weekStart).slice(5),
+        load: snapshot.load,
+        capacity: snapshot.capacity,
+        risk: snapshot.risk
+      })
+    })
+  })
+
+  const weeklyRows = weekKeys.map(weekStart => ({
+    weekStart,
+    label: String(weekStart).slice(5),
+    ...weekMap.get(weekStart)
+  }))
+  const latestWeek = weeklyRows[weeklyRows.length - 1] || null
+  const averageCompliance = domain => {
+    const rows = weeklyRows.slice(-8)
+    const completed = rows.reduce((sum, row) => sum + Number(row.domains?.[domain]?.completedDose || 0), 0)
+    const planned = rows.reduce((sum, row) => sum + Number(row.domains?.[domain]?.plannedDose || 0), 0)
+    return planned > 0 ? Number(clampNumber(completed / planned, 0, 1.2).toFixed(2)) : 0
+  }
+  const avgAbsorption = domain => {
+    const rows = weeklyRows.slice(-6)
+    const absorbed = rows.reduce((sum, row) => sum + Number(row.domains?.[domain]?.absorbedDose || 0), 0)
+    const completed = rows.reduce((sum, row) => sum + Number(row.domains?.[domain]?.completedDose || 0), 0)
+    return completed > 0 ? Number(clampNumber(absorbed / completed, 0, 1.05).toFixed(2)) : 0
+  }
+  const latestTendonRisk = latestWeek?.tendon || {}
+  const maxTendonRisk = Math.max(
+    Number(latestTendonRisk?.achilles_calf?.risk || 0),
+    Number(latestTendonRisk?.forefoot_toe_extensor?.risk || 0),
+    Number(latestTendonRisk?.patellar_knee?.risk || 0)
+  )
+  const forecastConfidence = clampNumber(
+    (
+      (Number(readinessScore || 0) * 0.18) +
+      (Number(latestWeek?.capital?.running || 0) * 0.32) +
+      (averageCompliance("running") * 100 * 0.18) +
+      (avgAbsorption("running") * 100 * 0.14) +
+      (averageCompliance("tendon") * 100 * 0.18)
+    ) / 100,
+    0.1,
+    0.95
+  )
+
+  const feedback = []
+  if (averageCompliance("running") >= 0.8 && averageCompliance("tendon") < 0.6) feedback.push("Running compliance is good, but tendon compliance is lagging.")
+  if (avgAbsorption("running") < 0.72) feedback.push("Completed dose was high, but absorbability was poor due to fatigue or operational constraints.")
+  if (averageCompliance("tendon") >= 0.75 && avgAbsorption("tendon") >= 0.8) feedback.push("Tendon consistency over the last 8 weeks supports progression.")
+  if (forecastConfidence < 0.45) feedback.push("Recent inconsistency reduces confidence in projected readiness.")
+  if (latestWeek?.modifiers?.acwr > 1.3) feedback.push("Absorbed dose is being discounted by elevated ACWR.")
+
+  const tendonAlerts = []
+  if (latestTendonRisk.achilles_calf?.risk >= TENDON_GROUP_META.achilles_calf.overload) tendonAlerts.push("Run load is rising faster than Achilles capacity.")
+  if (latestTendonRisk.forefoot_toe_extensor?.risk >= TENDON_GROUP_META.forefoot_toe_extensor.caution && estimateOcBurdenForDate(ocItems, latestWeek?.weekStart, ["Toe"]) > 1.5) tendonAlerts.push("Forefoot risk is elevated. Hold progression and favor tendon-support work.")
+  if ((latestWeek?.tendon?.achilles_calf?.risk || 0) > 1 && avgAbsorption("tendon") < 0.7) tendonAlerts.push("Current week counts against tendon readiness, not for it.")
+
+  return {
+    weeklyRows,
+    latestWeek,
+    complianceScores: {
+      running: averageCompliance("running"),
+      strength: averageCompliance("strength"),
+      tendon: averageCompliance("tendon"),
+      cardio: averageCompliance("cardio")
+    },
+    absorptionScores: {
+      running: avgAbsorption("running"),
+      strength: avgAbsorption("strength"),
+      tendon: avgAbsorption("tendon"),
+      cardio: avgAbsorption("cardio")
+    },
+    capitals: latestWeek?.capital || { running: 0, strength: 0, tendon: 0, cardio: 0 },
+    tendonSeries,
+    tendonAlerts,
+    feedback,
+    forecastConfidence,
+    maxTendonRisk
   }
 }
 function getInjuryPenalties(ocItems = []) {
@@ -7959,6 +8680,7 @@ const [sleepRecords, setSleepRecords] = useState(() => { try { return JSON.parse
 const [schedLog, setSchedLog] = useState(() => { try { return JSON.parse(localStorage.getItem('wt-log') || '[]') } catch { return [] } })
 const [ocItems, setOcItems] = useState(() => { try { return JSON.parse(localStorage.getItem('oc-items') || '[]') } catch { return [] } })
 const [tendonStatus, setTendonStatus] = useState({ painScore: 0, stiffness: false, override: null })
+const [selectedTendonGroup, setSelectedTendonGroup] = useState("achilles_calf")
 const [baseDataLoaded, setBaseDataLoaded] = useState(false)
 const [readinessInputsHydrated, setReadinessInputsHydrated] = useState(false)
 const [readinessRemoteInputsHydrated, setReadinessRemoteInputsHydrated] = useState(false)
@@ -10170,6 +10892,18 @@ const tsbV2Panel = useMemo(() => {
   return { rows, alerts: [], readinessRiskLabel: risk, readinessDetail: { score: readinessScore ?? Math.round(50 + tsbNow) }, tsbDomain }
 }, [operationalWorkouts, schedLog, ocItems, readinessScore, selectedRangePoints])
 
+const adaptiveTrainingState = useMemo(() => {
+  return buildAdaptiveTrainingState({
+    schedLog,
+    operationalWorkouts,
+    acwrSeries,
+    tsbRows: tsbV2Panel?.rows || [],
+    ocItems,
+    readinessScore,
+    weeklyTrainingBuckets
+  })
+}, [schedLog, operationalWorkouts, acwrSeries, tsbV2Panel, ocItems, readinessScore, weeklyTrainingBuckets])
+
 const operationalCapacityData = useMemo(() => {
   const items = Array.isArray(ocItems) ? ocItems : []
   if (!items.length) return []
@@ -10362,104 +11096,81 @@ function getPlannedLongRunAtMonth(hmPlanLongRun, monthsFromNow) {
   return best
 }
 const readinessProjectionData = useMemo(() => {
-  if (!enduranceForecast || !runningReadiness) return []
+  if (!adaptiveTrainingState?.latestWeek || !runningReadiness) return []
 
-  const fallbackNow =
-    Number(enduranceForecast.readinessNow ?? 0) > 0 ? Number(enduranceForecast.readinessNow) : 50
-  const rNow = currentOcReadiness != null ? currentOcReadiness : fallbackNow
-  const lockProjection = ocProgressionReadiness !== "progress"
-  const anchors = [
-    { month: 0,  readiness: rNow },
-    { month: 1,  readiness: lockProjection ? rNow : (Number(enduranceForecast.readiness1m  ?? 0) > 0 ? Number(enduranceForecast.readiness1m)  : rNow) },
-    { month: 3,  readiness: lockProjection ? rNow : (Number(enduranceForecast.readiness3m  ?? 0) > 0 ? Number(enduranceForecast.readiness3m)  : rNow) },
-    { month: 6,  readiness: lockProjection ? rNow : (Number(enduranceForecast.readiness6m  ?? 0) > 0 ? Number(enduranceForecast.readiness6m)  : rNow) },
-    { month: 12, readiness: lockProjection ? rNow : (Number(enduranceForecast.readiness12m ?? 0) > 0 ? Number(enduranceForecast.readiness12m) : rNow) }
-  ].filter(d => Number.isFinite(d.readiness))
-
-  if (!anchors.length) return []
-
-  const interpolateBaseReadiness = month => {
-    if (month <= anchors[0].month) return anchors[0].readiness
-
-    for (let i = 1; i < anchors.length; i += 1) {
-      const prev = anchors[i - 1]
-      const curr = anchors[i]
-
-      if (month <= curr.month) {
-        const frac = (month - prev.month) / (curr.month - prev.month || 1)
-        return prev.readiness + frac * (curr.readiness - prev.readiness)
-      }
-    }
-
-    const last = anchors[anchors.length - 1]
-    const prev = anchors.length > 1 ? anchors[anchors.length - 2] : last
-    const slope = (last.readiness - prev.readiness) / (last.month - prev.month || 1)
-
-    return Math.max(0, Math.min(100, last.readiness + slope * (month - last.month)))
-  }
-
+  const latestWeek = adaptiveTrainingState.latestWeek
   const clamp = (v, lo = 0, hi = 100) => Math.min(hi, Math.max(lo, v))
+  const acwrPenalty = latestWeek.modifiers?.acwr > 1.5 ? 16 : latestWeek.modifiers?.acwr > 1.3 ? 9 : 0
+  const tsbPenalty = latestWeek.modifiers?.tsb < -20 ? 14 : latestWeek.modifiers?.tsb < -10 ? 7 : 0
+  const ocPenalty = clampNumber((latestWeek.modifiers?.oc || 0) * 2.2, 0, 18)
+  const tendonPenalty = clampNumber((adaptiveTrainingState.maxTendonRisk || 0) > 1 ? ((adaptiveTrainingState.maxTendonRisk - 1) * 18) : 0, 0, 18)
+  const absorbPenalty = clampNumber((1 - (adaptiveTrainingState.absorptionScores?.running || 0.7)) * 22, 0, 15)
+  const effectiveProgress = clampNumber(
+    ((latestWeek.capital?.running || 0) * 0.34) +
+    ((latestWeek.capital?.cardio || 0) * 0.1) +
+    ((adaptiveTrainingState.complianceScores?.running || 0) * 28) -
+    acwrPenalty - tsbPenalty - ocPenalty - tendonPenalty - absorbPenalty,
+    0,
+    100
+  )
+  const runSpecificNow = clampNumber(
+    (runningReadiness.completionReadiness?.fiveK || 0) * 0.28 +
+    (runningReadiness.completionReadiness?.tenK || 0) * 0.18 +
+    effectiveProgress * 0.32 +
+    ((adaptiveTrainingState.capitals?.tendon || 0) * 0.12) +
+    ((adaptiveTrainingState.absorptionScores?.running || 0) * 100 * 0.1),
+    0,
+    100
+  )
+  const monthlyGainBase =
+    ocProgressionReadiness === "deload" ? -3.5 :
+    ocProgressionReadiness === "hold" ? -0.75 :
+    clampNumber(
+      ((adaptiveTrainingState.complianceScores?.running || 0.6) * 4.5) +
+      ((adaptiveTrainingState.absorptionScores?.running || 0.65) * 3.5) +
+      ((adaptiveTrainingState.complianceScores?.tendon || 0.5) * 2.5) -
+      (adaptiveTrainingState.maxTendonRisk > 1 ? (adaptiveTrainingState.maxTendonRisk - 1) * 5 : 0) -
+      (latestWeek.modifiers?.acwr > 1.3 ? 2.5 : 0),
+      -4,
+      6
+    )
 
-  const maxMonth = 12
   const series = []
-  let lastFiveK = Number(clamp(runningReadiness.completionReadiness?.fiveK ?? 0))
-  let lastTenK  = Number(clamp(runningReadiness.completionReadiness?.tenK  ?? 0))
-  let lastHalf  = Number(clamp(runningReadiness.completionReadiness?.half  ?? 0))
-
-  for (let month = 0; month <= maxMonth; month += 1) {
-    const baseReadiness = Number(interpolateBaseReadiness(month).toFixed(1))
-    const plannedLR = month === 0 ? null : getPlannedLongRunAtMonth(HM_PLAN_LONG_RUN, month)
-    const projectedFiveK = plannedLR != null
-      ? Math.min(100, Math.round(
-          plannedLR >= 3.1 ? 100
-          : plannedLR >= 2.5 ? 90
-          : plannedLR >= 2.0 ? 75
-          : plannedLR >= 1.5 ? 55
-          : 35
-        ))
-      : Number(clamp(runningReadiness.completionReadiness?.fiveK ?? 0))
-    const projectedTenK = plannedLR != null
-      ? Math.min(100, Math.round(
-          plannedLR >= 6.2 ? 100
-          : plannedLR >= 5.0 ? 90
-          : plannedLR >= 4.0 ? 75
-          : plannedLR >= 3.0 ? 58
-          : plannedLR >= 2.0 ? 40
-          : 20
-        ))
-      : Number(clamp(runningReadiness.completionReadiness?.tenK ?? 0))
-    const projectedHalf = plannedLR != null
-      ? Math.min(100, Math.round(
-          plannedLR >= 10.0 ? 92
-          : plannedLR >= 8.0 ? 80
-          : plannedLR >= 6.5 ? 65
-          : plannedLR >= 5.0 ? 50
-          : plannedLR >= 3.5 ? 35
-          : plannedLR >= 2.5 ? 22
-          : 12
-        ))
-      : Number(clamp(runningReadiness.completionReadiness?.half ?? 0))
-    const finalFiveK = plannedLR != null ? projectedFiveK : lastFiveK
-    const finalTenK  = plannedLR != null ? projectedTenK  : lastTenK
-    const finalHalf  = plannedLR != null ? projectedHalf  : lastHalf
-    if (plannedLR != null) {
-      lastFiveK = finalFiveK
-      lastTenK  = finalTenK
-      lastHalf  = finalHalf
-    }
+  for (let month = 0; month <= 12; month += 1) {
+    const plannedLR = month === 0 ? runningReadiness.signals?.recentLongestRunMiles : getPlannedLongRunAtMonth(HM_PLAN_LONG_RUN, month)
+    const monthGain = monthlyGainBase * (1 - Math.exp(-month / 3.5)) * 4
+    const baseReadiness = clampNumber(runSpecificNow + monthGain, 0, 100)
+    const lrBonus = plannedLR != null ? Math.min(18, plannedLR * 1.5) : 0
+    const tendonCap = adaptiveTrainingState.capitals?.tendon || 0
+    const eventBase = clampNumber(baseReadiness + (tendonCap * 0.08) + lrBonus * 0.25, 0, 100)
+    const fiveK = clampNumber(eventBase + 10, 0, 100)
+    const tenK = clampNumber(eventBase + (plannedLR >= 5 ? 6 : 0), 0, 100)
+    const half = clampNumber(eventBase - 10 + (plannedLR >= 8 ? 12 : plannedLR >= 6 ? 6 : 0), 0, 100)
+    const swimReadiness = clampNumber((adaptiveTrainingState.capitals?.cardio || 0) * 0.75, 0, 100)
+    const bikeReadiness = clampNumber(((adaptiveTrainingState.capitals?.cardio || 0) * 0.85) + ((adaptiveTrainingState.complianceScores?.cardio || 0) * 20), 0, 100)
+    const runReadiness = clampNumber(baseReadiness, 0, 100)
+    const triConfidence = clampNumber(Math.min(swimReadiness, bikeReadiness, runReadiness) / 100, 0.1, adaptiveTrainingState.forecastConfidence || 0.8)
+    const triWeightedSum = (swimReadiness * 0.28) + (bikeReadiness * 0.32) + (runReadiness * 0.4)
+    const tri = clampNumber((0.6 * Math.min(swimReadiness, bikeReadiness, runReadiness)) + (0.4 * triWeightedSum * triConfidence), 0, 100)
     series.push({
       month,
       label: month === 0 ? "Now" : `${month}M`,
-      baseReadiness,
-      fiveK: finalFiveK,
-      tenK: finalTenK,
-      half: finalHalf,
-      tri: Number(clamp(baseReadiness - 14).toFixed(1)),
+      baseReadiness: Number(baseReadiness.toFixed(1)),
+      fiveK: Number(fiveK.toFixed(1)),
+      tenK: Number(tenK.toFixed(1)),
+      half: Number(half.toFixed(1)),
+      tri: Number(tri.toFixed(1)),
+      swimReadiness: Number(swimReadiness.toFixed(1)),
+      bikeReadiness: Number(bikeReadiness.toFixed(1)),
+      runReadiness: Number(runReadiness.toFixed(1)),
+      confidence: Number((adaptiveTrainingState.forecastConfidence || 0.4).toFixed(2)),
+      triConfidence: Number(triConfidence.toFixed(2)),
+      effectiveProgress: Number(effectiveProgress.toFixed(1))
     })
   }
 
   return series
-}, [enduranceForecast, runningReadiness, currentOcReadiness, ocProgressionReadiness])
+}, [adaptiveTrainingState, runningReadiness, ocProgressionReadiness])
 const forecastReadinessCards = useMemo(() => {
   const byMonth = new Map(readinessProjectionData.map(row => [row.month, row.baseReadiness]))
   return [
@@ -10532,9 +11243,55 @@ const eventReadinessMarkers = useMemo(() => {
   return defs.map(d => ({
     ...d,
     month: findReadyMonth(d.key),
+    thresholdDate: (() => {
+      const month = findReadyMonth(d.key)
+      if (month == null) return null
+      return addDaysLocalIso(new Date(), month * 30.44)
+    })(),
     targetPct
   }))
 }, [readinessProjectionData])
+const targetableRaces = useMemo(() => {
+  const thresholds = Object.fromEntries(eventReadinessMarkers.map(marker => [marker.key, marker.thresholdDate]))
+  const ranked = (RACE_CALENDAR || [])
+    .map(race => {
+      const type = getRaceDistanceType(race)
+      const thresholdDate =
+        type === "fiveK" ? thresholds.fiveK :
+        type === "tenK" ? thresholds.tenK :
+        type === "half" ? thresholds.half :
+        null
+      if (!thresholdDate) return null
+      if (!passesRaceGeographyPolicy(race, type)) return null
+      if (race.date < thresholdDate) return null
+      const thresholdMs = new Date(`${thresholdDate}T12:00:00`).getTime()
+      const raceMs = new Date(`${race.date}T12:00:00`).getTime()
+      const bufferDays = Math.round((raceMs - thresholdMs) / 86400000)
+      return {
+        ...race,
+        type,
+        thresholdDate,
+        bufferDays
+      }
+    })
+    .filter(Boolean)
+    .sort((a, b) => (a.bufferDays - b.bufferDays) || String(a.date).localeCompare(String(b.date)))
+  return ranked
+}, [eventReadinessMarkers])
+const targetableRaceMarkers = useMemo(() => {
+  return targetableRaces.slice(0, 8).map(race => {
+    const month = monthsUntilLocalDate(race.date)
+    return { ...race, month }
+  })
+}, [targetableRaces])
+const readinessConfidenceSummary = useMemo(() => {
+  const latest = readinessProjectionData?.[0] || readinessProjectionData?.[readinessProjectionData.length - 1] || null
+  return {
+    readinessConfidence: Number((adaptiveTrainingState?.forecastConfidence || 0).toFixed(2)),
+    recommendationConfidence: Number(clampNumber((adaptiveTrainingState?.forecastConfidence || 0) * (adaptiveTrainingState?.complianceScores?.running || 0), 0, 1).toFixed(2)),
+    triConfidence: Number((latest?.triConfidence || 0).toFixed(2))
+  }
+}, [adaptiveTrainingState, readinessProjectionData])
 const readinessProjectionMaxMonth = useMemo(() => {
   const dataMax = readinessProjectionData.length
     ? Math.max(...readinessProjectionData.map(d => Number(d.month || 0)))
@@ -10946,16 +11703,18 @@ return (
       </div>
 
       <div style={{ ...cardStyle(), minWidth: 0 }}>
-        <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "8px" }}>Calories vs Target</div>
-        <div style={{ fontSize: "30px", fontWeight: "bold" }}>
-          {nutritionSummary?.avgCalories != null && calorieTarget?.targetCalories != null
-            ? `${Math.round(nutritionSummary.avgCalories)} / ${Math.round(calorieTarget.targetCalories)}`
+        <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "8px" }}>Tendon Risk Today</div>
+        <div style={{ fontSize: "30px", fontWeight: "bold", color: (() => {
+          const risk = adaptiveTrainingState?.latestWeek?.tendon?.[selectedTendonGroup]?.risk || 0
+          const meta = TENDON_GROUP_META[selectedTendonGroup]
+          return risk >= meta.overload ? "#ef4444" : risk >= meta.caution ? "#f59e0b" : "#4ade80"
+        })() }}>
+          {adaptiveTrainingState?.latestWeek?.tendon?.[selectedTendonGroup]?.risk != null
+            ? `${adaptiveTrainingState.latestWeek.tendon[selectedTendonGroup].risk.toFixed(2)}x`
             : "NA"}
         </div>
         <div style={{ fontSize: "12px", opacity: 0.7, marginTop: "8px" }}>
-          delta: {nutritionSummary?.avgCalories != null && calorieTarget?.targetCalories != null
-            ? `${Math.round(nutritionSummary.avgCalories - calorieTarget.targetCalories) > 0 ? "+" : ""}${Math.round(nutritionSummary.avgCalories - calorieTarget.targetCalories)} kcal`
-            : "NA"}
+          {TENDON_GROUP_META[selectedTendonGroup]?.label || "Selected tendon group"} · capacity {adaptiveTrainingState?.latestWeek?.tendon?.[selectedTendonGroup]?.capacity?.toFixed?.(1) ?? "NA"}
         </div>
       </div>
 
@@ -11165,6 +11924,141 @@ return (
       )
     })()}
 
+    <div style={{ display: "grid", gridTemplateColumns: window.innerWidth < 1024 ? "1fr" : "1.15fr 0.85fr", gap: 16, marginBottom: 16 }}>
+      <div style={{ ...cardStyle(), minWidth: 0 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+          <div>
+            <div style={{ fontWeight: "bold" }}>Tendon Capacity</div>
+            <div style={{ fontSize: 11, color: "#667", marginTop: 2 }}>Load vs capacity over the last 12 weeks with current risk zones.</div>
+          </div>
+          <select
+            value={selectedTendonGroup}
+            onChange={e => setSelectedTendonGroup(e.target.value)}
+            style={{ background: "#0d0e1c", color: "#ced2f0", border: "1px solid #1a1b2e", borderRadius: 6, padding: "6px 8px", fontSize: 12 }}
+          >
+            {Object.entries(TENDON_GROUP_META).map(([key, meta]) => (
+              <option key={key} value={key}>{meta.label}</option>
+            ))}
+          </select>
+        </div>
+        {adaptiveTrainingState?.tendonSeries?.[selectedTendonGroup]?.length ? (
+          <>
+            <ResponsiveContainer width="100%" height={260}>
+              <ComposedChart data={adaptiveTrainingState.tendonSeries[selectedTendonGroup]} margin={{ top: 10, right: 14, left: 8, bottom: 8 }}>
+                <CartesianGrid stroke="#1a1b2e" />
+                <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                <YAxis tick={{ fontSize: 10 }} />
+                <Tooltip formatter={(value, name) => [Number(value).toFixed(2), name]} />
+                <ReferenceArea y1={0} y2={TENDON_GROUP_META[selectedTendonGroup].safe * (adaptiveTrainingState.latestWeek?.tendon?.[selectedTendonGroup]?.capacity || 1)} fill="rgba(34,197,94,0.08)" />
+                <ReferenceArea y1={TENDON_GROUP_META[selectedTendonGroup].safe * (adaptiveTrainingState.latestWeek?.tendon?.[selectedTendonGroup]?.capacity || 1)} y2={TENDON_GROUP_META[selectedTendonGroup].caution * (adaptiveTrainingState.latestWeek?.tendon?.[selectedTendonGroup]?.capacity || 1)} fill="rgba(245,158,11,0.08)" />
+                <ReferenceArea y1={TENDON_GROUP_META[selectedTendonGroup].caution * (adaptiveTrainingState.latestWeek?.tendon?.[selectedTendonGroup]?.capacity || 1)} y2={Math.max(...adaptiveTrainingState.tendonSeries[selectedTendonGroup].map(row => Math.max(row.capacity, row.load))) * 1.15} fill="rgba(239,68,68,0.08)" />
+                <Area type="monotone" dataKey="capacity" fill={`${TENDON_GROUP_META[selectedTendonGroup].color}22`} stroke={TENDON_GROUP_META[selectedTendonGroup].color} strokeWidth={2} name="Capacity" />
+                <Line type="monotone" dataKey="load" stroke="#f8fafc" strokeWidth={2} dot={false} name="Load" />
+              </ComposedChart>
+            </ResponsiveContainer>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 10, marginTop: 10 }}>
+              <div style={{ background: "#07080e", border: "1px solid #1a1b2e", borderRadius: 8, padding: 10 }}>
+                <div style={{ fontSize: 10, color: "#667" }}>Current risk</div>
+                <div style={{ fontSize: 24, fontWeight: 800 }}>{adaptiveTrainingState.latestWeek?.tendon?.[selectedTendonGroup]?.risk?.toFixed?.(2) ?? "NA"}x</div>
+              </div>
+              <div style={{ background: "#07080e", border: "1px solid #1a1b2e", borderRadius: 8, padding: 10 }}>
+                <div style={{ fontSize: 10, color: "#667" }}>4-week trajectory</div>
+                <div style={{ fontSize: 13, lineHeight: 1.5, color: "#ced2f0" }}>
+                  {(() => {
+                    const series = adaptiveTrainingState.tendonSeries[selectedTendonGroup]
+                    const last4 = series.slice(-4)
+                    const avgRisk = last4.length
+                      ? last4.reduce((sum, row) => sum + Number(row?.risk || 0), 0) / last4.length
+                      : null
+                    return Number.isFinite(avgRisk) ? `${avgRisk.toFixed(2)}x if current pattern holds` : "Not enough data"
+                  })()}
+                </div>
+              </div>
+              <div style={{ background: "#07080e", border: "1px solid #1a1b2e", borderRadius: 8, padding: 10 }}>
+                <div style={{ fontSize: 10, color: "#667" }}>12-week trajectory</div>
+                <div style={{ fontSize: 13, lineHeight: 1.5, color: "#ced2f0" }}>
+                  {(() => {
+                    const current = adaptiveTrainingState.latestWeek?.tendon?.[selectedTendonGroup]
+                    if (!current) return "Not enough data"
+                    const risk = clampNumber(current.risk - ((adaptiveTrainingState.complianceScores?.tendon || 0) * 0.12), 0, 2)
+                    return `${risk.toFixed(2)}x if tendon work and run pattern stay similar`
+                  })()}
+                </div>
+              </div>
+            </div>
+            {(adaptiveTrainingState?.tendonAlerts || []).length > 0 && (
+              <div style={{ marginTop: 10, display: "grid", gap: 6 }}>
+                {adaptiveTrainingState.tendonAlerts.map(alert => (
+                  <div key={alert} style={{ padding: "9px 10px", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", borderLeft: "3px solid #ef4444", borderRadius: 6, fontSize: 12, color: "#fca5a5" }}>
+                    {alert}
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        ) : (
+          <div style={{ color: "#666", fontSize: 12, padding: "28px 0" }}>No tendon trend available yet.</div>
+        )}
+      </div>
+
+      <div style={{ ...cardStyle(), minWidth: 0 }}>
+        <div style={{ fontWeight: "bold", marginBottom: 10 }}>Compliance and Adaptation</div>
+        <div style={{ fontSize: 11, color: "#667", marginBottom: 10 }}>Planned vs completed vs absorbed over the last 12 weeks.</div>
+        {["running", "tendon", "strength", "cardio"].map(domain => (
+          <div key={domain} style={{ marginBottom: 10, paddingBottom: 10, borderBottom: domain !== "cardio" ? "1px solid #151515" : "none" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, textTransform: "capitalize" }}>{domain}</div>
+              <div style={{ fontSize: 11, color: "#667" }}>
+                compliance {(adaptiveTrainingState?.complianceScores?.[domain] * 100 || 0).toFixed(0)}% · absorbed {(adaptiveTrainingState?.absorptionScores?.[domain] * 100 || 0).toFixed(0)}%
+              </div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0,1fr))", gap: 6 }}>
+              {[
+                ["Planned", adaptiveTrainingState?.weeklyRows?.slice(-8).reduce((sum, row) => sum + Number(row.domains?.[domain]?.plannedDose || 0), 0)],
+                ["Completed", adaptiveTrainingState?.weeklyRows?.slice(-8).reduce((sum, row) => sum + Number(row.domains?.[domain]?.completedDose || 0), 0)],
+                ["Absorbed", adaptiveTrainingState?.weeklyRows?.slice(-8).reduce((sum, row) => sum + Number(row.domains?.[domain]?.absorbedDose || 0), 0)],
+              ].map(([label, value]) => (
+                <div key={label} style={{ background: "#07080e", border: "1px solid #1a1b2e", borderRadius: 6, padding: 8 }}>
+                  <div style={{ fontSize: 10, color: "#667" }}>{label}</div>
+                  <div style={{ fontSize: 18, fontWeight: 700 }}>{Number(value || 0).toFixed(1)}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+        {adaptiveTrainingState?.weeklyRows?.length > 0 && (
+          <div style={{ marginTop: 8 }}>
+            <div style={{ fontSize: 11, color: "#667", marginBottom: 6 }}>Training capital trend</div>
+            <ResponsiveContainer width="100%" height={140}>
+              <LineChart data={adaptiveTrainingState.weeklyRows.slice(-12).map(row => ({
+                label: row.label,
+                runCapital: row.capital?.running || 0,
+                tendonCapital: row.capital?.tendon || 0,
+                strengthCapital: row.capital?.strength || 0,
+                cardioCapital: row.capital?.cardio || 0,
+              }))} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
+                <CartesianGrid stroke="#1a1b2e" />
+                <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                <YAxis tick={{ fontSize: 10 }} />
+                <Tooltip formatter={(value, name) => [Number(value).toFixed(1), name]} />
+                <Line type="monotone" dataKey="runCapital" stroke="#ef4444" dot={false} name="Run capital" />
+                <Line type="monotone" dataKey="tendonCapital" stroke="#f59e0b" dot={false} name="Tendon capital" />
+                <Line type="monotone" dataKey="strengthCapital" stroke="#38bdf8" dot={false} name="Strength capital" />
+                <Line type="monotone" dataKey="cardioCapital" stroke="#22c55e" dot={false} name="Cardio capital" />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+        <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
+          {(adaptiveTrainingState?.feedback || []).map(message => (
+            <div key={message} style={{ fontSize: 12, color: "#cbd5e1", lineHeight: 1.5, padding: "8px 10px", background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: 6 }}>
+              {message}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+
     <div style={{ ...cardStyle(), minWidth: 0, marginBottom: 16 }}>
 {(() => {
   const riskPalette = {
@@ -11320,6 +12214,12 @@ return (
     Performance Readiness
   </div>
 
+  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+    <div style={{ fontSize: 11, color: "#9ca3af" }}>Readiness confidence {(readinessConfidenceSummary.readinessConfidence * 100).toFixed(0)}%</div>
+    <div style={{ fontSize: 11, color: "#9ca3af" }}>Recommendation confidence {(readinessConfidenceSummary.recommendationConfidence * 100).toFixed(0)}%</div>
+    <div style={{ fontSize: 11, color: "#9ca3af" }}>Tri confidence {(readinessConfidenceSummary.triConfidence * 100).toFixed(0)}%</div>
+  </div>
+
   <div style={{ marginBottom: "14px" }}>
 
 {readinessChartsReady ? (
@@ -11412,14 +12312,41 @@ return (
   angle: -90,
   position: "top",
   fill: marker.color
-}}
+              }}
             />
           ))}
+        {targetableRaceMarkers.map(race => (
+          <ReferenceLine
+            key={`${race.name}_${race.date}`}
+            x={race.month}
+            stroke="#94a3b8"
+            strokeDasharray="2 4"
+            label={{
+              value: race.name,
+              angle: -90,
+              position: "insideTop",
+              fill: "#94a3b8",
+              fontSize: 9
+            }}
+          />
+        ))}
       </LineChart>
     </ResponsiveContainer>
 ) : (
   <div style={{ color:'#666', fontSize:12, padding:'40px 0', textAlign:'center' }}>Loading readiness chart...</div>
 )}
+  </div>
+  <div style={{ display: "grid", gap: 6 }}>
+    {targetableRaces.slice(0, 4).map(race => (
+      <div key={`${race.name}_${race.date}`} style={{ padding: "8px 10px", background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: 6, fontSize: 12, color: "#cbd5e1" }}>
+        {race.name} · {race.city} · {fmtShortDate(race.date)} · ready by {fmtShortDate(race.thresholdDate)} · buffer {race.bufferDays} days
+      </div>
+    ))}
+    {!targetableRaces.length && (
+      <div style={{ fontSize: 12, color: "#666" }}>
+        No currently targetable local races after the projected readiness thresholds.
+      </div>
+    )}
   </div>
 </div>
 
@@ -12248,6 +13175,7 @@ return (
     progressionReadiness={ocConstraintState?.gate?.progressionReadiness ?? "hold"}
     progressionReasons={ocConstraintState?.gate?.progressionReasons ?? []}
     tendonStatus={ocConstraintState?.tendon ?? { painScore: 0, stiffness: false, override: null }}
+    scheduleFeedback={adaptiveTrainingState?.feedback || []}
   />
 )}
 
