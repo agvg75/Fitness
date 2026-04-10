@@ -525,22 +525,57 @@ const getScheduleEntryTrainingType = entry => {
   return "none"
 }
 
+const getScheduleEntryConflictSlot = entry => {
+  const venue = String(entry?.venue_label || entry?.venue || "").trim()
+  if (venue) return venue
+  const storedDay = String(entry?.day || "").slice(0, 3)
+  return storedDay || "unslotted"
+}
+
 const buildScheduleDayDateMismatchReport = entries => {
-  return (Array.isArray(entries) ? entries : [])
-    .map(entry => {
-      const mismatch = getScheduleEntryDayDateMismatch(entry)
-      if (!mismatch) return null
+  const activeEntries = (Array.isArray(entries) ? entries : []).filter(entry => !entry?.conflict_ignored && entry?.conflict_status !== "ignored")
+  const clusters = activeEntries.reduce((acc, entry) => {
+    const date = String(entry?.date || entry?.logged_at || "").slice(0, 10)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return acc
+    const slot = getScheduleEntryConflictSlot(entry)
+    const clusterKey = `${date}__${slot}`
+    if (!acc[clusterKey]) acc[clusterKey] = []
+    acc[clusterKey].push(entry)
+    return acc
+  }, {})
+
+  return Object.entries(clusters)
+    .map(([clusterKey, clusterEntries]) => {
+      if (!Array.isArray(clusterEntries) || clusterEntries.length < 2) return null
+      const first = clusterEntries[0]
+      const date = String(first?.date || first?.logged_at || "").slice(0, 10)
+      const impliedWeekday = dayKeyFromScheduleDate(date)
+      const slotLabel = getScheduleEntryConflictSlot(first)
       return {
-        id: entry?.id ?? entry?.session_id ?? "unknown",
-        storedDay: mismatch.storedDay,
-        storedDate: mismatch.date,
-        impliedWeekday: mismatch.dateDay,
-        loggedAt: entry?.logged_at || "",
-        venue: entry?.venue_label || entry?.venue || "",
-        trainingType: getScheduleEntryTrainingType(entry),
+        clusterKey,
+        date,
+        impliedWeekday,
+        slotLabel,
+        records: clusterEntries
+          .map(entry => {
+            const mismatch = getScheduleEntryDayDateMismatch(entry)
+            return {
+              id: entry?.id ?? entry?.session_id ?? "unknown",
+              storedDay: String(entry?.day || "").slice(0, 3),
+              storedDate: date,
+              impliedWeekday: mismatch?.dateDay || impliedWeekday,
+              loggedAt: entry?.logged_at || "",
+              venue: entry?.venue_label || entry?.venue || "",
+              trainingType: getScheduleEntryTrainingType(entry),
+              isCanonical: Boolean(entry?.conflict_canonical),
+              hasMismatch: Boolean(mismatch),
+            }
+          })
+          .sort((a, b) => Number(b.isCanonical) - Number(a.isCanonical) || String(a.loggedAt).localeCompare(String(b.loggedAt)))
       }
     })
     .filter(Boolean)
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)))
 }
 
 const mergeScheduleLogEntries = (...logs) => Object.values(
@@ -828,7 +863,7 @@ function ScheduleLogView({ log, expanded, setExpanded, onDelete, onEdit, highlig
               </div>
 
               <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-                <button onClick={e => { e.stopPropagation(); onEdit(entry.id) }} style={{ background: "none", border: "1px solid #222", borderRadius: "4px", color: "#555", fontSize: "10px", padding: "4px 10px", cursor: "pointer" }}>Edit</button>
+                <button onClick={e => { e.stopPropagation(); onEdit(entry.id) }} style={{ background: "none", border: "1px solid #222", borderRadius: "4px", color: "#555", fontSize: "10px", padding: "4px 10px", cursor: "pointer" }}>Edit record</button>
                 <button onClick={e => { e.stopPropagation(); onDelete(entry.id) }} style={{ background: "none", border: "1px solid #1e1e1e", borderRadius: "4px", color: "#3a3a3a", fontSize: "10px", padding: "4px 10px", cursor: "pointer" }}>Delete</button>
                 <span style={{ color: "#333", fontSize: "12px", marginLeft: "4px" }}>{open ? "▴" : "▾"}</span>
               </div>
@@ -941,65 +976,199 @@ function ScheduleLogView({ log, expanded, setExpanded, onDelete, onEdit, highlig
   )
 }
 
-function ScheduleMismatchDiagnostics({ report, onOpenEntry, expanded = false, onToggle = null }) {
-  const rows = Array.isArray(report) ? report : []
+function ScheduleMismatchDiagnostics({ report, onOpenEntry, onEditEntry, onResolveGroup, expanded = false, onToggle = null }) {
+  const groups = Array.isArray(report) ? report : []
+  const [resolveOpen, setResolveOpen] = useState({})
+  const [resolveDrafts, setResolveDrafts] = useState({})
+
+  useEffect(() => {
+    setResolveDrafts(prev => {
+      const next = { ...prev }
+      groups.forEach(group => {
+        if (!next[group.clusterKey]) {
+          const canonical = group.records.find(r => r.isCanonical)?.id ?? group.records[0]?.id ?? null
+          next[group.clusterKey] = {
+            canonicalId: canonical,
+            deleteOthers: false,
+            reassignDateEnabled: false,
+            reassignDate: group.date || ""
+          }
+        }
+      })
+      return next
+    })
+  }, [groups])
 
   return (
     <div style={{ marginBottom: 12, padding: "10px 12px", background: "#0a0a0a", border: "1px solid #1a1a1a", borderRadius: 8 }}>
       <div
         onClick={() => onToggle?.()}
-        style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", marginBottom: expanded && rows.length ? 10 : 0, flexWrap: "wrap", cursor: onToggle ? "pointer" : "default" }}
+        style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", marginBottom: expanded && groups.length ? 10 : 0, flexWrap: "wrap", cursor: onToggle ? "pointer" : "default" }}
       >
         <div>
           <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "#777", fontWeight: 700 }}>
             Schedule day/date diagnostics
           </div>
           <div style={{ fontSize: 11, color: "#444", marginTop: 2 }}>
-            Read-only legacy wt-log check.
+            Conflict detection and guided resolution for duplicated schedule slots.
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: rows.length ? "#f59e0b" : "#22c55e" }}>
-            {rows.length} {rows.length === 1 ? "mismatch" : "mismatches"}
+          <div style={{ fontSize: 12, fontWeight: 700, color: groups.length ? "#f59e0b" : "#22c55e" }}>
+            {groups.length} {groups.length === 1 ? "conflict cluster" : "conflict clusters"}
           </div>
           <div style={{ fontSize: 10, color: "#555" }}>{expanded ? "▼" : "▶"}</div>
         </div>
       </div>
 
-      {!expanded ? null : !rows.length ? (
-        <div style={{ fontSize: 12, color: "#555" }}>No mismatches found.</div>
+      {!expanded ? null : !groups.length ? (
+        <div style={{ fontSize: 12, color: "#555" }}>No conflicts found.</div>
       ) : (
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, color: "#aaa" }}>
-            <thead>
-              <tr style={{ color: "#555", textAlign: "left", borderBottom: "1px solid #181818" }}>
-                {["Entry id", "Stored day", "Stored date", "Date weekday", "Logged at", "Venue", "Type", "Action"].map(h => (
-                  <th key={h} style={{ padding: "5px 8px", fontWeight: 700, whiteSpace: "nowrap" }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(row => (
-                <tr key={`${row.id}_${row.storedDate}`} style={{ borderBottom: "1px solid #121212" }}>
-                  <td style={{ padding: "5px 8px", fontFamily: "'IBM Plex Mono',monospace", color: "#777", whiteSpace: "nowrap" }}>{row.id}</td>
-                  <td style={{ padding: "5px 8px", color: "#f59e0b", fontWeight: 700 }}>{row.storedDay}</td>
-                  <td style={{ padding: "5px 8px", whiteSpace: "nowrap" }}>{row.storedDate}</td>
-                  <td style={{ padding: "5px 8px", color: "#f59e0b", fontWeight: 700 }}>{row.impliedWeekday}</td>
-                  <td style={{ padding: "5px 8px", whiteSpace: "nowrap" }}>{row.loggedAt || "NA"}</td>
-                  <td style={{ padding: "5px 8px", whiteSpace: "nowrap" }}>{row.venue || "NA"}</td>
-                  <td style={{ padding: "5px 8px", whiteSpace: "nowrap" }}>{row.trainingType}</td>
-                  <td style={{ padding: "5px 8px", whiteSpace: "nowrap" }}>
-                    <button
-                      onClick={() => onOpenEntry?.(row.id)}
-                      style={{ background: "none", border: "1px solid #2a2a2a", borderRadius: "4px", color: "#aaa", fontSize: "10px", padding: "4px 10px", cursor: "pointer" }}
-                    >
-                      Open
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div style={{ display: "grid", gap: 10 }}>
+          {groups.map(group => {
+            const draft = resolveDrafts[group.clusterKey] || {}
+            const resolveEnabled = Boolean(resolveOpen[group.clusterKey])
+            return (
+              <div key={group.clusterKey} style={{ border: "1px solid #1a1a1a", borderRadius: 8, overflow: "hidden" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", padding: "10px 12px", background: "rgba(245,158,11,0.08)", borderBottom: "1px solid #171717" }}>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "#f59e0b" }}>
+                      Conflict: multiple records mapped to same session
+                    </div>
+                    <div style={{ fontSize: 11, color: "#888", marginTop: 2 }}>
+                      {group.date} · {group.impliedWeekday || "NA"} · {group.slotLabel || "NA"} · {group.records.length} records
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setResolveOpen(prev => ({ ...prev, [group.clusterKey]: !prev[group.clusterKey] }))}
+                    style={{ background: "none", border: "1px solid #2a2a2a", borderRadius: "4px", color: "#aaa", fontSize: "10px", padding: "4px 10px", cursor: "pointer", alignSelf: "flex-start" }}
+                  >
+                    Resolve
+                  </button>
+                </div>
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, color: "#aaa" }}>
+                    <thead>
+                      <tr style={{ color: "#555", textAlign: "left", borderBottom: "1px solid #181818" }}>
+                        {["Keep", "Entry id", "Stored day", "Stored date", "Date weekday", "Logged at", "Venue", "Type", "Status", "Action"].map(h => (
+                          <th key={h} style={{ padding: "5px 8px", fontWeight: 700, whiteSpace: "nowrap" }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {group.records.map(row => (
+                        <tr key={`${group.clusterKey}_${row.id}`} style={{ borderBottom: "1px solid #121212" }}>
+                          <td style={{ padding: "5px 8px", whiteSpace: "nowrap" }}>
+                            {resolveEnabled ? (
+                              <input
+                                type="radio"
+                                name={`canonical_${group.clusterKey}`}
+                                checked={String(draft.canonicalId) === String(row.id)}
+                                onChange={() => setResolveDrafts(prev => ({
+                                  ...prev,
+                                  [group.clusterKey]: { ...(prev[group.clusterKey] || {}), canonicalId: row.id }
+                                }))}
+                              />
+                            ) : row.isCanonical ? "✓" : "—"}
+                          </td>
+                          <td style={{ padding: "5px 8px", fontFamily: "'IBM Plex Mono',monospace", color: "#777", whiteSpace: "nowrap" }}>{row.id}</td>
+                          <td style={{ padding: "5px 8px", color: row.hasMismatch ? "#f59e0b" : "#aaa", fontWeight: row.hasMismatch ? 700 : 400 }}>{row.storedDay}</td>
+                          <td style={{ padding: "5px 8px", whiteSpace: "nowrap" }}>{row.storedDate}</td>
+                          <td style={{ padding: "5px 8px", color: row.hasMismatch ? "#f59e0b" : "#aaa", fontWeight: row.hasMismatch ? 700 : 400 }}>{row.impliedWeekday}</td>
+                          <td style={{ padding: "5px 8px", whiteSpace: "nowrap" }}>{row.loggedAt || "NA"}</td>
+                          <td style={{ padding: "5px 8px", whiteSpace: "nowrap" }}>{row.venue || "NA"}</td>
+                          <td style={{ padding: "5px 8px", whiteSpace: "nowrap" }}>{row.trainingType}</td>
+                          <td style={{ padding: "5px 8px", whiteSpace: "nowrap", color: row.isCanonical ? "#22c55e" : row.hasMismatch ? "#f59e0b" : "#666" }}>
+                            {row.isCanonical ? "Canonical" : row.hasMismatch ? "Day/date mismatch" : "Duplicate"}
+                          </td>
+                          <td style={{ padding: "5px 8px", whiteSpace: "nowrap" }}>
+                            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                              <button
+                                onClick={() => onOpenEntry?.(row.id)}
+                                style={{ background: "none", border: "1px solid #2a2a2a", borderRadius: "4px", color: "#aaa", fontSize: "10px", padding: "4px 10px", cursor: "pointer" }}
+                              >
+                                View
+                              </button>
+                              <button
+                                onClick={() => onEditEntry?.(row.id)}
+                                style={{ background: "none", border: "1px solid #2a2a2a", borderRadius: "4px", color: "#aaa", fontSize: "10px", padding: "4px 10px", cursor: "pointer" }}
+                              >
+                                Edit record
+                              </button>
+                              <button
+                                onClick={() => setResolveOpen(prev => ({ ...prev, [group.clusterKey]: true }))}
+                                style={{ background: "none", border: "1px solid #2a2a2a", borderRadius: "4px", color: "#f59e0b", fontSize: "10px", padding: "4px 10px", cursor: "pointer" }}
+                              >
+                                Resolve
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {resolveEnabled && (
+                  <div style={{ padding: "10px 12px", background: "#0d0e1c", borderTop: "1px solid #171717", display: "grid", gap: 10 }}>
+                    <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center" }}>
+                      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: "#aaa" }}>
+                        <input
+                          type="checkbox"
+                          checked={Boolean(draft.deleteOthers)}
+                          onChange={e => setResolveDrafts(prev => ({
+                            ...prev,
+                            [group.clusterKey]: { ...(prev[group.clusterKey] || {}), deleteOthers: e.target.checked }
+                          }))}
+                        />
+                        Delete non-canonical records
+                      </label>
+                      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: "#aaa" }}>
+                        <input
+                          type="checkbox"
+                          checked={Boolean(draft.reassignDateEnabled)}
+                          onChange={e => setResolveDrafts(prev => ({
+                            ...prev,
+                            [group.clusterKey]: { ...(prev[group.clusterKey] || {}), reassignDateEnabled: e.target.checked }
+                          }))}
+                        />
+                        Reassign canonical record to different day
+                      </label>
+                      {draft.reassignDateEnabled && (
+                        <input
+                          type="date"
+                          value={draft.reassignDate || ""}
+                          onChange={e => setResolveDrafts(prev => ({
+                            ...prev,
+                            [group.clusterKey]: { ...(prev[group.clusterKey] || {}), reassignDate: e.target.value }
+                          }))}
+                          style={{ background: "#07080e", color: "#ced2f0", border: "1px solid #1a1b2e", borderRadius: 6, padding: "6px 8px" }}
+                        />
+                      )}
+                    </div>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <button
+                        onClick={() => onResolveGroup?.({
+                          clusterKey: group.clusterKey,
+                          canonicalId: draft.canonicalId,
+                          deleteOthers: Boolean(draft.deleteOthers),
+                          reassignDate: draft.reassignDateEnabled ? draft.reassignDate : null
+                        })}
+                        style={{ background: "#1f3b2e", border: "1px solid #28543d", borderRadius: 6, color: "#d1fae5", fontSize: 11, padding: "6px 12px", cursor: "pointer" }}
+                      >
+                        Resolve conflict
+                      </button>
+                      <button
+                        onClick={() => setResolveOpen(prev => ({ ...prev, [group.clusterKey]: false }))}
+                        style={{ background: "none", border: "1px solid #2a2a2a", borderRadius: 6, color: "#aaa", fontSize: 11, padding: "6px 12px", cursor: "pointer" }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
     </div>
@@ -2239,6 +2408,79 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     showToast("Entry deleted")
   }
 
+  const resolveDiagnosticConflict = useCallback(async ({ clusterKey, canonicalId, deleteOthers = false, reassignDate = null }) => {
+    if (!canonicalId) {
+      showToast("Select a canonical record first")
+      return
+    }
+
+    const currentLog = await loadScheduleLogForMutation(schedLog)
+    const clusterEntries = currentLog.filter(entry => {
+      if (entry?.conflict_ignored || entry?.conflict_status === "ignored") return false
+      const date = String(entry?.date || entry?.logged_at || "").slice(0, 10)
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false
+      return `${date}__${getScheduleEntryConflictSlot(entry)}` === clusterKey
+    })
+
+    if (clusterEntries.length < 2) {
+      showToast("Conflict cluster no longer exists")
+      return
+    }
+
+    const canonicalEntry = clusterEntries.find(entry => String(entry.id) === String(canonicalId) || String(entry.session_id) === String(canonicalId))
+    if (!canonicalEntry) {
+      showToast("Canonical record not found")
+      return
+    }
+
+    const targetDate = reassignDate && /^\d{4}-\d{2}-\d{2}$/.test(reassignDate) ? reassignDate : null
+    const targetDay = targetDate ? dayKeyFromScheduleDate(targetDate) : null
+    const removedIds = new Set()
+
+    const nextLog = currentLog
+      .filter(entry => {
+        const inCluster = clusterEntries.some(clusterEntry => clusterEntry.id === entry.id)
+        if (!inCluster) return true
+        if (!deleteOthers) return true
+        const isCanonical = String(entry.id) === String(canonicalEntry.id)
+        if (!isCanonical) removedIds.add(entry.id)
+        return isCanonical
+      })
+      .map(entry => {
+        if (!clusterEntries.some(clusterEntry => clusterEntry.id === entry.id)) return entry
+        const isCanonical = String(entry.id) === String(canonicalEntry.id)
+        const updated = {
+          ...entry,
+          conflict_cluster_key: clusterKey,
+          conflict_canonical: isCanonical,
+          conflict_ignored: !isCanonical && !deleteOthers,
+          conflict_status: isCanonical ? "canonical" : deleteOthers ? "removed" : "ignored",
+        }
+        if (isCanonical && targetDate) {
+          updated.date = targetDate
+          if (targetDay) {
+            updated.day = targetDay
+            updated.dayLabel = SCH_META[targetDay]?.label || SMETA[targetDay]?.label || targetDay
+          }
+        }
+        return updated
+      })
+
+    setSchedLog(nextLog)
+    const savedLog = await saveScheduleKey("wt-log", nextLog)
+    if (Array.isArray(savedLog)) setSchedLog(savedLog)
+
+    if (removedIds.size > 0) {
+      const existingWorkouts = await store.get("ufd-workouts") || storedWorkouts
+      const nextWorkouts = (Array.isArray(existingWorkouts) ? existingWorkouts : []).filter(w => !removedIds.has(w._scheduleId))
+      setStoredWorkouts(nextWorkouts)
+      const savedWorkouts = await saveScheduleKey("ufd-workouts", nextWorkouts)
+      if (Array.isArray(savedWorkouts)) setStoredWorkouts(savedWorkouts)
+    }
+
+    showToast(deleteOthers ? "Conflict resolved; extra records deleted" : "Conflict resolved; extra records ignored")
+  }, [schedLog, storedWorkouts, showToast])
+
   const editEntry = id => {
     const entry = schedLog.find(e => e.id === id)
     if (!entry) return
@@ -2927,6 +3169,8 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       <ScheduleMismatchDiagnostics
         report={scheduleMismatchReport}
         onOpenEntry={openDiagnosticEntry}
+        onEditEntry={editEntry}
+        onResolveGroup={resolveDiagnosticConflict}
         expanded={openSections.diagnostics}
         onToggle={() => toggleSection("diagnostics")}
       />
@@ -8720,6 +8964,7 @@ const [schedLog, setSchedLog] = useState(() => { try { return JSON.parse(localSt
 const [ocItems, setOcItems] = useState(() => { try { return JSON.parse(localStorage.getItem('oc-items') || '[]') } catch { return [] } })
 const [tendonStatus, setTendonStatus] = useState({ painScore: 0, stiffness: false, override: null })
 const [selectedTendonGroup, setSelectedTendonGroup] = useState("combined")
+const [overviewExplainOpen, setOverviewExplainOpen] = useState({})
 const [baseDataLoaded, setBaseDataLoaded] = useState(false)
 const [readinessInputsHydrated, setReadinessInputsHydrated] = useState(false)
 const [readinessRemoteInputsHydrated, setReadinessRemoteInputsHydrated] = useState(false)
@@ -11679,6 +11924,42 @@ const acwrOverviewDomain = useMemo(() => {
   const upper = Math.max(1.6, Math.ceil((maxVal + 0.15) * 10) / 10)
   return [lower, upper]
 }, [acwrOverviewData])
+const toggleOverviewExplain = (key) => {
+  setOverviewExplainOpen(prev => ({ ...prev, [key]: !prev[key] }))
+}
+const isOverviewExplainOpen = (key) => Boolean(overviewExplainOpen[key])
+const renderOverviewExplainBody = (config) => (
+  <div style={{ display: "grid", gap: 8, fontSize: 12, lineHeight: 1.5, color: "#cbd5e1" }}>
+    <div><span style={{ color: "#94a3b8" }}>Shows:</span> {config.shows}</div>
+    <div><span style={{ color: "#94a3b8" }}>Derived:</span> {config.derived}</div>
+    <div><span style={{ color: "#94a3b8" }}>Interpret:</span> {config.interpret}</div>
+    <div><span style={{ color: "#94a3b8" }}>Action:</span> {config.action}</div>
+  </div>
+)
+const overviewExplainButton = (key) => (
+  <button
+    type="button"
+    onClick={(e) => {
+      e.stopPropagation()
+      toggleOverviewExplain(key)
+    }}
+    aria-label={isOverviewExplainOpen(key) ? "Show chart" : "Show explanation"}
+    style={{
+      width: 22,
+      height: 22,
+      borderRadius: 999,
+      border: "1px solid #2a2d45",
+      background: isOverviewExplainOpen(key) ? "#252640" : "#0d0e1c",
+      color: "#cbd5e1",
+      fontSize: 12,
+      fontWeight: 700,
+      cursor: "pointer",
+      flex: "0 0 auto"
+    }}
+  >
+    {isOverviewExplainOpen(key) ? "×" : "i"}
+  </button>
+)
 return (
   <ErrorBoundary>
   <div
@@ -11874,28 +12155,34 @@ return (
         </div>
       </div>
 
-<div style={{ ...cardStyle(), minWidth: 0 }}>
-  <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "8px" }}>VO₂ Sources</div>
-  <div style={{ fontSize: "30px", fontWeight: "bold" }}>
-    {vo2ProxySummary?.latestSmoothed != null ? f1(vo2ProxySummary.latestSmoothed) : "NA"}
+<div
+  style={{ ...cardStyle(), minWidth: 0, cursor: "pointer" }}
+  onClick={() => toggleOverviewExplain("vo2")}
+>
+  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+    <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "8px" }}>VO₂ Sources</div>
+    {overviewExplainButton("vo2")}
   </div>
-  <div style={{ fontSize: "12px", opacity: 0.7, marginTop: "8px", lineHeight: 1.5 }}>
-    LIFT proxy from run pace and duration. Do not treat this as interchangeable with Apple Cardio Fitness or lab-measured VO2 max.
-  </div>
-  <div style={{ marginTop: 8, display: "grid", gap: 4 }}>
-    {[
-      ["Lab / KNR", vo2SourceSummary?.labLike],
-      ["Apple", vo2SourceSummary?.apple],
-      ["LIFT proxy", vo2SourceSummary?.proxy]
-    ].map(([label, sourceRow]) => (
-      <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 11, color: "#cbd5e1" }}>
-        <span style={{ color: "#94a3b8" }}>{label}</span>
-        <span>
-          {sourceRow?.value != null ? `${f1(sourceRow.value)}${sourceRow?.date ? ` · ${fmtShortDate(sourceRow.date)}` : ""}` : "not available"}
-        </span>
+  {isOverviewExplainOpen("vo2") ? (
+    renderOverviewExplainBody({
+      shows: "The current LIFT aerobic proxy, with compact references to the latest KNR, Apple, and proxy values.",
+      derived: "KNR and Apple lines come from stored biometric records. The proxy comes from recent run pace and duration smoothing.",
+      interpret: "Treat KNR or lab values as anchors, Apple as a device estimate, and the LIFT value as an internal training proxy rather than an interchangeable VO2 max reading.",
+      action: "If the proxy drifts away from KNR or Apple, use it for trend direction only and refresh the anchor with a newer device or test value."
+    })
+  ) : (
+    <>
+      <div style={{ fontSize: "30px", fontWeight: "bold" }}>
+        {vo2ProxySummary?.latestSmoothed != null ? f1(vo2ProxySummary.latestSmoothed) : "NA"}
       </div>
-    ))}
-  </div>
+      <div style={{ fontSize: "12px", opacity: 0.7, marginTop: "8px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+        LIFT aerobic proxy from recent run pace and duration.
+      </div>
+      <div style={{ fontSize: 11, color: "#cbd5e1", marginTop: 8, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+        {`KNR ${vo2SourceSummary?.labLike?.value != null ? f1(vo2SourceSummary.labLike.value) : "NA"} | Apple ${vo2SourceSummary?.apple?.value != null ? f1(vo2SourceSummary.apple.value) : "NA"} | Proxy ${vo2SourceSummary?.proxy?.value != null ? f1(vo2SourceSummary.proxy.value) : "NA"}`}
+      </div>
+    </>
+  )}
 </div>
 
 
@@ -12159,82 +12446,121 @@ return (
         </div>
       )}
       <div style={{ marginTop:10 }}>
-        <div style={{ fontWeight:"bold", fontSize:12 }}>Weekly Strength Load, relative</div>
-        <div style={{ fontSize:11, color:"#667", margin:"2px 0 6px" }}>Purple bars normalize each day's logged strength load to the highest logged strength day in the selected window. Gaps mean no training data; baseline ticks mean training was logged but strength load was zero.</div>
-        <ResponsiveContainer width="100%" height={76}>
-          <BarChart data={panel.rows} margin={{ top:0, right:8, left:8, bottom:0 }}>
-            <XAxis dataKey="label" hide />
-            <YAxis hide domain={[0, 100]} />
-            <Tooltip formatter={(value, name) => {
-              if (name === "Zero logged strength") return ["0", "Zero logged strength"]
-              return [`${Number(value).toFixed(0)}`, "Relative strength load"]
-            }} />
-            <Bar dataKey="strengthNormDisplay" name="Relative strength load" fill="#7c3aed" fillOpacity={0.5} radius={[2, 2, 0, 0]} />
-            <Bar dataKey="strengthZeroMarker" name="Zero logged strength" fill="#c4b5fd" radius={[2, 2, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
+        <div
+          style={{ border: "1px solid #1a1b2e", borderRadius: 8, padding: "8px 10px", cursor: "pointer" }}
+          onClick={() => toggleOverviewExplain("strengthLoad")}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 6 }}>
+            <div>
+              <div style={{ fontWeight:"bold", fontSize:12 }}>Weekly Strength Load, relative</div>
+              {!isOverviewExplainOpen("strengthLoad") && (
+                <div style={{ fontSize:11, color:"#667", marginTop:2 }}>Normalized to the heaviest logged strength day in this selected window.</div>
+              )}
+            </div>
+            {overviewExplainButton("strengthLoad")}
+          </div>
+          {isOverviewExplainOpen("strengthLoad") ? (
+            renderOverviewExplainBody({
+              shows: "Relative strength loading across the selected window, scaled from light to heavy days.",
+              derived: "Each day's logged strength load is normalized against the highest strength-load day in the current time range. Blank gaps mean no workout data; low baseline ticks mean a workout was logged with zero strength load.",
+              interpret: "Higher bars show comparatively heavier strength stress inside this window, not absolute tonnage. A flat pattern means strength is not progressing materially.",
+              action: "Use this to decide whether strength support is being maintained. If bars disappear or stay tiny, add or restore purposeful strength sessions."
+            })
+          ) : (
+            <ResponsiveContainer width="100%" height={72}>
+              <BarChart data={panel.rows} margin={{ top:0, right:4, left:2, bottom:0 }}>
+                <XAxis dataKey="label" hide />
+                <YAxis hide domain={[0, 100]} />
+                <Tooltip formatter={(value, name) => {
+                  if (name === "Zero logged strength") return ["0", "Zero logged strength"]
+                  return [`${Number(value).toFixed(0)}`, "Relative strength load"]
+                }} />
+                <Bar dataKey="strengthNormDisplay" name="Relative strength load" fill="#7c3aed" fillOpacity={0.5} radius={[2, 2, 0, 0]} />
+                <Bar dataKey="strengthZeroMarker" name="Zero logged strength" fill="#c4b5fd" radius={[2, 2, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
       </div>
     </>
   )
 })()}
 </div>
 
-    <div style={{ ...cardStyle(), minWidth: 0, marginBottom: 16 }}>
+    <div
+      style={{ ...cardStyle(), minWidth: 0, marginBottom: 16, cursor: "pointer" }}
+      onClick={() => toggleOverviewExplain("acwr")}
+    >
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:10, flexWrap:"wrap", marginBottom:10 }}>
         <div>
           <div style={{ fontWeight:"bold" }}>Acute:Chronic Workload Ratio (ACWR)</div>
-          <div style={{ fontSize:11, color:"#667", marginTop:2 }}>ATL 7-day average divided by CTL 28-day average. This chart now follows the same selected time window as the rest of Overview.</div>
+          {!isOverviewExplainOpen("acwr") && (
+            <div style={{ fontSize:11, color:"#667", marginTop:2 }}>ATL 7-day average divided by CTL 28-day average across the selected time window.</div>
+          )}
         </div>
-        <div style={{ fontSize:10, color:"#445" }}>{rangeOptions.find(r => r.key === rangeKey)?.label ?? rangeKey}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ fontSize:10, color:"#445" }}>{rangeOptions.find(r => r.key === rangeKey)?.label ?? rangeKey}</div>
+          {overviewExplainButton("acwr")}
+        </div>
       </div>
-      {(() => {
-        const latest = acwrOverviewData.length ? acwrOverviewData[acwrOverviewData.length - 1] : null
-        const acwrVal = latest?.acwr ?? null
-        const acwrColor = acwrVal == null ? "#555"
-          : acwrVal > 1.5 ? "#ef4444"
-          : acwrVal > 1.3 ? "#f97316"
-          : acwrVal > 0.8 ? "#4ade80"
-          : "#fbbf24"
-        const acwrLabel = acwrVal == null ? "No data"
-          : acwrVal > 1.5 ? "High risk — load spike detected"
-          : acwrVal > 1.3 ? "Caution — approaching overreach zone"
-          : acwrVal > 0.8 ? "Optimal training zone"
-          : "Low — undertraining or deload"
-        return (
-          <div style={{ borderLeft:`3px solid ${acwrColor}`, paddingLeft:9, fontSize:11, color:"#ccc", lineHeight:1.5, marginBottom:12 }}>
-            {acwrVal != null && <span style={{ fontSize:20, fontWeight:800, color:acwrColor, marginRight:8 }}>{acwrVal.toFixed(2)}</span>}
-            {acwrLabel}
-          </div>
-        )
-      })()}
-      {acwrOverviewData.length > 0 ? (
-        <ResponsiveContainer width="100%" height={190}>
-          <ComposedChart data={acwrOverviewData} margin={{ top:8, right:10, left:6, bottom:8 }}>
-            <CartesianGrid stroke="#1a1b2e" />
-            <XAxis dataKey="label" tick={{ fontSize:9 }} interval="preserveStartEnd" minTickGap={20} />
-            <YAxis domain={acwrOverviewDomain} tick={{ fontSize:10 }} width={28} />
-            <Tooltip formatter={(v, n) => [Number(v).toFixed(2), n]} />
-            <ReferenceArea y1={1.3} y2={1.5} fill="rgba(249,115,22,0.10)" />
-            <ReferenceArea y1={1.5} y2={Math.max(2.5, acwrOverviewDomain[1])} fill="rgba(239,68,68,0.10)" />
-            <ReferenceLine y={1.3} stroke="#f97316" strokeDasharray="4 3" />
-            <ReferenceLine y={1.5} stroke="#ef4444" strokeDasharray="4 3" />
-            <Line dataKey="acwr" stroke="#fbbf24" strokeWidth={2} dot={false} name="ACWR" connectNulls />
-          </ComposedChart>
-        </ResponsiveContainer>
+      {isOverviewExplainOpen("acwr") ? (
+        renderOverviewExplainBody({
+          shows: "How fast recent workload is rising compared with the last month of work.",
+          derived: "ACWR uses a 7-day rolling load divided by a 28-day rolling load from the full session series, then filters to the selected Overview window.",
+          interpret: "Values near 1.0 mean current work matches your base. Above about 1.3 means load is climbing faster than the base can absorb; below 0.8 usually reflects a deload or undertraining period.",
+          action: "If ACWR is elevated, avoid adding more volume this week. If it is very low, rebuild steadily instead of jumping straight back to previous mileage."
+        })
       ) : (
-        <div style={{ color:"#555", fontSize:12, padding:"20px 0" }}>No session data available for ACWR computation.</div>
+        <>
+          {(() => {
+            const latest = acwrOverviewData.length ? acwrOverviewData[acwrOverviewData.length - 1] : null
+            const acwrVal = latest?.acwr ?? null
+            const acwrColor = acwrVal == null ? "#555"
+              : acwrVal > 1.5 ? "#ef4444"
+              : acwrVal > 1.3 ? "#f97316"
+              : acwrVal > 0.8 ? "#4ade80"
+              : "#fbbf24"
+            const acwrLabel = acwrVal == null ? "No data"
+              : acwrVal > 1.5 ? "High risk — load spike detected"
+              : acwrVal > 1.3 ? "Caution — approaching overreach zone"
+              : acwrVal > 0.8 ? "Optimal training zone"
+              : "Low — undertraining or deload"
+            return (
+              <div style={{ borderLeft:`3px solid ${acwrColor}`, paddingLeft:9, fontSize:11, color:"#ccc", lineHeight:1.5, marginBottom:12 }}>
+                {acwrVal != null && <span style={{ fontSize:20, fontWeight:800, color:acwrColor, marginRight:8 }}>{acwrVal.toFixed(2)}</span>}
+                {acwrLabel}
+              </div>
+            )
+          })()}
+          {acwrOverviewData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={180}>
+              <ComposedChart data={acwrOverviewData} margin={{ top:8, right:10, left:2, bottom:8 }}>
+                <CartesianGrid stroke="#1a1b2e" />
+                <XAxis dataKey="label" tick={{ fontSize:9 }} interval="preserveStartEnd" minTickGap={20} />
+                <YAxis domain={acwrOverviewDomain} tick={{ fontSize:10 }} width={24} />
+                <Tooltip formatter={(v, n) => [Number(v).toFixed(2), n]} />
+                <ReferenceArea y1={1.3} y2={1.5} fill="rgba(249,115,22,0.10)" />
+                <ReferenceArea y1={1.5} y2={Math.max(2.5, acwrOverviewDomain[1])} fill="rgba(239,68,68,0.10)" />
+                <ReferenceLine y={1.3} stroke="#f97316" strokeDasharray="4 3" />
+                <ReferenceLine y={1.5} stroke="#ef4444" strokeDasharray="4 3" />
+                <Line dataKey="acwr" stroke="#fbbf24" strokeWidth={2} dot={false} name="ACWR" connectNulls />
+              </ComposedChart>
+            </ResponsiveContainer>
+          ) : (
+            <div style={{ color:"#555", fontSize:12, padding:"20px 0" }}>No session data available for ACWR computation.</div>
+          )}
+          <div style={{ fontSize:10, color:"#445", marginTop:6, lineHeight:1.6 }}>
+            Below 0.8 usually reflects deload or undertraining. Around 0.8 to 1.3 is the usable zone. Above 1.3 is caution, and above 1.5 is a load-spike warning.
+          </div>
+        </>
       )}
-      <div style={{ fontSize:10, color:"#445", marginTop:6, lineHeight:1.6 }}>
-        ACWR below 0.8 indicates undertraining. 0.8 to 1.3 is optimal. Above 1.3 is caution. Above 1.5 is high injury risk.
-        Based on all modalities combined. November 2025 overreach peaked at 2.15.
-      </div>
     </div>
 
     <div style={{ ...cardStyle(), minWidth:"0", marginBottom:16 }}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:10, flexWrap:"wrap", marginBottom:10 }}>
         <div>
           <div style={{ fontWeight:"bold", marginBottom:"4px", minHeight:"20px" }}>Performance Readiness</div>
-          <div style={{ fontSize:11, color:"#667" }}>Completion-readiness projection by event type. Vertical race markers stay in the plot; race names move into the unused left margin for easier scanning.</div>
+          <div style={{ fontSize:11, color:"#667" }}>Completion-readiness projection by event type. Threshold markers and race markers stay distinct, with race names rotated vertically above their own dashed lines.</div>
         </div>
         <div style={{ display:"flex", gap:8, flexWrap:"wrap", justifyContent:"flex-end" }}>
           <div style={{ fontSize:11, color:"#9ca3af" }}>Readiness confidence {(readinessConfidenceSummary.readinessConfidence * 100).toFixed(0)}%</div>
@@ -12255,29 +12581,21 @@ return (
           </div>
         ))}
       </div>
+      <div style={{ display:"flex", gap:12, alignItems:"center", marginBottom:8, flexWrap:"wrap" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:5, fontSize:10, color:"#94a3b8" }}>
+          <div style={{ width:14, height:2, background:"#94a3b8", borderRadius:999, opacity:0.9 }} />
+          <span>Race marker</span>
+        </div>
+        <div style={{ display:"flex", alignItems:"center", gap:5, fontSize:10, color:"#64748b" }}>
+          <div style={{ width:14, height:2, background:"#64748b", borderRadius:999, opacity:0.8 }} />
+          <span>Threshold marker</span>
+        </div>
+      </div>
       <div style={{ marginBottom:"6px", position:"relative" }}>
         {readinessChartsReady ? (
           <div style={{ position:"relative" }}>
-            {safeTargetableRaceMarkers.length > 0 && (
-              <div style={{
-                position:"absolute",
-                left:0,
-                top:6,
-                width: window.innerWidth < 768 ? "100%" : 132,
-                display:"grid",
-                gap:4,
-                zIndex:1,
-                pointerEvents:"none"
-              }}>
-                {safeTargetableRaceMarkers.slice(0, 4).map(race => (
-                  <div key={`${race.name}_${race.date}_label`} style={{ fontSize:10, color:"#94a3b8", lineHeight:1.3, background:"rgba(13,14,28,0.82)", border:"1px solid #1a1b2e", borderRadius:6, padding:"4px 6px" }}>
-                    {race.name}
-                  </div>
-                ))}
-              </div>
-            )}
             <ResponsiveContainer width="100%" height={290}>
-              <LineChart data={readinessProjectionData} margin={{ top:8, right:14, left:window.innerWidth < 768 ? 10 : 120, bottom:18 }}>
+              <LineChart data={readinessProjectionData} margin={{ top:20, right:14, left:window.innerWidth < 768 ? 8 : 12, bottom:18 }}>
                 <CartesianGrid stroke="#1a1b2e" />
                 <XAxis type="number" dataKey="month" domain={[0, readinessProjectionMaxMonth]} allowDecimals={false} tickCount={Math.min(readinessProjectionMaxMonth + 1, 8)} tick={{ fontSize:10 }} />
                 <YAxis domain={[0, 100]} tick={{ fontSize:10 }} width={30} />
@@ -12287,10 +12605,24 @@ return (
                 <Line type="monotone" dataKey="half" stroke="#facc15" strokeWidth={2} dot={false} name="Half marathon" isAnimationActive={false} />
                 <Line type="monotone" dataKey="tri" stroke="#a78bfa" strokeWidth={3} dot={false} name="Olympic triathlon" isAnimationActive={false} />
                 {safeEventReadinessMarkers.filter(marker => marker.month != null).map(marker => (
-                  <ReferenceLine key={marker.key} x={marker.month} stroke={marker.color} strokeDasharray="6 4" />
+                  <ReferenceLine key={marker.key} x={marker.month} stroke={marker.color} strokeDasharray="6 4" strokeOpacity={0.55} />
                 ))}
-                {safeTargetableRaceMarkers.map(race => (
-                  <ReferenceLine key={`${race.name}_${race.date}`} x={race.month} stroke="#94a3b8" strokeDasharray="2 4" />
+                {safeTargetableRaceMarkers.map((race, index) => (
+                  <ReferenceLine
+                    key={`${race.name}_${race.date}`}
+                    x={race.month}
+                    stroke="#94a3b8"
+                    strokeDasharray="2 4"
+                    strokeWidth={1.5}
+                    label={{
+                      value: race.name,
+                      angle: -90,
+                      position: "insideTop",
+                      fill: "#94a3b8",
+                      fontSize: window.innerWidth < 768 ? 8 : 9,
+                      offset: 8 + ((index % 2) * 10)
+                    }}
+                  />
                 ))}
               </LineChart>
             </ResponsiveContainer>
@@ -12306,90 +12638,150 @@ return (
       )}
     </div>
 
-    <div style={{ display:"grid", gridTemplateColumns: window.innerWidth < 1024 ? "1fr" : "1.05fr 0.95fr", gap:16, marginBottom:20, alignItems:"start" }}>
-      <div style={{ ...cardStyle(), minWidth:0 }}>
-        <div style={{ fontWeight:"bold", marginBottom:6 }}>Compliance and Adaptation</div>
-        <div style={{ fontSize:11, color:"#667", marginBottom:10 }}>Compact 8-week rollup of planned work, completed work, absorbed work, and compliance by domain.</div>
-        <div style={{ display:"grid", gap:8 }}>
-          {complianceOverviewRows.map(row => (
-            <div key={row.domain} style={{ display:"grid", gridTemplateColumns: window.innerWidth < 768 ? "68px repeat(4, minmax(0, 1fr))" : "82px repeat(4, minmax(0, 1fr))", gap:6, alignItems:"stretch" }}>
-              <div style={{ display:"flex", alignItems:"center", justifyContent:"center", background:"#0d0e1c", border:"1px solid #1a1b2e", borderRadius:6, fontSize:11, fontWeight:800, textTransform:"uppercase", letterSpacing:"0.08em", color:"#cbd5e1", padding:"8px 4px", textAlign:"center" }}>
-                {row.domain}
-              </div>
-              {[
-                ["Planned", row.planned],
-                ["Completed", row.completed],
-                ["Absorbed", row.absorbed],
-                ["Compliance", `${row.compliancePct}% / ${row.absorptionPct}%`]
-              ].map(([label, value]) => (
-                <div key={label} style={{ background:"#07080e", border:"1px solid #1a1b2e", borderRadius:6, padding:"8px 6px", minHeight:58, display:"flex", flexDirection:"column", justifyContent:"space-between" }}>
-                  <div style={{ fontSize:10, color:"#667" }}>{label}</div>
-                  <div style={{ fontSize: window.innerWidth < 768 ? 13 : 16, fontWeight:700, lineHeight:1.15 }}>{value}</div>
+    <div style={{ display:"grid", gridTemplateColumns: window.innerWidth < 1024 ? "1fr" : "1.05fr 0.95fr", gap:16, marginBottom:20, alignItems:"stretch" }}>
+      <div
+        style={{ ...cardStyle(), minWidth:0, height:"100%", display:"grid", gridTemplateRows:"auto auto 1fr auto", cursor:"pointer" }}
+        onClick={() => toggleOverviewExplain("compliance")}
+      >
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:8, marginBottom:6 }}>
+          <div>
+            <div style={{ fontWeight:"bold" }}>Compliance and Adaptation</div>
+            {!isOverviewExplainOpen("compliance") && (
+              <div style={{ fontSize:11, color:"#667", marginTop:2 }}>Compact 8-week rollup of plan, completion, absorption, and compliance by domain.</div>
+            )}
+          </div>
+          {overviewExplainButton("compliance")}
+        </div>
+        {isOverviewExplainOpen("compliance") ? (
+          <div style={{ marginTop: 4 }}>
+            {renderOverviewExplainBody({
+              shows: "The last eight weeks of planned work, completed work, absorbed work, and compact compliance by domain.",
+              derived: "Each row sums weekly domain doses, then pairs the total with model-level compliance and absorption percentages.",
+              interpret: "Large gaps between PLAN and COMP mean execution is slipping. Large gaps between COMP and ABS mean work is being done but not fully absorbed.",
+              action: "Use this table to decide which domain needs either better consistency or a lower, more absorbable dose."
+            })}
+          </div>
+        ) : (
+          <>
+            <div style={{ display:"grid", gridTemplateColumns: window.innerWidth < 768 ? "60px repeat(4, minmax(0, 1fr))" : "72px repeat(4, minmax(0, 1fr))", gap:6, marginBottom:6 }}>
+              <div />
+              {["PLAN", "COMP", "ABS", "%COMP"].map(label => (
+                <div key={label} style={{ fontSize:10, color:"#667", fontWeight:800, letterSpacing:"0.08em", textAlign:"center", padding:"0 2px" }}>{label}</div>
+              ))}
+            </div>
+            <div style={{ display:"grid", gap:6, alignContent:"stretch" }}>
+              {complianceOverviewRows.map(row => (
+                <div key={row.domain} style={{ display:"grid", gridTemplateColumns: window.innerWidth < 768 ? "60px repeat(4, minmax(0, 1fr))" : "72px repeat(4, minmax(0, 1fr))", gap:6, alignItems:"stretch" }}>
+                  <div style={{ display:"flex", alignItems:"center", justifyContent:"flex-start", fontSize:11, fontWeight:800, color:"#cbd5e1", padding:"0 2px", textTransform:"uppercase", letterSpacing:"0.05em" }}>
+                    {row.domain === "running" ? "Running" : row.domain === "tendon" ? "Tendon" : row.domain === "strength" ? "Strength" : "Cardio"}
+                  </div>
+                  {[
+                    row.planned,
+                    row.completed,
+                    row.absorbed,
+                    `${row.compliancePct} / ${row.absorptionPct}`
+                  ].map((value, idx) => (
+                    <div key={`${row.domain}_${idx}`} style={{ background:"#07080e", border:"1px solid #1a1b2e", borderRadius:6, padding:"8px 6px", minHeight:56, display:"flex", alignItems:"center", justifyContent:"center", textAlign:"center" }}>
+                      <div style={{ fontSize: window.innerWidth < 768 ? 13 : 15, fontWeight:700, lineHeight:1.1 }}>{value}</div>
+                    </div>
+                  ))}
                 </div>
               ))}
             </div>
-          ))}
-        </div>
-        <div style={{ marginTop:10, display:"grid", gap:6 }}>
-          {safeAdaptiveFeedback.map(message => (
-            <div key={message} style={{ fontSize:12, color:"#cbd5e1", lineHeight:1.5, padding:"8px 10px", background:"#0d0e1c", border:"1px solid #1a1b2e", borderRadius:6 }}>
+          </>
+        )}
+        <div style={{ marginTop:10, display:"grid", gap:6, alignSelf:"end" }}>
+          {safeAdaptiveFeedback.slice(0, 3).map(message => (
+            <div key={message} style={{ fontSize:12, color:"#cbd5e1", lineHeight:1.45, padding:"8px 10px", background:"#0d0e1c", border:"1px solid #1a1b2e", borderRadius:6 }}>
               {message}
             </div>
           ))}
         </div>
       </div>
 
-      <div style={{ display:"grid", gap:16 }}>
-        <div style={{ ...cardStyle(), minWidth:0 }}>
-          <div style={{ fontWeight:"bold", marginBottom:4 }}>Training Capital Trend</div>
-          <div style={{ fontSize:11, color:"#667", marginBottom:8 }}>Slow-moving adaptive support signal, not acute load. Higher values reflect deeper recent support across each domain.</div>
-          {trainingCapitalChartData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={96}>
-              <LineChart data={trainingCapitalChartData} margin={{ top:6, right:8, left:18, bottom:8 }}>
-                <CartesianGrid stroke="#1a1b2e" />
-                <XAxis dataKey="label" tick={{ fontSize:10 }} />
-                <YAxis tick={{ fontSize:10 }} width={30} label={{ value:"Capital (AU)", angle:-90, position:"insideLeft", offset:-2, fill:"#94a3b8", style:{ textAnchor:"middle" }, fontSize:10 }} />
-                <Tooltip formatter={(value, name) => [Number(value).toFixed(1), name]} />
-                <Line type="monotone" dataKey="runCapital" stroke="#ef4444" dot={false} name="Run capital" />
-                <Line type="monotone" dataKey="tendonCapital" stroke="#f59e0b" dot={false} name="Tendon capital" />
-                <Line type="monotone" dataKey="strengthCapital" stroke="#38bdf8" dot={false} name="Strength capital" />
-                <Line type="monotone" dataKey="cardioCapital" stroke="#22c55e" dot={false} name="Cardio capital" />
-              </LineChart>
-            </ResponsiveContainer>
+      <div style={{ display:"grid", gap:16, height:"100%", gridTemplateRows:"auto 1fr" }}>
+        <div
+          style={{ ...cardStyle(), minWidth:0, cursor:"pointer" }}
+          onClick={() => toggleOverviewExplain("capital")}
+        >
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:8, marginBottom:4 }}>
+            <div>
+              <div style={{ fontWeight:"bold" }}>Training Capital Trend</div>
+              {!isOverviewExplainOpen("capital") && (
+                <div style={{ fontSize:11, color:"#667", marginTop:2 }}>Capital (AU). Slow-moving adaptive support signal, not acute load.</div>
+              )}
+            </div>
+            {overviewExplainButton("capital")}
+          </div>
+          {isOverviewExplainOpen("capital") ? (
+            renderOverviewExplainBody({
+              shows: "Longer-horizon support across running, tendon, strength, and cardio rather than short-term fatigue.",
+              derived: "Each line comes from the adaptive training state and reflects slower-moving support capital accumulated from recent absorbed work.",
+              interpret: "Rising lines mean that domain has a deeper base to support future progression. Falling lines mean support is decaying even if acute fatigue is low.",
+              action: "Use this to decide which support system needs maintenance before you push race-specific work harder."
+            })
           ) : (
-            <div style={{ color:"#666", fontSize:12, padding:"24px 0" }}>No training capital trend available yet.</div>
+            trainingCapitalChartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={92}>
+                <LineChart data={trainingCapitalChartData} margin={{ top:6, right:8, left:2, bottom:8 }}>
+                  <CartesianGrid stroke="#1a1b2e" />
+                  <XAxis dataKey="label" tick={{ fontSize:10 }} />
+                  <YAxis tick={{ fontSize:10 }} width={24} />
+                  <Tooltip formatter={(value, name) => [Number(value).toFixed(1), name]} />
+                  <Line type="monotone" dataKey="runCapital" stroke="#ef4444" dot={false} name="Run capital" />
+                  <Line type="monotone" dataKey="tendonCapital" stroke="#f59e0b" dot={false} name="Tendon capital" />
+                  <Line type="monotone" dataKey="strengthCapital" stroke="#38bdf8" dot={false} name="Strength capital" />
+                  <Line type="monotone" dataKey="cardioCapital" stroke="#22c55e" dot={false} name="Cardio capital" />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <div style={{ color:"#666", fontSize:12, padding:"24px 0" }}>No training capital trend available yet.</div>
+            )
           )}
         </div>
 
-        <div style={{ ...cardStyle(), minWidth:0 }}>
+        <div
+          style={{ ...cardStyle(), minWidth:0, cursor:"pointer" }}
+          onClick={() => toggleOverviewExplain("tendon")}
+        >
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:8, flexWrap:"wrap", marginBottom:8 }}>
             <div>
               <div style={{ fontWeight:"bold" }}>Tendon Capacity</div>
-              <div style={{ fontSize:11, color:"#667", marginTop:2 }}>Combined view defaults to all modeled tendon systems together. Drill down for Achilles/Calf, Forefoot/Toe Extensor, or Patellar/Knee.</div>
+              {!isOverviewExplainOpen("tendon") && (
+                <div style={{ fontSize:11, color:"#667", marginTop:2 }}>Combined is the default modeled tendon view. Use the dropdown for drill-down.</div>
+              )}
             </div>
-            <select
-              value={selectedTendonGroup}
-              onChange={e => setSelectedTendonGroup(e.target.value)}
-              style={{ background:"#0d0e1c", color:"#ced2f0", border:"1px solid #1a1b2e", borderRadius:6, padding:"6px 8px", fontSize:12 }}
-            >
-              {Object.entries(TENDON_GROUP_META).map(([key, meta]) => (
-                <option key={key} value={key}>{meta.label}</option>
-              ))}
-            </select>
+            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+              <select
+                value={selectedTendonGroup}
+                onChange={e => {
+                  e.stopPropagation()
+                  setSelectedTendonGroup(e.target.value)
+                }}
+                onClick={e => e.stopPropagation()}
+                style={{ background:"#0d0e1c", color:"#ced2f0", border:"1px solid #1a1b2e", borderRadius:6, padding:"6px 8px", fontSize:12 }}
+              >
+                {Object.entries(TENDON_GROUP_META).map(([key, meta]) => (
+                  <option key={key} value={key}>{meta.label}</option>
+                ))}
+              </select>
+              {overviewExplainButton("tendon")}
+            </div>
           </div>
-          <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:8 }}>
-            <div style={{ fontSize:11, color:"#f8fafc" }}>white = load</div>
-            <div style={{ fontSize:11, color:"#f97316" }}>orange = capacity</div>
-            <div style={{ fontSize:11, color:"#cbd5e1" }}>risk = load / capacity</div>
-            <div style={{ fontSize:11, color:"#9ca3af" }}>1.0x means load equals modeled tolerance</div>
-          </div>
-          {safeTendonSeries.length ? (
+          {isOverviewExplainOpen("tendon") ? (
+            renderOverviewExplainBody({
+              shows: "Modeled tendon load and capacity for the combined view or for the selected tendon system.",
+              derived: "White line is modeled load, orange area is modeled capacity, and risk is the ratio of load divided by capacity.",
+              interpret: "A risk of 1.0x means load equals modeled tolerance. Higher than 1.0x means tendon demand is catching or exceeding current capacity.",
+              action: "If risk is elevated, hold run progression and maintain tendon work. If risk stays below target, continue steady tendon and run buildup."
+            })
+          ) : safeTendonSeries.length ? (
             <>
-              <ResponsiveContainer width="100%" height={220}>
-                <ComposedChart data={safeTendonSeries} margin={{ top:8, right:12, left:20, bottom:8 }}>
+              <ResponsiveContainer width="100%" height={196}>
+                <ComposedChart data={safeTendonSeries} margin={{ top:8, right:12, left:2, bottom:8 }}>
                   <CartesianGrid stroke="#1a1b2e" />
                   <XAxis dataKey="label" tick={{ fontSize:10 }} />
-                  <YAxis tick={{ fontSize:10 }} width={32} label={{ value:"Relative load / capacity (AU)", angle:-90, position:"insideLeft", offset:-4, fill:"#94a3b8", style:{ textAnchor:"middle" }, fontSize:10 }} />
+                  <YAxis tick={{ fontSize:10 }} width={24} />
                   <Tooltip formatter={(value, name) => [Number(value).toFixed(2), name]} />
                   <ReferenceArea y1={0} y2={TENDON_GROUP_META[selectedTendonGroup].safe * (currentTendonSnapshot?.capacity || 1)} fill="rgba(34,197,94,0.08)" />
                   <ReferenceArea y1={TENDON_GROUP_META[selectedTendonGroup].safe * (currentTendonSnapshot?.capacity || 1)} y2={TENDON_GROUP_META[selectedTendonGroup].caution * (currentTendonSnapshot?.capacity || 1)} fill="rgba(245,158,11,0.08)" />
@@ -12398,14 +12790,14 @@ return (
                   <Line type="monotone" dataKey="load" stroke="#f8fafc" strokeWidth={2} dot={false} name="Load" />
                 </ComposedChart>
               </ResponsiveContainer>
-              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(120px, 1fr))", gap:10, marginTop:10 }}>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(110px, 1fr))", gap:10, marginTop:10 }}>
                 <div style={{ background:"#07080e", border:"1px solid #1a1b2e", borderRadius:8, padding:10 }}>
                   <div style={{ fontSize:10, color:"#667" }}>Current risk</div>
                   <div style={{ fontSize:24, fontWeight:800 }}>{currentTendonSnapshot?.risk?.toFixed?.(2) ?? "NA"}x</div>
                 </div>
                 <div style={{ background:"#07080e", border:"1px solid #1a1b2e", borderRadius:8, padding:10 }}>
                   <div style={{ fontSize:10, color:"#667" }}>4-week trajectory</div>
-                  <div style={{ fontSize:13, lineHeight:1.5, color:"#ced2f0" }}>
+                  <div style={{ fontSize:13, lineHeight:1.45, color:"#ced2f0" }}>
                     {(() => {
                       const last4 = safeTendonSeries.slice(-4)
                       const avgRisk = last4.length ? last4.reduce((sum, row) => sum + Number(row?.risk || 0), 0) / last4.length : null
@@ -12415,7 +12807,7 @@ return (
                 </div>
                 <div style={{ background:"#07080e", border:"1px solid #1a1b2e", borderRadius:8, padding:10 }}>
                   <div style={{ fontSize:10, color:"#667" }}>12-week trajectory</div>
-                  <div style={{ fontSize:13, lineHeight:1.5, color:"#ced2f0" }}>
+                  <div style={{ fontSize:13, lineHeight:1.45, color:"#ced2f0" }}>
                     {(() => {
                       if (!currentTendonSnapshot) return "Not enough data"
                       const risk = clampNumber(currentTendonSnapshot.risk - ((adaptiveTrainingState.complianceScores?.tendon || 0) * 0.12), 0, 2)
@@ -12423,6 +12815,15 @@ return (
                     })()}
                   </div>
                 </div>
+              </div>
+              <div style={{ fontSize:12, color:"#cbd5e1", marginTop:10 }}>
+                {(() => {
+                  const risk = Number(currentTendonSnapshot?.risk || 0)
+                  if (!Number.isFinite(risk) || risk <= 0) return "Tendon status is still calibrating. Keep logging tendon work consistently."
+                  if (risk >= TENDON_GROUP_META[selectedTendonGroup].caution) return "Hold run progression and maintain tendon work until risk settles back below the caution range."
+                  if (risk < 0.85) return "Tendon load is below target, continue steady buildup with consistent tendon work."
+                  return "Maintain the current progression and keep tendon work steady while this load remains absorbable."
+                })()}
               </div>
               {safeTendonAlerts.length > 0 && (
                 <div style={{ marginTop:10, display:"grid", gap:6 }}>
