@@ -81,19 +81,46 @@ const AUTH_URL_KEYS = [
 
 function getAuthRedirectContext() {
   if (typeof window === "undefined") {
-    return { hasAuthParams: false, isRecovery: false }
+    return {
+      hasAuthParams: false,
+      isRecovery: false,
+      source: "none",
+      type: null,
+      hasAccessToken: false,
+      hasRefreshToken: false,
+      hasCode: false,
+      summary: "no-auth-params"
+    }
   }
 
   const url = new URL(window.location.href)
   const searchParams = new URLSearchParams(url.search)
   const hash = url.hash.startsWith("#") ? url.hash.slice(1) : url.hash
   const hashParams = new URLSearchParams(hash)
-  const hasAuthParams = AUTH_URL_KEYS.some(key => searchParams.has(key) || hashParams.has(key))
-  const recoveryType = searchParams.get("type") || hashParams.get("type")
+  const source = AUTH_URL_KEYS.some(key => hashParams.has(key))
+    ? "hash"
+    : AUTH_URL_KEYS.some(key => searchParams.has(key))
+      ? "search"
+      : "none"
+  const activeParams = source === "hash" ? hashParams : searchParams
+  const hasAuthParams = source !== "none"
+  const recoveryType = activeParams.get("type") || null
+  const hasAccessToken = activeParams.has("access_token")
+  const hasRefreshToken = activeParams.has("refresh_token")
+  const hasCode = activeParams.has("code")
+  const summary = hasAuthParams
+    ? `${source}:type=${recoveryType || "none"}:access=${String(hasAccessToken)}:refresh=${String(hasRefreshToken)}:code=${String(hasCode)}`
+    : "no-auth-params"
 
   return {
     hasAuthParams,
-    isRecovery: recoveryType === "recovery"
+    isRecovery: recoveryType === "recovery",
+    source,
+    type: recoveryType,
+    hasAccessToken,
+    hasRefreshToken,
+    hasCode,
+    summary
   }
 }
 
@@ -9782,7 +9809,12 @@ const [authMsg, setAuthMsg] = useState("")
 const [authEvents, setAuthEvents] = useState([])
 const [sessionRestoredFromStorage, setSessionRestoredFromStorage] = useState(false)
 const [authInitialized, setAuthInitialized] = useState(false)
-const [isRecoveryMode, setIsRecoveryMode] = useState(() => getAuthRedirectContext().isRecovery)
+const [authRedirectDebug, setAuthRedirectDebug] = useState(() => getAuthRedirectContext())
+const [recoveryStatus, setRecoveryStatus] = useState(() => {
+  const redirectContext = getAuthRedirectContext()
+  return redirectContext.isRecovery && redirectContext.hasAuthParams ? "verifying" : "inactive"
+})
+const isRecoveryMode = recoveryStatus !== "inactive"
 const isRecoveryModeRef = useRef(isRecoveryMode)
   const [hydrated, setHydrated] = useState(false)
 
@@ -10124,9 +10156,16 @@ useEffect(() => {
 
   let cancelled = false
 
+  const applyRedirectContext = (reason) => {
+    const redirectContext = getAuthRedirectContext()
+    setAuthRedirectDebug(redirectContext)
+    pushAuthEvent("REDIRECT_PARSE", null, `${reason} | ${redirectContext.summary}`)
+    return redirectContext
+  }
+
   ;(async () => {
     try {
-      const redirectContext = getAuthRedirectContext()
+      const redirectContext = applyRedirectContext("getSession")
       const { data, error } = await supabase.auth.getSession()
       if (cancelled) return
 
@@ -10134,8 +10173,19 @@ useEffect(() => {
 
       setSession(data?.session ?? null)
       setSessionRestoredFromStorage(restoredFromStorage)
-      setIsRecoveryMode(redirectContext.isRecovery)
       setAuthInitialized(true)
+
+      if (redirectContext.isRecovery && redirectContext.hasAuthParams) {
+        if (data?.session) {
+          setRecoveryStatus("ready")
+          setAuthMsg("Enter a new password to finish password recovery.")
+        } else {
+          setRecoveryStatus("expired")
+          setAuthMsg("Recovery link expired, request a new one.")
+        }
+      } else {
+        setRecoveryStatus("inactive")
+      }
 
       if (error) {
         pushAuthEvent("GET_SESSION_ERROR", data?.session ?? null, error.message || "Unknown error")
@@ -10153,30 +10203,37 @@ useEffect(() => {
     } catch (err) {
       if (cancelled) return
       setAuthInitialized(true)
+      const redirectContext = applyRedirectContext("getSession-catch")
+      if (redirectContext.isRecovery && redirectContext.hasAuthParams) {
+        setRecoveryStatus("expired")
+        setAuthMsg("Recovery link expired, request a new one.")
+      }
       pushAuthEvent("GET_SESSION_THROWN", null, err?.message || "Unknown error")
     }
   })()
 
   const sub = supabase.auth.onAuthStateChange(async (evt, sess) => {
-    const redirectContext = getAuthRedirectContext()
+    const redirectContext = applyRedirectContext(`auth:${evt}`)
 
     setSession(sess)
-    pushAuthEvent(evt, sess, redirectContext.isRecovery ? "recovery-url" : "")
+    pushAuthEvent(evt, sess, redirectContext.isRecovery ? `recovery-url | ${redirectContext.summary}` : redirectContext.summary)
 
     if (evt === "INITIAL_SESSION") {
       setSessionRestoredFromStorage(Boolean(sess) && !redirectContext.hasAuthParams)
       setAuthInitialized(true)
-      if (redirectContext.isRecovery) setIsRecoveryMode(true)
+      if (redirectContext.isRecovery && redirectContext.hasAuthParams) {
+        setRecoveryStatus(sess ? "ready" : "expired")
+        setAuthMsg(sess ? "Enter a new password to finish password recovery." : "Recovery link expired, request a new one.")
+      }
     }
 
     if (evt === "PASSWORD_RECOVERY") {
-      setIsRecoveryMode(true)
+      setRecoveryStatus("ready")
       setAuthMsg("Enter a new password to finish password recovery.")
-      cleanAuthRedirectUrl()
     }
 
     if (evt === "SIGNED_OUT") {
-      setIsRecoveryMode(false)
+      if (!redirectContext.isRecovery) setRecoveryStatus("inactive")
       setSessionRestoredFromStorage(false)
       setPassword("")
       setRecoveryPassword("")
@@ -10197,15 +10254,19 @@ useEffect(() => {
       }
 
       if (!redirectContext.isRecovery) {
-        setIsRecoveryMode(false)
+        setRecoveryStatus("inactive")
         cleanAuthRedirectUrl()
+      } else {
+        setRecoveryStatus("ready")
+        setAuthMsg("Enter a new password to finish password recovery.")
       }
     }
 
     if (evt === "USER_UPDATED" && isRecoveryModeRef.current) {
-      setIsRecoveryMode(false)
+      setRecoveryStatus("inactive")
       setRecoveryPassword("")
       setPassword("")
+      setAuthMsg("Password updated. You can now sign in normally.")
       cleanAuthRedirectUrl()
     }
   })
@@ -10736,7 +10797,7 @@ cutoff.setDate(cutoff.getDate() - selectedRangePoints)
 
     setRecoveryPassword("")
     setPassword("")
-    setIsRecoveryMode(false)
+    setRecoveryStatus("inactive")
     setAuthMsg("Password updated. You can now sign in normally.")
     cleanAuthRedirectUrl()
   }
@@ -12423,6 +12484,15 @@ return (
                 Sign in with email and password to keep sync stable across phone, desktop, and Home Screen launches.
               </div>
               <div style={{ display: "grid", gap: "8px" }}>
+                {isRecoveryMode && (
+                  <div style={{ padding: "10px 12px", borderRadius: 8, background: recoveryStatus === "expired" ? "rgba(239,68,68,0.12)" : "rgba(245,158,11,0.12)", border: recoveryStatus === "expired" ? "1px solid rgba(239,68,68,0.3)" : "1px solid rgba(245,158,11,0.3)", fontSize: "12px", color: recoveryStatus === "expired" ? "#fca5a5" : "#fcd34d", lineHeight: 1.5 }}>
+                    {recoveryStatus === "ready"
+                      ? "Password recovery detected. Set a new password to complete recovery."
+                      : recoveryStatus === "expired"
+                        ? "Recovery link expired, request a new one."
+                        : "Checking recovery link..."}
+                  </div>
+                )}
                 <input
                   value={email}
                   onChange={e => setEmail(e.target.value)}
@@ -12441,11 +12511,8 @@ return (
                     style={inputStyle()}
                   />
                 )}
-                {isRecoveryMode && (
+                {recoveryStatus === "ready" && (
                   <>
-                    <div style={{ fontSize: "12px", color: "#ffd166" }}>
-                      Password recovery detected. Set a new password to finish recovery.
-                    </div>
                     <input
                       type="password"
                       value={recoveryPassword}
@@ -12457,8 +12524,12 @@ return (
                   </>
                 )}
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                  {isRecoveryMode ? (
+                  {recoveryStatus === "ready" ? (
                     <button onClick={completePasswordRecovery} style={buttonStyle(true)}>Set new password</button>
+                  ) : recoveryStatus === "expired" ? (
+                    <button onClick={sendPasswordRecovery} style={buttonStyle(true)}>Request new recovery link</button>
+                  ) : recoveryStatus === "verifying" ? (
+                    <button disabled style={{ ...buttonStyle(false), opacity: 0.6, cursor: "default" }}>Checking link</button>
                   ) : (
                     <>
                       <button onClick={signInWithPassword} style={buttonStyle(true)}>Sign in</button>
@@ -12478,6 +12549,8 @@ return (
             <div>restored from storage on load: {String(sessionRestoredFromStorage)}</div>
             <div>auth initialized: {String(authInitialized)}</div>
             <div>recovery mode: {String(isRecoveryMode)}</div>
+            <div>recovery status: {recoveryStatus}</div>
+            <div>redirect parse: {authRedirectDebug.summary}</div>
             <div style={{ marginTop: "6px", opacity: 0.7 }}>auth events</div>
             <div style={{ display: "grid", gap: "4px", marginTop: "4px", maxHeight: "100px", overflowY: "auto" }}>
               {authEvents.length ? authEvents.slice().reverse().map(eventLine => (
