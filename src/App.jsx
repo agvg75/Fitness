@@ -11988,6 +11988,14 @@ const readinessChartsReady =
   readinessInputsHydrated &&
   readinessRemoteInputsHydrated
 const showDeveloperPanels = import.meta.env.DEV
+const showAuthDebug = useMemo(() => {
+  if (import.meta.env.DEV) return true
+  try {
+    return new URLSearchParams(window.location.search).get("debugAuth") === "1"
+  } catch {
+    return false
+  }
+}, [])
 const readinessDebugData = useMemo(() => {
   const now = Date.now()
   const cutoff = now - 30 * 24 * 3600000
@@ -12607,26 +12615,28 @@ return (
           )}
           {authMsg && <div style={{ marginTop: "8px", fontSize: "12px", color: "#ffd166" }}>{authMsg}</div>}
           {!supabase && <div style={{ marginTop: "8px", fontSize: "12px", color: "#ff8a8a" }}>Supabase env vars not found. Sync is disabled.</div>}
-          <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px solid #1a1b2e", fontSize: "11px", lineHeight: 1.5 }}>
-            <div style={{ opacity: 0.7, marginBottom: "6px" }}>Auth Debug</div>
-            <div>session exists: {String(Boolean(session))}</div>
-            <div>current user email: {session?.user?.email || "none"}</div>
-            <div>restored from storage on load: {String(sessionRestoredFromStorage)}</div>
-            <div>auth initialized: {String(authInitialized)}</div>
-            <div>recovery mode: {String(isRecoveryMode)}</div>
-            <div>recovery status: {recoveryStatus}</div>
-            <div>redirect parse: {authRedirectDebug.summary}</div>
-            <div style={{ marginTop: "6px", opacity: 0.7 }}>auth events</div>
-            <div style={{ display: "grid", gap: "4px", marginTop: "4px", maxHeight: "100px", overflowY: "auto" }}>
-              {authEvents.length ? authEvents.slice().reverse().map(eventLine => (
-                <div key={eventLine} style={{ fontFamily: "monospace", fontSize: "10px", opacity: 0.85 }}>
-                  {eventLine}
-                </div>
-              )) : (
-                <div style={{ opacity: 0.6 }}>No auth events yet.</div>
-              )}
+          {showAuthDebug && (
+            <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px solid #1a1b2e", fontSize: "11px", lineHeight: 1.5 }}>
+              <div style={{ opacity: 0.7, marginBottom: "6px" }}>Auth Debug</div>
+              <div>session exists: {String(Boolean(session))}</div>
+              <div>current user email: {session?.user?.email || "none"}</div>
+              <div>restored from storage on load: {String(sessionRestoredFromStorage)}</div>
+              <div>auth initialized: {String(authInitialized)}</div>
+              <div>recovery mode: {String(isRecoveryMode)}</div>
+              <div>recovery status: {recoveryStatus}</div>
+              <div>redirect parse: {authRedirectDebug.summary}</div>
+              <div style={{ marginTop: "6px", opacity: 0.7 }}>auth events</div>
+              <div style={{ display: "grid", gap: "4px", marginTop: "4px", maxHeight: "100px", overflowY: "auto" }}>
+                {authEvents.length ? authEvents.slice().reverse().map(eventLine => (
+                  <div key={eventLine} style={{ fontFamily: "monospace", fontSize: "10px", opacity: 0.85 }}>
+                    {eventLine}
+                  </div>
+                )) : (
+                  <div style={{ opacity: 0.6 }}>No auth events yet.</div>
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
