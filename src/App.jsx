@@ -1417,6 +1417,8 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
   const [selectedId, setSelectedId] = useState(null)
   const [addForm, setAddForm] = useState({ key: "muscleStatus", location: "Quad L", currentScore: 1, halfLifeHours: null })
   const [capacityInfoOpen, setCapacityInfoOpen] = useState({ tendonPain: false })
+  const MTP_LOCATION = "Toe R"
+  const MTP_KEY = "jointStatus"
 
   const selectedItem = ocItems.find(i => i.id === selectedId) || null
   const rd = computeReadinessDetail(ocItems, sleepRecords, healthFitDaily, tsbFallback)
@@ -1540,6 +1542,27 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
     const chronicity = episodeCount >= 2 || (daysSinceLast != null && daysSinceLast < 90) ? "chronic" : item.chronicity
     updateItem(id, { currentScore: 0, episodeCount, lastResolvedDate, chronicity })
     setSelectedId(null)
+  }
+
+  const logMtpZeroCheck = () => {
+    const nowIso = new Date().toISOString()
+    const item = {
+      id: Date.now(),
+      key: MTP_KEY,
+      location: MTP_LOCATION,
+      label: `${OC_KEY_META[MTP_KEY]?.label || "Joint"} — ${MTP_LOCATION}`,
+      currentScore: 0,
+      initialScore: 0,
+      startDate: nowIso,
+      halfLifeHours: OC_KEY_META[MTP_KEY]?.halfLifeHours || 120,
+      episodeCount: 0,
+      lastResolvedDate: nowIso,
+      chronicity: "acute",
+      eventType: "explicit_zero_check"
+    }
+    const updated = [item, ...ocItems]
+    setOcItems(updated)
+    saveOcItems(updated)
   }
 
   const infoButton = key => (
@@ -1685,10 +1708,17 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
 
       {/* ── MTP Progression Counter ───────────────────────────────── */}
       {(() => {
-        const mtpItem = ocItems.find(i =>
-          (i.location || "").toLowerCase().includes("toe") &&
-          i.key === "jointStatus"
-        )
+        const mtpHistory = [...ocItems]
+          .filter(i =>
+            (i.location || "").toLowerCase().includes("toe") &&
+            i.key === MTP_KEY
+          )
+          .sort((a, b) => {
+            const aDate = String(a.lastResolvedDate || a.startDate || "")
+            const bDate = String(b.lastResolvedDate || b.startDate || "")
+            return bDate.localeCompare(aDate)
+          })
+        const mtpItem = mtpHistory[0] || null
         const sortedRuns = [...runSessions]
           .filter(w => w.date)
           .sort((a, b) => String(b.date).localeCompare(String(a.date)))
@@ -1699,29 +1729,32 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
         const currentScore = mtpItem?.currentScore ?? 0
         const isActive = currentScore > 0
         const chronicity = mtpItem?.chronicity || "acute"
+        const lastActiveDate =
+          mtpHistory.find(item => Number(item.currentScore || 0) > 0)?.startDate ||
+          mtpHistory.find(item => Number(item.currentScore || 0) === 0 && Number(item.episodeCount || 0) > 0)?.startDate ||
+          null
+        const zeroChecks = mtpHistory.filter(item => {
+          if (Number(item.currentScore || 0) !== 0) return false
+          const eventDate = String(item.lastResolvedDate || item.startDate || "")
+          return !lastActiveDate || eventDate > String(lastActiveDate)
+        })
 
-        // Consecutive score-0 sessions: count runs logged since the OC score
-        // last dropped to 0 (proxy: since startDate if score==0, else 0 streak)
         let streak = 0
         let recentMax = 0
-        if (!isActive && sortedRuns.length > 0) {
-          const resolvedDate = mtpItem?.lastResolvedDate
-            ? new Date(mtpItem.lastResolvedDate)
-            : null
-          for (const run of sortedRuns) {
-            const runDate = new Date(String(run.date).slice(0, 10) + "T12:00:00")
-            if (resolvedDate && runDate < resolvedDate) break
-            streak++
-            if ((run.distance || 0) > recentMax) recentMax = run.distance || 0
-          }
-        } else if (sortedRuns.length > 0) {
+        if (!isActive) streak = zeroChecks.length
+        if (sortedRuns.length > 0) {
+          recentMax = Math.max(...sortedRuns.map(run => Number(run.distance || 0) || 0), 0)
+        }
+        if (isActive && sortedRuns.length > 0) {
           recentMax = sortedRuns[0].distance || 0
         }
 
         const PROGRESSION_THRESHOLD = 3
         const progressPct = Math.min(100, Math.round((streak / PROGRESSION_THRESHOLD) * 100))
         const nextDistanceMilestone = recentMax > 0 ? (recentMax * 1.1).toFixed(2) : null
+        const nextDistanceText = nextDistanceMilestone ? `${nextDistanceMilestone} mi` : "the next distance step"
         const remainingScoreZeroSessions = Math.max(0, PROGRESSION_THRESHOLD - streak)
+        const latestZeroCheckDate = zeroChecks[0]?.lastResolvedDate || zeroChecks[0]?.startDate || null
         const nextMilestoneDate = (() => {
           if (streak >= PROGRESSION_THRESHOLD) return "Cleared"
           const projected = new Date()
@@ -1758,7 +1791,7 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: "10px", marginBottom: "12px" }}>
               <div style={{ background: "#07080e", border: "1px solid #1a1b2e", borderRadius: "8px", padding: "10px", textAlign: "center" }}>
-                <div style={{ fontSize: "10px", color: "#555", marginBottom: "3px" }}>Score-0 streak</div>
+                <div style={{ fontSize: "10px", color: "#555", marginBottom: "3px" }}>Score-0 checks</div>
                 <div style={{ fontSize: "28px", fontWeight: "800", color: barColor, lineHeight: 1 }}>{streak}</div>
                 <div style={{ fontSize: "10px", color: "#555" }}>of {PROGRESSION_THRESHOLD} needed</div>
               </div>
@@ -1777,11 +1810,13 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
                 <div style={{ fontSize: "10px", color: "#555" }}>target date</div>
               </div>
               <div style={{ background: "#07080e", border: "1px solid #1a1b2e", borderRadius: "8px", padding: "10px", textAlign: "center" }}>
-                <div style={{ fontSize: "10px", color: "#555", marginBottom: "3px" }}>Last run</div>
+                <div style={{ fontSize: "10px", color: "#555", marginBottom: "3px" }}>Latest zero check</div>
                 <div style={{ fontSize: "14px", fontWeight: "700", color: "#ced2f0", lineHeight: 1.3 }}>
-                  {sortedRuns[0] ? fmtShortDate(sortedRuns[0].date) : "—"}
+                  {latestZeroCheckDate ? fmtShortDate(String(latestZeroCheckDate).slice(0, 10)) : "—"}
                 </div>
-                <div style={{ fontSize: "10px", color: "#555" }}>{sortedRuns[0] ? `${sortedRuns[0].distance?.toFixed(2)} mi` : ""}</div>
+                <div style={{ fontSize: "10px", color: "#555" }}>
+                  {latestZeroCheckDate ? "explicit no-issue event" : "no explicit zero check yet"}
+                </div>
               </div>
             </div>
 
@@ -1792,10 +1827,17 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
               {isActive
                 ? `Resolve MTP to score 0 before resuming progression. ${sortedRuns.length > 0 ? `Last run: ${fmtShortDate(sortedRuns[0]?.date)}.` : ""}`
                 : streak >= PROGRESSION_THRESHOLD
-                  ? `Threshold met. Advance from ${recentMax.toFixed(2)} mi to ${nextDistanceMilestone} mi on next run.`
-                  : `${remainingScoreZeroSessions} more score-0 run${remainingScoreZeroSessions === 1 ? "" : "s"} required before advancing to ${nextDistanceMilestone} mi. Expected by ${nextMilestoneDate}.`
+                  ? `Threshold met. Advance from ${recentMax.toFixed(2)} mi to ${nextDistanceText} on next run.`
+                  : streak > 0
+                    ? `${remainingScoreZeroSessions} more explicit score-0 check${remainingScoreZeroSessions === 1 ? "" : "s"} required before advancing to ${nextDistanceText}. Expected by ${nextMilestoneDate}.`
+                    : "No explicit score-0 checks logged yet. Missing data does not advance progression."
               }
             </div>
+            {!isActive && (
+              <div style={{ marginTop: "10px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                <button onClick={logMtpZeroCheck} style={buttonStyle(true)}>Log zero-pain check</button>
+              </div>
+            )}
           </div>
         )
       })()}
@@ -12831,23 +12873,67 @@ return (
 
     {/* ── Sleep Quality Panel ───────────────────────────────────── */}
     {(() => {
-      const sevenDaysAgo = Date.now() - 7 * 24 * 3600000
       const sleepMinutes = record => {
         const raw = Number(record?.duration_min || 0) || 0
         // Defensive normalization for older/stale records that may still be stored in seconds.
         return raw > 24 * 60 ? raw / 60 : raw
       }
+      const TARGET_HOURS = 7.5
+      const sleepByDate = new Map(
+        (Array.isArray(sleepRecords) ? sleepRecords : [])
+          .filter(r => r.date && r.duration_min != null)
+          .map(record => [String(record.date).slice(0, 10), record])
+      )
+      const lastSevenNights = Array.from({ length: 7 }, (_, index) => {
+        const date = new Date()
+        date.setHours(12, 0, 0, 0)
+        date.setDate(date.getDate() - (6 - index))
+        const iso = date.toISOString().slice(0, 10)
+        const record = sleepByDate.get(iso) || null
+        const hours = record ? sleepMinutes(record) / 60 : null
+        const status = hours == null ? "missing" : hours >= TARGET_HOURS ? "good" : hours >= 6 ? "fair" : "poor"
+        const bg = status === "good"
+          ? "rgba(74, 222, 128, 0.22)"
+          : status === "fair"
+            ? "rgba(251, 191, 36, 0.22)"
+            : status === "poor"
+              ? "rgba(239, 68, 68, 0.22)"
+              : "rgba(71, 85, 105, 0.18)"
+        const border = status === "good"
+          ? "rgba(74, 222, 128, 0.45)"
+          : status === "fair"
+            ? "rgba(251, 191, 36, 0.45)"
+            : status === "poor"
+              ? "rgba(239, 68, 68, 0.45)"
+              : "rgba(100, 116, 139, 0.32)"
+        const color = status === "missing"
+          ? "#64748b"
+          : status === "good"
+            ? "#4ade80"
+            : status === "fair"
+              ? "#fbbf24"
+              : "#ef4444"
+        return {
+          iso,
+          record,
+          hours,
+          status,
+          bg,
+          border,
+          color,
+          dayLabel: date.toLocaleDateString(undefined, { weekday: "short" })
+        }
+      })
       const recentSleep = (Array.isArray(sleepRecords) ? sleepRecords : [])
-        .filter(r => r.date && new Date(r.date).getTime() >= sevenDaysAgo && r.duration_min != null)
+        .filter(r => sleepByDate.has(String(r.date).slice(0, 10)) && r.duration_min != null)
         .sort((a, b) => String(b.date).localeCompare(String(a.date)))
         .slice(0, 7)
 
       if (recentSleep.length === 0) return null
 
       const avgHours = recentSleep.reduce((s, r) => s + sleepMinutes(r), 0) / recentSleep.length / 60
-      const lastNight = recentSleep[0]
+      const lastNight = lastSevenNights[lastSevenNights.length - 1]?.record || recentSleep[0]
       const lastHours = lastNight ? sleepMinutes(lastNight) / 60 : null
-      const TARGET_HOURS = 7.0
       const avgPct = Math.min(100, Math.round((avgHours / TARGET_HOURS) * 100))
       const avgColor = avgHours >= 7 ? "#4ade80" : avgHours >= 6 ? "#fbbf24" : "#ef4444"
       const lastColor = lastHours == null ? "#667" : lastHours >= 7 ? "#4ade80" : lastHours >= 6 ? "#fbbf24" : "#ef4444"
@@ -12876,7 +12962,7 @@ return (
               <div style={{ fontSize: "26px", fontWeight: "800", color: "#ced2f0", lineHeight: 1 }}>
                 {recentSleep.filter(r => sleepMinutes(r) / 60 >= TARGET_HOURS).length}
               </div>
-              <div style={{ fontSize: "10px", color: "#555" }}>of {recentSleep.length}</div>
+              <div style={{ fontSize: "10px", color: "#555" }}>of 7</div>
             </div>
             <div style={{ background: "#07080e", border: "1px solid #1a1b2e", borderRadius: "8px", padding: "10px", textAlign: "center" }}>
               <div style={{ fontSize: "10px", color: "#555", marginBottom: "3px" }}>Readiness impact</div>
@@ -12886,16 +12972,29 @@ return (
               <div style={{ fontSize: "10px", color: "#555" }}>pts penalty</div>
             </div>
           </div>
-          <div style={{ display: "flex", gap: "3px", alignItems: "flex-end", height: "36px" }}>
-            {[...recentSleep].reverse().map((r, i) => {
-              const h = sleepMinutes(r) / 60
-              const heightPct = Math.min(100, Math.round((h / 9) * 100))
-              const col = h >= 7 ? "#4ade80" : h >= 6 ? "#fbbf24" : "#ef4444"
-              return (
-                <div key={i} title={`${fmtShortDate(r.date)}: ${h.toFixed(1)}h`}
-                  style={{ flex: 1, height: `${heightPct}%`, background: col, borderRadius: "2px 2px 0 0", opacity: 0.8 }} />
-              )
-            })}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: "6px" }}>
+            {lastSevenNights.map(night => (
+              <div key={night.iso} style={{ display: "grid", gap: "4px" }}>
+                <div
+                  title={night.hours != null ? `${fmtShortDate(night.iso)}: ${night.hours.toFixed(1)}h` : `${fmtShortDate(night.iso)}: no entry`}
+                  style={{
+                    height: "42px",
+                    borderRadius: "8px",
+                    background: night.bg,
+                    border: `1px solid ${night.border}`,
+                    color: night.color,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: "12px",
+                    fontWeight: "700"
+                  }}
+                >
+                  {night.hours != null ? night.hours.toFixed(1) : "—"}
+                </div>
+                <div style={{ fontSize: "10px", color: "#667", textAlign: "center" }}>{night.dayLabel}</div>
+              </div>
+            ))}
           </div>
           <div style={{ fontSize: "10px", color: "#445", marginTop: "6px" }}>
             {avgHours >= 7
@@ -14453,17 +14552,83 @@ return (
           {showDeveloperPanels && overviewExplainButton("readinessDebug")}
         </div>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: "10px", marginBottom: "14px" }}>
-        {forecastReadinessCards.map(({ label, value }) => (
-          <div key={label} style={{ background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: "8px", padding: "10px", textAlign: "center" }}>
-            <div style={{ fontSize: "11px", opacity: 0.6, marginBottom: "4px" }}>{label}</div>
-            <div style={{ fontSize: "22px", fontWeight: "700",
-              color: value >= 60 ? "#4ade80" : value >= 35 ? "#ffd166" : "#ff8a8a" }}>
+      <div
+        onClick={() => toggleOverviewExplain("readinessSummary")}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault()
+            toggleOverviewExplain("readinessSummary")
+          }
+        }}
+        aria-expanded={isOverviewExplainOpen("readinessSummary")}
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+          gap: "6px",
+          marginBottom: "14px",
+          cursor: "pointer",
+          userSelect: "none"
+        }}
+      >
+        {[
+          { shortLabel: "Now", value: forecastReadinessCards[0]?.value ?? "—" },
+          { shortLabel: "1M", value: forecastReadinessCards[1]?.value ?? "—" },
+          { shortLabel: "3M", value: forecastReadinessCards[2]?.value ?? "—" },
+          { shortLabel: "6M", value: forecastReadinessCards[3]?.value ?? "—" },
+          { shortLabel: "12M", value: forecastReadinessCards[4]?.value ?? "—" }
+        ].map(({ shortLabel, value }) => (
+          <div
+            key={shortLabel}
+            style={{
+              minWidth: 0,
+              background: "#0d0e1c",
+              border: "1px solid #1a1b2e",
+              borderRadius: "8px",
+              padding: "6px 4px 7px",
+              textAlign: "center",
+              boxShadow: isOverviewExplainOpen("readinessSummary") ? "0 0 0 1px rgba(74,158,232,0.25)" : "none"
+            }}
+          >
+            <div
+              style={{
+                fontSize: "clamp(9px, 2vw, 11px)",
+                lineHeight: 1,
+                opacity: 0.62,
+                marginBottom: "5px",
+                letterSpacing: "0.04em",
+                whiteSpace: "nowrap"
+              }}
+            >
+              {shortLabel}
+            </div>
+            <div
+              style={{
+                fontSize: "clamp(16px, 4vw, 22px)",
+                fontWeight: "700",
+                lineHeight: 1,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "clip",
+                color: value >= 60 ? "#4ade80" : value >= 35 ? "#ffd166" : "#ff8a8a"
+              }}
+            >
               {value}
             </div>
           </div>
         ))}
       </div>
+      {isOverviewExplainOpen("readinessSummary") && (
+        <div style={{ background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: "8px", padding: "12px", marginBottom: "14px" }}>
+          {renderOverviewExplainBody({
+            shows: "Five compact readiness checkpoints: current, 1 month, 3 months, 6 months, and 12 months.",
+            derived: "Scores come from the endurance projection model using recent aerobic volume, running pace, cardio consistency, and the current readiness base.",
+            interpret: "Higher values imply a stronger base for steady endurance work. Projections assume you keep training patterns broadly similar rather than making abrupt jumps.",
+            action: "Use the ribbon as a fast planning snapshot. Use the chart below to inspect the projection curve and race-specific readiness lines in more detail."
+          })}
+        </div>
+      )}
       {showDeveloperPanels && isOverviewExplainOpen("readinessDebug") && (
         <div style={{ background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: "8px", padding: "12px", marginBottom: "14px" }}>
           <div style={{ fontWeight: "bold", marginBottom: "8px" }}>Readiness Debug</div>
