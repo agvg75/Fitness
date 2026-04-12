@@ -7340,7 +7340,13 @@ function parseFitnessViewCSV(text) {
     let startDate = null
     try {
       const d = new Date(dateRaw)
-      if (!isNaN(d.getTime())) startDate = d.toISOString().slice(0, 10) + "T00:00:00"
+      if (!isNaN(d.getTime())) {
+        // Preserve the local calendar date; UTC conversion can shift bare dates.
+        const yr = d.getFullYear()
+        const mo = String(d.getMonth() + 1).padStart(2, "0")
+        const dy = String(d.getDate()).padStart(2, "0")
+        startDate = `${yr}-${mo}-${dy}T00:00:00`
+      }
     } catch {}
     if (!startDate) { rejected.push({ source: "FitnessView", reason: "Unparseable date: " + dateRaw, raw: raw.slice(0, 200) }); continue }
 
@@ -8426,7 +8432,9 @@ Return ONLY a JSON object with this exact structure, no explanation:
       }
       // Small-source imports: local fallback, Supabase tables when signed in
       if (sleepResult.length) {
-        const existing = JSON.parse(localStorage.getItem("lift_sleep_records") || "[]")
+        const existing = supabase && STORE_USER_ID
+  ? await loadSleepRecords(supabase, STORE_USER_ID).catch(() => [])
+  : JSON.parse(localStorage.getItem("lift_sleep_records") || "[]")
         const byDate = {}
         ;(Array.isArray(existing) ? existing : []).forEach(r => { byDate[r.date] = r })
         sleepResult.forEach(r => { byDate[r.date] = r })
