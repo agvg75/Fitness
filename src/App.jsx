@@ -1990,6 +1990,10 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
       {/* ── Operational Capacity current projection chart ─────────── */}
       <div style={{ ...cardStyle(), minWidth: "0" }}>
         <div style={{ fontSize: "12px", fontWeight: "700", marginBottom: "12px" }}>Operational Capacity Projection</div>
+        <div style={{ fontSize: 11, color: "#555", marginBottom: 8 }}>
+          Acute = tendon, muscle, joint items. Disease = illness. Fatigue = sleep debt.
+          Each item decays at its own half-life. Hover for item breakdown.
+        </div>
         {(!operationalCapacityData || operationalCapacityData.length === 0) ? (
           <div style={{ fontSize: "12px", color: "#444", textAlign: "center", padding: "40px 0" }}>
             No current OC issues — true historical snapshots are not stored yet.
@@ -2000,10 +2004,43 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
               <CartesianGrid stroke="#1a1b2e" />
               <XAxis dataKey="label" label={{ value: "Date", position: "bottom", offset: 10, fill: "#ced2f0" }} />
               <YAxis domain={[0, 100]} label={{ value: "Operational capacity (%)", angle: -90, position: "insideLeft", offset: 15, fill: "#ced2f0", style: { textAnchor: "middle" } }} />
-              <Tooltip formatter={(v, n) => {
-                const lbl = { operationalPct: "Operational", acuteLossPct: "Acute burden", diseaseLossPct: "Disease burden", fatigueLossPct: "Fatigue burden" }
-                return [`${Number(v).toFixed(1)}%`, lbl[n] || n]
-              }} />
+              <Tooltip
+                formatter={(v, n) => {
+                  const lbl = {
+                    operationalPct: "Operational",
+                    acuteLossPct: "Acute burden (tendon/muscle/joint)",
+                    diseaseLossPct: "Disease burden",
+                    fatigueLossPct: "Fatigue / sleep burden"
+                  }
+                  return [`${Number(v).toFixed(1)}%`, lbl[n] || n]
+                }}
+                content={({ active, payload, label }) => {
+                  if (!active || !payload?.length) return null
+                  const d = payload[0]?.payload
+                  return (
+                    <div style={{ background: "#0d0f1e", border: "1px solid #222", borderRadius: 6, padding: "8px 12px", fontSize: 12 }}>
+                      <div style={{ color: "#888", marginBottom: 4 }}>{label}</div>
+                      {payload.map(p => (
+                      <div key={p.dataKey} style={{ color: p.stroke || p.fill, marginBottom: 2 }}>
+                          {{
+                            operationalPct: "Operational",
+                            acuteLossPct: "Acute burden (tendon/muscle/joint)",
+                            diseaseLossPct: "Disease burden",
+                            fatigueLossPct: "Fatigue / sleep burden"
+                          }[p.dataKey] || p.name}: {Number(p.value).toFixed(1)}%
+                        </div>
+                      ))}
+                      {d?.breakdown?.length > 0 && (
+                        <div style={{ marginTop: 6, borderTop: "1px solid #222", paddingTop: 6, color: "#666" }}>
+                          {d.breakdown.map((b, i) => (
+                            <div key={i}>{b.label}: {b.lossPct}%</div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                }}
+              />
               <Legend verticalAlign="top" height={36} />
               <Line type="monotone" dataKey="operationalPct" stroke="#e5e7eb" strokeWidth={3} dot={false} name="Operational" />
               <Line type="monotone" dataKey="acuteLossPct"   stroke="#ef4444" strokeWidth={2} dot={false} name="Acute" />
@@ -10454,10 +10491,18 @@ useEffect(() => {
     const ocLocal = await store.get("oc-items")
     const hfLocal = await store.get("healthfit-daily")
     const dedupedWorkouts = dedupeUfdWorkouts(wo)
+    const cleanedOcLocal = (Array.isArray(ocLocal) ? ocLocal : []).filter(
+      item => (item.initialScore || item.currentScore || 0) > 0
+    )
     if (Array.isArray(wo) && dedupedWorkouts.length !== wo.length) {
       await store.set("ufd-workouts", dedupedWorkouts)
       setStoredWorkouts(dedupedWorkouts)
       console.log(`[migration] Removed ${wo.length - dedupedWorkouts.length} duplicate ufd-workouts entries`)
+    }
+    if (Array.isArray(ocLocal) && cleanedOcLocal.length !== ocLocal.length) {
+      await store.set("oc-items", cleanedOcLocal)
+      setOcItems(cleanedOcLocal)
+      console.log(`[migration] Removed ${ocLocal.length - cleanedOcLocal.length} zero-score OC items`)
     }
     if (Array.isArray(hfLocal)) setHealthFitDaily(hfLocal)
     // Then fetch from Supabase and merge
@@ -10522,14 +10567,16 @@ useEffect(() => {
           // Merge oc-items
           const sbOc = data.find(r => r.key === "oc-items")?.value
           if (Array.isArray(sbOc)) {
-            const local = Array.isArray(ocLocal) ? ocLocal : []
+            const local = cleanedOcLocal
             const merged = Object.values(
               [...local, ...sbOc].reduce((acc, e) => { acc[e.id] = e; return acc }, {})
-            ).sort((a, b) => b.id - a.id)
+            )
+              .filter(item => (item.initialScore || item.currentScore || 0) > 0)
+              .sort((a, b) => b.id - a.id)
             setOcItems(merged)
             await store.set("oc-items", merged)
-          } else if (Array.isArray(ocLocal)) {
-            setOcItems(ocLocal)
+          } else if (Array.isArray(cleanedOcLocal)) {
+            setOcItems(cleanedOcLocal)
           }
           // HealthFit daily records — merge by date, Supabase wins on conflict
           const sbHf = data.find(r => r.key === "healthfit-daily")?.value
@@ -10548,7 +10595,7 @@ useEffect(() => {
       }
     } else {
       if (Array.isArray(wo)) setStoredWorkouts(wo)
-      if (Array.isArray(ocLocal)) setOcItems(ocLocal)
+      if (Array.isArray(cleanedOcLocal)) setOcItems(cleanedOcLocal)
     }
     } finally {
       setReadinessInputsHydrated(true)
@@ -11898,7 +11945,7 @@ const operationalCapacityData = useMemo(() => {
   today.setHours(0, 0, 0, 0)
 
   const daysBetween = (a, b) =>
-    Math.floor((a.getTime() - b.getTime()) / (1000 * 60 * 60 * 24))
+    (a.getTime() - b.getTime()) / (1000 * 60 * 60 * 24)
 
   const classifyItem = item => {
     if (item.key === "illnessLoad") return "disease"
@@ -11906,16 +11953,21 @@ const operationalCapacityData = useMemo(() => {
     return "acute" // tendonStatus, muscleStatus, jointStatus
   }
 
-  const categoryTau = { acute: 28, disease: 10, fatigue: 5 }
-
+  const PEAK_LOSS_BY_SCORE = [0, 0.15, 0.25, 0.40, 0.60, 0.80]
   const datedEntries = items
     .map(item => {
       const start = item.startDate ? new Date(item.startDate) : null
       if (!start || Number.isNaN(start.getTime())) return null
+      const initScore = item.initialScore || item.currentScore || 0
+      if (initScore <= 0) return null
+      const halfLifeHours = Number(item.halfLifeHours || OC_KEY_META[item.key]?.halfLifeHours || 72)
+      const peakLoss = PEAK_LOSS_BY_SCORE[Math.min(5, Math.max(0, Math.round(initScore)))] ?? 0.40
       return {
         _start: start,
         _category: classifyItem(item),
-        _peakLoss: Math.max(0, Math.min(0.8, (item.initialScore || item.currentScore || 0) / 5))
+        _label: OC_KEY_META[item.key]?.label || item.key,
+        _halfLifeHours: halfLifeHours,
+        _peakLoss: peakLoss
       }
     })
     .filter(Boolean)
@@ -11932,25 +11984,28 @@ const operationalCapacityData = useMemo(() => {
     const acuteLoss = datedEntries
       .filter(e => e._category === "acute")
       .reduce((sum, e) => {
-        const age = daysBetween(d, e._start)
-        if (age < 0) return sum
-        return sum + e._peakLoss * Math.exp(-age / categoryTau.acute)
+        const ageDays = daysBetween(d, e._start)
+        if (ageDays < 0) return sum
+        const ageHours = ageDays * 24
+        return sum + e._peakLoss * Math.pow(0.5, ageHours / e._halfLifeHours)
       }, 0)
 
     const diseaseLoss = datedEntries
       .filter(e => e._category === "disease")
       .reduce((sum, e) => {
-        const age = daysBetween(d, e._start)
-        if (age < 0) return sum
-        return sum + e._peakLoss * Math.exp(-age / categoryTau.disease)
+        const ageDays = daysBetween(d, e._start)
+        if (ageDays < 0) return sum
+        const ageHours = ageDays * 24
+        return sum + e._peakLoss * Math.pow(0.5, ageHours / e._halfLifeHours)
       }, 0)
 
     const fatigueLoss = datedEntries
       .filter(e => e._category === "fatigue")
       .reduce((sum, e) => {
-        const age = daysBetween(d, e._start)
-        if (age < 0) return sum
-        return sum + e._peakLoss * Math.exp(-age / categoryTau.fatigue)
+        const ageDays = daysBetween(d, e._start)
+        if (ageDays < 0) return sum
+        const ageHours = ageDays * 24
+        return sum + e._peakLoss * Math.pow(0.5, ageHours / e._halfLifeHours)
       }, 0)
 
     const totalMultiplier =
@@ -11964,7 +12019,14 @@ const operationalCapacityData = useMemo(() => {
       acuteLossPct: Number((acuteLoss * 100).toFixed(1)),
       diseaseLossPct: Number((diseaseLoss * 100).toFixed(1)),
       fatigueLossPct: Number((fatigueLoss * 100).toFixed(1)),
-      operationalPct: Number((totalMultiplier * 100).toFixed(1))
+      operationalPct: Number((totalMultiplier * 100).toFixed(1)),
+      breakdown: datedEntries.map(e => {
+        const ageDays = daysBetween(d, e._start)
+        if (ageDays < 0) return null
+        const loss = e._peakLoss * Math.pow(0.5, (ageDays * 24) / e._halfLifeHours)
+        if (loss < 0.005) return null
+        return { label: e._label, lossPct: Number((loss * 100).toFixed(1)) }
+      }).filter(Boolean)
     })
   }
 
@@ -13952,6 +14014,10 @@ return (
       <div style={{ fontWeight: "bold", marginBottom: "12px", minHeight: "20px" }}>
         Operational Capacity Projection
       </div>
+      <div style={{ fontSize: 11, color: "#555", marginBottom: 8 }}>
+        Acute = tendon, muscle, joint items. Disease = illness. Fatigue = sleep debt.
+        Each item decays at its own half-life. Hover for item breakdown.
+      </div>
       {(!operationalCapacityData || operationalCapacityData.length === 0) ? (
         <div style={{ fontSize: "12px", color: "#444", textAlign: "center", padding: "40px 0" }}>
           No current OC issues — true historical snapshots are not stored yet.
@@ -13962,10 +14028,43 @@ return (
             <CartesianGrid stroke="#1a1b2e" />
             <XAxis dataKey="label" tick={{ fontSize: 10 }} />
             <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} width={34} />
-            <Tooltip formatter={(v, n) => {
-              const lbl = { operationalPct: "Operational", acuteLossPct: "Acute burden", diseaseLossPct: "Disease burden", fatigueLossPct: "Fatigue burden" }
-              return [`${Number(v).toFixed(1)}%`, lbl[n] || n]
-            }} />
+            <Tooltip
+              formatter={(v, n) => {
+                const lbl = {
+                  operationalPct: "Operational",
+                  acuteLossPct: "Acute burden (tendon/muscle/joint)",
+                  diseaseLossPct: "Disease burden",
+                  fatigueLossPct: "Fatigue / sleep burden"
+                }
+                return [`${Number(v).toFixed(1)}%`, lbl[n] || n]
+              }}
+              content={({ active, payload, label }) => {
+                if (!active || !payload?.length) return null
+                const d = payload[0]?.payload
+                return (
+                  <div style={{ background: "#0d0f1e", border: "1px solid #222", borderRadius: 6, padding: "8px 12px", fontSize: 12 }}>
+                    <div style={{ color: "#888", marginBottom: 4 }}>{label}</div>
+                    {payload.map(p => (
+                      <div key={p.dataKey} style={{ color: p.stroke || p.fill, marginBottom: 2 }}>
+                        {{
+                          operationalPct: "Operational",
+                          acuteLossPct: "Acute burden (tendon/muscle/joint)",
+                          diseaseLossPct: "Disease burden",
+                          fatigueLossPct: "Fatigue / sleep burden"
+                        }[p.dataKey] || p.name}: {Number(p.value).toFixed(1)}%
+                      </div>
+                    ))}
+                    {d?.breakdown?.length > 0 && (
+                      <div style={{ marginTop: 6, borderTop: "1px solid #222", paddingTop: 6, color: "#666" }}>
+                        {d.breakdown.map((b, i) => (
+                          <div key={i}>{b.label}: {b.lossPct}%</div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              }}
+            />
             <Legend verticalAlign="top" height={28} />
             <Line type="monotone" dataKey="operationalPct" stroke="#e5e7eb" strokeWidth={3} dot={false} name="Operational" />
             <Line type="monotone" dataKey="acuteLossPct" stroke="#ef4444" strokeWidth={2} dot={false} name="Acute" />
