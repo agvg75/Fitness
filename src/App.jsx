@@ -8462,8 +8462,10 @@ Return ONLY a JSON object with this exact structure, no explanation:
       // Small-source imports: local fallback, Supabase tables when signed in
       if (sleepResult.length) {
         const existing = supabase && STORE_USER_ID
-  ? await loadSleepRecords(supabase, STORE_USER_ID).catch(() => [])
-  : JSON.parse(localStorage.getItem("lift_sleep_records") || "[]")
+          ? await loadSleepRecords(supabase, STORE_USER_ID).catch(() =>
+              JSON.parse(localStorage.getItem("lift_sleep_records") || "[]")
+            )
+          : JSON.parse(localStorage.getItem("lift_sleep_records") || "[]")
         const byDate = {}
         ;(Array.isArray(existing) ? existing : []).forEach(r => { byDate[r.date] = r })
         sleepResult.forEach(r => { byDate[r.date] = r })
@@ -8479,7 +8481,11 @@ Return ONLY a JSON object with this exact structure, no explanation:
         }
       }
       if (biometricResult.length) {
-        const existing = JSON.parse(localStorage.getItem("lift_biometric_records") || "[]")
+        const existing = supabase && STORE_USER_ID
+          ? await loadBiometricRecords(supabase, STORE_USER_ID).catch(() =>
+              JSON.parse(localStorage.getItem("lift_biometric_records") || "[]")
+            )
+          : JSON.parse(localStorage.getItem("lift_biometric_records") || "[]")
         const byKey = {}
         ;(Array.isArray(existing) ? existing : []).forEach(r => { byKey[r.biometric_id || r.id || `${r.source || "bio"}_${r.timestamp || r.date}`] = r })
         biometricResult.forEach(r => { byKey[r.biometric_id || r.id || `${r.source || "bio"}_${r.timestamp || r.date}`] = r })
