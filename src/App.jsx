@@ -11182,12 +11182,27 @@ async function persistMealEntries(nextEntries, currentUserId) {
 // These extend Banister inputs forward without altering canonical history.
 const banisterSupplementalSessions = useMemo(() => {
   const newestCanonicalTs = getNewestWorkoutLikeTimestamp(unifiedCanonicalSessions) || 0
-  return (Array.isArray(operationalWorkouts) ? operationalWorkouts : [])
+
+  const candidates = (Array.isArray(operationalWorkouts) ? operationalWorkouts : [])
     .filter(workout => {
       const ts = Date.parse(normalizeDateString(workout.dateTime || workout.date || "") || "")
       return Number.isFinite(ts) && ts > newestCanonicalTs && Number(workout.dur || 0) > 0
     })
-    .map(workout => ({
+
+  // Deduplicate by date + type + duration bucket to suppress cross-session
+  // duplicate schedule log entries before feeding TRIMP to the Banister model.
+  // _scheduleId-based dedup (dedupeUfdWorkouts) already handles same-session
+  // duplicates; this handles identical activities logged in separate sessions.
+  const seen = new Map()
+  for (const w of candidates) {
+    const dateStr = String(w.dateTime || w.date || "").slice(0, 10)
+    const durBucket = Math.round(Number(w.dur || 0) / 5) * 5
+    const typeKey = String(w.type || w.category || "").toLowerCase()
+    const key = `${dateStr}|${typeKey}|${durBucket}`
+    if (!seen.has(key)) seen.set(key, w)
+  }
+
+  return [...seen.values()].map(workout => ({
       start_date: String(workout.dateTime || workout.date || "").slice(0, 10),
       duration_min: Number(workout.dur || 0),
       avg_hr: 0,
