@@ -4172,6 +4172,8 @@ function TrainingDashboard({ workouts, recentNutrition, healthFitDaily = [], sch
           bucket: key,
           label: formatBucketLabel(bucketDate, rangeMode),
           cardioDistance: 0,
+          cardioDistanceEst: 0,
+          hasEstimatedDistance: false,
           cardioCalories: 0,
           cardioCaloriesEst: 0,
           hasEstimatedCal: false,
@@ -4188,7 +4190,18 @@ if (w.category === "Strength") {
 } else if (
   ["Running", "Walking", "Cycling", "Swimming", "Elliptical", "Rowing", "Stairs", "Machine Cardio", "Indoor Cycling"].includes(w.category)
 ) {
-  grouped[key].cardioDistance += Number(w.distance || 0)
+  const loggedDist = Number.isFinite(Number(w.distance)) && Number(w.distance) > 0
+    ? Number(w.distance)
+    : 0
+  const estimatedDist =
+    loggedDist > 0
+      ? 0
+      : (w.category === "Running" || w.category === "Walking") && Number(w.dur || 0) > 0
+        ? Number(w.dur) / 10
+        : 0
+  grouped[key].cardioDistance += loggedDist
+  grouped[key].cardioDistanceEst = (grouped[key].cardioDistanceEst || 0) + estimatedDist
+  grouped[key].hasEstimatedDistance = grouped[key].hasEstimatedDistance || estimatedDist > 0
   const storedCal = Number.isFinite(Number(w.calories)) && Number(w.calories) > 0
     ? Number(w.calories)
     : null
@@ -4209,6 +4222,7 @@ if (w.category === "Strength") {
     return chartData.reduce(
       (acc, row) => {
         acc.cardioDistance += row.cardioDistance
+        acc.cardioDistanceEst = (acc.cardioDistanceEst || 0) + row.cardioDistanceEst
         acc.cardioCalories += row.cardioCalories
         acc.cardioCaloriesEst = (acc.cardioCaloriesEst || 0) + row.cardioCaloriesEst
         acc.cardioMinutes += row.cardioMinutes
@@ -4218,6 +4232,7 @@ if (w.category === "Strength") {
       },
       {
         cardioDistance: 0,
+        cardioDistanceEst: 0,
         cardioCalories: 0,
         cardioCaloriesEst: 0,
         cardioMinutes: 0,
@@ -4311,7 +4326,12 @@ if (w.category === "Strength") {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "12px", marginBottom: "18px" }}>
         <div style={cardStyle}>
           <div style={labelStyle}>Cardio Distance (mi)</div>
-<div style={valueStyle}>{fmt1(totals.cardioDistance)}</div>
+<div style={valueStyle}>{fmt1((totals.cardioDistance || 0) + (totals.cardioDistanceEst || 0))}</div>
+{totals.cardioDistanceEst > 0 && (
+  <div style={{ fontSize: 10, color: "#666", marginTop: 2 }}>
+    {fmt1(totals.cardioDistanceEst)} estimated
+  </div>
+)}
         </div>
 
         <div style={cardStyle}>
@@ -4362,7 +4382,8 @@ if (w.category === "Strength") {
     <XAxis dataKey="label" />
     <YAxis unit="" />
     <Tooltip formatter={(value) => [fmt1(value), "Distance (mi)"]} />
-<Bar dataKey="cardioDistance" name="Cardio Distance (mi)" fill="#4a9ee8" />
+<Bar dataKey="cardioDistance" name="Cardio Distance (logged)" fill="#4a9ee8" stackId="dist" />
+<Bar dataKey="cardioDistanceEst" name="Cardio Distance (estimated)" fill="#4a9ee8" fillOpacity={0.35} stackId="dist" />
   </BarChart>
 </ResponsiveContainer>
         </div>
@@ -6269,7 +6290,15 @@ const buckets = {}
     }
 
     if (w.category === "Running" || w.category === "Walking") {
-      buckets[key].running += getWorkoutDistanceMiles(w)
+      const loggedMiles = getWorkoutDistanceMiles(w)
+      // If no GPS or logged distance is available, estimate from duration
+      // using a conservative 10 min/mile pace for the Training Load chart only.
+      // This is display-only; storage is not modified.
+      const estimatedMiles =
+        loggedMiles > 0
+          ? loggedMiles
+          : (Number(w.dur || 0) > 0 ? Number(w.dur) / 10 : 0)
+      buckets[key].running += estimatedMiles
       buckets[key].cardioMinutes += Number(w.dur || 0)
     } else if (w.category === "Swimming") {
       buckets[key].swimming += getWorkoutDistanceMiles(w)
