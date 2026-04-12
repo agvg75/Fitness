@@ -2619,8 +2619,10 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
         _scheduleId: entry.id,
       }))
       const existing = await store.get("ufd-workouts") || storedWorkouts
-      const merged = [...(Array.isArray(existing) ? existing : []), ...summaryEntries]
-        .sort((a, b) => String(a.dateTime || a.date || "").localeCompare(String(b.dateTime || b.date || "")))
+      const merged = dedupeUfdWorkouts([
+        ...(Array.isArray(existing) ? existing : []),
+        ...summaryEntries,
+      ])
       setStoredWorkouts(merged)
       const savedWorkouts = await saveScheduleKey("ufd-workouts", merged)
       if (Array.isArray(savedWorkouts)) setStoredWorkouts(savedWorkouts)
@@ -4595,6 +4597,33 @@ function buildScheduleCardioWorkoutsFromLog(logEntries) {
 
   return [...deduped.values()].sort((a, b) =>
     String(a.dateTime || a.date || "").localeCompare(String(b.dateTime || b.date || ""))
+  )
+}
+
+// Deduplicates stored schedule workouts. Prefer schedule IDs when present;
+// otherwise fall back to date + type + rounded duration to collapse repeat writes.
+function dedupeUfdWorkouts(workouts) {
+  const map = new Map()
+
+  const score = entry =>
+    (entry?.calories != null ? 1 : 0) +
+    (entry?.hr != null ? 1 : 0) +
+    (Number(entry?.distance) > 0 ? 1 : 0) +
+    (Number(entry?.dur) > 0 ? 1 : 0)
+
+  for (const workout of (Array.isArray(workouts) ? workouts : [])) {
+    const sid = workout?._scheduleId != null ? String(workout._scheduleId) : null
+    const dateStr = String(workout?.dateTime || workout?.date || "").slice(0, 10)
+    const durBucket = Math.round(Number(workout?.dur || 0) / 5) * 5
+    const key = sid ? `sid:${sid}` : `${dateStr}|${workout?.type || ""}|${durBucket}`
+    const existing = map.get(key)
+    if (!existing || score(workout) > score(existing)) {
+      map.set(key, workout)
+    }
+  }
+
+  return [...map.values()].sort((a, b) =>
+    String(a?.dateTime || a?.date || "").localeCompare(String(b?.dateTime || b?.date || ""))
   )
 }
 
@@ -10349,6 +10378,12 @@ useEffect(() => {
     const lg = await store.get("wt-log")
     const ocLocal = await store.get("oc-items")
     const hfLocal = await store.get("healthfit-daily")
+    const dedupedWorkouts = dedupeUfdWorkouts(wo)
+    if (Array.isArray(wo) && dedupedWorkouts.length !== wo.length) {
+      await store.set("ufd-workouts", dedupedWorkouts)
+      setStoredWorkouts(dedupedWorkouts)
+      console.log(`[migration] Removed ${wo.length - dedupedWorkouts.length} duplicate ufd-workouts entries`)
+    }
     if (Array.isArray(hfLocal)) setHealthFitDaily(hfLocal)
     // Then fetch from Supabase and merge
     if (supabase) {
@@ -10362,13 +10397,13 @@ useEffect(() => {
           if (process.env.NODE_ENV === "development") console.log("Supabase user_kv fetch:", { sbWo_count: Array.isArray(sbWo)?sbWo.length:0 })
           // Merge ufd-workouts: union by id, prefer Supabase if newer
           if (Array.isArray(sbWo)) {
-            const local = Array.isArray(wo) ? wo : []
-            const merged = Object.values(
+            const local = Array.isArray(dedupedWorkouts) ? dedupedWorkouts : []
+            const merged = dedupeUfdWorkouts(Object.values(
               [...local, ...sbWo].reduce((acc, w) => {
                 if (!acc[w.id] || w.id > acc[w.id].id) acc[w.id] = w
                 return acc
               }, {})
-            ).sort((a, b) => String(a.dateTime || a.date || "").localeCompare(String(b.dateTime || b.date || "")))
+            ))
             operationalWorkoutUpdateRef.current = {
               source: "remote:user_kv:ufd-workouts",
               newestDate: getNewestWorkoutLikeDate(merged),
@@ -10377,14 +10412,14 @@ useEffect(() => {
             console.log("Readiness workout source update", operationalWorkoutUpdateRef.current)
             setStoredWorkouts(merged)
             await store.set("ufd-workouts", merged)
-             } else if (Array.isArray(wo)) {
+             } else if (Array.isArray(dedupedWorkouts)) {
             operationalWorkoutUpdateRef.current = {
               source: "local:ufd-workouts",
-              newestDate: getNewestWorkoutLikeDate(wo),
-              count: wo.length
+              newestDate: getNewestWorkoutLikeDate(dedupedWorkouts),
+              count: dedupedWorkouts.length
             }
             console.log("Readiness workout source update", operationalWorkoutUpdateRef.current)
-            setStoredWorkouts(wo)
+            setStoredWorkouts(dedupedWorkouts)
           }
           const sbLg = data.find(r => r.key === "wt-log")?.value
           if (Array.isArray(sbLg)) {
