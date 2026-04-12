@@ -10194,27 +10194,35 @@ useEffect(() => {
         setCanonicalSessions(currentCanonicalSessions => {
           const currentNewestTs = getNewestWorkoutLikeTimestamp(currentCanonicalSessions)
           const remoteNewestTs = getNewestWorkoutLikeTimestamp(remoteCanonicalSessions)
-          const shouldUseRemote =
-            !Number.isFinite(currentNewestTs) ||
-            (Number.isFinite(remoteNewestTs) && remoteNewestTs >= currentNewestTs)
 
-          if (shouldUseRemote) {
-            operationalWorkoutUpdateRef.current = {
-              source: "remote:canonicalSessions",
-              newestDate: getNewestWorkoutLikeDate(remoteCanonicalSessions),
-              count: remoteCanonicalSessions.length
-            }
-            console.log("Readiness workout source update", operationalWorkoutUpdateRef.current)
-            return remoteCanonicalSessions
+          if (
+            Number.isFinite(currentNewestTs) &&
+            Number.isFinite(remoteNewestTs) &&
+            remoteNewestTs < currentNewestTs &&
+            (Array.isArray(currentCanonicalSessions) ? currentCanonicalSessions.length : 0) >
+              remoteCanonicalSessions.length
+          ) {
+            console.warn("[LIFT] Remote canonical sessions are older than local. Local may have uncommitted imports. Using local until next import commit.", {
+              localNewest: getNewestWorkoutLikeDate(currentCanonicalSessions),
+              remoteNewest: getNewestWorkoutLikeDate(remoteCanonicalSessions),
+              localCount: Array.isArray(currentCanonicalSessions) ? currentCanonicalSessions.length : 0,
+              remoteCount: remoteCanonicalSessions.length
+            })
+            return currentCanonicalSessions
           }
 
-          console.warn("Ignoring stale remote canonical sessions", {
-            currentNewestDate: getNewestWorkoutLikeDate(currentCanonicalSessions),
-            remoteNewestDate: getNewestWorkoutLikeDate(remoteCanonicalSessions),
-            currentCount: Array.isArray(currentCanonicalSessions) ? currentCanonicalSessions.length : 0,
-            remoteCount: remoteCanonicalSessions.length
-          })
-          return currentCanonicalSessions
+          const merged = dedupeCanonicalSessions([
+            ...(Array.isArray(currentCanonicalSessions) ? currentCanonicalSessions : []),
+            ...remoteCanonicalSessions,
+          ]).map(applyCanonicalSessionMergePolicy)
+
+          operationalWorkoutUpdateRef.current = {
+            source: "remote:canonicalSessions",
+            newestDate: getNewestWorkoutLikeDate(merged),
+            count: merged.length
+          }
+          console.log("[LIFT] Merged remote canonical sessions", operationalWorkoutUpdateRef.current)
+          return merged
         })
       }
       if (remoteSleepRecords.length) {
