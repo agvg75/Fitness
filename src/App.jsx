@@ -11093,11 +11093,32 @@ async function persistMealEntries(nextEntries, currentUserId) {
     return Math.max(2500, ...filteredNutrition.map(r => toNum(r.calories) + 100))
 }, [filteredNutrition])
 
+// Sessions from the schedule log dated after the newest canonical session.
+// These extend Banister inputs forward without altering canonical history.
+const banisterSupplementalSessions = useMemo(() => {
+  const newestCanonicalTs = getNewestWorkoutLikeTimestamp(unifiedCanonicalSessions) || 0
+  return (Array.isArray(operationalWorkouts) ? operationalWorkouts : [])
+    .filter(workout => {
+      const ts = Date.parse(normalizeDateString(workout.dateTime || workout.date || "") || "")
+      return Number.isFinite(ts) && ts > newestCanonicalTs && Number(workout.dur || 0) > 0
+    })
+    .map(workout => ({
+      start_date: String(workout.dateTime || workout.date || "").slice(0, 10),
+      duration_min: Number(workout.dur || 0),
+      avg_hr: 0,
+      trimp: null,
+    }))
+}, [operationalWorkouts, unifiedCanonicalSessions])
+
 // ── Banister TSB from unified canonical sessions ──────────────────────────
 // tau1=27 (fitness/CTL), tau2=18 (fatigue/ATL), TRIMP-based
 const computedTSBFromSessions = useMemo(() => {
   const tau1 = LIFT_CONFIG.tau1, tau2 = LIFT_CONFIG.tau2
-  const raw = (Array.isArray(unifiedCanonicalSessions) ? unifiedCanonicalSessions : []).map(s => {
+  const allBanisterSessions = [
+    ...(Array.isArray(unifiedCanonicalSessions) ? unifiedCanonicalSessions : []),
+    ...banisterSupplementalSessions,
+  ]
+  const raw = allBanisterSessions.map(s => {
     const durMin = s.dur_min || s.duration_min ||
       (Number(s.duration_sec) > 0 ? s.duration_sec / 60 : 0)
     const avgHr = Number(s.avg_hr) || 0
@@ -11135,10 +11156,13 @@ const computedTSBFromSessions = useMemo(() => {
   const out = { ctl: +ctl.toFixed(1), atl: +atl.toFixed(1), tsb }
   out.global = out
   return out
-}, [unifiedCanonicalSessions])
+}, [banisterSupplementalSessions, unifiedCanonicalSessions])
 
 const acwrSeries = useMemo(() => {
-  const sessions = Array.isArray(unifiedCanonicalSessions) ? unifiedCanonicalSessions : []
+  const sessions = [
+    ...(Array.isArray(unifiedCanonicalSessions) ? unifiedCanonicalSessions : []),
+    ...banisterSupplementalSessions,
+  ]
   if (!sessions.length) return []
 
   const dailyTrimp = {}
@@ -11232,7 +11256,7 @@ const acwrSeries = useMemo(() => {
   }
 
   return rows
-}, [unifiedCanonicalSessions])
+}, [banisterSupplementalSessions, unifiedCanonicalSessions])
 
 const trainingSummary = useMemo(() => {
   return buildTrainingSummary(operationalWorkouts)
