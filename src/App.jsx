@@ -4131,6 +4131,8 @@ function TrainingDashboard({ workouts, recentNutrition, healthFitDaily = [], sch
           label: formatBucketLabel(bucketDate, rangeMode),
           cardioDistance: 0,
           cardioCalories: 0,
+          cardioCaloriesEst: 0,
+          hasEstimatedCal: false,
           cardioMinutes: 0,
           strengthSessions: 0,
           totalWorkouts: 0
@@ -4145,7 +4147,15 @@ if (w.category === "Strength") {
   ["Running", "Walking", "Cycling", "Swimming", "Elliptical", "Rowing", "Stairs", "Machine Cardio", "Indoor Cycling"].includes(w.category)
 ) {
   grouped[key].cardioDistance += Number(w.distance || 0)
-  grouped[key].cardioCalories += Number(w.calories || 0)
+  const storedCal = Number.isFinite(Number(w.calories)) && Number(w.calories) > 0
+    ? Number(w.calories)
+    : null
+  const estimatedCal = storedCal == null
+    ? estimateCaloriesFromDuration(w.category, Number(w.dur || 0))
+    : null
+  grouped[key].cardioCalories += storedCal ?? 0
+  grouped[key].cardioCaloriesEst = (grouped[key].cardioCaloriesEst || 0) + (estimatedCal ?? 0)
+  grouped[key].hasEstimatedCal = grouped[key].hasEstimatedCal || estimatedCal != null
   grouped[key].cardioMinutes += Number(w.dur || 0)
 }
     })
@@ -4158,6 +4168,7 @@ if (w.category === "Strength") {
       (acc, row) => {
         acc.cardioDistance += row.cardioDistance
         acc.cardioCalories += row.cardioCalories
+        acc.cardioCaloriesEst = (acc.cardioCaloriesEst || 0) + row.cardioCaloriesEst
         acc.cardioMinutes += row.cardioMinutes
         acc.strengthSessions += row.strengthSessions
         acc.totalWorkouts += row.totalWorkouts
@@ -4166,6 +4177,7 @@ if (w.category === "Strength") {
       {
         cardioDistance: 0,
         cardioCalories: 0,
+        cardioCaloriesEst: 0,
         cardioMinutes: 0,
         strengthSessions: 0,
         totalWorkouts: 0
@@ -4262,7 +4274,12 @@ if (w.category === "Strength") {
 
         <div style={cardStyle}>
           <div style={labelStyle}>Cardio Calories (kcal)</div>
-<div style={valueStyle}>{fmt0(totals.cardioCalories)}</div>
+<div style={valueStyle}>{fmt0((totals.cardioCalories || 0) + (totals.cardioCaloriesEst || 0))}</div>
+{totals.cardioCaloriesEst > 0 && (
+  <div style={{ fontSize: 10, color: "#666", marginTop: 2 }}>
+    {fmt0(totals.cardioCaloriesEst)} estimated
+  </div>
+)}
         </div>
 
         <div style={cardStyle}>
@@ -4318,7 +4335,8 @@ if (w.category === "Strength") {
               <XAxis dataKey="label" />
               <YAxis />
               <Tooltip />
-              <Bar dataKey="cardioCalories" name="Cardio Calories" fill="#ff9f6e" />
+              <Bar dataKey="cardioCalories" name="Cardio Calories (logged)" fill="#ff9f6e" stackId="cal" />
+              <Bar dataKey="cardioCaloriesEst" name="Cardio Calories (estimated)" fill="#ff9f6e" fillOpacity={0.35} stackId="cal" />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -6159,6 +6177,26 @@ function getInjuryPenalties(ocItems = []) {
 
   return penalties
 }
+
+// Conservative display-only calorie fallback for cardio logs without energy data.
+function estimateCaloriesFromDuration(category, durationMin) {
+  if (!Number.isFinite(durationMin) || durationMin <= 0) return null
+  const rates = {
+    Running: 9.2,
+    Walking: 4.5,
+    Cycling: 5.0,
+    Swimming: 7.5,
+    Elliptical: 6.0,
+    Rowing: 7.0,
+    Stairs: 8.0,
+    "Machine Cardio": 5.5,
+    "Indoor Cycling": 5.0,
+  }
+  const rate = rates[category]
+  if (!rate) return null
+  return Math.round(rate * durationMin)
+}
+
 function buildWeeklyTrainingBuckets(workouts) {
   const startOfWeek = dateValue => {
     const d = new Date(dateValue)
