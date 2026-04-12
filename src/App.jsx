@@ -366,7 +366,12 @@ function toNum(v) {
 
 function fmtShortDate(dateStr) {
   if (!dateStr) return "NA"
-  const d = new Date(dateStr)
+  // Append T12:00:00 for bare YYYY-MM-DD strings to prevent UTC-midnight
+  // parse from shifting the local calendar date in UTC-negative timezones.
+  const normalized = /^\d{4}-\d{2}-\d{2}$/.test(String(dateStr))
+    ? `${dateStr}T12:00:00`
+    : String(dateStr)
+  const d = new Date(normalized)
   if (Number.isNaN(d.getTime())) return dateStr
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "2-digit" })
 }
