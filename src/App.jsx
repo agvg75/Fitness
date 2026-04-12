@@ -8212,8 +8212,31 @@ Return ONLY a JSON object with this exact structure, no explanation:
               setResult({ accepted, all_sessions: accepted, review: mergedReviewRows, rejected: allRejected,
                 summary: { accepted: accepted.length, linked: linkedCount, review: mergedReviewRows.length, rejected: allRejected.length, total: accepted.length } })
               setReviewRows(mergedReviewRows)
+
+              // Persist immediately so mobile tab eviction cannot drop staged sessions.
+              try {
+                const existingCanonical = supabase && STORE_USER_ID
+                  ? await loadCanonicalSessions(supabase, STORE_USER_ID).catch(() => canonicalSessions)
+                  : canonicalSessions
+                const mergedSessions = dedupeCanonicalSessions([
+                  ...(Array.isArray(existingCanonical) ? existingCanonical : []),
+                  ...accepted,
+                ])
+                const policyMerged = mergedSessions.map(applyCanonicalSessionMergePolicy)
+                localStorage.setItem("lift_canonical_sessions", JSON.stringify(policyMerged))
+                setCanonicalSessions(policyMerged)
+                if (supabase && STORE_USER_ID) {
+                  await upsertCanonicalSessions(supabase, STORE_USER_ID, policyMerged)
+                  const remote = await loadCanonicalSessions(supabase, STORE_USER_ID)
+                  localStorage.setItem("lift_canonical_sessions", JSON.stringify(remote))
+                  setCanonicalSessions(remote)
+                }
+                setStatus(`FitnessView: ${accepted.length} sessions committed (${linkedCount} linked to Schedule, ${accepted.length - linkedCount} standalone)`)
+              } catch (autoCommitErr) {
+                setStatus(`FitnessView: ${accepted.length} sessions staged — auto-commit failed (${autoCommitErr.message}). Tap Commit to dashboard to save.`)
+              }
+
               setImporting(false)
-              setStatus(`FitnessView: ${accepted.length} sessions ready (${linkedCount} linked to Schedule, ${accepted.length - linkedCount} standalone)`)
               return
             }
           }
