@@ -2546,7 +2546,14 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   }
 
   const addCardioEntry = (day) => {
-    setCardioEntries(prev => ({ ...prev, [day]: [...getCardioEntries(day), { modality: "run", duration: "", notes: "" }] }))
+    const prescribedMod = CARDIO[day]?.sessions?.[0]?.mod || CARDIO[day]?.mod || "run"
+    setCardioEntries(prev => ({
+      ...prev,
+      [day]: [
+        ...getCardioEntries(day),
+        { modality: prescribedMod, duration: "", distance: "", calories: "", hr: "", notes: "" }
+      ]
+    }))
   }
 
   const removeCardioEntry = (day, idx) => {
@@ -3123,7 +3130,10 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
           </div>
         ))}
 
-        <div style={{ fontSize: 10, fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", margin: "10px 0 6px" }}>Log actual</div>
+        <div style={{ fontSize: 10, fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", margin: "10px 0 3px" }}>Log actual</div>
+        <div style={{ fontSize: 10, color: "#444", marginBottom: 6 }}>
+          Check the box when done. Change modality via the dropdown. Add extra sessions below.
+        </div>
         {entries.map((entry, idx) => {
           const mc = modColor[entry.modality] || "#888"
           const target = prescribedSessions[idx] || cd
@@ -3187,7 +3197,23 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
             </div>
           )
         })}
-        {addBtn(() => addCardioEntry(day))}
+        <button
+          onClick={() => addCardioEntry(day)}
+          style={{
+            width: "100%",
+            marginTop: 8,
+            padding: "6px",
+            border: "0.5px dashed #333",
+            borderRadius: 5,
+            background: "transparent",
+            color: "#4a9ee8",
+            fontSize: 12,
+            cursor: "pointer",
+            fontFamily: "inherit"
+          }}
+        >
+          + Add cardio session
+        </button>
         {cd.cnote && <div style={{ fontSize: 10, color: "#555", lineHeight: 1.4, marginTop: 8 }}>{cd.cnote}</div>}
       </div>
     )
