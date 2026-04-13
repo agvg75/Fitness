@@ -1399,11 +1399,34 @@ function sleepMinutesForReadiness(record) {
   return raw > 24 * 60 ? raw / 60 : raw
 }
 
+function getSleepRecordDate(record) {
+  const candidates = [
+    record?.date,
+    record?.sleep_date,
+    record?.end_at,
+    record?.end_time,
+    record?.start_at,
+    record?.start_time,
+  ]
+
+  for (const value of candidates) {
+    const normalized = normalizeDateString(value)
+    if (normalized) return String(normalized).slice(0, 10)
+    const plain = String(value || "").slice(0, 10)
+    if (/^\d{4}-\d{2}-\d{2}$/.test(plain)) return plain
+  }
+
+  return null
+}
+
 function getRecentSleepRecords(records, limit = 7) {
   const sevenDaysAgo = Date.now() - 7 * 24 * 3600000
   return (Array.isArray(records) ? records : [])
-    .filter(r => r.date && new Date(r.date).getTime() >= sevenDaysAgo && r.duration_min != null)
-    .sort((a, b) => String(b.date).localeCompare(String(a.date)))
+    .filter(r => {
+      const sleepDate = getSleepRecordDate(r)
+      return sleepDate && new Date(sleepDate).getTime() >= sevenDaysAgo && r.duration_min != null
+    })
+    .sort((a, b) => String(getSleepRecordDate(b) || "").localeCompare(String(getSleepRecordDate(a) || "")))
     .slice(0, limit)
 }
 
@@ -4221,9 +4244,10 @@ if (w.category === "Strength") {
 } else if (
   ["Running", "Walking", "Cycling", "Swimming", "Elliptical", "Rowing", "Stairs", "Machine Cardio", "Indoor Cycling"].includes(w.category)
 ) {
-  const loggedDist = Number.isFinite(Number(w.distance)) && Number(w.distance) > 0
-    ? Number(w.distance)
-    : 0
+  const loggedDist =
+    w.category === "Cycling"
+      ? getCyclingDistanceMiles(w)
+      : getWorkoutDistanceMiles(w)
   const estimatedDist =
     loggedDist > 0
       ? 0
@@ -4320,6 +4344,46 @@ if (w.category === "Strength") {
       }))
       .sort((a, b) => a.date.localeCompare(b.date))
   }, [healthFitDaily])
+
+  const showLiveStateDebug = useMemo(() => {
+    if (import.meta.env.DEV) return true
+    try {
+      return new URLSearchParams(window.location.search).get("debugLiveState") === "1"
+    } catch {
+      return false
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!showLiveStateDebug) return
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const todayKey = today.toISOString().slice(0, 10)
+    const todayRow = chartData.find(row => row.bucket === todayKey) || null
+    const todayWorkouts = (Array.isArray(workouts) ? workouts : [])
+      .filter(workout => String(workout?.dateTime || workout?.date || workout?.start_date || "").slice(0, 10) === todayKey)
+      .map(workout => ({
+        type: workout?.type ?? workout?.canonical_type ?? null,
+        category: workout?.category ?? null,
+        date: workout?.date ?? null,
+        dateTime: workout?.dateTime ?? null,
+        start_date: workout?.start_date ?? null,
+        distance: workout?.distance ?? null,
+        distance_unit: workout?.distance_unit ?? workout?.unit ?? null,
+        preferred_metrics_distance: workout?.preferred_metrics?.distance ?? null,
+        sources_apple_distance: workout?.sources?.apple?.distance ?? null,
+        sources_technogym_distance: workout?.sources?.technogym?.distance ?? null,
+        dur: workout?.dur ?? workout?.duration_min ?? null,
+        normalizedDistanceMiles: workout?.category === "Cycling"
+          ? getCyclingDistanceMiles(workout)
+          : getWorkoutDistanceMiles(workout)
+      }))
+    console.log("[LIFT DEBUG] Training dashboard live state", {
+      todayKey,
+      todayChartDataRow: todayRow,
+      todayOperationalWorkouts: todayWorkouts,
+    })
+  }, [showLiveStateDebug, chartData, workouts])
 
   return (
     <div style={{ padding: "16px" }}>
@@ -8655,8 +8719,14 @@ Return ONLY a JSON object with this exact structure, no explanation:
             )
           : JSON.parse(localStorage.getItem("lift_sleep_records") || "[]")
         const byDate = {}
-        ;(Array.isArray(existing) ? existing : []).forEach(r => { byDate[r.date] = r })
-        sleepResult.forEach(r => { byDate[r.date] = r })
+        ;(Array.isArray(existing) ? existing : []).forEach(r => {
+          const key = getSleepRecordDate(r)
+          if (key) byDate[key] = { ...r, date: key }
+        })
+        sleepResult.forEach(r => {
+          const key = getSleepRecordDate(r)
+          if (key) byDate[key] = { ...r, date: key }
+        })
         const merged = Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date))
         localStorage.setItem("lift_sleep_records", JSON.stringify(merged))
         if (setSleepRecords) setSleepRecords(merged)
@@ -10475,8 +10545,14 @@ useEffect(() => {
       if (remoteSleepRecords.length) {
         setSleepRecords(prev => {
           const byDate = {}
-          ;(Array.isArray(prev) ? prev : []).forEach(r => { if (r.date) byDate[r.date] = r })
-          remoteSleepRecords.forEach(r => { if (r.date) byDate[r.date] = r })
+          ;(Array.isArray(prev) ? prev : []).forEach(r => {
+            const key = getSleepRecordDate(r)
+            if (key) byDate[key] = { ...r, date: key }
+          })
+          remoteSleepRecords.forEach(r => {
+            const key = getSleepRecordDate(r)
+            if (key) byDate[key] = { ...r, date: key }
+          })
           return Object.values(byDate).sort((a, b) =>
             String(a.date || "").localeCompare(String(b.date || ""))
           )
@@ -12429,6 +12505,14 @@ const showAuthDebug = useMemo(() => {
     return false
   }
 }, [])
+const showLiveStateDebug = useMemo(() => {
+  if (import.meta.env.DEV) return true
+  try {
+    return new URLSearchParams(window.location.search).get("debugLiveState") === "1"
+  } catch {
+    return false
+  }
+}, [])
 const readinessDebugData = useMemo(() => {
   const now = Date.now()
   const cutoff = now - 30 * 24 * 3600000
@@ -12467,6 +12551,63 @@ const readinessDebugData = useMemo(() => {
   readinessRemoteInputsHydrated,
   readinessChartsReady
 ])
+const liveStateDebugData = useMemo(() => {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const todayKey = today.toISOString().slice(0, 10)
+  const weekStart = new Date(today)
+  const day = weekStart.getDay()
+  const diff = day === 0 ? -6 : 1 - day
+  weekStart.setDate(weekStart.getDate() + diff)
+  weekStart.setHours(0, 0, 0, 0)
+  const currentWeekKey = weekStart.toISOString().slice(0, 10)
+
+  const recentSleep = (Array.isArray(sleepRecords) ? sleepRecords : [])
+    .map(record => {
+      const sleepDate = getSleepRecordDate(record)
+      return sleepDate ? { ...record, date: sleepDate } : null
+    })
+    .filter(Boolean)
+    .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))
+    .slice(0, 10)
+
+  const todaysOperationalWorkouts = (Array.isArray(operationalWorkouts) ? operationalWorkouts : [])
+    .filter(workout => getWorkoutLikeDateKey(workout) === todayKey)
+    .map(workout => ({
+      type: workout?.type ?? workout?.canonical_type ?? null,
+      category: workout?.category ?? null,
+      date: workout?.date ?? null,
+      dateTime: workout?.dateTime ?? null,
+      start_date: workout?.start_date ?? null,
+      distance: workout?.distance ?? null,
+      distance_unit: workout?.distance_unit ?? workout?.unit ?? null,
+      preferred_metrics_distance: workout?.preferred_metrics?.distance ?? null,
+      sources_apple_distance: workout?.sources?.apple?.distance ?? null,
+      sources_technogym_distance: workout?.sources?.technogym?.distance ?? null,
+      dur: workout?.dur ?? workout?.duration_min ?? null,
+    }))
+
+  const todayTsbRow =
+    tsbV2Panel?.rows?.find(row => row.date === todayKey) ||
+    tsbV2Panel?.rows?.[tsbV2Panel.rows.length - 1] ||
+    null
+
+  return {
+    todayKey,
+    sleepRecordsLength: Array.isArray(sleepRecords) ? sleepRecords.length : 0,
+    recentSleepRecords: recentSleep,
+    todaysOperationalWorkouts,
+    currentWeekTrainingBucket:
+      weeklyTrainingBuckets?.find(bucket => bucket.weekStart === currentWeekKey) ||
+      weeklyTrainingBuckets?.[weeklyTrainingBuckets.length - 1] ||
+      null,
+    todayTsbRow,
+  }
+}, [sleepRecords, operationalWorkouts, weeklyTrainingBuckets, tsbV2Panel])
+useEffect(() => {
+  if (!showLiveStateDebug) return
+  console.log("[LIFT DEBUG] Live app state", liveStateDebugData)
+}, [showLiveStateDebug, liveStateDebugData])
 const eventReadinessMarkers = useMemo(() => {
   if (!readinessProjectionData?.length) return []
 
@@ -13267,8 +13408,13 @@ return (
       const TARGET_HOURS = 7.5
       const sleepByDate = new Map(
         (Array.isArray(sleepRecords) ? sleepRecords : [])
-          .filter(r => r.date && r.duration_min != null)
-          .map(record => [String(record.date).slice(0, 10), record])
+          .map(record => {
+            const sleepDate = getSleepRecordDate(record)
+            return sleepDate && record?.duration_min != null
+              ? [sleepDate, { ...record, date: sleepDate }]
+              : null
+          })
+          .filter(Boolean)
       )
       const lastSevenNights = Array.from({ length: 7 }, (_, index) => {
         const date = new Date()
