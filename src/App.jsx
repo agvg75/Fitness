@@ -10503,29 +10503,7 @@ useEffect(() => {
         }
       }
 
-      const migrationWriteResults = await Promise.allSettled([
-        runMigration("canonical_sessions", migrationSummary.localStorage.liftCanonicalSessions.count || 0, () =>
-          migrateLocalCanonicalSessions(supabase, userId, { removeLocal: false })
-        ),
-        runMigration("sleep_records", migrationSummary.localStorage.liftSleepRecords.count || 0, () =>
-          migrateLocalSleepRecords(supabase, userId, { removeLocal: false })
-        ),
-        runMigration("healthfit_daily", (migrationSummary.localStorage.healthfitDaily.count || 0) + healthfitDailyStoreCount, () =>
-          migrateLocalHealthfitDaily(supabase, userId, store, { removeLocal: false })
-        ),
-        runMigration("biometric_records", migrationSummary.localStorage.liftBiometricRecords.count || 0, () =>
-          migrateLocalBiometricRecords(supabase, userId, { removeLocal: false })
-        )
-      ])
-      const [migratedCanonicalSessions, migratedSleepRecords, migratedHealthFitDaily, migratedBiometricRecords] =
-        migrationWriteResults.map(r => (r.status === "fulfilled" ? r.value : []))
-      console.log("Core imported data migration summary", {
-        canonicalSessions: migratedCanonicalSessions.length,
-        sleepRecords: migratedSleepRecords.length,
-        healthFitDaily: migratedHealthFitDaily.length,
-        biometricRecords: migratedBiometricRecords.length
-      })
-
+      // ── READS FIRST: always load from Supabase regardless of migration state ──
       const remoteReadResults = await Promise.allSettled([
         loadCanonicalSessions(supabase, userId),
         loadSleepRecords(supabase, userId),
@@ -10618,6 +10596,32 @@ useEffect(() => {
           )
         })
       }
+
+      // ── WRITES IN BACKGROUND: migrate local data to Supabase without blocking ──
+      Promise.allSettled([
+        runMigration("canonical_sessions", migrationSummary.localStorage.liftCanonicalSessions.count || 0, () =>
+          migrateLocalCanonicalSessions(supabase, userId, { removeLocal: false })
+        ),
+        runMigration("sleep_records", migrationSummary.localStorage.liftSleepRecords.count || 0, () =>
+          migrateLocalSleepRecords(supabase, userId, { removeLocal: false })
+        ),
+        runMigration("healthfit_daily", (migrationSummary.localStorage.healthfitDaily.count || 0) + healthfitDailyStoreCount, () =>
+          migrateLocalHealthfitDaily(supabase, userId, store, { removeLocal: false })
+        ),
+        runMigration("biometric_records", migrationSummary.localStorage.liftBiometricRecords.count || 0, () =>
+          migrateLocalBiometricRecords(supabase, userId, { removeLocal: false })
+        )
+      ]).then(migrationWriteResults => {
+        const [mc, ms, mh, mb] = migrationWriteResults.map(r => r.status === "fulfilled" ? r.value : [])
+        console.log("Core imported data migration background writes complete", {
+          canonicalSessions: mc.length,
+          sleepRecords: ms.length,
+          healthFitDaily: mh.length,
+          biometricRecords: mb.length
+        })
+      }).catch(err => {
+        console.warn("Core imported data migration background writes error", err)
+      })
     } catch (err) {
       console.error("Core imported data migration/hydration failed:", err)
       if (process.env.NODE_ENV === "development") console.warn("Core imported data hydration failed:", err)
