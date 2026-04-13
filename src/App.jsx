@@ -1362,17 +1362,9 @@ function computeReadinessDetail(ocItems, sleepRecords, healthFitDaily, tsbFallba
   const injuryPenalty = active.length ? Math.round(maxRegional * 12 + maxGlobal * 10 + sumAll * 1.5) : 0
 
   // ── Sleep penalty — average of last 7 nights ───────────────────
-  const sleepMinutes = record => {
-    const raw = Number(record?.duration_min || 0) || 0
-    return raw > 24 * 60 ? raw / 60 : raw
-  }
-  const sevenDaysAgo = Date.now() - 7 * 24 * 3600000
-  const recentSleep = (Array.isArray(sleepRecords) ? sleepRecords : [])
-    .filter(r => r.date && new Date(r.date).getTime() >= sevenDaysAgo && r.duration_min != null)
-    .sort((a, b) => b.date.localeCompare(a.date))
-    .slice(0, 7)
+  const recentSleep = getRecentSleepRecords(sleepRecords, 7)
   const avgSleepHours = recentSleep.length
-    ? recentSleep.reduce((s, r) => s + sleepMinutes(r), 0) / recentSleep.length / 60
+    ? recentSleep.reduce((s, r) => s + sleepMinutesForReadiness(r), 0) / recentSleep.length / 60
     : null
   const sleepPenalty = avgSleepHours == null ? 0
     : avgSleepHours < 5.5 ? 20
@@ -1400,6 +1392,19 @@ function computeReadinessDetail(ocItems, sleepRecords, healthFitDaily, tsbFallba
 
 function computeReadiness(items) {
   return computeReadinessDetail(items, [], []).score
+}
+
+function sleepMinutesForReadiness(record) {
+  const raw = Number(record?.duration_min || 0) || 0
+  return raw > 24 * 60 ? raw / 60 : raw
+}
+
+function getRecentSleepRecords(records, limit = 7) {
+  const sevenDaysAgo = Date.now() - 7 * 24 * 3600000
+  return (Array.isArray(records) ? records : [])
+    .filter(r => r.date && new Date(r.date).getTime() >= sevenDaysAgo && r.duration_min != null)
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)))
+    .slice(0, limit)
 }
 
 function computeOcPredictedScore(item) {
@@ -7174,6 +7179,12 @@ function getNewestWorkoutLikeDate(rows) {
   return Number.isFinite(ts) ? new Date(ts).toISOString().slice(0, 10) : null
 }
 
+function getWorkoutLikeDateKey(row) {
+  const raw = row?.dateTime || row?.date || row?.start_date || row?.startDate || null
+  const normalized = normalizeDateString(raw)
+  return normalized ? normalized.slice(0, 10) : ""
+}
+
 function toMs(value) {
   const normalized = normalizeDateString(value)
   if (!normalized) return null
@@ -12028,7 +12039,7 @@ const tsbV2Panel = useMemo(() => {
   const dailyLoads = Object.fromEntries(dayKeys.map(k => [k, mkL()]))
   const wkts = Array.isArray(operationalWorkouts) ? operationalWorkouts : []
   wkts.forEach(w => {
-    const date = String(w.date || '').slice(0,10)
+    const date = getWorkoutLikeDateKey(w)
     if (!dailyLoads[date]) return
     const cat = normalizeWorkoutType(w.type, w)
     const dur = Number(w.duration_min ?? w.dur ?? 0) || 0
@@ -13253,11 +13264,6 @@ return (
 
     {/* ── Sleep Quality Panel ───────────────────────────────────── */}
     {(() => {
-      const sleepMinutes = record => {
-        const raw = Number(record?.duration_min || 0) || 0
-        // Defensive normalization for older/stale records that may still be stored in seconds.
-        return raw > 24 * 60 ? raw / 60 : raw
-      }
       const TARGET_HOURS = 7.5
       const sleepByDate = new Map(
         (Array.isArray(sleepRecords) ? sleepRecords : [])
@@ -13270,7 +13276,7 @@ return (
         date.setDate(date.getDate() - (6 - index))
         const iso = date.toISOString().slice(0, 10)
         const record = sleepByDate.get(iso) || null
-        const hours = record ? sleepMinutes(record) / 60 : null
+        const hours = record ? sleepMinutesForReadiness(record) / 60 : null
         const status = hours == null ? "missing" : hours >= TARGET_HOURS ? "good" : hours >= 6 ? "fair" : "poor"
         const bg = status === "good"
           ? "rgba(74, 222, 128, 0.22)"
@@ -13304,16 +13310,13 @@ return (
           dayLabel: date.toLocaleDateString(undefined, { weekday: "short" })
         }
       })
-      const recentSleep = (Array.isArray(sleepRecords) ? sleepRecords : [])
-        .filter(r => sleepByDate.has(String(r.date).slice(0, 10)) && r.duration_min != null)
-        .sort((a, b) => String(b.date).localeCompare(String(a.date)))
-        .slice(0, 7)
+      const recentSleep = getRecentSleepRecords(sleepRecords, 7)
 
       if (recentSleep.length === 0) return null
 
-      const avgHours = recentSleep.reduce((s, r) => s + sleepMinutes(r), 0) / recentSleep.length / 60
+      const avgHours = recentSleep.reduce((s, r) => s + sleepMinutesForReadiness(r), 0) / recentSleep.length / 60
       const lastNight = lastSevenNights[lastSevenNights.length - 1]?.record || recentSleep[0]
-      const lastHours = lastNight ? sleepMinutes(lastNight) / 60 : null
+      const lastHours = lastNight ? sleepMinutesForReadiness(lastNight) / 60 : null
       const avgPct = Math.min(100, Math.round((avgHours / TARGET_HOURS) * 100))
       const avgColor = avgHours >= 7 ? "#4ade80" : avgHours >= 6 ? "#fbbf24" : "#ef4444"
       const lastColor = lastHours == null ? "#667" : lastHours >= 7 ? "#4ade80" : lastHours >= 6 ? "#fbbf24" : "#ef4444"
@@ -13340,7 +13343,7 @@ return (
             <div style={{ background: "#07080e", border: "1px solid #1a1b2e", borderRadius: "8px", padding: "10px", textAlign: "center" }}>
               <div style={{ fontSize: "10px", color: "#555", marginBottom: "3px" }}>Nights at target</div>
               <div style={{ fontSize: "26px", fontWeight: "800", color: "#ced2f0", lineHeight: 1 }}>
-                {recentSleep.filter(r => sleepMinutes(r) / 60 >= TARGET_HOURS).length}
+                {recentSleep.filter(r => sleepMinutesForReadiness(r) / 60 >= TARGET_HOURS).length}
               </div>
               <div style={{ fontSize: "10px", color: "#555" }}>of 7</div>
             </div>
