@@ -1424,7 +1424,9 @@ function getRecentSleepRecords(records, limit = 7) {
   return (Array.isArray(records) ? records : [])
     .filter(r => {
       const sleepDate = getSleepRecordDate(r)
-      return sleepDate && new Date(sleepDate).getTime() >= sevenDaysAgo && r.duration_min != null
+      if (!sleepDate) return false
+      const ts = new Date(sleepDate).getTime()
+      return Number.isFinite(ts) && ts >= sevenDaysAgo
     })
     .sort((a, b) => String(getSleepRecordDate(b) || "").localeCompare(String(getSleepRecordDate(a) || "")))
     .slice(0, limit)
@@ -3122,7 +3124,17 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     const prescribedSessions = cd.sessions || []
     const entries = getCardioEntries(day)
     const modColor = { run: "#ef4444", bike: "#d97706", swim: "#0ea5e9", walk: "#22c55e", row: "#8b5cf6" }
+    const BUILTIN_MODS = ["run", "bike", "swim", "walk", "row"]
     const modLabel = { run: "Run", bike: "Bike", swim: "Swim", walk: "Walk", row: "Row" }
+    const pastMods = [...new Set(
+      (Array.isArray(schedLog) ? schedLog : [])
+        .flatMap(entry => (Array.isArray(entry.cardio) ? entry.cardio : []).map(c => c.modality))
+        .filter(m => m && !BUILTIN_MODS.includes(m))
+    )].sort()
+    const allMods = [...BUILTIN_MODS, ...pastMods]
+    const allModLabels = Object.fromEntries(
+      allMods.map(m => [m, modLabel[m] || m.charAt(0).toUpperCase() + m.slice(1)])
+    )
 
     return (
       <div style={{ padding: "12px 14px" }}>
@@ -3179,8 +3191,29 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
                 />
                 <select value={entry.modality} onChange={e => setCardioEntryF(day, idx, "modality", e.target.value)}
                   style={{ padding: "4px 8px", borderRadius: 20, fontSize: 11, fontWeight: 700, background: `${mc}22`, color: mc, border: `0.5px solid ${mc}`, outline: "none", cursor: "pointer", fontFamily: "inherit" }}>
-                  {["run", "bike", "swim", "walk", "row"].map(m => <option key={m} value={m}>{modLabel[m]}</option>)}
+                  {allMods.map(m => <option key={m} value={m}>{allModLabels[m]}</option>)}
+                  <option key="__new__" value="__new__">+ New activity…</option>
                 </select>
+                {entry.modality === "__new__" && (
+                  <input
+                    type="text"
+                    placeholder="activity name"
+                    autoFocus
+                    style={{ padding: "3px 7px", borderRadius: 5, fontSize: 11, fontWeight: 600,
+                      color: "#e8e8e8", background: "#111", border: "0.5px solid #252525",
+                      outline: "none", fontFamily: "inherit", width: 110 }}
+                    onBlur={e => {
+                      const val = e.target.value.trim().toLowerCase()
+                      if (val) setCardioEntryF(day, idx, "modality", val)
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === "Enter") {
+                        const val = e.target.value.trim().toLowerCase()
+                        if (val) setCardioEntryF(day, idx, "modality", val)
+                      }
+                    }}
+                  />
+                )}
                 <span style={{ fontSize: idx === 0 ? 11 : 10, color: cardioChecked ? "#9ca3af" : idx === 0 ? "#555" : "#444" }}>
                   {cardioChecked ? "Completed" : "Planned"}{targetLabel ? ` · ${targetLabel}` : idx > 0 ? " · Additional session" : " · Cardio"}
                 </span>
@@ -4165,7 +4198,7 @@ function TrainingDashboard({ workouts, recentNutrition, healthFitDaily = [], sch
     cutoffDate.setDate(cutoffDate.getDate() - cutoff)
     cutoffDate.setHours(0, 0, 0, 0)
     return workouts.filter(w => {
-      const d = new Date(w.dateTime || w.date)
+      const d = new Date(w.dateTime || w.date || w.start_date)
       return !Number.isNaN(d.getTime()) && d >= cutoffDate
     })
   }, [workouts, timeWindow])
@@ -4205,7 +4238,7 @@ function TrainingDashboard({ workouts, recentNutrition, healthFitDaily = [], sch
     const grouped = {}
 
     filteredWorkouts.forEach(w => {
-      const rawDate = new Date(w.dateTime || w.date)
+      const rawDate = new Date(w.dateTime || w.date || w.start_date)
       let bucketDate
 
       if (rangeMode === "weekly") {
@@ -4845,7 +4878,7 @@ function buildTrainingSummary(workouts) {
     return d
   }
 
-const last28 = workouts.filter(w => new Date(w.dateTime || w.date) >= daysAgo(28))
+const last28 = workouts.filter(w => new Date(w.dateTime || w.date || w.start_date) >= daysAgo(28))
   const summary = {
     runningDistance28: 0,
     swimmingDistance28: 0,
@@ -6368,9 +6401,9 @@ function buildWeeklyTrainingBuckets(workouts) {
 const buckets = {}
   const cutoffMs = Date.now() - 52 * 7 * 24 * 60 * 60 * 1000
   workouts.forEach(w => {
-    const wMs = new Date(w.dateTime || w.date || 0).getTime()
+    const wMs = new Date(w.dateTime || w.date || w.start_date || 0).getTime()
     if (!Number.isFinite(wMs) || wMs < cutoffMs) return
-    const weekStart = startOfWeek(w.dateTime || w.date)
+    const weekStart = startOfWeek(w.dateTime || w.date || w.start_date)
     const key = weekStart.toISOString().slice(0, 10)
 
     if (!buckets[key]) {
@@ -13410,7 +13443,7 @@ return (
         (Array.isArray(sleepRecords) ? sleepRecords : [])
           .map(record => {
             const sleepDate = getSleepRecordDate(record)
-            return sleepDate && record?.duration_min != null
+            return sleepDate
               ? [sleepDate, { ...record, date: sleepDate }]
               : null
           })
@@ -13896,10 +13929,10 @@ return (
                     label={{
                       value: race.name,
                       angle: -90,
-                      position: "insideTop",
+                      position: "insideBottomLeft",
                       fill: "#94a3b8",
                       fontSize: window.innerWidth < 768 ? 8 : 9,
-                      offset: 8 + ((index % 2) * 10)
+                      offset: 4 + ((index % 2) * 10)
                     }}
                   />
                 ))}
