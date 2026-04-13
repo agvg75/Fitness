@@ -7475,6 +7475,9 @@ function parseFitnessViewCSV(text) {
     const calRaw  = iCal >= 0 ? cells[iCal] : null
     const hrRaw   = iHR >= 0 ? cells[iHR] : null
     const paceRaw = iPace >= 0 ? cells[iPace] : null
+    const hasExplicitTime =
+      /T\d{1,2}:\d{2}/.test(String(dateRaw || "")) ||
+      /\d{1,2}:\d{2}/.test(String(dateRaw || ""))
 
     // Parse duration — handles "47min", "1hr 2min", "02:30:00", plain minutes
     let durationMin = null
@@ -7518,11 +7521,12 @@ function parseFitnessViewCSV(text) {
     try {
       const d = new Date(dateRaw)
       if (!isNaN(d.getTime())) {
-        // Preserve the local calendar date; UTC conversion can shift bare dates.
         const yr = d.getFullYear()
         const mo = String(d.getMonth() + 1).padStart(2, "0")
         const dy = String(d.getDate()).padStart(2, "0")
-        startDate = `${yr}-${mo}-${dy}T00:00:00`
+        startDate = hasExplicitTime
+          ? normalizeDateString(dateRaw)
+          : `${yr}-${mo}-${dy}T00:00:00`
       }
     } catch {}
     if (!startDate) { rejected.push({ source: "FitnessView", reason: "Unparseable date: " + dateRaw, raw: raw.slice(0, 200) }); continue }
@@ -7532,6 +7536,7 @@ function parseFitnessViewCSV(text) {
       type: typeRaw,
       start_date: startDate,
       end_date: null,
+      timing_precision: hasExplicitTime ? "exact" : "date_only",
       duration_min: durationMin,
       distance,
       distance_unit: distanceUnit,
@@ -7587,8 +7592,9 @@ function makeFitnessViewCanonicalSession(workout, scheduleMatch = null) {
   const sessionId = scheduleId
     ? `schedule_fv_${scheduleId}_${stableHash(`${workout.start_date}|${workout.type}|${workout.duration_min || ""}|${workout.distance || ""}`)}`
     : makeSessionId("fv", workout)
+  const hasExactTime = workout?.timing_precision === "exact"
   const startMs = Date.parse(workout.start_date || "")
-  const endDate = Number.isFinite(startMs) && Number(workout.duration_min) > 0
+  const endDate = hasExactTime && Number.isFinite(startMs) && Number(workout.duration_min) > 0
     ? new Date(startMs + Number(workout.duration_min) * 60000).toISOString()
     : workout.end_date || workout.start_date
 
@@ -9965,6 +9971,59 @@ function getWorkoutScheduleId(workout) {
     workout?.overlap_summary?.schedule_workout_id ??
     null
 }
+function isSuspiciousApproximateFitnessViewCardio(workout) {
+  const fv = workout?.sources?.fitnessview
+  if (!fv) return false
+
+  const sourceKeys = Object.keys(workout?.sources || {}).filter(key => workout?.sources?.[key])
+  if (sourceKeys.length !== 1 || sourceKeys[0] !== "fitnessview") return false
+
+  const type = normalizeWorkoutType(workout?.type || workout?.canonical_type || workout?.category, workout)
+  if (type !== "Cycling" && type !== "Running" && type !== "Walking" && type !== "Swimming" && type !== "Rowing") {
+    return false
+  }
+
+  const rawStart = String(fv?.start_date || "")
+  const rawEnd = String(fv?.end_date || "")
+  const dateOnlyTiming =
+    /T00:00:00(?:\.000)?$/.test(rawStart) &&
+    (!rawEnd || /T00:00:00(?:\.000)?$/.test(rawEnd))
+
+  const durationMin = Number(workout?.dur ?? workout?.duration_min ?? 0) || 0
+  return dateOnlyTiming && durationMin >= 180
+}
+function getOperationalWorkoutWindow(workout) {
+  const startRaw = workout?.start_date || workout?.dateTime || workout?.date || null
+  const endRaw = workout?.end_date || workout?.endDate || null
+  const normalizedStart = normalizeDateString(startRaw)
+  const normalizedEnd = normalizeDateString(endRaw)
+  const startMs = normalizedStart ? Date.parse(normalizedStart) : NaN
+  const explicitEndMs = normalizedEnd ? Date.parse(normalizedEnd) : NaN
+  const durationMin = Number(workout?.dur ?? workout?.duration_min ?? workout?.durationMin ?? extractDurationMin(workout) ?? 0) || 0
+  const endMs = Number.isFinite(explicitEndMs)
+    ? explicitEndMs
+    : (Number.isFinite(startMs) && durationMin > 0 ? startMs + durationMin * 60000 : NaN)
+
+  return { startMs, endMs, durationMin }
+}
+function getOperationalWorkoutOverlap(imported, manual) {
+  const importedWindow = getOperationalWorkoutWindow(imported)
+  const manualWindow = getOperationalWorkoutWindow(manual)
+  const hasComparableWindows =
+    Number.isFinite(importedWindow.startMs) &&
+    Number.isFinite(importedWindow.endMs) &&
+    Number.isFinite(manualWindow.startMs) &&
+    Number.isFinite(manualWindow.endMs)
+
+  if (!hasComparableWindows) return { hasComparableWindows: false }
+
+  const overlapMin = Math.max(0, Math.min(importedWindow.endMs, manualWindow.endMs) - Math.max(importedWindow.startMs, manualWindow.startMs)) / 60000
+  const importedFraction = importedWindow.durationMin > 0 ? overlapMin / importedWindow.durationMin : 0
+  const manualFraction = manualWindow.durationMin > 0 ? overlapMin / manualWindow.durationMin : 0
+  const startDiffMin = Math.abs(importedWindow.startMs - manualWindow.startMs) / 60000
+
+  return { hasComparableWindows, overlapMin, importedFraction, manualFraction, startDiffMin }
+}
 function areDuplicateOperationalWorkouts(imported, manual) {
   const importedScheduleId = getWorkoutScheduleId(imported)
   const manualScheduleId = getWorkoutScheduleId(manual)
@@ -9981,13 +10040,36 @@ function areDuplicateOperationalWorkouts(imported, manual) {
   const manualType = normalizeWorkoutType(manual?.type || manual?.canonical_type || manual?.category, manual)
   if (importedType !== manualType) return false
 
+  if (isSuspiciousApproximateFitnessViewCardio(imported)) {
+    const importedCalories = Number(imported?.calories ?? imported?.preferred_metrics?.calories?.value ?? 0)
+    const manualCalories = Number(manual?.calories ?? 0)
+    const importedDistance = Number(imported?.distance ?? 0)
+    const manualDistance = Number(manual?.distance ?? 0)
+    const caloriesAligned =
+      importedCalories > 0 &&
+      manualCalories > 0 &&
+      closeEnough(importedCalories, manualCalories, 25)
+    const distanceCompatible =
+      importedDistance <= 0 || manualDistance <= 0 || closeEnough(importedDistance, manualDistance, 0.15)
+    if (caloriesAligned && distanceCompatible) return true
+  }
+
+  const overlap = getOperationalWorkoutOverlap(imported, manual)
+  if (overlap.hasComparableWindows) {
+    const strongOverlap =
+      overlap.overlapMin >= 5 &&
+      (overlap.importedFraction >= 0.4 || overlap.manualFraction >= 0.4)
+    if (strongOverlap) return true
+    if (overlap.overlapMin <= 0 && overlap.startDiffMin > 180) return false
+  }
+
   const importedDuration = Number(imported?.dur ?? imported?.duration_min ?? 0)
   const manualDuration = Number(manual?.dur ?? manual?.duration_min ?? 0)
   if (!Number.isFinite(importedDuration) || !Number.isFinite(manualDuration) || !closeEnough(importedDuration, manualDuration, 15)) return false
 
   const importedDistance = Number(imported?.distance ?? 0)
   const manualDistance = Number(manual?.distance ?? 0)
-  if (importedDistance > 0 || manualDistance > 0) {
+  if (importedDistance > 0 && manualDistance > 0) {
     return closeEnough(importedDistance, manualDistance, 0.15)
   }
 
