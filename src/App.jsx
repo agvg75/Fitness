@@ -7369,10 +7369,23 @@ function detectSourceType(filename, firstChunk) {
   if (chunk.includes(",") || name.endsWith(".csv")) {
     const firstLine = chunk.split(/\r?\n/)[0].toLowerCase()
 
-    // FitnessView CSV — characteristic columns
-    if (firstLine.includes("workout type") || firstLine.includes("activity_type") ||
-        (firstLine.includes("distance") && firstLine.includes("heart rate") && firstLine.includes("pace")))
-      return { source: "fitnessview", format: "csv", confidence: "high" }
+    // FitnessView / HealthFit workout export — characteristic column combinations.
+    // HealthFit exports vary: "Workout Type" vs "Type", "Heart Rate" vs "Avg HR".
+    {
+      const hasType = firstLine.includes("workout type") || firstLine.includes("activity_type") ||
+        (firstLine.includes("type") && !firstLine.includes("fitness") && !firstLine.includes("fatigue"))
+      const hasDist = firstLine.includes("distance")
+      const hasDur = firstLine.includes("duration") || firstLine.includes("time")
+      const hasPace = firstLine.includes("pace")
+      const hasHR = firstLine.includes("heart rate") || firstLine.includes("avg hr") ||
+        firstLine.includes("average hr")
+
+      if (hasType && hasDur && (hasDist || hasPace || hasHR))
+        return { source: "fitnessview", format: "csv", confidence: "high" }
+
+      if (hasDist && hasPace && hasDur)
+        return { source: "fitnessview", format: "csv", confidence: "high" }
+    }
 
     // Cronometer — nutrition export
     if (firstLine.includes("energy (kcal)") || firstLine.includes("protein (g)") ||
@@ -9512,6 +9525,12 @@ function normalizeWorkoutType(type, workout) {
   if (t.includes("functional strength")) return "Strength"
   if (t.includes("core")) return "Strength"
   if (hasStrengthExercises) return "Strength"
+
+  if (t.includes("outdoor run") || t.includes("indoor run") || t.includes("treadmill")) return "Running"
+  if (t.includes("trail run")) return "Running"
+  if (t.includes("outdoor cycle") || t.includes("indoor cycle") || t === "cycling") return "Cycling"
+  if (t.includes("outdoor swim") || t.includes("pool swim") || t === "swimming") return "Swimming"
+  if (t.includes("open water")) return "Swimming"
 
   if (isTechnogymCyclingSession(workout)) return "Cycling"
 
