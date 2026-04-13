@@ -131,13 +131,29 @@ function rowToCanonicalSession(row) {
 
 export async function loadCanonicalSessions(supabase, userId) {
   requireSupabase(supabase, userId, "loadCanonicalSessions")
-  const { data, error } = await supabase
-    .from("canonical_sessions")
-    .select("*")
-    .eq("user_id", userId)
-    .order("start_date", { ascending: true })
-  throwIfError(error, "loadCanonicalSessions")
-  return (data || []).map(rowToCanonicalSession)
+
+  const pageSize = 1000
+  let from = 0
+  const allRows = []
+
+  while (true) {
+    const { data, error } = await supabase
+      .from("canonical_sessions")
+      .select("*")
+      .eq("user_id", userId)
+      .order("start_date", { ascending: true })
+      .range(from, from + pageSize - 1)
+
+    throwIfError(error, "loadCanonicalSessions")
+
+    const rows = data || []
+    allRows.push(...rows)
+
+    if (rows.length < pageSize) break
+    from += pageSize
+  }
+
+  return allRows.map(rowToCanonicalSession)
 }
 
 export async function upsertCanonicalSessions(supabase, userId, sessions) {
