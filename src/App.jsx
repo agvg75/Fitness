@@ -43,6 +43,7 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
 const ANTHROPIC_API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY
 const SUPABASE_AUTH_STORAGE_KEY = "lift-supabase-auth"
+const SIGN_OUT_TIMEOUT_MS = 8000
 const supabase = SUPABASE_URL && SUPABASE_ANON_KEY
   ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       auth: {
@@ -10267,6 +10268,7 @@ const [authMsg, setAuthMsg] = useState("")
 const [authEvents, setAuthEvents] = useState([])
 const [sessionRestoredFromStorage, setSessionRestoredFromStorage] = useState(false)
 const [authInitialized, setAuthInitialized] = useState(false)
+const [signOutPending, setSignOutPending] = useState(false)
 const [authRedirectDebug, setAuthRedirectDebug] = useState(() => getAuthRedirectContext())
 const [recoveryStatus, setRecoveryStatus] = useState(() => {
   const redirectContext = getAuthRedirectContext()
@@ -10501,12 +10503,7 @@ useEffect(() => {
         }
       }
 
-      const [
-        migratedCanonicalSessions,
-        migratedSleepRecords,
-        migratedHealthFitDaily,
-        migratedBiometricRecords
-      ] = await Promise.all([
+      const migrationWriteResults = await Promise.allSettled([
         runMigration("canonical_sessions", migrationSummary.localStorage.liftCanonicalSessions.count || 0, () =>
           migrateLocalCanonicalSessions(supabase, userId, { removeLocal: false })
         ),
@@ -10520,6 +10517,8 @@ useEffect(() => {
           migrateLocalBiometricRecords(supabase, userId, { removeLocal: false })
         )
       ])
+      const [migratedCanonicalSessions, migratedSleepRecords, migratedHealthFitDaily, migratedBiometricRecords] =
+        migrationWriteResults.map(r => (r.status === "fulfilled" ? r.value : []))
       console.log("Core imported data migration summary", {
         canonicalSessions: migratedCanonicalSessions.length,
         sleepRecords: migratedSleepRecords.length,
@@ -10527,17 +10526,25 @@ useEffect(() => {
         biometricRecords: migratedBiometricRecords.length
       })
 
-      const [
-        remoteCanonicalSessions,
-        remoteSleepRecords,
-        remoteHealthFitDaily,
-        remoteBiometricRecords
-      ] = await Promise.all([
+      const remoteReadResults = await Promise.allSettled([
         loadCanonicalSessions(supabase, userId),
         loadSleepRecords(supabase, userId),
         loadHealthfitDaily(supabase, userId),
         loadBiometricRecords(supabase, userId)
       ])
+      const [
+        remoteCanonicalSessions,
+        remoteSleepRecords,
+        remoteHealthFitDaily,
+        remoteBiometricRecords
+      ] = remoteReadResults.map(result => (result.status === "fulfilled" ? result.value : []))
+
+      remoteReadResults.forEach((result, index) => {
+        if (result.status === "fulfilled") return
+        const tableName = ["canonical_sessions", "sleep_records", "healthfit_daily", "biometric_records"][index]
+        migrationSummary.failures[`${tableName}_read`] = result.reason?.message || String(result.reason)
+        console.error("Core imported data remote read failure", { tableName, error: result.reason })
+      })
 
       if (cancelled) return
       if (remoteCanonicalSessions.length) {
@@ -11291,10 +11298,28 @@ cutoff.setDate(cutoff.getDate() - selectedRangePoints)
   }
 
   const doSignOut = async () => {
-    if (!supabase) return
+    if (!supabase || signOutPending) return
+    setSignOutPending(true)
     setAuthMsg("")
-    const { error: authError } = await supabase.auth.signOut()
-    if (authError) setAuthMsg(`Sign out failed: ${authError.message}`)
+    try {
+      const { error: authError } = await Promise.race([
+        supabase.auth.signOut({ scope: "local" }),
+        new Promise((_, reject) => {
+          window.setTimeout(() => reject(new Error("Sign out timed out. Reload and try again.")), SIGN_OUT_TIMEOUT_MS)
+        })
+      ])
+      if (authError) throw authError
+      setSession(null)
+      setSessionRestoredFromStorage(false)
+      setPassword("")
+      setRecoveryPassword("")
+      setRecoveryStatus("inactive")
+      cleanAuthRedirectUrl()
+    } catch (err) {
+      setAuthMsg(`Sign out failed: ${err?.message || String(err)}`)
+    } finally {
+      setSignOutPending(false)
+    }
   }
 async function syncMealsToSupabase(entries, currentUserId) {
   if (!supabase || !currentUserId) return
@@ -13121,7 +13146,15 @@ return (
                 />
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                   <button onClick={completePasswordRecovery} style={buttonStyle(true)}>Set new password</button>
-                  {session && <button onClick={doSignOut} style={buttonStyle(false)}>Sign out</button>}
+                  {session && (
+                    <button
+                      onClick={doSignOut}
+                      disabled={signOutPending}
+                      style={signOutPending ? { ...buttonStyle(false), opacity: 0.6, cursor: "default" } : buttonStyle(false)}
+                    >
+                      {signOutPending ? "Signing out..." : "Sign out"}
+                    </button>
+                  )}
                 </div>
               </div>
             </>
@@ -13156,7 +13189,13 @@ return (
               <div style={{ fontSize: "14px", marginBottom: "10px" }}>
                 Signed in as <span style={{ color: "#4a9ee8" }}>{session.user.email}</span>
               </div>
-              <button onClick={doSignOut} style={buttonStyle(false)}>Sign out</button>
+              <button
+                onClick={doSignOut}
+                disabled={signOutPending}
+                style={signOutPending ? { ...buttonStyle(false), opacity: 0.6, cursor: "default" } : buttonStyle(false)}
+              >
+                {signOutPending ? "Signing out..." : "Sign out"}
+              </button>
             </>
           ) : (
             <>
