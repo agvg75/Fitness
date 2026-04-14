@@ -7541,6 +7541,11 @@ function detectSourceType(filename, firstChunk) {
         (firstLine.includes("heart rate (bpm)") && firstLine.includes("steps")))
       return { source: "sleep_cycle", format: "csv", confidence: "high" }
 
+    // HealthFit workout export — "Total Time" column distinguishes it from FitnessView
+    if (firstLine.includes("total time") && firstLine.includes("active calories") &&
+        firstLine.includes("type"))
+      return { source: "healthfit_workout_csv", format: "csv", confidence: "high" }
+
     // FitnessView / HealthFit workout export — characteristic column combinations.
     // HealthFit exports vary: "Workout Type" vs "Type", "Heart Rate" vs "Avg HR".
     {
@@ -8008,6 +8013,100 @@ function parseSleepCycleCSV(text) {
   return { workouts: [], sleep, rejected }
 }
 
+function parseHealthFitWorkoutCSV(text) {
+  const delimiter = ","
+  const lines = text.split(/\r?\n/).filter(l => l.trim())
+  if (lines.length < 2) return { records: [], rejected: [] }
+
+  const headers = lines[0].split(delimiter).map(h => h.trim().toLowerCase().replace(/\s+/g, "_"))
+  const col = key => headers.indexOf(key)
+
+  const typeMap = {
+    "outdoor running": "Running", "indoor running": "Running",
+    "outdoor cycling": "Cycling", "indoor cycling": "Indoor Cycling",
+    "pool swim": "Swimming", "open water swimming": "Swimming",
+    "outdoor walking": "Walking", "indoor walking": "Walking",
+    "strength training": "Functional Strength Training",
+    "traditional strength training": "Traditional Strength Training",
+    "hiit": "HIIT", "yoga": "Yoga", "elliptical": "Elliptical",
+    "rowing": "Rowing", "stair stepper": "Stairs",
+  }
+
+  const parseHMS = val => {
+    if (!val) return 0
+    const m = String(val).match(/(\d+)h:(\d+)m:(\d+)s/)
+    if (!m) return 0
+    return Number(m[1]) * 60 + Number(m[2]) + Number(m[3]) / 60
+  }
+
+  const parseVal = val => {
+    if (!val) return null
+    const n = parseFloat(String(val).replace(/[^0-9.]/g, ""))
+    return Number.isFinite(n) ? n : null
+  }
+
+  const parseDate = (dateStr, timeStr) => {
+    if (!dateStr) return null
+    const d = dateStr.trim()
+    const t = (timeStr || "00:00").trim()
+    const parts = d.split("/")
+    if (parts.length !== 3) return null
+    const [m, day, yr] = parts
+    const iso = `${yr}-${m.padStart(2, "0")}-${day.padStart(2, "0")}T${t}:00`
+    const dt = new Date(iso)
+    return Number.isFinite(dt.getTime()) ? dt.toISOString() : null
+  }
+
+  const records = []
+  const rejected = []
+
+  for (let i = 1; i < lines.length; i++) {
+    const raw = lines[i]
+    if (!raw.trim()) continue
+    const cells = raw.split(delimiter).map(c => c.trim())
+
+    const dateStr = cells[col("date")]
+    const timeStr = cells[col("time")]
+    const typRaw = (cells[col("type")] || "").toLowerCase()
+    const startISO = parseDate(dateStr, timeStr)
+
+    if (!startISO) {
+      rejected.push({ row: i, reason: "bad date", raw: raw.slice(0, 100) })
+      continue
+    }
+
+    const canonical_type = typeMap[typRaw] || "Other"
+    const duration_min = parseHMS(cells[col("total_time")])
+    const distance_raw = cells[col("distance")]
+    const distance_mi = distance_raw ? parseVal(distance_raw) : null
+    const calories = parseVal(cells[col("active_calories")])
+    const hr_avg = parseVal(cells[col("avg._heart_rate")])
+    const hr_max = parseVal(cells[col("max._heart_rate")])
+    const trimp = parseVal(cells[col("trimp")])
+
+    records.push({
+      session_id: `hf_${startISO.replace(/\D/g, "").slice(0, 17)}`,
+      canonical_type,
+      start_date: startISO,
+      duration_min,
+      distance: distance_mi,
+      distance_unit: distance_mi != null ? "mi" : null,
+      calories,
+      hr: hr_avg,
+      hr_max,
+      trimp,
+      source: "healthfit_workout_csv",
+      preferred_metrics: {
+        ...(calories != null ? { calories: { value: calories, unit: "kcal", source: "healthfit" } } : {}),
+        ...(hr_avg != null ? { hr: { value: hr_avg, unit: "bpm", source: "healthfit" } } : {}),
+        ...(distance_mi != null ? { distance: { value: distance_mi, unit: "mi", source: "healthfit" } } : {}),
+      }
+    })
+  }
+
+  return { records, rejected }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // A&D HEART TRACK PARSER (blood pressure)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -8201,6 +8300,7 @@ const SOURCE_LABELS = {
   technogym:          { label: "Technogym",             color: "#3b82f6" },
   knr_json:           { label: "KNR JSON",              color: "#4ade80" },
   fitnessview:        { label: "FitnessView",           color: "#8b5cf6" },
+  healthfit_workout_csv: { label: "HealthFit Workouts", color: "#f59e0b" },
   cronometer:         { label: "Cronometer",            color: "#22c55e" },
   sleep_cycle:        { label: "Sleep Cycle",           color: "#0ea5e9" },
   ad_heart_track:     { label: "A&D Heart Track",       color: "#f97316" },
@@ -8585,6 +8685,14 @@ Return ONLY a JSON object with this exact structure, no explanation:
         allSleep.push(...(parsed.sleep || []))
         allRejected.push(...(parsed.rejected || []))
         setStatus(`Sleep Cycle: ${parsed.sleep.length} sleep records parsed`)
+        continue
+      }
+
+      if (src === "healthfit_workout_csv") {
+        const { records, rejected } = parseHealthFitWorkoutCSV(text)
+        allKnrSessions.push(...records)
+        allRejected.push(...(rejected || []))
+        setStatus(`HealthFit workouts: ${records.length} sessions parsed`)
         continue
       }
 
