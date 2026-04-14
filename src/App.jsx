@@ -50,7 +50,8 @@ const supabase = SUPABASE_URL && SUPABASE_ANON_KEY
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: true,
-        storageKey: SUPABASE_AUTH_STORAGE_KEY
+        storageKey: SUPABASE_AUTH_STORAGE_KEY,
+        lock: (name, acquireTimeout, fn) => fn()
       }
     })
   : null

@@ -6,6 +6,8 @@ function safeJsonString(value) {
   }
 }
 
+const SLEEP_UPSERT_TIMEOUT_MS = 20000
+
 function stableHash(input) {
   const str = String(input || "")
   let hash = 2166136261
@@ -285,10 +287,28 @@ export async function upsertSleepRecords(supabase, userId, records) {
     })
   }
   if (!rows.length) return []
-  const { data, error } = await supabase
-    .from("sleep_records")
-    .upsert(rows, { onConflict: "user_id,sleep_id" })
-    .select()
+  const upsertResult = await Promise.race([
+    supabase
+      .from("sleep_records")
+      .upsert(rows, { onConflict: "user_id,sleep_id" })
+      .select(),
+    new Promise(resolve => {
+      window.setTimeout(() => resolve({
+        data: [],
+        error: null,
+        timedOut: true,
+      }), SLEEP_UPSERT_TIMEOUT_MS)
+    })
+  ])
+  if (upsertResult?.timedOut) {
+    console.warn("upsertSleepRecords timed out; allowing UI flow to continue", {
+      userId,
+      rowCount: rows.length,
+      timeoutMs: SLEEP_UPSERT_TIMEOUT_MS,
+    })
+    return []
+  }
+  const { data, error } = upsertResult
   throwIfError(error, "upsertSleepRecords")
   return (data || []).map(rowToSleepRecord)
 }
