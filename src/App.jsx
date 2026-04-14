@@ -10528,6 +10528,13 @@ useEffect(() => {
   let cancelled = false
   setReadinessRemoteInputsHydrated(false)
 
+  const hydrateTimeoutId = window.setTimeout(() => {
+    if (!cancelled) {
+      console.warn('[LIFT] Hydration timed out after 15s, forcing hydrated=true')
+      setReadinessRemoteInputsHydrated(true)
+    }
+  }, 15000)
+
   ;(async () => {
     try {
       const userId = session.user.id
@@ -10681,12 +10688,13 @@ useEffect(() => {
       console.error("Core imported data migration/hydration failed:", err)
       if (process.env.NODE_ENV === "development") console.warn("Core imported data hydration failed:", err)
     } finally {
+      window.clearTimeout(hydrateTimeoutId)
       if (!cancelled) setReadinessRemoteInputsHydrated(true)
       console.log("Core imported data migration final summary", migrationSummary)
     }
   })()
 
-  return () => { cancelled = true }
+  return () => { cancelled = true; window.clearTimeout(hydrateTimeoutId) }
 }, [baseDataLoaded, session?.user?.id, supabase])
 
 useEffect(() => {
