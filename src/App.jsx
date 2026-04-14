@@ -2167,6 +2167,16 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const [isMobileLayout, setIsMobileLayout] = useState(() => typeof window !== "undefined" ? window.innerWidth < 768 : true)
   const [scheduleInfoOpen, setScheduleInfoOpen] = useState({ tendon: false })
   const logEntryRefs = useRef({})
+  const historicalExerciseNames = useMemo(
+    () =>
+      [...new Set(
+        (Array.isArray(schedLog) ? schedLog : [])
+          .flatMap(entry => Array.isArray(entry?.exercises) ? entry.exercises : [])
+          .map(exercise => exercise?.exercise_name)
+          .filter(Boolean)
+      )].sort((a, b) => String(a).localeCompare(String(b))),
+    [schedLog]
+  )
 
   const SPLIT_DAYS = ["Tue", "Thu"]
   const isSplitDay = SPLIT_DAYS.includes(activeDay)
@@ -3747,9 +3757,15 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
                       value={inlineExName}
                       onChange={e => setInlineExName(e.target.value)}
                       onKeyDown={e => { if (e.key === "Enter") commitCustomExercise(); if (e.key === "Escape") setInlineExForm(null) }}
+                      list="schedule-exercise-history"
                       placeholder="Exercise name..."
                       style={{ ...inputStyle(), marginBottom: 8, fontSize: 12, padding: "6px 8px" }}
                     />
+                    <datalist id="schedule-exercise-history">
+                      {historicalExerciseNames.map(name => (
+                        <option key={name} value={name} />
+                      ))}
+                    </datalist>
                     <div style={{ display: "flex", gap: 6 }}>
                       <button onClick={commitCustomExercise}
                         style={{ flex: 1, padding: "5px 0", background: "#185FA5", border: "none", borderRadius: 5, color: "#fff", fontSize: 12, cursor: "pointer" }}>
@@ -13931,7 +13947,7 @@ return (
             <ComposedChart data={panel.rows} margin={{ top:8, right:14, left:12, bottom:14 }}>
               <CartesianGrid stroke="#1a1b2e" />
               <XAxis dataKey="label" tick={{ fontSize:10 }} interval={Math.max(1, Math.floor((panel.rows.length || 1) / (isLongWindow ? 10 : 12)) - 1)} />
-              <YAxis domain={panel.tsbDomain || [-15, 10]} tick={{ fontSize:10 }} width={34} tickFormatter={value => Number(value).toFixed(0)} />
+              <YAxis domain={[-30, 15]} allowDataOverflow={true} tick={{ fontSize:10 }} width={34} tickFormatter={value => Number(value).toFixed(0)} />
               <ReferenceLine y={0} stroke="#444" strokeDasharray="3 3" />
               <Tooltip contentStyle={tooltipStyle} formatter={(v, n) => [Number(v).toFixed(2), n]} />
               <Line type="monotone" dataKey="overallTsb" name="Overall TSB" stroke="#e5e7eb" strokeWidth={isLongWindow ? 2 : 2.2} dot={false} connectNulls isAnimationActive={false} />
