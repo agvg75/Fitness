@@ -6474,16 +6474,11 @@ const buckets = {}
       }
     }
 
-    if (w.category === "Running" || w.category === "Walking") {
+    if (w.category === "Running") {
       const loggedMiles = getWorkoutDistanceMiles(w)
-      // If no GPS or logged distance is available, estimate from duration
-      // using a conservative 10 min/mile pace for the Training Load chart only.
-      // This is display-only; storage is not modified.
-      const estimatedMiles =
-        loggedMiles > 0
-          ? loggedMiles
-          : (Number(w.dur || 0) > 0 ? Number(w.dur) / 10 : 0)
-      buckets[key].running += estimatedMiles
+      if (w.source !== "ManualSchedule") {
+        buckets[key].running += loggedMiles
+      }
       buckets[key].cardioMinutes += Number(w.dur || 0)
     } else if (w.category === "Swimming") {
       buckets[key].swimming += getWorkoutDistanceMiles(w)
