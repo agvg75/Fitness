@@ -2576,6 +2576,31 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     })
   }
 
+  const addManualSleepEntry = async (dateStr, hours) => {
+    const mins = Math.round(Number(hours) * 60)
+    if (!mins || mins < 0 || mins > 960) return
+    const record = {
+      date: dateStr,
+      duration_min: mins,
+      source: "manual",
+      sleep_quality: null,
+      sleep_date: dateStr
+    }
+    const next = [
+      ...(Array.isArray(sleepRecords) ? sleepRecords.filter(r => getSleepRecordDate(r) !== dateStr) : []),
+      record
+    ].sort((a, b) => String(getSleepRecordDate(a) || "").localeCompare(String(getSleepRecordDate(b) || "")))
+    setSleepRecords(next)
+    try {
+      if (supabase && session?.user?.id) {
+        await upsertSleepRecords(supabase, session.user.id, [record])
+      }
+    } catch (e) {
+      console.warn("Manual sleep upsert failed", e)
+    }
+    showToast(`Sleep logged: ${hours}h on ${dateStr}`)
+  }
+
   const addCardioEntry = (day) => {
     const prescribedMod = CARDIO[day]?.sessions?.[0]?.mod || CARDIO[day]?.mod || "run"
     setCardioEntries(prev => ({
@@ -3399,6 +3424,38 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
             }}
               style={{ padding: "4px 10px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 11, color: "#666", background: "transparent", cursor: "pointer", fontFamily: "inherit" }}>Today</button>
           )}
+        </div>
+        <div style={{ marginTop: 12, padding: "10px 14px", background: "#0a0a12", border: "0.5px solid #1e1e2e", borderRadius: 8 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: "#7F77DD", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>
+            Log Sleep
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <input
+              type="date"
+              defaultValue={sessionDate}
+              id="manualSleepDate"
+              style={{ padding: "5px 8px", borderRadius: 5, fontSize: 12, background: "#111", border: "0.5px solid #252525", color: "#e8e8e8", fontFamily: "inherit", outline: "none" }}
+            />
+            <input
+              type="number"
+              min="0"
+              max="16"
+              step="0.25"
+              placeholder="hours (e.g. 7.5)"
+              id="manualSleepHours"
+              style={{ width: 130, padding: "5px 8px", borderRadius: 5, fontSize: 12, background: "#111", border: "0.5px solid #252525", color: "#e8e8e8", fontFamily: "inherit", outline: "none" }}
+            />
+            <button
+              onClick={() => {
+                const d = document.getElementById("manualSleepDate")?.value
+                const h = document.getElementById("manualSleepHours")?.value
+                if (d && h) addManualSleepEntry(d, h)
+              }}
+              style={{ padding: "5px 14px", borderRadius: 20, fontSize: 11, fontWeight: 700, background: "#7F77DD22", color: "#7F77DD", border: "0.5px solid #7F77DD", cursor: "pointer", fontFamily: "inherit" }}
+            >
+              Save
+            </button>
+          </div>
         </div>
 
         {justUndone && (
@@ -7473,7 +7530,7 @@ function detectSourceType(filename, firstChunk) {
   }
 
   // CSV sources — inspect header row
-  if (chunk.includes(",") || name.endsWith(".csv")) {
+  if (chunk.includes(",") || chunk.includes(";") || name.endsWith(".csv")) {
     const firstLine = chunk.split(/\r?\n/)[0].toLowerCase()
 
     // FitnessView / HealthFit workout export — characteristic column combinations.
