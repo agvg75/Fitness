@@ -7533,6 +7533,13 @@ function detectSourceType(filename, firstChunk) {
   if (chunk.includes(",") || chunk.includes(";") || name.endsWith(".csv")) {
     const firstLine = chunk.split(/\r?\n/)[0].toLowerCase()
 
+    // Sleep Cycle — must check before FitnessView because Sleep Cycle headers
+    // contain "type", "time", and "heart rate" which falsely match FitnessView
+    if (firstLine.includes("sleep quality") || firstLine.includes("time in bed") ||
+        firstLine.includes("wake up") || firstLine.includes("sleep notes") ||
+        (firstLine.includes("heart rate (bpm)") && firstLine.includes("steps")))
+      return { source: "sleep_cycle", format: "csv", confidence: "high" }
+
     // FitnessView / HealthFit workout export — characteristic column combinations.
     // HealthFit exports vary: "Workout Type" vs "Type", "Heart Rate" vs "Avg HR".
     {
@@ -7555,12 +7562,6 @@ function detectSourceType(filename, firstChunk) {
     if (firstLine.includes("energy (kcal)") || firstLine.includes("protein (g)") ||
         firstLine.includes("food name") || firstLine.includes("cronometer"))
       return { source: "cronometer", format: "csv", confidence: "high" }
-
-    // Sleep Cycle
-    if (firstLine.includes("sleep quality") || firstLine.includes("time in bed") ||
-        firstLine.includes("wake up") || firstLine.includes("sleep notes") ||
-        firstLine.includes("heart rate (bpm)") && firstLine.includes("steps"))
-      return { source: "sleep_cycle", format: "csv", confidence: "high" }
 
     // A&D Heart Track — BP measurements
     if (firstLine.includes("systolic") || firstLine.includes("diastolic") ||
