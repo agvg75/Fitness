@@ -4687,14 +4687,12 @@ function getWorkoutDistanceMiles(workout) {
   )
 }
 
-// Returns cycling distance in miles. When no odometer distance exists (Apple-only sessions),
-// derives an equivalent from duration at a conservative 13 mph indoor pace.
-// This is clearly labeled as an estimate in chart tooltips.
+// Returns cycling distance in miles.
+// Only explicit recorded distance counts; duration-only cycling sessions do not
+// get a mileage estimate because many are indoor bike workouts.
 function getCyclingDistanceMiles(workout) {
   const explicit = getWorkoutDistanceMiles(workout)
   if (explicit > 0) return explicit
-  const dur = Number(workout?.dur || 0)
-  if (dur > 0) return Number((dur * (13 / 60)).toFixed(2))
   return 0
 }
 
