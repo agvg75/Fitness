@@ -10772,14 +10772,20 @@ useEffect(() => {
       if (remoteSleepRecords.length) {
         setSleepRecords(prev => {
           const byDate = {}
-          ;(Array.isArray(prev) ? prev : []).forEach(r => {
+          const mergeSleep = (r) => {
             const key = getSleepRecordDate(r)
-            if (key) byDate[key] = { ...r, date: key }
-          })
-          remoteSleepRecords.forEach(r => {
-            const key = getSleepRecordDate(r)
-            if (key) byDate[key] = { ...r, date: key }
-          })
+            if (!key) return
+            if (!byDate[key]) {
+              byDate[key] = { ...r, date: key }
+            } else {
+              byDate[key] = {
+                ...byDate[key],
+                duration_min: (Number(byDate[key].duration_min) || 0) + (Number(r.duration_min) || 0)
+              }
+            }
+          }
+          ;(Array.isArray(prev) ? prev : []).forEach(mergeSleep)
+          remoteSleepRecords.forEach(mergeSleep)
           return Object.values(byDate).sort((a, b) =>
             String(a.date || "").localeCompare(String(b.date || ""))
           )
@@ -13692,16 +13698,22 @@ return (
     {/* ── Sleep Quality Panel ───────────────────────────────────── */}
     {(() => {
       const TARGET_HOURS = 7.5
-      const sleepByDate = new Map(
-        (Array.isArray(sleepRecords) ? sleepRecords : [])
-          .map(record => {
-            const sleepDate = getSleepRecordDate(record)
-            return sleepDate
-              ? [sleepDate, { ...record, date: sleepDate }]
-              : null
-          })
-          .filter(Boolean)
-      )
+      const sleepByDate = (() => {
+        const acc = {}
+        ;(Array.isArray(sleepRecords) ? sleepRecords : []).forEach(record => {
+          const sleepDate = getSleepRecordDate(record)
+          if (!sleepDate) return
+          if (!acc[sleepDate]) {
+            acc[sleepDate] = { ...record, date: sleepDate }
+          } else {
+            acc[sleepDate] = {
+              ...acc[sleepDate],
+              duration_min: (Number(acc[sleepDate].duration_min) || 0) + (Number(record.duration_min) || 0)
+            }
+          }
+        })
+        return new Map(Object.entries(acc))
+      })()
       const lastSevenNights = Array.from({ length: 7 }, (_, index) => {
         const date = new Date()
         date.setHours(12, 0, 0, 0)
@@ -13973,7 +13985,7 @@ return (
             <ComposedChart data={panel.rows} margin={{ top:8, right:14, left:12, bottom:14 }}>
               <CartesianGrid stroke="#1a1b2e" />
               <XAxis dataKey="label" tick={{ fontSize:10 }} interval={Math.max(1, Math.floor((panel.rows.length || 1) / (isLongWindow ? 10 : 12)) - 1)} />
-              <YAxis domain={[-35, 15]} allowDataOverflow={true} tick={{ fontSize:10 }} width={30} tickFormatter={value => Number(value).toFixed(0)} />
+              <YAxis domain={[dataMin => Math.min(Math.floor(dataMin - 3), -5), dataMax => Math.max(Math.ceil(dataMax + 3), 5)]} tick={{ fontSize:10 }} width={30} tickFormatter={value => Number(value).toFixed(0)} />
               <ReferenceLine y={0} stroke="#444" strokeDasharray="3 3" />
               <Tooltip contentStyle={tooltipStyle} formatter={(v, n) => [Number(v).toFixed(2), n]} />
               <Line type="monotone" dataKey="overallTsb" name="Overall TSB" stroke="#e5e7eb" strokeWidth={isLongWindow ? 2 : 2.2} dot={false} connectNulls isAnimationActive={false} />
