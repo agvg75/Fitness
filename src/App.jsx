@@ -12446,10 +12446,21 @@ const tsbV2Panel = useMemo(() => {
   const wkts = Array.isArray(operationalWorkouts) ? operationalWorkouts : []
   function isPlausibleSession(w) {
     const dur = Number(w.dur || w.duration_min || 0)
-    if (dur <= 240) return true
     const sources = Object.keys(w.sources || {})
-    const fvOnly = sources.length === 1 && sources[0] === 'fitnessview'
-    return !fvOnly
+    const singleSource = sources.length === 1
+
+    // FitnessView date-only rows get expanded to 336-400 min windows.
+    // Any FitnessView-only session over 4 hours is implausible.
+    if (dur > 240 && singleSource && sources[0] === 'fitnessview') return false
+
+    // Technogym exports strength training with duration_min = 240 (a cap/artifact,
+    // not a real time). Strength sessions over 90 min from Technogym alone are implausible.
+    const type = String(w.canonical_type || w.type || w.category || '').toLowerCase()
+    const isStrength = type.includes('strength') || type.includes('functional') ||
+      type.includes('traditional') || type.includes('weight') || type.includes('resistance')
+    if (dur >= 200 && isStrength && singleSource && sources[0] === 'technogym') return false
+
+    return true
   }
   wkts.forEach(w => {
     if (!isPlausibleSession(w)) return
