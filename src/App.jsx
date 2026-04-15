@@ -10771,23 +10771,41 @@ useEffect(() => {
       }
       if (remoteSleepRecords.length) {
         setSleepRecords(prev => {
-          const byDate = {}
-          const mergeSleep = (r) => {
+          // Step 1: pool all records by sleep_id so the same session
+          // from localStorage and Supabase is never counted twice.
+          // Remote wins for the same sleep_id.
+          const byId = {}
+          const addById = r => {
+            const id = r.sleep_id || r.id || null
             const key = getSleepRecordDate(r)
             if (!key) return
+            const rec = { ...r, date: key }
+            if (id) {
+              byId[id] = rec
+            } else {
+              // No sleep_id: fall back to date key so we still dedup
+              // single-session nights while allowing same-date splits.
+              byId[`noId_${key}_${r.duration_min}`] = rec
+            }
+          }
+          ;(Array.isArray(prev) ? prev : []).forEach(addById)
+          remoteSleepRecords.forEach(addById)
+
+          // Step 2: aggregate by date so split-night segments sum correctly.
+          const byDate = {}
+          Object.values(byId).forEach(r => {
+            const key = r.date
             if (!byDate[key]) {
-              byDate[key] = { ...r, date: key }
+              byDate[key] = { ...r }
             } else {
               byDate[key] = {
                 ...byDate[key],
                 duration_min: (Number(byDate[key].duration_min) || 0) + (Number(r.duration_min) || 0)
               }
             }
-          }
-          ;(Array.isArray(prev) ? prev : []).forEach(mergeSleep)
-          remoteSleepRecords.forEach(mergeSleep)
+          })
           return Object.values(byDate).sort((a, b) =>
-            String(a.date || "").localeCompare(String(b.date || ""))
+            String(a.date || '').localeCompare(String(b.date || ''))
           )
         })
       }
