@@ -158,17 +158,174 @@ export async function loadCanonicalSessions(supabase, userId) {
   return allRows.map(rowToCanonicalSession)
 }
 
+/**
+ * Merges two canonical session row objects using field-level source priority.
+ * existing: the row currently in Supabase (may be null if new record)
+ * incoming: the row being imported right now
+ * Returns: the merged row to write back to Supabase
+ */
+function mergeCanonicalSessionRow(existing, incoming) {
+  if (!existing) return incoming
+
+  const pick = (existingVal, incomingVal) => {
+    const existingNum = Number(existingVal)
+    const hasExisting = existingVal != null && (!Number.isFinite(existingNum) || existingNum > 0)
+    return hasExisting ? existingVal : incomingVal
+  }
+
+  const existingSources = existing.sources || {}
+  const incomingSources = incoming.sources || {}
+  const mergedSources = { ...existingSources, ...incomingSources }
+
+  const existingIsApple = existingSources.apple != null
+  const incomingIsApple = incomingSources.apple != null
+  const existingIsFitnessView = existingSources.fitnessview != null
+  const incomingIsFitnessView = incomingSources.fitnessview != null
+  const existingIsTechnogym = existingSources.technogym != null
+  const incomingIsTechnogym = incomingSources.technogym != null
+
+  const existingDist = existing.preferred_metrics?.distance?.value
+  const incomingDist = incoming.preferred_metrics?.distance?.value
+
+  let finalDistance
+  if (incomingIsTechnogym && Number(incomingDist) > 0) {
+    finalDistance = incomingDist
+  } else if (existingIsTechnogym && Number(existingDist) > 0) {
+    finalDistance = existingDist
+  } else {
+    finalDistance = pick(existingDist, incomingDist)
+  }
+
+  const existingPower = existing.preferred_metrics?.power_avg?.value
+  const incomingPower = incoming.preferred_metrics?.power_avg?.value
+  const finalPower = incomingIsTechnogym && Number(incomingPower) > 0
+    ? incomingPower
+    : pick(existingPower, incomingPower)
+
+  const existingCadence = existing.preferred_metrics?.rpm_avg?.value
+  const incomingCadence = incoming.preferred_metrics?.rpm_avg?.value
+  const finalCadence = incomingIsTechnogym && Number(incomingCadence) > 0
+    ? incomingCadence
+    : pick(existingCadence, incomingCadence)
+
+  const existingCal = existing.preferred_metrics?.calories?.value
+  const incomingCal = incoming.preferred_metrics?.calories?.value
+
+  let finalCalories
+  if (existingIsApple && Number(existingCal) > 0) {
+    finalCalories = existingCal
+  } else if (incomingIsApple && Number(incomingCal) > 0) {
+    finalCalories = incomingCal
+  } else if (existingIsFitnessView && Number(existingCal) > 0) {
+    finalCalories = existingCal
+  } else if (incomingIsFitnessView && Number(incomingCal) > 0) {
+    finalCalories = incomingCal
+  } else {
+    finalCalories = pick(existingCal, incomingCal)
+  }
+
+  const existingHr = existing.preferred_metrics?.hr?.value
+  const incomingHr = incoming.preferred_metrics?.hr?.value
+  let finalHr
+  if (existingIsApple && Number(existingHr) > 0) {
+    finalHr = existingHr
+  } else if (incomingIsApple && Number(incomingHr) > 0) {
+    finalHr = incomingHr
+  } else if (existingIsFitnessView && Number(existingHr) > 0) {
+    finalHr = existingHr
+  } else if (incomingIsFitnessView && Number(incomingHr) > 0) {
+    finalHr = incomingHr
+  } else {
+    finalHr = pick(existingHr, incomingHr)
+  }
+
+  const existingDur = existing.duration_min
+  const incomingDur = incoming.duration_min
+  let finalDur
+  if (existingIsApple && Number(existingDur) > 0) {
+    finalDur = existingDur
+  } else if (incomingIsApple && Number(incomingDur) > 0) {
+    finalDur = incomingDur
+  } else if (existingIsFitnessView && Number(existingDur) > 0) {
+    finalDur = existingDur
+  } else if (incomingIsFitnessView && Number(incomingDur) > 0) {
+    finalDur = incomingDur
+  } else {
+    finalDur = pick(existingDur, incomingDur)
+  }
+
+  const typeSpecificity = (type) => {
+    if (!type) return 0
+    const known = [
+      "Functional Strength Training",
+      "Traditional Strength Training",
+      "Indoor Cycling",
+      "Running",
+      "Swimming",
+      "Walking",
+      "Rowing",
+      "Cycling",
+      "Elliptical",
+      "Other",
+    ]
+    const index = known.indexOf(type)
+    return index === -1 ? 1 : known.length - index
+  }
+
+  const finalType = typeSpecificity(existing.canonical_type) >= typeSpecificity(incoming.canonical_type)
+    ? existing.canonical_type
+    : incoming.canonical_type
+
+  const mergedPreferredMetrics = {
+    ...(existing.preferred_metrics || {}),
+    ...(incoming.preferred_metrics || {}),
+    distance: { ...(existing.preferred_metrics?.distance || {}), value: finalDistance },
+    calories: { ...(existing.preferred_metrics?.calories || {}), value: finalCalories },
+    hr: { ...(existing.preferred_metrics?.hr || {}), value: finalHr },
+    power_avg: { ...(existing.preferred_metrics?.power_avg || {}), value: finalPower },
+    rpm_avg: { ...(existing.preferred_metrics?.rpm_avg || {}), value: finalCadence },
+  }
+
+  return {
+    ...existing,
+    ...incoming,
+    canonical_type: finalType,
+    duration_min: finalDur,
+    sources: mergedSources,
+    preferred_metrics: mergedPreferredMetrics,
+    created_at: existing.created_at || incoming.created_at,
+  }
+}
+
 export async function upsertCanonicalSessions(supabase, userId, sessions) {
   requireSupabase(supabase, userId, "upsertCanonicalSessions")
-  const rows = (Array.isArray(sessions) ? sessions : [])
+  const incoming = (Array.isArray(sessions) ? sessions : [])
     .map(session => canonicalSessionToRow(session, userId))
     .filter(row => row.session_id)
-  if (!rows.length) return []
+  if (!incoming.length) return []
+
+  const sessionIds = incoming.map(row => row.session_id)
+  const { data: existingRows, error: readError } = await supabase
+    .from("canonical_sessions")
+    .select("*")
+    .eq("user_id", userId)
+    .in("session_id", sessionIds)
+  throwIfError(readError, "upsertCanonicalSessions:read")
+
+  const existingBySessionId = {}
+  ;(existingRows || []).forEach(row => {
+    existingBySessionId[row.session_id] = row
+  })
+
+  const merged = incoming.map(row =>
+    mergeCanonicalSessionRow(existingBySessionId[row.session_id] || null, row)
+  )
+
   const { data, error } = await supabase
     .from("canonical_sessions")
-    .upsert(rows, { onConflict: "session_id" })
+    .upsert(merged, { onConflict: "session_id" })
     .select()
-  throwIfError(error, "upsertCanonicalSessions")
+  throwIfError(error, "upsertCanonicalSessions:write")
   return (data || []).map(rowToCanonicalSession)
 }
 
