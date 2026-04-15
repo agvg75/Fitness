@@ -2146,8 +2146,8 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
   )
 }
 
-function DailyReadinessPanel({ readinessScore, latestHealthFit, ocItems, computedTSB = null }) {
-  const tsb = latestHealthFit?.tsb ?? computedTSB?.global?.tsb ?? null
+function DailyReadinessPanel({ readinessScore, latestHealthFit, ocItems, computedTSB = null, tsbV2Panel = null }) {
+  const tsb = latestHealthFit?.tsb ?? tsbV2Panel?.currentOverallTsb ?? computedTSB?.global?.tsb ?? null
   const hasActiveIssue = (ocItems || []).some(i => i.currentScore >= 3)
   let status, color, bg, rationale
   if (readinessScore < 40 || hasActiveIssue) {
@@ -2188,7 +2188,7 @@ function DailyReadinessPanel({ readinessScore, latestHealthFit, ocItems, compute
 }
 
 // ─── TabSchedule ──────────────────────────────────────────────────────────────
-function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, setSchedLog, readinessScore, latestHealthFit = null, ocItems = [], computedTSB = null, progressionReadiness = "progress", progressionReasons = [], tendonStatus = { painScore: 0, stiffness: false, override: null }, scheduleFeedback = [] }) {
+function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, setSchedLog, readinessScore, latestHealthFit = null, ocItems = [], computedTSB = null, tsbV2Panel = null, progressionReadiness = "progress", progressionReasons = [], tendonStatus = { painScore: 0, stiffness: false, override: null }, scheduleFeedback = [] }) {
   const safeScheduleFeedback = Array.isArray(scheduleFeedback) ? scheduleFeedback : []
   const [activeDay, setActiveDay] = useState(todayDayKey())
   const [schedView, setSchedView] = useState("schedule")
@@ -3698,7 +3698,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
           ))}
         </div>
       )}
-      <DailyReadinessPanel readinessScore={readinessScore} latestHealthFit={latestHealthFit} ocItems={ocItems} computedTSB={computedTSB} />
+      <DailyReadinessPanel readinessScore={readinessScore} latestHealthFit={latestHealthFit} ocItems={ocItems} computedTSB={computedTSB} tsbV2Panel={tsbV2Panel} />
       <ScheduleMismatchDiagnostics
         report={scheduleMismatchReport}
         onOpenEntry={openDiagnosticEntry}
@@ -5499,12 +5499,12 @@ function scoreThreshold(value, thresholds, fallback = 0) {
   return fallback
 }
 
-function buildOcConstraintState({ ocItems, sleepRecords, healthFitDaily, computedTSB, weeklyTrainingBuckets, workouts }) {
+function buildOcConstraintState({ ocItems, sleepRecords, healthFitDaily, computedTSB, tsbV2Panel, weeklyTrainingBuckets, workouts }) {
   const readiness = computeReadinessDetail(
     ocItems,
     sleepRecords,
     healthFitDaily,
-    computedTSB?.global?.tsb ?? computedTSB?.running?.tsb ?? null
+    tsbV2Panel?.currentOverallTsb ?? computedTSB?.global?.tsb ?? computedTSB?.running?.tsb ?? null
   )
   const activeItems = Array.isArray(ocItems)
     ? ocItems.filter(item => Number(item?.currentScore || 0) > 0)
@@ -12423,17 +12423,6 @@ const computedTSB = useMemo(() => {
   };
 }, [unifiedCanonicalSessions])
 
-const ocConstraintState = useMemo(() => {
-  return buildOcConstraintState({
-    ocItems,
-    sleepRecords,
-    healthFitDaily,
-    computedTSB,
-    weeklyTrainingBuckets,
-    workouts: operationalWorkouts
-  })
-}, [ocItems, sleepRecords, healthFitDaily, computedTSB, weeklyTrainingBuckets, operationalWorkouts])
-
 const tsbV2Panel = useMemo(() => {
   const tau1 = LIFT_CONFIG.tau1, tau2 = LIFT_CONFIG.tau2, lookbackDays = selectedRangePoints ?? 90, warmupDays = 42
   const now = new Date(); now.setHours(0,0,0,0)
@@ -12587,6 +12576,18 @@ const tsbV2Panel = useMemo(() => {
     tsbDomain
   }
 }, [operationalWorkouts, schedLog, ocItems, readinessScore, selectedRangePoints])
+
+const ocConstraintState = useMemo(() => {
+  return buildOcConstraintState({
+    ocItems,
+    sleepRecords,
+    healthFitDaily,
+    computedTSB,
+    tsbV2Panel,
+    weeklyTrainingBuckets,
+    workouts: operationalWorkouts
+  })
+}, [ocItems, sleepRecords, healthFitDaily, computedTSB, tsbV2Panel, weeklyTrainingBuckets, operationalWorkouts])
 
 const adaptiveTrainingState = useMemo(() => {
   return buildAdaptiveTrainingState({
@@ -13663,7 +13664,7 @@ return (
     {(() => {
       const rd = computeReadinessDetail(ocItems, sleepRecords, healthFitDaily, computedTSBFromSessions?.tsb ?? null)
       const latestAcwr = acwrSeries.length ? acwrSeries[acwrSeries.length - 1]?.acwr ?? null : null
-      const tsbNow = computedTSBFromSessions?.tsb ?? computedTSB?.global?.tsb ?? null
+      const tsbNow = tsbV2Panel?.currentOverallTsb ?? computedTSBFromSessions?.tsb ?? computedTSB?.global?.tsb ?? null
       const mtpItem = ocItems.find(i => (i.location || "").toLowerCase().includes("toe"))
 
       let message = ""
@@ -15333,6 +15334,7 @@ return (
     latestHealthFit={latestHealthFit}
     ocItems={ocItems}
     computedTSB={computedTSBFromSessions ?? computedTSB}
+    tsbV2Panel={tsbV2Panel}
     progressionReadiness={ocConstraintState?.gate?.progressionReadiness ?? "hold"}
     progressionReasons={ocConstraintState?.gate?.progressionReasons ?? []}
     tendonStatus={ocConstraintState?.tendon ?? { painScore: 0, stiffness: false, override: null }}
