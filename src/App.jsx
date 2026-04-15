@@ -14113,7 +14113,7 @@ return (
               <XAxis dataKey="label" tick={{ fontSize:10 }} interval={Math.max(1, Math.floor((panel.rows.length || 1) / (isLongWindow ? 10 : 12)) - 1)} />
               <YAxis domain={[dataMin => Math.min(Math.floor(dataMin - 3), -5), dataMax => Math.max(Math.ceil(dataMax + 3), 5)]} tick={{ fontSize:10 }} width={30} tickFormatter={value => Number(value).toFixed(0)} />
               <ReferenceLine y={0} stroke="#444" strokeDasharray="3 3" />
-              <Tooltip contentStyle={tooltipStyle} formatter={(v, n) => [Number(v).toFixed(2), n]} />
+              <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: '#0f172a' }} formatter={(v, n) => [Number(v).toFixed(2), n]} />
               <Line type="monotone" dataKey="overallTsb" name="Overall TSB" stroke="#e5e7eb" strokeWidth={isLongWindow ? 2 : 2.2} dot={false} connectNulls isAnimationActive={false} />
               <Line type="monotone" dataKey="runningTsb" name="Running TSB" stroke="#ef4444" strokeWidth={modalityStrokeWidth} strokeOpacity={isLongWindow ? 0.78 : 1} dot={false} connectNulls isAnimationActive={false} />
               <Line type="monotone" dataKey="cyclingTsb" name="Cycling TSB" stroke="#22d3ee" strokeWidth={modalityStrokeWidth} strokeOpacity={isLongWindow ? 0.78 : 1} dot={false} connectNulls isAnimationActive={false} />
