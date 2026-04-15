@@ -1275,6 +1275,10 @@ function ScheduleMismatchDiagnostics({ report, onOpenEntry, onEditEntry, onResol
 
 // ─── Operational Capacity constants ───────────────────────────────────────────
 const SCORE_LABELS = ["Resolved", "Mild", "Discomfort", "Pain", "Impairment", "Severe"]
+const DEFAULT_TSB_THRESHOLDS = {
+  moderate: -7,
+  high: -9,
+}
 
 const OC_KEY_META = {
   tendonStatus: { label: "Tendon",     halfLifeHours: 168, scope: "regional", color: "#f59e0b" },
@@ -1282,6 +1286,23 @@ const OC_KEY_META = {
   jointStatus:  { label: "Joint",      halfLifeHours: 120, scope: "regional", color: "#3b82f6" },
   sleepDebt:    { label: "Sleep Debt", halfLifeHours: 48,  scope: "global",   color: "#a78bfa" },
   illnessLoad:  { label: "Illness",    halfLifeHours: 72,  scope: "global",   color: "#22c55e" },
+}
+
+const DEFAULT_OC_HALF_LIFE_OVERRIDES = {
+  "MTP joint": 840,
+  toe: 840,
+  foot: 672,
+}
+
+function resolveOcHalfLifeHours(item, overrides = DEFAULT_OC_HALF_LIFE_OVERRIDES, fallback = 72) {
+  const explicitHalfLife = Number(item?.halfLifeHours)
+  if (Number.isFinite(explicitHalfLife) && explicitHalfLife > 0) return explicitHalfLife
+  const haystack = String(item?.region || item?.label || item?.location || "").toLowerCase()
+  const override = Object.entries(overrides || {})
+    .find(([key]) => haystack.includes(String(key).toLowerCase()))
+    ?.[1]
+  if (Number.isFinite(Number(override)) && Number(override) > 0) return Number(override)
+  return fallback
 }
 
 const OC_BODY_REGIONS = [
@@ -1384,8 +1405,8 @@ function computeReadinessDetail(ocItems, sleepRecords, healthFitDaily, tsbFallba
   const latestTsb = (!hfIsStale && latestHFEntry) ? latestHFEntry.tsb
     : tsbFallback ?? (latestHFEntry?.tsb ?? null)
   const tsbPenalty = latestTsb == null ? 0
-    : latestTsb < -30 ? 20
-    : latestTsb < -20 ? 10
+    : latestTsb < DEFAULT_TSB_THRESHOLDS.high ? 20
+    : latestTsb < DEFAULT_TSB_THRESHOLDS.moderate ? 10
     : 0
 
   const score = Math.max(0, 100 - injuryPenalty - sleepPenalty - tsbPenalty)
@@ -1436,13 +1457,14 @@ function getRecentSleepRecords(records, limit = 7) {
 
 function computeOcPredictedScore(item) {
   const hoursElapsed = (Date.now() - new Date(item.startDate).getTime()) / 3600000
-  return Math.max(0, (item.initialScore || item.currentScore) * Math.pow(0.5, hoursElapsed / (item.halfLifeHours || 72)))
+  const halfLife = resolveOcHalfLifeHours(item)
+  return Math.max(0, (item.initialScore || item.currentScore) * Math.pow(0.5, hoursElapsed / halfLife))
 }
 
 function computeOcRecoveryDate(item) {
   const score = item.initialScore || item.currentScore
   if (!score) return null
-  const hoursToResolve = (item.halfLifeHours || 72) * Math.log2(score / 0.25)
+  const hoursToResolve = resolveOcHalfLifeHours(item) * Math.log2(score / 0.25)
   if (!Number.isFinite(hoursToResolve) || hoursToResolve <= 0) return null
   const recoveryMs = new Date(item.startDate).getTime() + hoursToResolve * 3600000
   const d = new Date(recoveryMs)
@@ -2100,10 +2122,10 @@ function DailyReadinessPanel({ readinessScore, latestHealthFit, ocItems, compute
     rationale = hasActiveIssue
       ? `OC ${readinessScore} · Active issue score ≥3 · Substitute exercises affecting flagged regions`
       : `OC ${readinessScore} · TSB ${tsb != null ? tsb.toFixed(1) : "—"} · Substitute exercises affecting flagged regions`
-  } else if (readinessScore < 60 || (tsb != null && tsb < -20)) {
+  } else if (readinessScore < 60 || (tsb != null && tsb < DEFAULT_TSB_THRESHOLDS.high)) {
     status = "ORANGE"; color = "#ff8c42"; bg = "rgba(255,140,66,0.15)"
     rationale = `OC ${readinessScore} · TSB ${tsb != null ? tsb.toFixed(1) : "—"} · Reduce working weight 10–15%, cap at 2 sets on compounds`
-  } else if (readinessScore < 80 || (tsb != null && tsb < -10)) {
+  } else if (readinessScore < 80 || (tsb != null && tsb < DEFAULT_TSB_THRESHOLDS.moderate)) {
     status = "YELLOW"; color = "#ffeb3b"; bg = "rgba(255,235,59,0.15)"
     rationale = `OC ${readinessScore} · TSB ${tsb != null ? tsb.toFixed(1) : "—"} · Execute as written, no additions today`
   } else {
@@ -6048,7 +6070,7 @@ function estimateOcBurdenForDate(ocItems, isoDate, keywords = []) {
     if (!Number.isFinite(start) || start > target) return sum
     if (keywords.length && !keywords.some(keyword => String(item?.location || "").includes(keyword))) return sum
     const initial = Number(item?.initialScore || item?.currentScore || 0)
-    const halfLife = Number(item?.halfLifeHours || 96)
+    const halfLife = resolveOcHalfLifeHours(item, DEFAULT_OC_HALF_LIFE_OVERRIDES, 96)
     if (initial <= 0 || halfLife <= 0) return sum
     const hours = (target - start) / 3600000
     const score = initial * Math.pow(0.5, hours / halfLife)
@@ -6222,7 +6244,7 @@ function buildAdaptiveTrainingState({
       const tendonSensitive = domain === "running" || domain === "tendon"
       const modifier = clampNumber(
         1
-          - (Number.isFinite(tsb) && tsb < -20 ? 0.18 : Number.isFinite(tsb) && tsb < -10 ? 0.1 : 0)
+          - (Number.isFinite(tsb) && tsb < DEFAULT_TSB_THRESHOLDS.high ? 0.18 : Number.isFinite(tsb) && tsb < DEFAULT_TSB_THRESHOLDS.moderate ? 0.1 : 0)
           - (Number.isFinite(acwr) && acwr > 1.5 ? 0.2 : Number.isFinite(acwr) && acwr > 1.3 ? 0.12 : 0)
           - clampNumber((domain === "strength" ? estimateOcBurdenForDate(ocItems, weekStart, ["Shoulder", "Back", "Knee", "Hip"]) : ocRun) / 22, 0, 0.16)
           - (tendonSensitive ? clampNumber(ocTendon / 18, 0, 0.12) : 0),
@@ -6250,7 +6272,7 @@ function buildAdaptiveTrainingState({
     const patellarLoad = runMiles * 0.55 + quadStrengthDose
 
     const acwrPenalty = Number.isFinite(acwr) && acwr > 1.5 ? 1.2 : Number.isFinite(acwr) && acwr > 1.3 ? 0.65 : 0
-    const tsbPenalty = Number.isFinite(tsb) && tsb < -20 ? 0.9 : Number.isFinite(tsb) && tsb < -10 ? 0.45 : 0
+    const tsbPenalty = Number.isFinite(tsb) && tsb < DEFAULT_TSB_THRESHOLDS.high ? 0.9 : Number.isFinite(tsb) && tsb < DEFAULT_TSB_THRESHOLDS.moderate ? 0.45 : 0
 
     tendonCapacities.achilles_calf = clampNumber(
       tendonCapacities.achilles_calf * 0.97 + (0.03 * achillesLoad) - acwrPenalty - tsbPenalty - clampNumber(estimateOcBurdenForDate(ocItems, weekStart, getTendonGroupKeywords("achilles_calf")) / 8, 0, 0.8),
@@ -9678,6 +9700,13 @@ export default function App() {
     // Banister model constants — fitted via grid search on 466 days, R²=0.887
     tau1: 27,          // fitness decay (days) — HealthFit default is 42
     tau2: 18,          // fatigue decay (days) — HealthFit default is 7
+    tsbModerateRiskThreshold: -7,
+    tsbHighRiskThreshold: -9,
+    ocHalfLifeOverrides: {
+      "MTP joint": 840,
+      toe: 840,
+      foot: 672,
+    },
 
     // Body composition — update after each DEXA scan
     ffm_lb: 113.1,             // fat-free mass, January 2026 DEXA
@@ -12436,9 +12465,17 @@ const tsbV2Panel = useMemo(() => {
       chronic[k] += aC * (load[k] - chronic[k])
       row[`${k}Tsb`] = Number((chronic[k] - acute[k]).toFixed(2))
     })
+    row.dailyLoad = Number((load.overall || 0).toFixed(2))
     row.strengthLoad = Number((load.strength || 0).toFixed(2))
     row.hasAnyWorkout = Boolean(load.anyWorkout)
     return row
+  })
+  let rollingLoad14 = 0
+  allRows.forEach((row, index) => {
+    rollingLoad14 += Number(row.dailyLoad || 0)
+    if (index >= 14) rollingLoad14 -= Number(allRows[index - 14]?.dailyLoad || 0)
+    row.rollingLoad14 = Number(rollingLoad14.toFixed(2))
+    row.load14Alert = row.rollingLoad14 > 700 && Number(row.overallTsb) < LIFT_CONFIG.tsbModerateRiskThreshold
   })
   const rows = allRows.slice(-lookbackDays).map(r => ({ ...r, label: String(r.date).slice(5) }))
   const sVals = rows.map(r => r.strengthLoad).filter(v => Number.isFinite(v))
@@ -12454,7 +12491,12 @@ const tsbV2Panel = useMemo(() => {
   const riskFromOC = readinessScore != null
     ? (readinessScore >= 75 ? 'green' : readinessScore >= 50 ? 'yellow' : readinessScore >= 25 ? 'orange' : 'red')
     : null
-  const risk = riskFromOC ?? (tsbNow < -25 ? 'red' : tsbNow < -15 ? 'orange' : tsbNow < -8 ? 'yellow' : 'green')
+  const risk = riskFromOC ?? (
+    tsbNow < LIFT_CONFIG.tsbHighRiskThreshold ? 'red'
+      : tsbNow < LIFT_CONFIG.tsbModerateRiskThreshold ? 'orange'
+      : tsbNow < 0 ? 'yellow'
+      : 'green'
+  )
   const tsbVals = rows.flatMap(r => [
     r.overallTsb,
     r.runningTsb,
@@ -12479,6 +12521,9 @@ const tsbV2Panel = useMemo(() => {
     readinessRiskLabel: risk,
     readinessDetail: { score: readinessScore ?? Math.round(50 + tsbNow) },
     currentOverallTsb: tsbNow,
+    currentLoad14: cur.rollingLoad14 ?? 0,
+    currentLoad14Alert: Boolean(cur.load14Alert),
+    currentRow: cur,
     tsbDomain
   }
 }, [operationalWorkouts, schedLog, ocItems, readinessScore, selectedRangePoints])
@@ -12518,7 +12563,7 @@ const operationalCapacityData = useMemo(() => {
       if (!start || Number.isNaN(start.getTime())) return null
       const initScore = item.initialScore || item.currentScore || 0
       if (initScore <= 0) return null
-      const halfLifeHours = Number(item.halfLifeHours || OC_KEY_META[item.key]?.halfLifeHours || 72)
+      const halfLifeHours = resolveOcHalfLifeHours(item, LIFT_CONFIG.ocHalfLifeOverrides, Number(OC_KEY_META[item.key]?.halfLifeHours || 72))
       const peakLoss = PEAK_LOSS_BY_SCORE[Math.min(5, Math.max(0, Math.round(initScore)))] ?? 0.40
       return {
         _start: start,
@@ -12707,7 +12752,7 @@ const readinessProjectionData = useMemo(() => {
   const latestWeek = adaptiveTrainingState.latestWeek
   const clamp = (v, lo = 0, hi = 100) => Math.min(hi, Math.max(lo, v))
   const acwrPenalty = latestWeek.modifiers?.acwr > 1.5 ? 16 : latestWeek.modifiers?.acwr > 1.3 ? 9 : 0
-  const tsbPenalty = latestWeek.modifiers?.tsb < -20 ? 14 : latestWeek.modifiers?.tsb < -10 ? 7 : 0
+  const tsbPenalty = latestWeek.modifiers?.tsb < LIFT_CONFIG.tsbHighRiskThreshold ? 14 : latestWeek.modifiers?.tsb < LIFT_CONFIG.tsbModerateRiskThreshold ? 7 : 0
   const ocPenalty = clampNumber((latestWeek.modifiers?.oc || 0) * 2.2, 0, 18)
   const tendonPenalty = clampNumber((adaptiveTrainingState.maxTendonRisk || 0) > 1 ? ((adaptiveTrainingState.maxTendonRisk - 1) * 18) : 0, 0, 18)
   const absorbPenalty = clampNumber((1 - (adaptiveTrainingState.absorptionScores?.running || 0.7)) * 22, 0, 15)
@@ -13574,7 +13619,7 @@ return (
       } else if (latestAcwr != null && latestAcwr > 1.3) {
         message = `ACWR is ${latestAcwr.toFixed(2)} — workload is rising faster than your fitness base can absorb. Avoid adding volume this week.`
         color = latestAcwr > 1.5 ? "#ef4444" : "#f97316"
-      } else if (tsbNow != null && tsbNow < -20) {
+      } else if (tsbNow != null && tsbNow < LIFT_CONFIG.tsbHighRiskThreshold) {
         message = `TSB is ${tsbNow.toFixed(1)} — acute fatigue is high. Today's priority is recovery, not load.`
         color = "#f97316"
       } else if (mtpItem && mtpItem.currentScore >= 1) {
@@ -13951,6 +13996,10 @@ return (
   const panel = tsbV2Panel || { rows: [], readinessDetail: { score: "NA" } }
   const isLongWindow = rangeKey === "1Y" || rangeKey === "ALL"
   const modalityStrokeWidth = isLongWindow ? 1.2 : 1.8
+  const tsbNumberStyle = value => ({
+    color: !Number.isFinite(value) ? "#94a3b8" : value >= 0 ? "#4ade80" : value < LIFT_CONFIG.tsbModerateRiskThreshold ? "#ef4444" : "#fbbf24",
+    fontWeight: 600
+  })
   const tooltipStyle = {
     backgroundColor: "rgba(248, 250, 252, 0.96)",
     border: "1px solid rgba(148, 163, 184, 0.4)",
@@ -13972,8 +14021,8 @@ return (
         const tsb = panel.currentOverallTsb ?? 0
         let borderColor = "#4ade80"
         let msg = ""
-        if (tsb < -20) { borderColor = "#ef4444"; msg = "Acute fatigue. Substitute today's session with recovery swim or complete rest." }
-        else if (tsb < -10) { borderColor = "#fb923c"; msg = "Moderate fatigue. Reduce intensity; replace run with easy bike or swim." }
+        if (tsb < LIFT_CONFIG.tsbHighRiskThreshold) { borderColor = "#ef4444"; msg = "Acute fatigue. Substitute today's session with recovery swim or complete rest." }
+        else if (tsb < LIFT_CONFIG.tsbModerateRiskThreshold) { borderColor = "#fb923c"; msg = "Moderate fatigue. Reduce intensity; replace run with easy bike or swim." }
         else if (tsb > 10) { borderColor = "#4ade80"; msg = "Form is positive. Good window for quality work or long run." }
         else { borderColor = "#facc15"; msg = "Neutral form. Proceed with scheduled session at controlled effort." }
         return (
@@ -14012,6 +14061,27 @@ return (
               <Line type="monotone" dataKey="strengthTsb" name="Strength TSB" stroke="#ffd166" strokeWidth={modalityStrokeWidth} strokeOpacity={isLongWindow ? 0.78 : 1} dot={false} connectNulls strokeDasharray="4 2" isAnimationActive={false} />
             </ComposedChart>
           </ResponsiveContainer>
+          <div style={{ display:"flex", gap:10, flexWrap:"wrap", fontSize:11, color:"#94a3b8", marginTop:8 }}>
+            {[
+              ["Overall", panel.currentRow?.overallTsb],
+              ["Run", panel.currentRow?.runningTsb],
+              ["Cycle", panel.currentRow?.cyclingTsb],
+              ["Swim", panel.currentRow?.swimmingTsb],
+              ["Strength", panel.currentRow?.strengthTsb]
+            ].map(([label, value]) => (
+              <div key={label} style={{ display:"flex", alignItems:"center", gap:4 }}>
+                <span>{label}:</span>
+                <span style={tsbNumberStyle(Number(value))}>
+                  {Number.isFinite(Number(value)) ? Number(value).toFixed(1) : "—"}
+                </span>
+              </div>
+            ))}
+          </div>
+          {panel.currentLoad14Alert ? (
+            <div style={{ borderLeft:"3px solid #fb923c", paddingLeft:9, fontSize:11, color:"#ccc", lineHeight:1.5, marginTop:10 }}>
+              14-day load above 700 with TSB below -7. Moderate injury risk. Reduce intensity today.
+            </div>
+          ) : null}
         </>
       ) : (
         <div style={{ color:"#666", fontSize:12, padding:"20px 0" }}>
