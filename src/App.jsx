@@ -1442,6 +1442,30 @@ function getSleepRecordDate(record) {
   return null
 }
 
+function deduplicateSleepRecords(records) {
+  const toMs = v => v ? Date.parse(String(v)) : null
+  const deduped = []
+  for (const r of records) {
+    const rStart = toMs(r.start_at)
+    const rEnd = toMs(r.end_at)
+    const isDupe = deduped.some(e => {
+      if (r.sleep_id && e.sleep_id && r.sleep_id === e.sleep_id) return true
+      const eStart = toMs(e.start_at)
+      const eEnd = toMs(e.end_at)
+      if (rStart && eStart) {
+        if (Math.abs(rStart - eStart) <= 5 * 60000) return true
+      }
+      if (rStart && rEnd && eStart && eEnd) {
+        if (Math.min(rEnd, eEnd) > Math.max(rStart, eStart)) return true
+      }
+      return e.date === r.date &&
+        Math.abs((Number(e.duration_min) || 0) - (Number(r.duration_min) || 0)) <= 5
+    })
+    if (!isDupe) deduped.push(r)
+  }
+  return deduped
+}
+
 function getRecentSleepRecords(records, limit = 7) {
   const sevenDaysAgo = Date.now() - 7 * 24 * 3600000
   const byDate = {}
@@ -8965,16 +8989,12 @@ Return ONLY a JSON object with this exact structure, no explanation:
               JSON.parse(localStorage.getItem("lift_sleep_records") || "[]")
             )
           : JSON.parse(localStorage.getItem("lift_sleep_records") || "[]")
-        const byDate = {}
-        ;(Array.isArray(existing) ? existing : []).forEach(r => {
-          const key = getSleepRecordDate(r)
-          if (key) byDate[key] = { ...r, date: key }
-        })
-        sleepResult.forEach(r => {
-          const key = getSleepRecordDate(r)
-          if (key) byDate[key] = { ...r, date: key }
-        })
-        const merged = Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date))
+        const combined = [
+          ...(Array.isArray(existing) ? existing : []),
+          ...sleepResult.map(r => ({ ...r, date: getSleepRecordDate(r) || r.date })).filter(r => r.date)
+        ]
+        const merged = deduplicateSleepRecords(combined)
+          .sort((a, b) => (a.start_at || a.date || '').localeCompare(b.start_at || b.date || ''))
         localStorage.setItem("lift_sleep_records", JSON.stringify(merged))
         if (setSleepRecords) setSleepRecords(merged)
         committed += sleepResult.length
@@ -10815,38 +10835,12 @@ useEffect(() => {
       }
       if (remoteSleepRecords.length) {
         setSleepRecords(prev => {
-          // Pool all records from both sources
-          const all = [
-            ...(Array.isArray(prev) ? prev : []),
-            ...remoteSleepRecords
-          ].map(r => ({ ...r, date: getSleepRecordDate(r) })).filter(r => r.date)
-
-          // Dedup: two records are the same session if they share a sleep_id
-          // OR their time windows overlap. This handles the case where the same
-          // session exists in both localStorage (with sleep_id) and Supabase (null sleep_id).
-          const toMs = v => v ? Date.parse(String(v)) : null
-          const deduped = []
-          for (const r of all) {
-            const rStart = toMs(r.start_at)
-            const rEnd = toMs(r.end_at)
-            const isDupe = deduped.some(e => {
-              if (r.sleep_id && e.sleep_id && r.sleep_id === e.sleep_id) return true
-              const eStart = toMs(e.start_at)
-              const eEnd = toMs(e.end_at)
-              if (rStart && rEnd && eStart && eEnd) {
-                return Math.min(rEnd, eEnd) > Math.max(rStart, eStart)
-              }
-              return e.date === r.date &&
-                Math.abs((Number(e.duration_min) || 0) - (Number(r.duration_min) || 0)) <= 5
-            })
-            if (!isDupe) deduped.push(r)
-          }
-
-          // Sort by date then start_at — do NOT aggregate by date here.
-          // The display layer (sleepByDate IIFE in Overview) handles same-night summing.
-          return deduped.sort((a, b) =>
-            (a.start_at || a.date || '').localeCompare(b.start_at || b.date || '')
-          )
+          const combined = [
+            ...(Array.isArray(prev) ? prev : []).map(r => ({ ...r, date: getSleepRecordDate(r) || r.date })),
+            ...remoteSleepRecords.map(r => ({ ...r, date: getSleepRecordDate(r) || r.date }))
+          ].filter(r => r.date)
+          return deduplicateSleepRecords(combined)
+            .sort((a, b) => (a.start_at || a.date || '').localeCompare(b.start_at || b.date || ''))
         })
       }
       if (remoteHealthFitDaily.length) {
@@ -12450,7 +12444,15 @@ const tsbV2Panel = useMemo(() => {
   const mkL = () => ({ overall:0, running:0, cycling:0, swimming:0, strength:0, anyWorkout:false })
   const dailyLoads = Object.fromEntries(dayKeys.map(k => [k, mkL()]))
   const wkts = Array.isArray(operationalWorkouts) ? operationalWorkouts : []
+  function isPlausibleSession(w) {
+    const dur = Number(w.dur || w.duration_min || 0)
+    if (dur <= 240) return true
+    const sources = Object.keys(w.sources || {})
+    const fvOnly = sources.length === 1 && sources[0] === 'fitnessview'
+    return !fvOnly
+  }
   wkts.forEach(w => {
+    if (!isPlausibleSession(w)) return
     const date = getWorkoutLikeDateKey(w)
     if (!dailyLoads[date]) return
     const cat = normalizeWorkoutType(w.type, w)
