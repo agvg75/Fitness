@@ -10993,13 +10993,15 @@ useEffect(() => {
     if (evt === "SIGNED_IN" && sess?.user?.id) {
       const localMeals = JSON.parse(localStorage.getItem("ufd-meal-entries") || "[]")
 
-      if (localMeals.length > 0) {
+      if (localMeals.length > 0 && sess?.user?.id) {
         if (process.env.NODE_ENV === "development") console.log("Migrating local meals to Supabase...")
 
         try {
           await syncMealsToSupabase(localMeals, sess.user.id)
+          // Only remove from localStorage after confirmed Supabase write
           localStorage.removeItem("ufd-meal-entries")
         } catch (err) {
+          console.warn("Meal sync to Supabase failed, keeping localStorage copy", err)
           if (process.env.NODE_ENV === "development") console.error("Meal migration failed:", err)
         }
       }
@@ -11051,9 +11053,12 @@ useEffect(() => {
     const ocLocal = await store.get("oc-items")
     const hfLocal = await store.get("healthfit-daily")
     const dedupedWorkouts = dedupeUfdWorkouts(wo)
-    const cleanedOcLocal = (Array.isArray(ocLocal) ? ocLocal : []).filter(
-      item => (item.initialScore || item.currentScore || 0) > 0
-    )
+    const ninetyDaysAgo = Date.now() - 90 * 24 * 3600000
+    const cleanedOcLocal = (Array.isArray(ocLocal) ? ocLocal : []).filter(item => {
+      if ((item.initialScore || item.currentScore || 0) > 0) return true
+      const startMs = item.startDate ? new Date(item.startDate).getTime() : 0
+      return Number.isFinite(startMs) && startMs >= ninetyDaysAgo
+    })
     if (Array.isArray(wo) && dedupedWorkouts.length !== wo.length) {
       await store.set("ufd-workouts", dedupedWorkouts)
       setStoredWorkouts(dedupedWorkouts)
@@ -11131,7 +11136,11 @@ useEffect(() => {
             const merged = Object.values(
               [...local, ...sbOc].reduce((acc, e) => { acc[e.id] = e; return acc }, {})
             )
-              .filter(item => (item.initialScore || item.currentScore || 0) > 0)
+              .filter(item => {
+                if ((item.initialScore || item.currentScore || 0) > 0) return true
+                const startMs = item.startDate ? new Date(item.startDate).getTime() : 0
+                return Number.isFinite(startMs) && startMs >= ninetyDaysAgo
+              })
               .sort((a, b) => b.id - a.id)
             setOcItems(merged)
             await store.set("oc-items", merged)
@@ -15358,7 +15367,7 @@ return (
     operationalCapacityData={operationalCapacityData}
     healthFitDaily={healthFitDaily}
     sleepRecords={sleepRecords}
-    tsbFallback={computedTSBFromSessions?.tsb ?? null}
+    tsbFallback={tsbV2Panel?.currentOverallTsb ?? computedTSBFromSessions?.tsb ?? null}
     runSessions={operationalWorkouts.filter(w => w.category === "Running" && w.distance > 0)}
   />
 )}
