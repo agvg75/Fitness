@@ -11000,9 +11000,9 @@ useEffect(() => {
           await syncMealsToSupabase(localMeals, sess.user.id)
           // Only remove from localStorage after confirmed Supabase write
           localStorage.removeItem("ufd-meal-entries")
-        } catch (err) {
-          console.warn("Meal sync to Supabase failed, keeping localStorage copy", err)
-          if (process.env.NODE_ENV === "development") console.error("Meal migration failed:", err)
+        } catch (mealSyncErr) {
+          console.warn("[LIFT] Meal sync to Supabase failed, keeping localStorage copy", mealSyncErr)
+          if (process.env.NODE_ENV === "development") console.error("Meal migration failed:", mealSyncErr)
         }
       }
 
