@@ -7977,7 +7977,7 @@ function parseSleepCycleCSV(text) {
   const rejected = []
 
   const col = name => headers.findIndex(h => h.includes(name))
-  const iDate    = Math.max(col("date"), col("start"))
+  const iDate    = col("date")
   const iQual    = Math.max(col("sleep quality"), col("quality"), col("score"))
   // Prefer "time asleep" over "time in bed"; Sleep Cycle exports often label these as seconds.
   const iAsleep  = col("time asleep")
@@ -7996,7 +7996,12 @@ function parseSleepCycleCSV(text) {
     const cells = splitRow(raw)
     if (cells.length < 2) continue
 
-    const dateRaw = iDate >= 0 ? cells[iDate] : null
+    // Use the wake-up (end) time as the canonical sleep date — convention: the night
+    // belongs to the date you woke up on. Sessions spanning midnight (e.g., sleep
+    // Apr 14 22:14, wake Apr 15 03:19) correctly land on Apr 15, not Apr 14.
+    // Fall back to explicit date column, then start time, in that order.
+    const endRaw   = iEnd   >= 0 ? cells[iEnd]   : null
+    const dateRaw  = endRaw || (iDate >= 0 ? cells[iDate] : null) || (iStart >= 0 ? cells[iStart] : null)
     if (!dateRaw) { rejected.push({ source: "SleepCycle", reason: "Missing date", raw: raw.slice(0, 200) }); continue }
 
     let date = null
@@ -8040,6 +8045,7 @@ function parseSleepCycleCSV(text) {
       avg_hr_bpm: n(iHR >= 0 ? cells[iHR] : null),
       steps: n(iSteps >= 0 ? cells[iSteps] : null),
       notes: iNotes >= 0 ? cells[iNotes] : null,
+      sleep_id: `sc_${String(dateRaw || "").replace(/\W/g, "").slice(0, 17)}`,
     })
   }
 
