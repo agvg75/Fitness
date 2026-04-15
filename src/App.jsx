@@ -12446,20 +12446,21 @@ const tsbV2Panel = useMemo(() => {
   const wkts = Array.isArray(operationalWorkouts) ? operationalWorkouts : []
   function isPlausibleSession(w) {
     const dur = Number(w.dur || w.duration_min || 0)
-    const sources = Object.keys(w.sources || {})
-    const singleSource = sources.length === 1
-
-    // FitnessView date-only rows get expanded to 336-400 min windows.
-    // Any FitnessView-only session over 4 hours is implausible.
-    if (dur > 240 && singleSource && sources[0] === 'fitnessview') return false
-
-    // Technogym exports strength training with duration_min = 240 (a cap/artifact,
-    // not a real time). Strength sessions over 90 min from Technogym alone are implausible.
+    if (dur <= 0) return true
     const type = String(w.canonical_type || w.type || w.category || '').toLowerCase()
-    const isStrength = type.includes('strength') || type.includes('functional') ||
-      type.includes('traditional') || type.includes('weight') || type.includes('resistance')
-    if (dur >= 200 && isStrength && singleSource && sources[0] === 'technogym') return false
 
+    // Absolute caps by activity category regardless of source count.
+    // FitnessView date-only rows expand to 336-400 min; Technogym strength = 240 min artifact.
+    // These caps are well above any real session Andrés would do.
+    if (type.includes('swim') || type.includes('pool')) return dur <= 150
+    if (type.includes('cycl') || type.includes('bike') || type.includes('indoor')) return dur <= 180
+    if (type.includes('run')) return dur <= 240
+    if (type.includes('walk')) return dur <= 150
+    if (type.includes('strength') || type.includes('functional') ||
+        type.includes('traditional') || type.includes('weight') ||
+        type.includes('resistance')) return dur <= 150
+    const sources = Object.keys(w.sources || {})
+    if (dur > 240 && sources.length === 1) return false
     return true
   }
   // Before the daily-load loop, deduplicate operational workouts so that the same
@@ -12472,8 +12473,16 @@ const tsbV2Panel = useMemo(() => {
       if (!isPlausibleSession(w)) continue
       const day = String(w.dateTime || w.date || w.start_date || '').slice(0, 10)
       if (!day) continue
-      const type = String(w.canonical_type || w.type || w.category || 'other').toLowerCase()
-      const key = `${day}__${type}`
+      const rawType = String(w.canonical_type || w.type || w.category || 'other').toLowerCase()
+      const normType = rawType.includes('swim') || rawType.includes('pool') ? 'swimming'
+        : rawType.includes('cycl') || rawType.includes('bike') ? 'cycling'
+        : rawType.includes('run') ? 'running'
+        : rawType.includes('walk') ? 'walking'
+        : (rawType.includes('strength') || rawType.includes('functional') ||
+           rawType.includes('traditional') || rawType.includes('weight') ||
+           rawType.includes('resistance')) ? 'strength'
+        : rawType
+      const key = `${day}__${normType}`
       const existing = byDayType[key]
       if (!existing) {
         byDayType[key] = w
