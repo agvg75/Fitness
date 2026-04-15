@@ -1444,14 +1444,23 @@ function getSleepRecordDate(record) {
 
 function getRecentSleepRecords(records, limit = 7) {
   const sevenDaysAgo = Date.now() - 7 * 24 * 3600000
-  return (Array.isArray(records) ? records : [])
-    .filter(r => {
-      const sleepDate = getSleepRecordDate(r)
-      if (!sleepDate) return false
-      const ts = new Date(sleepDate).getTime()
-      return Number.isFinite(ts) && ts >= sevenDaysAgo
-    })
-    .sort((a, b) => String(getSleepRecordDate(b) || "").localeCompare(String(getSleepRecordDate(a) || "")))
+  const byDate = {}
+  ;(Array.isArray(records) ? records : []).forEach(r => {
+    const sleepDate = getSleepRecordDate(r)
+    if (!sleepDate) return
+    const ts = new Date(sleepDate).getTime()
+    if (!Number.isFinite(ts) || ts < sevenDaysAgo) return
+    if (!byDate[sleepDate]) {
+      byDate[sleepDate] = { ...r, date: sleepDate }
+    } else {
+      byDate[sleepDate] = {
+        ...byDate[sleepDate],
+        duration_min: (Number(byDate[sleepDate].duration_min) || 0) + (Number(r.duration_min) || 0)
+      }
+    }
+  })
+  return Object.values(byDate)
+    .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))
     .slice(0, limit)
 }
 
@@ -10806,40 +10815,37 @@ useEffect(() => {
       }
       if (remoteSleepRecords.length) {
         setSleepRecords(prev => {
-          // Step 1: pool all records by sleep_id to prevent double-counting
-          // when the same session exists in both localStorage and Supabase.
-          // Remote wins for the same sleep_id (fresher metadata).
-          const byId = {}
-          const addById = r => {
-            const sleepDate = getSleepRecordDate(r)
-            if (!sleepDate) return
-            const rec = { ...r, date: sleepDate }
-            const id = r.sleep_id || r.id
-            if (id) {
-              byId[id] = rec
-            } else {
-              // No sleep_id: use date + duration as fallback dedup key
-              byId[`noId_${sleepDate}_${r.duration_min}`] = rec
-            }
-          }
-          ;(Array.isArray(prev) ? prev : []).forEach(addById)
-          remoteSleepRecords.forEach(addById) // remote overwrites same id
+          // Pool all records from both sources
+          const all = [
+            ...(Array.isArray(prev) ? prev : []),
+            ...remoteSleepRecords
+          ].map(r => ({ ...r, date: getSleepRecordDate(r) })).filter(r => r.date)
 
-          // Step 2: aggregate unique sessions by date so split nights sum
-          const byDate = {}
-          Object.values(byId).forEach(r => {
-            const key = r.date
-            if (!byDate[key]) {
-              byDate[key] = { ...r }
-            } else {
-              byDate[key] = {
-                ...byDate[key],
-                duration_min: (Number(byDate[key].duration_min) || 0) + (Number(r.duration_min) || 0)
+          // Dedup: two records are the same session if they share a sleep_id
+          // OR their time windows overlap. This handles the case where the same
+          // session exists in both localStorage (with sleep_id) and Supabase (null sleep_id).
+          const toMs = v => v ? Date.parse(String(v)) : null
+          const deduped = []
+          for (const r of all) {
+            const rStart = toMs(r.start_at)
+            const rEnd = toMs(r.end_at)
+            const isDupe = deduped.some(e => {
+              if (r.sleep_id && e.sleep_id && r.sleep_id === e.sleep_id) return true
+              const eStart = toMs(e.start_at)
+              const eEnd = toMs(e.end_at)
+              if (rStart && rEnd && eStart && eEnd) {
+                return Math.min(rEnd, eEnd) > Math.max(rStart, eStart)
               }
-            }
-          })
-          return Object.values(byDate).sort((a, b) =>
-            String(a.date || '').localeCompare(String(b.date || ''))
+              return e.date === r.date &&
+                Math.abs((Number(e.duration_min) || 0) - (Number(r.duration_min) || 0)) <= 5
+            })
+            if (!isDupe) deduped.push(r)
+          }
+
+          // Sort by date then start_at — do NOT aggregate by date here.
+          // The display layer (sleepByDate IIFE in Overview) handles same-night summing.
+          return deduped.sort((a, b) =>
+            (a.start_at || a.date || '').localeCompare(b.start_at || b.date || '')
           )
         })
       }
