@@ -3757,11 +3757,11 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
                       value={inlineExName}
                       onChange={e => setInlineExName(e.target.value)}
                       onKeyDown={e => { if (e.key === "Enter") commitCustomExercise(); if (e.key === "Escape") setInlineExForm(null) }}
-                      list="schedule-exercise-history"
-                      placeholder="Exercise name..."
+                      list="exercise-history-datalist"
+                      placeholder="Exercise name or pick from history"
                       style={{ ...inputStyle(), marginBottom: 8, fontSize: 12, padding: "6px 8px" }}
                     />
-                    <datalist id="schedule-exercise-history">
+                    <datalist id="exercise-history-datalist">
                       {historicalExerciseNames.map(name => (
                         <option key={name} value={name} />
                       ))}
@@ -10022,8 +10022,15 @@ function extractDurationMin(workout) {
     const v = Number(c)
     if (Number.isFinite(v) && v > 0) {
       // Guard against seconds being returned as minutes (>600 min = implausible)
-      if (v > 600) return v / 60
-      return v
+      let result = v
+      if (result > 600) result = result / 60
+      // Technogym occasionally stores duration in seconds instead of minutes.
+      // Heuristic: if result > 180 and no HR data exists, divide by 60.
+      // A 3-hour workout with no HR is almost certainly a seconds-stored-as-minutes artifact.
+      if (result > 180 && !workout?.hr && !(workout?.preferred_metrics?.hr?.value)) {
+        result = result / 60
+      }
+      return result
     }
   }
 
@@ -13947,7 +13954,7 @@ return (
             <ComposedChart data={panel.rows} margin={{ top:8, right:14, left:12, bottom:14 }}>
               <CartesianGrid stroke="#1a1b2e" />
               <XAxis dataKey="label" tick={{ fontSize:10 }} interval={Math.max(1, Math.floor((panel.rows.length || 1) / (isLongWindow ? 10 : 12)) - 1)} />
-              <YAxis domain={[-30, 15]} allowDataOverflow={true} tick={{ fontSize:10 }} width={34} tickFormatter={value => Number(value).toFixed(0)} />
+              <YAxis domain={[-35, 15]} allowDataOverflow={true} tick={{ fontSize:10 }} width={30} tickFormatter={value => Number(value).toFixed(0)} />
               <ReferenceLine y={0} stroke="#444" strokeDasharray="3 3" />
               <Tooltip contentStyle={tooltipStyle} formatter={(v, n) => [Number(v).toFixed(2), n]} />
               <Line type="monotone" dataKey="overallTsb" name="Overall TSB" stroke="#e5e7eb" strokeWidth={isLongWindow ? 2 : 2.2} dot={false} connectNulls isAnimationActive={false} />
