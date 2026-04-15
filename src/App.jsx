@@ -10024,11 +10024,22 @@ function extractDurationMin(workout) {
       // Guard against seconds being returned as minutes (>600 min = implausible)
       let result = v
       if (result > 600) result = result / 60
-      // Technogym occasionally stores duration in seconds instead of minutes.
-      // Heuristic: if result > 180 and no HR data exists, divide by 60.
-      // A 3-hour workout with no HR is almost certainly a seconds-stored-as-minutes artifact.
-      if (result > 180 && !workout?.hr && !(workout?.preferred_metrics?.hr?.value)) {
+      // Technogym stores duration in seconds rather than minutes for machine sessions.
+      // Two-pass correction:
+      // Pass 1: if raw value > 180 and no HR, it was seconds — divide by 60.
+      // Pass 2: strength sessions with no HR are capped at 90 min (YMCA 5-7 AM window).
+      //         Cardio sessions are capped at 180 min (generous for long rides/swims).
+      const hasHR = !!(workout?.hr || workout?.preferred_metrics?.hr?.value)
+      if (result > 180 && !hasHR) {
         result = result / 60
+      }
+      const isStrength = ['Strength', 'Functional Strength Training', 'Traditional Strength Training',
+        'Core Training', 'CrossFit'].includes(workout?.category || workout?.canonical_type || workout?.type || '')
+      if (!hasHR && isStrength && result > 90) {
+        result = 90
+      }
+      if (!hasHR && !isStrength && result > 180) {
+        result = 180
       }
       return result
     }
@@ -10351,6 +10362,14 @@ function areDuplicateOperationalWorkouts(imported, manual) {
       importedDistance <= 0 || manualDistance <= 0 || closeEnough(importedDistance, manualDistance, 0.15)
     if (caloriesAligned && distanceCompatible) return true
   }
+
+  // Same day + same category + duration within 20% = duplicate
+  const sameDay = String(imported?.dateTime || imported?.date || "").slice(0, 10) === String(manual?.dateTime || manual?.date || "").slice(0, 10)
+  const sameCategory = (imported?.category || imported?.canonical_type) === (manual?.category || manual?.canonical_type)
+  const durA = Number(imported?.dur || 0)
+  const durB = Number(manual?.dur || 0)
+  const durSimilar = durA > 0 && durB > 0 && Math.abs(durA - durB) / Math.max(durA, durB) < 0.20
+  if (sameDay && sameCategory && durSimilar) return true
 
   const overlap = getOperationalWorkoutOverlap(imported, manual)
   if (overlap.hasComparableWindows) {
