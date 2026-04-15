@@ -1,4 +1,6 @@
 node_modules/
 dist/
-.envdata_source/export.xml
+.env
+.codex
+data_source/export.xml
 data_source/*.xml
