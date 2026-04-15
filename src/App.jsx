@@ -12462,8 +12462,34 @@ const tsbV2Panel = useMemo(() => {
 
     return true
   }
-  wkts.forEach(w => {
-    if (!isPlausibleSession(w)) return
+  // Before the daily-load loop, deduplicate operational workouts so that the same
+  // session imported from multiple sources (Apple, Technogym, FitnessView) is only
+  // counted once per type per day. Keep the session with the most sources; break
+  // ties by keeping the longest duration.
+  const dedupedForTsb = (() => {
+    const byDayType = {}
+    for (const w of wkts) {
+      if (!isPlausibleSession(w)) continue
+      const day = String(w.dateTime || w.date || w.start_date || '').slice(0, 10)
+      if (!day) continue
+      const type = String(w.canonical_type || w.type || w.category || 'other').toLowerCase()
+      const key = `${day}__${type}`
+      const existing = byDayType[key]
+      if (!existing) {
+        byDayType[key] = w
+        continue
+      }
+      const existingSources = Object.keys(existing.sources || {}).length
+      const newSources = Object.keys(w.sources || {}).length
+      const existingDur = Number(existing.dur || existing.duration_min || 0)
+      const newDur = Number(w.dur || w.duration_min || 0)
+      if (newSources > existingSources || (newSources === existingSources && newDur > existingDur)) {
+        byDayType[key] = w
+      }
+    }
+    return Object.values(byDayType)
+  })()
+  dedupedForTsb.forEach(w => {
     const date = getWorkoutLikeDateKey(w)
     if (!dailyLoads[date]) return
     const cat = normalizeWorkoutType(w.type, w)
