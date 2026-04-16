@@ -3,7 +3,9 @@ import { PROG, CARDIO } from "./scheduleData.js"
 import {
   applyCanonicalSessionMergePolicy,
   dedupeCanonicalSessions,
+  getCanonicalSessionDuplicateKey,
   makeCanonicalSessionFromScheduleLog,
+  mergeCanonicalSessionsPreferPrimary,
   mergeCanonicalSessionsWithScheduleSeeds
 } from "./lib/canonicalSessions.js"
 import {
@@ -1422,6 +1424,28 @@ function sleepMinutesForReadiness(record) {
   return raw > 24 * 60 ? raw / 60 : raw
 }
 
+function getSleepRecordStartInfo(record) {
+  const candidates = [record?.start_at, record?.start_time]
+  for (const value of candidates) {
+    const normalized = normalizeDateString(value)
+    if (!normalized) continue
+    const ms = Date.parse(normalized)
+    if (Number.isFinite(ms)) return { normalized, ms }
+  }
+  return { normalized: null, ms: NaN }
+}
+
+function getSleepRecordEndInfo(record) {
+  const candidates = [record?.end_at, record?.end_time]
+  for (const value of candidates) {
+    const normalized = normalizeDateString(value)
+    if (!normalized) continue
+    const ms = Date.parse(normalized)
+    if (Number.isFinite(ms)) return { normalized, ms }
+  }
+  return { normalized: null, ms: NaN }
+}
+
 function getSleepRecordDate(record) {
   const candidates = [
     record?.date,
@@ -1440,6 +1464,78 @@ function getSleepRecordDate(record) {
   }
 
   return null
+}
+
+function mergeAdjacentSleepSegments(records, gapMinutes = 90) {
+  const gapMs = gapMinutes * 60000
+  const normalized = (Array.isArray(records) ? records : [])
+    .map(record => {
+      const start = getSleepRecordStartInfo(record)
+      const end = getSleepRecordEndInfo(record)
+      const durationMin = sleepMinutesForReadiness(record)
+      return {
+        record,
+        startNormalized: start.normalized,
+        endNormalized: end.normalized,
+        startMs: start.ms,
+        endMs: end.ms,
+        durationMin,
+      }
+    })
+    .filter(row => Number.isFinite(row.startMs) && Number.isFinite(row.endMs) && row.endMs > row.startMs)
+    .sort((a, b) => a.startMs - b.startMs)
+
+  const episodes = []
+
+  normalized.forEach(row => {
+    const previous = episodes[episodes.length - 1]
+    const canMerge =
+      previous &&
+      row.startMs <= previous.endMs + gapMs
+
+    if (!canMerge) {
+      episodes.push({
+        startMs: row.startMs,
+        endMs: row.endMs,
+        start_time: row.startNormalized,
+        end_time: row.endNormalized,
+        duration_min: row.durationMin,
+        records: [row.record],
+      })
+      return
+    }
+
+    previous.endMs = Math.max(previous.endMs, row.endMs)
+    previous.end_time = row.endNormalized
+    previous.duration_min += row.durationMin
+    previous.records.push(row.record)
+  })
+
+  return episodes.map((episode, index) => {
+    const nightKey = String(episode.start_time || "").slice(0, 10)
+    const avgQuality =
+      episode.records
+        .map(record => Number(record?.sleep_quality))
+        .filter(Number.isFinite)
+        .reduce((sum, value, _, arr) => sum + value / arr.length, 0)
+
+    return {
+      sleep_id: episode.records.length === 1
+        ? episode.records[0]?.sleep_id
+        : `merged_sleep_${nightKey}_${index}`,
+      date: nightKey,
+      sleep_date: nightKey,
+      start_time: episode.start_time,
+      end_time: episode.end_time,
+      start_at: episode.start_time,
+      end_at: episode.end_time,
+      duration_min: episode.duration_min,
+      sleep_quality: Number.isFinite(avgQuality) ? avgQuality : null,
+      merged_segment_count: episode.records.length,
+      merged_segments: episode.records,
+      source: episode.records[0]?.source || "SleepCycle",
+    }
+  })
 }
 
 function deduplicateSleepRecords(records) {
@@ -1468,22 +1564,13 @@ function deduplicateSleepRecords(records) {
 
 function getRecentSleepRecords(records, limit = 7) {
   const sevenDaysAgo = Date.now() - 7 * 24 * 3600000
-  const byDate = {}
-  ;(Array.isArray(records) ? records : []).forEach(r => {
-    const sleepDate = getSleepRecordDate(r)
-    if (!sleepDate) return
-    const ts = new Date(sleepDate).getTime()
-    if (!Number.isFinite(ts) || ts < sevenDaysAgo) return
-    if (!byDate[sleepDate]) {
-      byDate[sleepDate] = { ...r, date: sleepDate }
-    } else {
-      byDate[sleepDate] = {
-        ...byDate[sleepDate],
-        duration_min: (Number(byDate[sleepDate].duration_min) || 0) + (Number(r.duration_min) || 0)
-      }
-    }
-  })
-  return Object.values(byDate)
+  return mergeAdjacentSleepSegments(records)
+    .filter(record => {
+      const sleepDate = getSleepRecordDate(record)
+      if (!sleepDate) return false
+      const ts = new Date(sleepDate).getTime()
+      return Number.isFinite(ts) && ts >= sevenDaysAgo
+    })
     .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))
     .slice(0, limit)
 }
@@ -4460,6 +4547,16 @@ if (w.category === "Strength") {
     )
   }, [chartData])
 
+  useEffect(() => {
+    if (!import.meta.env.DEV) return
+    console.log("[LIFT DEBUG] TrainingDashboard counts", {
+      workouts: summarizeWorkoutSet(workouts),
+      filteredCount: Array.isArray(filteredWorkouts) ? filteredWorkouts.length : 0,
+      chartBuckets: Array.isArray(chartData) ? chartData.length : 0,
+      totals
+    })
+  }, [workouts, filteredWorkouts, chartData, totals])
+
   const cardStyle = {
     background: "#101622",
     border: "1px solid #1a2a44",
@@ -7399,6 +7496,31 @@ function getNewestWorkoutLikeDate(rows) {
   return Number.isFinite(ts) ? new Date(ts).toISOString().slice(0, 10) : null
 }
 
+function summarizeWorkoutSet(rows) {
+  const list = Array.isArray(rows) ? rows : []
+  const typeCounts = {}
+  const seenKeys = new Set()
+  let duplicateCount = 0
+
+  list.forEach(row => {
+    const type = String(row?.category || row?.canonical_type || row?.type || "Other")
+    typeCounts[type] = (typeCounts[type] || 0) + 1
+
+    const key = getCanonicalSessionDuplicateKey(row)
+    if (seenKeys.has(key)) duplicateCount += 1
+    else seenKeys.add(key)
+  })
+
+  return {
+    count: list.length,
+    newestDate: getNewestWorkoutLikeDate(list),
+    duplicateCount,
+    topTypes: Object.entries(typeCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+  }
+}
+
 function getWorkoutLikeDateKey(row) {
   const raw = row?.dateTime || row?.date || row?.start_date || row?.startDate || null
   const normalized = normalizeDateString(raw)
@@ -9850,6 +9972,63 @@ const unifiedCanonicalSessions = useMemo(() => {
   return mergeCanonicalSessionsWithScheduleSeeds(canonicalSessions, scheduleStrengthCanonicalSeeds)
 }, [canonicalSessions, scheduleStrengthCanonicalSeeds])
 
+const mergedSleepEpisodes = useMemo(() => {
+  return mergeAdjacentSleepSegments(sleepRecords, 90)
+}, [sleepRecords])
+
+useEffect(() => {
+  if (process.env.NODE_ENV !== "development") return
+  console.log("[LIFT DEBUG] canonicalSessions state", summarizeWorkoutSet(canonicalSessions))
+}, [canonicalSessions])
+
+useEffect(() => {
+  if (process.env.NODE_ENV !== "development") return
+  console.log("[LIFT DEBUG] unifiedCanonicalSessions", summarizeWorkoutSet(unifiedCanonicalSessions))
+}, [unifiedCanonicalSessions])
+
+useEffect(() => {
+  if (process.env.NODE_ENV !== "development") return
+
+  const inWindow = record => {
+    const start = String(record?.start_at || record?.start_time || "")
+    const end = String(record?.end_at || record?.end_time || "")
+    return (
+      start.slice(0, 10) >= "2026-04-14" && start.slice(0, 10) <= "2026-04-16"
+    ) || (
+      end.slice(0, 10) >= "2026-04-14" && end.slice(0, 10) <= "2026-04-16"
+    ) || (
+      String(record?.date || record?.sleep_date || "").slice(0, 10) >= "2026-04-14" &&
+      String(record?.date || record?.sleep_date || "").slice(0, 10) <= "2026-04-16"
+    )
+  }
+
+  console.log("[LIFT DEBUG] raw sleep rows 2026-04-14..2026-04-16",
+    (Array.isArray(sleepRecords) ? sleepRecords : [])
+      .filter(inWindow)
+      .map(record => ({
+        sleep_id: record?.sleep_id,
+        date: record?.date || record?.sleep_date || null,
+        start: record?.start_at || record?.start_time || null,
+        end: record?.end_at || record?.end_time || null,
+        duration_min: sleepMinutesForReadiness(record),
+      }))
+  )
+
+  console.log("[LIFT DEBUG] merged sleep episodes 2026-04-14..2026-04-16",
+    mergedSleepEpisodes
+      .filter(inWindow)
+      .map(record => ({
+        sleep_id: record?.sleep_id,
+        date: record?.date,
+        start: record?.start_time,
+        end: record?.end_time,
+        duration_min: record?.duration_min,
+        hours: Number((Number(record?.duration_min || 0) / 60).toFixed(3)),
+        merged_segment_count: record?.merged_segment_count,
+      }))
+  )
+}, [sleepRecords, mergedSleepEpisodes])
+
   const activeWorkouts = useMemo(() => {
     return unifiedCanonicalSessions && unifiedCanonicalSessions.length > 0
       ? unifiedCanonicalSessions
@@ -10342,6 +10521,12 @@ const normalizedActiveWorkouts = useMemo(() => {
     }
   })
 }, [activeWorkouts])
+
+useEffect(() => {
+  if (process.env.NODE_ENV !== "development") return
+  console.log("[LIFT DEBUG] normalizedActiveWorkouts", summarizeWorkoutSet(normalizedActiveWorkouts))
+}, [normalizedActiveWorkouts])
+
 function sameDay(a, b) {
   return String(a || "").slice(0, 10) === String(b || "").slice(0, 10)
 }
@@ -10537,6 +10722,13 @@ useEffect(() => {
     storedNewestDate: getNewestWorkoutLikeDate(storedWorkouts),
     schedNewestDate: getNewestWorkoutLikeDate(buildScheduleCardioWorkoutsFromLog(schedLog))
   })
+  if (process.env.NODE_ENV === "development") {
+    console.log("[LIFT DEBUG] operationalWorkouts summary", {
+      operational: summarizeWorkoutSet(operationalWorkouts),
+      imported: summarizeWorkoutSet(normalizedActiveWorkouts),
+      manual: summarizeWorkoutSet(normalizedStoredWorkouts),
+    })
+  }
 }, [operationalWorkouts, canonicalSessions, storedWorkouts, schedLog])
 
 
@@ -10676,6 +10868,9 @@ useEffect(() => {
         setDexa(Array.isArray(dx) ? dx : [])
         setWorkouts(Array.isArray(w) ? w : [])
         const bundledCanonicalSessions = Array.isArray(cs?.all_sessions) ? cs.all_sessions : []
+        if (process.env.NODE_ENV === "development") {
+          console.log("[LIFT DEBUG] bundled canonical sessions loaded", summarizeWorkoutSet(bundledCanonicalSessions))
+        }
         operationalWorkoutUpdateRef.current = {
           source: "bundle:canonicalSessions",
           newestDate: getNewestWorkoutLikeDate(bundledCanonicalSessions),
@@ -10833,17 +11028,22 @@ useEffect(() => {
             return currentCanonicalSessions
           }
 
-          const merged = dedupeCanonicalSessions([
-            ...(Array.isArray(currentCanonicalSessions) ? currentCanonicalSessions : []),
-            ...remoteCanonicalSessions,
-          ]).map(applyCanonicalSessionMergePolicy)
+          const merged = mergeCanonicalSessionsPreferPrimary(
+            Array.isArray(currentCanonicalSessions) ? currentCanonicalSessions : [],
+            remoteCanonicalSessions
+          ).map(applyCanonicalSessionMergePolicy)
 
           operationalWorkoutUpdateRef.current = {
             source: "remote:canonicalSessions",
             newestDate: getNewestWorkoutLikeDate(merged),
             count: merged.length
           }
-          console.log("[LIFT] Merged remote canonical sessions", operationalWorkoutUpdateRef.current)
+          console.log("[LIFT] Merged remote canonical sessions", {
+            ...operationalWorkoutUpdateRef.current,
+            current: summarizeWorkoutSet(currentCanonicalSessions),
+            remote: summarizeWorkoutSet(remoteCanonicalSessions),
+            merged: summarizeWorkoutSet(merged)
+          })
           return merged
         })
       }
@@ -13844,25 +14044,24 @@ return (
     {/* ── Sleep Quality Panel ───────────────────────────────────── */}
     {(() => {
       const TARGET_HOURS = 7.5
-      const sleepByDate = (() => {
-        const acc = {}
-        ;(Array.isArray(sleepRecords) ? sleepRecords : []).forEach(record => {
-          const sleepDate = getSleepRecordDate(record)
-          if (!sleepDate) return
-          if (!acc[sleepDate]) {
-            acc[sleepDate] = { ...record, date: sleepDate }
-          } else {
-            acc[sleepDate] = {
-              ...acc[sleepDate],
-              duration_min: (Number(acc[sleepDate].duration_min) || 0) + (Number(record.duration_min) || 0)
-            }
-          }
-        })
-        return new Map(Object.entries(acc))
+      const sleepByDate = new Map(
+        mergedSleepEpisodes.map(record => [record.date, record])
+      )
+      const mostRecentMergedEpisode = mergedSleepEpisodes.length
+        ? mergedSleepEpisodes.slice().sort((a, b) => String(a.date || "").localeCompare(String(b.date || ""))).slice(-1)[0]
+        : null
+      const anchorDate = (() => {
+        if (mostRecentMergedEpisode?.date) {
+          const d = new Date(`${mostRecentMergedEpisode.date}T12:00:00`)
+          if (!Number.isNaN(d.getTime())) return d
+        }
+        const fallback = new Date()
+        fallback.setHours(12, 0, 0, 0)
+        fallback.setDate(fallback.getDate() - 1)
+        return fallback
       })()
       const lastSevenNights = Array.from({ length: 7 }, (_, index) => {
-        const date = new Date()
-        date.setHours(12, 0, 0, 0)
+        const date = new Date(anchorDate)
         date.setDate(date.getDate() - (6 - index))
         const iso = date.toISOString().slice(0, 10)
         const record = sleepByDate.get(iso) || null
@@ -13905,11 +14104,25 @@ return (
       if (recentSleep.length === 0) return null
 
       const avgHours = recentSleep.reduce((s, r) => s + sleepMinutesForReadiness(r), 0) / recentSleep.length / 60
-      const lastNight = lastSevenNights[lastSevenNights.length - 1]?.record || recentSleep[0]
+      const lastNight = mostRecentMergedEpisode || recentSleep[0] || null
       const lastHours = lastNight ? sleepMinutesForReadiness(lastNight) / 60 : null
       const avgPct = Math.min(100, Math.round((avgHours / TARGET_HOURS) * 100))
       const avgColor = avgHours >= 7 ? "#4ade80" : avgHours >= 6 ? "#fbbf24" : "#ef4444"
       const lastColor = lastHours == null ? "#667" : lastHours >= 7 ? "#4ade80" : lastHours >= 6 ? "#fbbf24" : "#ef4444"
+
+      if (import.meta.env.DEV) {
+        console.log("[LIFT DEBUG] nightly sleep display values", lastSevenNights.map(night => ({
+          date: night.iso,
+          hours: night.hours == null ? null : Number(night.hours.toFixed(3)),
+          status: night.status
+        })))
+        console.log("[LIFT DEBUG] selected last night", lastNight ? {
+          date: lastNight.date,
+          start: lastNight.start_at || lastNight.start_time || null,
+          end: lastNight.end_at || lastNight.end_time || null,
+          hours: Number((sleepMinutesForReadiness(lastNight) / 60).toFixed(3))
+        } : null)
+      }
 
       return (
         <div style={{ ...cardStyle(), marginBottom: "16px" }}>

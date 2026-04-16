@@ -182,6 +182,10 @@ function getDuplicateSessionKey(session) {
   return `${type}|${roundedStart}|${roundedEnd}`
 }
 
+export function getCanonicalSessionDuplicateKey(session) {
+  return getDuplicateSessionKey(session)
+}
+
 export function dedupeCanonicalSessions(sessions) {
   const deduped = new Map()
 
@@ -198,6 +202,22 @@ export function dedupeCanonicalSessions(sessions) {
   return [...deduped.values()]
     .map(applyCanonicalSessionMergePolicy)
     .sort((a, b) => String(a?.start_date || "").localeCompare(String(b?.start_date || "")))
+}
+
+export function mergeCanonicalSessionsPreferPrimary(primarySessions, secondarySessions) {
+  const primary = dedupeCanonicalSessions(primarySessions)
+  const secondary = dedupeCanonicalSessions(secondarySessions)
+  const primaryKeys = new Set(primary.map(getDuplicateSessionKey))
+  const appended = []
+
+  secondary.forEach(session => {
+    const key = getDuplicateSessionKey(session)
+    if (primaryKeys.has(key)) return
+    primaryKeys.add(key)
+    appended.push(session)
+  })
+
+  return dedupeCanonicalSessions([...primary, ...appended])
 }
 
 function estimateScheduleStrengthTrimp(entry) {

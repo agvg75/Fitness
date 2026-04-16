@@ -60,8 +60,6 @@ const swimLaps = {};
 let lineCount = 0;
 let statCount = 0;
 let lapCount = 0;
-let buffer = "";
-
 const rl = readline.createInterface({
   input: fs.createReadStream(inputFile, { encoding: "utf8" }),
   crlfDelay: Infinity,
@@ -107,61 +105,38 @@ rl.on("line", (line) => {
     }
   }
 
-  // Collect Workout opening tags (distance patched later in close handler)
-  buffer += " " + trimmed;
+  // Apple Health export writes each Workout opening tag on its own line.
+  // Parse directly from the trimmed line to avoid brittle cross-line buffering.
+  if (trimmed.startsWith("<Workout ") && trimmed.includes("workoutActivityType")) {
+    const rawType = attr(trimmed, "workoutActivityType") || "";
+    const type = typeMap[rawType] || "Other";
+    const startDate = attr(trimmed, "startDate") || "";
+    const endDate = attr(trimmed, "endDate") || "";
+    const duration = toNumber(attr(trimmed, "duration"));
+    const sourceName = attr(trimmed, "sourceName") || "";
+    const distance = toNumber(attr(trimmed, "totalDistance"));
+    const distUnit = attr(trimmed, "totalDistanceUnit") || "";
+    const calories = toNumber(attr(trimmed, "totalEnergyBurned"));
 
-  let start;
-  while ((start = buffer.indexOf("<Workout ")) !== -1) {
-    const selfClose = buffer.indexOf("/>", start);
-    const openClose = buffer.indexOf(">", start);
-    if (selfClose === -1 && openClose === -1) break;
-
-    let tagEnd, tagStr;
-    if (selfClose !== -1 && (openClose === -1 || selfClose < openClose)) {
-      tagEnd = selfClose + 2;
-      tagStr = buffer.slice(start, tagEnd);
-    } else {
-      tagEnd = openClose + 1;
-      tagStr = buffer.slice(start, tagEnd);
+    const key = `${startDate}|${rawType}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      workouts.push({
+        source: "AppleHealth",
+        raw_type: rawType,
+        type,
+        start_date: startDate,
+        end_date: endDate,
+        duration_min: duration,
+        distance, // may be 0 — patched in close handler
+        distance_unit: distUnit,
+        calories,
+        hr: 0,
+        notes: "",
+        source_name: sourceName,
+      });
     }
-
-    if (tagStr.includes("workoutActivityType")) {
-      const rawType    = attr(tagStr, "workoutActivityType") || "";
-      const type       = typeMap[rawType] || "Other";
-      const startDate  = attr(tagStr, "startDate") || "";
-      const endDate    = attr(tagStr, "endDate")   || "";
-      const duration   = toNumber(attr(tagStr, "duration"));
-      const sourceName = attr(tagStr, "sourceName") || "";
-      const distance   = toNumber(attr(tagStr, "totalDistance"));
-      const distUnit   = attr(tagStr, "totalDistanceUnit") || "";
-      const calories   = toNumber(attr(tagStr, "totalEnergyBurned"));
-
-      const key = `${startDate}|${rawType}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        workouts.push({
-          source:        "AppleHealth",
-          raw_type:      rawType,
-          type,
-          start_date:    startDate,
-          end_date:      endDate,
-          duration_min:  duration,
-          distance,              // may be 0 — patched in close handler
-          distance_unit: distUnit,
-          calories,
-          hr:            0,
-          notes:         "",
-          source_name:   sourceName,
-        });
-      }
-    }
-
-    buffer = buffer.slice(tagEnd);
   }
-
-  const lastAngle = buffer.lastIndexOf("<Workout ");
-  if (lastAngle > 0) { buffer = buffer.slice(lastAngle); }
-  else if (buffer.length > 2000) { buffer = buffer.slice(-500); }
 });
 
 rl.on("close", () => {

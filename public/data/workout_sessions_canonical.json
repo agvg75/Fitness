@@ -2,9 +2,9 @@
   "summary": {
     "strong_matches_input": 147,
     "canonical_linked_sessions": 73,
-    "unmatched_apple_sessions": 394,
+    "unmatched_apple_sessions": 413,
     "unmatched_technogym_sessions": 200,
-    "total_sessions_written": 667
+    "total_sessions_written": 686
   },
   "linked_sessions": [
     {
@@ -29500,6 +29500,1146 @@
           "start_date": "2026-04-09 09:39:38 -0500",
           "end_date": "2026-04-09 10:50:50 -0500",
           "duration_min": 71.20337746739388,
+          "distance": 0,
+          "distance_unit": "",
+          "calories": 0,
+          "hr": 0,
+          "notes": "",
+          "source_name": "Andres’s Apple Watch"
+        },
+        "technogym": null
+      },
+      "preferred_metrics": {
+        "hr": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "calories": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "distance": {
+          "value": 0,
+          "source": "AppleHealth",
+          "rationale": "Apple-only session",
+          "unit": null
+        },
+        "power_avg": {
+          "value": null,
+          "source": null
+        },
+        "level": {
+          "value": null,
+          "source": null
+        },
+        "rpm_avg": {
+          "value": null,
+          "source": null
+        },
+        "vo2": {
+          "value": null,
+          "source": null,
+          "note": null
+        }
+      }
+    },
+    {
+      "session_id": "apple_0467",
+      "match_confidence": "unmatched",
+      "relationship": null,
+      "canonical_type": "Walking",
+      "start_date": "2026-04-09 14:47:06 -0500",
+      "end_date": "2026-04-09 14:53:29 -0500",
+      "duration_min": 6.376079765955607,
+      "overlap_summary": null,
+      "sources": {
+        "apple": {
+          "source": "AppleHealth",
+          "raw_type": "HKWorkoutActivityTypeWalking",
+          "type": "Walking",
+          "start_date": "2026-04-09 14:47:06 -0500",
+          "end_date": "2026-04-09 14:53:29 -0500",
+          "duration_min": 6.376079765955607,
+          "distance": 0.366286,
+          "distance_unit": "mi",
+          "calories": 0,
+          "hr": 0,
+          "notes": "",
+          "source_name": "Andres’s Apple Watch"
+        },
+        "technogym": null
+      },
+      "preferred_metrics": {
+        "hr": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "calories": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "distance": {
+          "value": 0.366286,
+          "source": "AppleHealth",
+          "rationale": "Apple-only session",
+          "unit": "mi"
+        },
+        "power_avg": {
+          "value": null,
+          "source": null
+        },
+        "level": {
+          "value": null,
+          "source": null
+        },
+        "rpm_avg": {
+          "value": null,
+          "source": null
+        },
+        "vo2": {
+          "value": null,
+          "source": null,
+          "note": null
+        }
+      }
+    },
+    {
+      "session_id": "apple_0468",
+      "match_confidence": "unmatched",
+      "relationship": null,
+      "canonical_type": "Running",
+      "start_date": "2026-04-09 14:53:40 -0500",
+      "end_date": "2026-04-09 15:26:42 -0500",
+      "duration_min": 33.03362828294436,
+      "overlap_summary": null,
+      "sources": {
+        "apple": {
+          "source": "AppleHealth",
+          "raw_type": "HKWorkoutActivityTypeRunning",
+          "type": "Running",
+          "start_date": "2026-04-09 14:53:40 -0500",
+          "end_date": "2026-04-09 15:26:42 -0500",
+          "duration_min": 33.03362828294436,
+          "distance": 3.01599,
+          "distance_unit": "mi",
+          "calories": 0,
+          "hr": 0,
+          "notes": "",
+          "source_name": "Andres’s Apple Watch"
+        },
+        "technogym": null
+      },
+      "preferred_metrics": {
+        "hr": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "calories": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "distance": {
+          "value": 3.01599,
+          "source": "AppleHealth",
+          "rationale": "Apple-only session",
+          "unit": "mi"
+        },
+        "power_avg": {
+          "value": null,
+          "source": null
+        },
+        "level": {
+          "value": null,
+          "source": null
+        },
+        "rpm_avg": {
+          "value": null,
+          "source": null
+        },
+        "vo2": {
+          "value": null,
+          "source": null,
+          "note": null
+        }
+      }
+    },
+    {
+      "session_id": "apple_0469",
+      "match_confidence": "unmatched",
+      "relationship": null,
+      "canonical_type": "Cycling",
+      "start_date": "2026-04-10 05:25:11 -0500",
+      "end_date": "2026-04-10 06:02:17 -0500",
+      "duration_min": 37.09931123256683,
+      "overlap_summary": null,
+      "sources": {
+        "apple": {
+          "source": "AppleHealth",
+          "raw_type": "HKWorkoutActivityTypeCycling",
+          "type": "Cycling",
+          "start_date": "2026-04-10 05:25:11 -0500",
+          "end_date": "2026-04-10 06:02:17 -0500",
+          "duration_min": 37.09931123256683,
+          "distance": 0,
+          "distance_unit": "",
+          "calories": 0,
+          "hr": 0,
+          "notes": "",
+          "source_name": "Andres’s Apple Watch"
+        },
+        "technogym": null
+      },
+      "preferred_metrics": {
+        "hr": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "calories": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "distance": {
+          "value": 0,
+          "source": "AppleHealth",
+          "rationale": "Apple-only session",
+          "unit": null
+        },
+        "power_avg": {
+          "value": null,
+          "source": null
+        },
+        "level": {
+          "value": null,
+          "source": null
+        },
+        "rpm_avg": {
+          "value": null,
+          "source": null
+        },
+        "vo2": {
+          "value": null,
+          "source": null,
+          "note": null
+        }
+      }
+    },
+    {
+      "session_id": "apple_0470",
+      "match_confidence": "unmatched",
+      "relationship": null,
+      "canonical_type": "Traditional Strength Training",
+      "start_date": "2026-04-10 06:02:28 -0500",
+      "end_date": "2026-04-10 06:47:08 -0500",
+      "duration_min": 44.66045371691386,
+      "overlap_summary": null,
+      "sources": {
+        "apple": {
+          "source": "AppleHealth",
+          "raw_type": "HKWorkoutActivityTypeTraditionalStrengthTraining",
+          "type": "Traditional Strength Training",
+          "start_date": "2026-04-10 06:02:28 -0500",
+          "end_date": "2026-04-10 06:47:08 -0500",
+          "duration_min": 44.66045371691386,
+          "distance": 0,
+          "distance_unit": "",
+          "calories": 0,
+          "hr": 0,
+          "notes": "",
+          "source_name": "Andres’s Apple Watch"
+        },
+        "technogym": null
+      },
+      "preferred_metrics": {
+        "hr": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "calories": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "distance": {
+          "value": 0,
+          "source": "AppleHealth",
+          "rationale": "Apple-only session",
+          "unit": null
+        },
+        "power_avg": {
+          "value": null,
+          "source": null
+        },
+        "level": {
+          "value": null,
+          "source": null
+        },
+        "rpm_avg": {
+          "value": null,
+          "source": null
+        },
+        "vo2": {
+          "value": null,
+          "source": null,
+          "note": null
+        }
+      }
+    },
+    {
+      "session_id": "apple_0471",
+      "match_confidence": "unmatched",
+      "relationship": null,
+      "canonical_type": "Running",
+      "start_date": "2026-04-11 09:00:03 -0500",
+      "end_date": "2026-04-11 09:35:31 -0500",
+      "duration_min": 35.4682243168354,
+      "overlap_summary": null,
+      "sources": {
+        "apple": {
+          "source": "AppleHealth",
+          "raw_type": "HKWorkoutActivityTypeRunning",
+          "type": "Running",
+          "start_date": "2026-04-11 09:00:03 -0500",
+          "end_date": "2026-04-11 09:35:31 -0500",
+          "duration_min": 35.4682243168354,
+          "distance": 3.12899,
+          "distance_unit": "mi",
+          "calories": 0,
+          "hr": 0,
+          "notes": "",
+          "source_name": "Andres’s Apple Watch"
+        },
+        "technogym": null
+      },
+      "preferred_metrics": {
+        "hr": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "calories": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "distance": {
+          "value": 3.12899,
+          "source": "AppleHealth",
+          "rationale": "Apple-only session",
+          "unit": "mi"
+        },
+        "power_avg": {
+          "value": null,
+          "source": null
+        },
+        "level": {
+          "value": null,
+          "source": null
+        },
+        "rpm_avg": {
+          "value": null,
+          "source": null
+        },
+        "vo2": {
+          "value": null,
+          "source": null,
+          "note": null
+        }
+      }
+    },
+    {
+      "session_id": "apple_0472",
+      "match_confidence": "unmatched",
+      "relationship": null,
+      "canonical_type": "Cycling",
+      "start_date": "2026-04-11 16:11:21 -0500",
+      "end_date": "2026-04-11 17:31:35 -0500",
+      "duration_min": 68.67331944704056,
+      "overlap_summary": null,
+      "sources": {
+        "apple": {
+          "source": "AppleHealth",
+          "raw_type": "HKWorkoutActivityTypeCycling",
+          "type": "Cycling",
+          "start_date": "2026-04-11 16:11:21 -0500",
+          "end_date": "2026-04-11 17:31:35 -0500",
+          "duration_min": 68.67331944704056,
+          "distance": 3.89328,
+          "distance_unit": "mi",
+          "calories": 0,
+          "hr": 0,
+          "notes": "",
+          "source_name": "Andres’s Apple Watch"
+        },
+        "technogym": null
+      },
+      "preferred_metrics": {
+        "hr": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "calories": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "distance": {
+          "value": 3.89328,
+          "source": "AppleHealth",
+          "rationale": "Apple-only session",
+          "unit": "mi"
+        },
+        "power_avg": {
+          "value": null,
+          "source": null
+        },
+        "level": {
+          "value": null,
+          "source": null
+        },
+        "rpm_avg": {
+          "value": null,
+          "source": null
+        },
+        "vo2": {
+          "value": null,
+          "source": null,
+          "note": null
+        }
+      }
+    },
+    {
+      "session_id": "apple_0473",
+      "match_confidence": "unmatched",
+      "relationship": null,
+      "canonical_type": "Swimming",
+      "start_date": "2026-04-12 14:48:24 -0500",
+      "end_date": "2026-04-12 15:10:19 -0500",
+      "duration_min": 21.91335371732712,
+      "overlap_summary": null,
+      "sources": {
+        "apple": {
+          "source": "AppleHealth",
+          "raw_type": "HKWorkoutActivityTypeSwimming",
+          "type": "Swimming",
+          "start_date": "2026-04-12 14:48:24 -0500",
+          "end_date": "2026-04-12 15:10:19 -0500",
+          "duration_min": 21.91335371732712,
+          "distance": 500,
+          "distance_unit": "yd",
+          "calories": 0,
+          "hr": 0,
+          "notes": "",
+          "source_name": "Andres’s Apple Watch"
+        },
+        "technogym": null
+      },
+      "preferred_metrics": {
+        "hr": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "calories": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "distance": {
+          "value": 500,
+          "source": "AppleHealth",
+          "rationale": "Apple-only session",
+          "unit": "yd"
+        },
+        "power_avg": {
+          "value": null,
+          "source": null
+        },
+        "level": {
+          "value": null,
+          "source": null
+        },
+        "rpm_avg": {
+          "value": null,
+          "source": null
+        },
+        "vo2": {
+          "value": null,
+          "source": null,
+          "note": null
+        }
+      }
+    },
+    {
+      "session_id": "apple_0474",
+      "match_confidence": "unmatched",
+      "relationship": null,
+      "canonical_type": "Cycling",
+      "start_date": "2026-04-12 16:50:57 -0500",
+      "end_date": "2026-04-12 17:26:11 -0500",
+      "duration_min": 35.23333333333333,
+      "overlap_summary": null,
+      "sources": {
+        "apple": {
+          "source": "AppleHealth",
+          "raw_type": "HKWorkoutActivityTypeCycling",
+          "type": "Cycling",
+          "start_date": "2026-04-12 16:50:57 -0500",
+          "end_date": "2026-04-12 17:26:11 -0500",
+          "duration_min": 35.23333333333333,
+          "distance": 2.02044,
+          "distance_unit": "mi",
+          "calories": 0,
+          "hr": 0,
+          "notes": "",
+          "source_name": "HealthFit"
+        },
+        "technogym": null
+      },
+      "preferred_metrics": {
+        "hr": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "calories": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "distance": {
+          "value": 2.02044,
+          "source": "AppleHealth",
+          "rationale": "Apple-only session",
+          "unit": "mi"
+        },
+        "power_avg": {
+          "value": null,
+          "source": null
+        },
+        "level": {
+          "value": null,
+          "source": null
+        },
+        "rpm_avg": {
+          "value": null,
+          "source": null
+        },
+        "vo2": {
+          "value": null,
+          "source": null,
+          "note": null
+        }
+      }
+    },
+    {
+      "session_id": "apple_0475",
+      "match_confidence": "unmatched",
+      "relationship": null,
+      "canonical_type": "Cycling",
+      "start_date": "2026-04-13 05:36:22 -0500",
+      "end_date": "2026-04-13 06:02:10 -0500",
+      "duration_min": 25.79998718301455,
+      "overlap_summary": null,
+      "sources": {
+        "apple": {
+          "source": "AppleHealth",
+          "raw_type": "HKWorkoutActivityTypeCycling",
+          "type": "Cycling",
+          "start_date": "2026-04-13 05:36:22 -0500",
+          "end_date": "2026-04-13 06:02:10 -0500",
+          "duration_min": 25.79998718301455,
+          "distance": 0,
+          "distance_unit": "",
+          "calories": 0,
+          "hr": 0,
+          "notes": "",
+          "source_name": "Andres’s Apple Watch"
+        },
+        "technogym": null
+      },
+      "preferred_metrics": {
+        "hr": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "calories": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "distance": {
+          "value": 0,
+          "source": "AppleHealth",
+          "rationale": "Apple-only session",
+          "unit": null
+        },
+        "power_avg": {
+          "value": null,
+          "source": null
+        },
+        "level": {
+          "value": null,
+          "source": null
+        },
+        "rpm_avg": {
+          "value": null,
+          "source": null
+        },
+        "vo2": {
+          "value": null,
+          "source": null,
+          "note": null
+        }
+      }
+    },
+    {
+      "session_id": "apple_0476",
+      "match_confidence": "unmatched",
+      "relationship": null,
+      "canonical_type": "Traditional Strength Training",
+      "start_date": "2026-04-13 06:03:17 -0500",
+      "end_date": "2026-04-13 06:57:46 -0500",
+      "duration_min": 54.4916385491689,
+      "overlap_summary": null,
+      "sources": {
+        "apple": {
+          "source": "AppleHealth",
+          "raw_type": "HKWorkoutActivityTypeTraditionalStrengthTraining",
+          "type": "Traditional Strength Training",
+          "start_date": "2026-04-13 06:03:17 -0500",
+          "end_date": "2026-04-13 06:57:46 -0500",
+          "duration_min": 54.4916385491689,
+          "distance": 0,
+          "distance_unit": "",
+          "calories": 0,
+          "hr": 0,
+          "notes": "",
+          "source_name": "Andres’s Apple Watch"
+        },
+        "technogym": null
+      },
+      "preferred_metrics": {
+        "hr": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "calories": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "distance": {
+          "value": 0,
+          "source": "AppleHealth",
+          "rationale": "Apple-only session",
+          "unit": null
+        },
+        "power_avg": {
+          "value": null,
+          "source": null
+        },
+        "level": {
+          "value": null,
+          "source": null
+        },
+        "rpm_avg": {
+          "value": null,
+          "source": null
+        },
+        "vo2": {
+          "value": null,
+          "source": null,
+          "note": null
+        }
+      }
+    },
+    {
+      "session_id": "apple_0477",
+      "match_confidence": "unmatched",
+      "relationship": null,
+      "canonical_type": "Cycling",
+      "start_date": "2026-04-13 08:53:37 -0500",
+      "end_date": "2026-04-13 09:34:06 -0500",
+      "duration_min": 35.16593333482742,
+      "overlap_summary": null,
+      "sources": {
+        "apple": {
+          "source": "AppleHealth",
+          "raw_type": "HKWorkoutActivityTypeCycling",
+          "type": "Cycling",
+          "start_date": "2026-04-13 08:53:37 -0500",
+          "end_date": "2026-04-13 09:34:06 -0500",
+          "duration_min": 35.16593333482742,
+          "distance": 4.70409,
+          "distance_unit": "mi",
+          "calories": 0,
+          "hr": 0,
+          "notes": "",
+          "source_name": "Cadence"
+        },
+        "technogym": null
+      },
+      "preferred_metrics": {
+        "hr": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "calories": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "distance": {
+          "value": 4.70409,
+          "source": "AppleHealth",
+          "rationale": "Apple-only session",
+          "unit": "mi"
+        },
+        "power_avg": {
+          "value": null,
+          "source": null
+        },
+        "level": {
+          "value": null,
+          "source": null
+        },
+        "rpm_avg": {
+          "value": null,
+          "source": null
+        },
+        "vo2": {
+          "value": null,
+          "source": null,
+          "note": null
+        }
+      }
+    },
+    {
+      "session_id": "apple_0478",
+      "match_confidence": "unmatched",
+      "relationship": null,
+      "canonical_type": "Cycling",
+      "start_date": "2026-04-13 17:32:37 -0500",
+      "end_date": "2026-04-13 17:53:30 -0500",
+      "duration_min": 20.87985000212987,
+      "overlap_summary": null,
+      "sources": {
+        "apple": {
+          "source": "AppleHealth",
+          "raw_type": "HKWorkoutActivityTypeCycling",
+          "type": "Cycling",
+          "start_date": "2026-04-13 17:32:37 -0500",
+          "end_date": "2026-04-13 17:53:30 -0500",
+          "duration_min": 20.87985000212987,
+          "distance": 3.23011,
+          "distance_unit": "mi",
+          "calories": 0,
+          "hr": 0,
+          "notes": "",
+          "source_name": "Cadence"
+        },
+        "technogym": null
+      },
+      "preferred_metrics": {
+        "hr": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "calories": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "distance": {
+          "value": 3.23011,
+          "source": "AppleHealth",
+          "rationale": "Apple-only session",
+          "unit": "mi"
+        },
+        "power_avg": {
+          "value": null,
+          "source": null
+        },
+        "level": {
+          "value": null,
+          "source": null
+        },
+        "rpm_avg": {
+          "value": null,
+          "source": null
+        },
+        "vo2": {
+          "value": null,
+          "source": null,
+          "note": null
+        }
+      }
+    },
+    {
+      "session_id": "apple_0479",
+      "match_confidence": "unmatched",
+      "relationship": null,
+      "canonical_type": "Swimming",
+      "start_date": "2026-04-14 05:42:05 -0500",
+      "end_date": "2026-04-14 06:28:46 -0500",
+      "duration_min": 46.67577806512515,
+      "overlap_summary": null,
+      "sources": {
+        "apple": {
+          "source": "AppleHealth",
+          "raw_type": "HKWorkoutActivityTypeSwimming",
+          "type": "Swimming",
+          "start_date": "2026-04-14 05:42:05 -0500",
+          "end_date": "2026-04-14 06:28:46 -0500",
+          "duration_min": 46.67577806512515,
+          "distance": 1100,
+          "distance_unit": "yd",
+          "calories": 0,
+          "hr": 0,
+          "notes": "",
+          "source_name": "Andres’s Apple Watch"
+        },
+        "technogym": null
+      },
+      "preferred_metrics": {
+        "hr": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "calories": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "distance": {
+          "value": 1100,
+          "source": "AppleHealth",
+          "rationale": "Apple-only session",
+          "unit": "yd"
+        },
+        "power_avg": {
+          "value": null,
+          "source": null
+        },
+        "level": {
+          "value": null,
+          "source": null
+        },
+        "rpm_avg": {
+          "value": null,
+          "source": null
+        },
+        "vo2": {
+          "value": null,
+          "source": null,
+          "note": null
+        }
+      }
+    },
+    {
+      "session_id": "apple_0480",
+      "match_confidence": "unmatched",
+      "relationship": null,
+      "canonical_type": "Running",
+      "start_date": "2026-04-14 09:36:09 -0500",
+      "end_date": "2026-04-14 09:39:50 -0500",
+      "duration_min": 3.698354933659236,
+      "overlap_summary": null,
+      "sources": {
+        "apple": {
+          "source": "AppleHealth",
+          "raw_type": "HKWorkoutActivityTypeRunning",
+          "type": "Running",
+          "start_date": "2026-04-14 09:36:09 -0500",
+          "end_date": "2026-04-14 09:39:50 -0500",
+          "duration_min": 3.698354933659236,
+          "distance": 0.373429,
+          "distance_unit": "mi",
+          "calories": 0,
+          "hr": 0,
+          "notes": "",
+          "source_name": "Andres’s Apple Watch"
+        },
+        "technogym": null
+      },
+      "preferred_metrics": {
+        "hr": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "calories": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "distance": {
+          "value": 0.373429,
+          "source": "AppleHealth",
+          "rationale": "Apple-only session",
+          "unit": "mi"
+        },
+        "power_avg": {
+          "value": null,
+          "source": null
+        },
+        "level": {
+          "value": null,
+          "source": null
+        },
+        "rpm_avg": {
+          "value": null,
+          "source": null
+        },
+        "vo2": {
+          "value": null,
+          "source": null,
+          "note": null
+        }
+      }
+    },
+    {
+      "session_id": "apple_0481",
+      "match_confidence": "unmatched",
+      "relationship": null,
+      "canonical_type": "Traditional Strength Training",
+      "start_date": "2026-04-14 09:41:30 -0500",
+      "end_date": "2026-04-14 10:52:27 -0500",
+      "duration_min": 70.94221381743749,
+      "overlap_summary": null,
+      "sources": {
+        "apple": {
+          "source": "AppleHealth",
+          "raw_type": "HKWorkoutActivityTypeTraditionalStrengthTraining",
+          "type": "Traditional Strength Training",
+          "start_date": "2026-04-14 09:41:30 -0500",
+          "end_date": "2026-04-14 10:52:27 -0500",
+          "duration_min": 70.94221381743749,
+          "distance": 0,
+          "distance_unit": "",
+          "calories": 0,
+          "hr": 0,
+          "notes": "",
+          "source_name": "Andres’s Apple Watch"
+        },
+        "technogym": null
+      },
+      "preferred_metrics": {
+        "hr": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "calories": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "distance": {
+          "value": 0,
+          "source": "AppleHealth",
+          "rationale": "Apple-only session",
+          "unit": null
+        },
+        "power_avg": {
+          "value": null,
+          "source": null
+        },
+        "level": {
+          "value": null,
+          "source": null
+        },
+        "rpm_avg": {
+          "value": null,
+          "source": null
+        },
+        "vo2": {
+          "value": null,
+          "source": null,
+          "note": null
+        }
+      }
+    },
+    {
+      "session_id": "apple_0482",
+      "match_confidence": "unmatched",
+      "relationship": null,
+      "canonical_type": "Cycling",
+      "start_date": "2026-04-16 05:53:50 -0500",
+      "end_date": "2026-04-16 06:15:31 -0500",
+      "duration_min": 21.68553735017776,
+      "overlap_summary": null,
+      "sources": {
+        "apple": {
+          "source": "AppleHealth",
+          "raw_type": "HKWorkoutActivityTypeCycling",
+          "type": "Cycling",
+          "start_date": "2026-04-16 05:53:50 -0500",
+          "end_date": "2026-04-16 06:15:31 -0500",
+          "duration_min": 21.68553735017776,
+          "distance": 0,
+          "distance_unit": "",
+          "calories": 0,
+          "hr": 0,
+          "notes": "",
+          "source_name": "Andres’s Apple Watch"
+        },
+        "technogym": null
+      },
+      "preferred_metrics": {
+        "hr": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "calories": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "distance": {
+          "value": 0,
+          "source": "AppleHealth",
+          "rationale": "Apple-only session",
+          "unit": null
+        },
+        "power_avg": {
+          "value": null,
+          "source": null
+        },
+        "level": {
+          "value": null,
+          "source": null
+        },
+        "rpm_avg": {
+          "value": null,
+          "source": null
+        },
+        "vo2": {
+          "value": null,
+          "source": null,
+          "note": null
+        }
+      }
+    },
+    {
+      "session_id": "apple_0483",
+      "match_confidence": "unmatched",
+      "relationship": null,
+      "canonical_type": "Swimming",
+      "start_date": "2026-04-16 06:24:09 -0500",
+      "end_date": "2026-04-16 06:47:10 -0500",
+      "duration_min": 23.02243934869766,
+      "overlap_summary": null,
+      "sources": {
+        "apple": {
+          "source": "AppleHealth",
+          "raw_type": "HKWorkoutActivityTypeSwimming",
+          "type": "Swimming",
+          "start_date": "2026-04-16 06:24:09 -0500",
+          "end_date": "2026-04-16 06:47:10 -0500",
+          "duration_min": 23.02243934869766,
+          "distance": 500,
+          "distance_unit": "yd",
+          "calories": 0,
+          "hr": 0,
+          "notes": "",
+          "source_name": "Andres’s Apple Watch"
+        },
+        "technogym": null
+      },
+      "preferred_metrics": {
+        "hr": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "calories": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "distance": {
+          "value": 500,
+          "source": "AppleHealth",
+          "rationale": "Apple-only session",
+          "unit": "yd"
+        },
+        "power_avg": {
+          "value": null,
+          "source": null
+        },
+        "level": {
+          "value": null,
+          "source": null
+        },
+        "rpm_avg": {
+          "value": null,
+          "source": null
+        },
+        "vo2": {
+          "value": null,
+          "source": null,
+          "note": null
+        }
+      }
+    },
+    {
+      "session_id": "apple_0484",
+      "match_confidence": "unmatched",
+      "relationship": null,
+      "canonical_type": "Running",
+      "start_date": "2026-04-16 09:35:56 -0500",
+      "end_date": "2026-04-16 09:39:36 -0500",
+      "duration_min": 3.666855015357335,
+      "overlap_summary": null,
+      "sources": {
+        "apple": {
+          "source": "AppleHealth",
+          "raw_type": "HKWorkoutActivityTypeRunning",
+          "type": "Running",
+          "start_date": "2026-04-16 09:35:56 -0500",
+          "end_date": "2026-04-16 09:39:36 -0500",
+          "duration_min": 3.666855015357335,
+          "distance": 0.38295,
+          "distance_unit": "mi",
+          "calories": 0,
+          "hr": 0,
+          "notes": "",
+          "source_name": "Andres’s Apple Watch"
+        },
+        "technogym": null
+      },
+      "preferred_metrics": {
+        "hr": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "calories": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "distance": {
+          "value": 0.38295,
+          "source": "AppleHealth",
+          "rationale": "Apple-only session",
+          "unit": "mi"
+        },
+        "power_avg": {
+          "value": null,
+          "source": null
+        },
+        "level": {
+          "value": null,
+          "source": null
+        },
+        "rpm_avg": {
+          "value": null,
+          "source": null
+        },
+        "vo2": {
+          "value": null,
+          "source": null,
+          "note": null
+        }
+      }
+    },
+    {
+      "session_id": "apple_0485",
+      "match_confidence": "unmatched",
+      "relationship": null,
+      "canonical_type": "Traditional Strength Training",
+      "start_date": "2026-04-16 09:39:51 -0500",
+      "end_date": "2026-04-16 10:50:00 -0500",
+      "duration_min": 70.14877988298734,
+      "overlap_summary": null,
+      "sources": {
+        "apple": {
+          "source": "AppleHealth",
+          "raw_type": "HKWorkoutActivityTypeTraditionalStrengthTraining",
+          "type": "Traditional Strength Training",
+          "start_date": "2026-04-16 09:39:51 -0500",
+          "end_date": "2026-04-16 10:50:00 -0500",
+          "duration_min": 70.14877988298734,
           "distance": 0,
           "distance_unit": "",
           "calories": 0,
@@ -83838,6 +84978,1146 @@
           "start_date": "2026-04-09 09:39:38 -0500",
           "end_date": "2026-04-09 10:50:50 -0500",
           "duration_min": 71.20337746739388,
+          "distance": 0,
+          "distance_unit": "",
+          "calories": 0,
+          "hr": 0,
+          "notes": "",
+          "source_name": "Andres’s Apple Watch"
+        },
+        "technogym": null
+      },
+      "preferred_metrics": {
+        "hr": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "calories": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "distance": {
+          "value": 0,
+          "source": "AppleHealth",
+          "rationale": "Apple-only session",
+          "unit": null
+        },
+        "power_avg": {
+          "value": null,
+          "source": null
+        },
+        "level": {
+          "value": null,
+          "source": null
+        },
+        "rpm_avg": {
+          "value": null,
+          "source": null
+        },
+        "vo2": {
+          "value": null,
+          "source": null,
+          "note": null
+        }
+      }
+    },
+    {
+      "session_id": "apple_0467",
+      "match_confidence": "unmatched",
+      "relationship": null,
+      "canonical_type": "Walking",
+      "start_date": "2026-04-09 14:47:06 -0500",
+      "end_date": "2026-04-09 14:53:29 -0500",
+      "duration_min": 6.376079765955607,
+      "overlap_summary": null,
+      "sources": {
+        "apple": {
+          "source": "AppleHealth",
+          "raw_type": "HKWorkoutActivityTypeWalking",
+          "type": "Walking",
+          "start_date": "2026-04-09 14:47:06 -0500",
+          "end_date": "2026-04-09 14:53:29 -0500",
+          "duration_min": 6.376079765955607,
+          "distance": 0.366286,
+          "distance_unit": "mi",
+          "calories": 0,
+          "hr": 0,
+          "notes": "",
+          "source_name": "Andres’s Apple Watch"
+        },
+        "technogym": null
+      },
+      "preferred_metrics": {
+        "hr": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "calories": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "distance": {
+          "value": 0.366286,
+          "source": "AppleHealth",
+          "rationale": "Apple-only session",
+          "unit": "mi"
+        },
+        "power_avg": {
+          "value": null,
+          "source": null
+        },
+        "level": {
+          "value": null,
+          "source": null
+        },
+        "rpm_avg": {
+          "value": null,
+          "source": null
+        },
+        "vo2": {
+          "value": null,
+          "source": null,
+          "note": null
+        }
+      }
+    },
+    {
+      "session_id": "apple_0468",
+      "match_confidence": "unmatched",
+      "relationship": null,
+      "canonical_type": "Running",
+      "start_date": "2026-04-09 14:53:40 -0500",
+      "end_date": "2026-04-09 15:26:42 -0500",
+      "duration_min": 33.03362828294436,
+      "overlap_summary": null,
+      "sources": {
+        "apple": {
+          "source": "AppleHealth",
+          "raw_type": "HKWorkoutActivityTypeRunning",
+          "type": "Running",
+          "start_date": "2026-04-09 14:53:40 -0500",
+          "end_date": "2026-04-09 15:26:42 -0500",
+          "duration_min": 33.03362828294436,
+          "distance": 3.01599,
+          "distance_unit": "mi",
+          "calories": 0,
+          "hr": 0,
+          "notes": "",
+          "source_name": "Andres’s Apple Watch"
+        },
+        "technogym": null
+      },
+      "preferred_metrics": {
+        "hr": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "calories": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "distance": {
+          "value": 3.01599,
+          "source": "AppleHealth",
+          "rationale": "Apple-only session",
+          "unit": "mi"
+        },
+        "power_avg": {
+          "value": null,
+          "source": null
+        },
+        "level": {
+          "value": null,
+          "source": null
+        },
+        "rpm_avg": {
+          "value": null,
+          "source": null
+        },
+        "vo2": {
+          "value": null,
+          "source": null,
+          "note": null
+        }
+      }
+    },
+    {
+      "session_id": "apple_0469",
+      "match_confidence": "unmatched",
+      "relationship": null,
+      "canonical_type": "Cycling",
+      "start_date": "2026-04-10 05:25:11 -0500",
+      "end_date": "2026-04-10 06:02:17 -0500",
+      "duration_min": 37.09931123256683,
+      "overlap_summary": null,
+      "sources": {
+        "apple": {
+          "source": "AppleHealth",
+          "raw_type": "HKWorkoutActivityTypeCycling",
+          "type": "Cycling",
+          "start_date": "2026-04-10 05:25:11 -0500",
+          "end_date": "2026-04-10 06:02:17 -0500",
+          "duration_min": 37.09931123256683,
+          "distance": 0,
+          "distance_unit": "",
+          "calories": 0,
+          "hr": 0,
+          "notes": "",
+          "source_name": "Andres’s Apple Watch"
+        },
+        "technogym": null
+      },
+      "preferred_metrics": {
+        "hr": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "calories": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "distance": {
+          "value": 0,
+          "source": "AppleHealth",
+          "rationale": "Apple-only session",
+          "unit": null
+        },
+        "power_avg": {
+          "value": null,
+          "source": null
+        },
+        "level": {
+          "value": null,
+          "source": null
+        },
+        "rpm_avg": {
+          "value": null,
+          "source": null
+        },
+        "vo2": {
+          "value": null,
+          "source": null,
+          "note": null
+        }
+      }
+    },
+    {
+      "session_id": "apple_0470",
+      "match_confidence": "unmatched",
+      "relationship": null,
+      "canonical_type": "Traditional Strength Training",
+      "start_date": "2026-04-10 06:02:28 -0500",
+      "end_date": "2026-04-10 06:47:08 -0500",
+      "duration_min": 44.66045371691386,
+      "overlap_summary": null,
+      "sources": {
+        "apple": {
+          "source": "AppleHealth",
+          "raw_type": "HKWorkoutActivityTypeTraditionalStrengthTraining",
+          "type": "Traditional Strength Training",
+          "start_date": "2026-04-10 06:02:28 -0500",
+          "end_date": "2026-04-10 06:47:08 -0500",
+          "duration_min": 44.66045371691386,
+          "distance": 0,
+          "distance_unit": "",
+          "calories": 0,
+          "hr": 0,
+          "notes": "",
+          "source_name": "Andres’s Apple Watch"
+        },
+        "technogym": null
+      },
+      "preferred_metrics": {
+        "hr": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "calories": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "distance": {
+          "value": 0,
+          "source": "AppleHealth",
+          "rationale": "Apple-only session",
+          "unit": null
+        },
+        "power_avg": {
+          "value": null,
+          "source": null
+        },
+        "level": {
+          "value": null,
+          "source": null
+        },
+        "rpm_avg": {
+          "value": null,
+          "source": null
+        },
+        "vo2": {
+          "value": null,
+          "source": null,
+          "note": null
+        }
+      }
+    },
+    {
+      "session_id": "apple_0471",
+      "match_confidence": "unmatched",
+      "relationship": null,
+      "canonical_type": "Running",
+      "start_date": "2026-04-11 09:00:03 -0500",
+      "end_date": "2026-04-11 09:35:31 -0500",
+      "duration_min": 35.4682243168354,
+      "overlap_summary": null,
+      "sources": {
+        "apple": {
+          "source": "AppleHealth",
+          "raw_type": "HKWorkoutActivityTypeRunning",
+          "type": "Running",
+          "start_date": "2026-04-11 09:00:03 -0500",
+          "end_date": "2026-04-11 09:35:31 -0500",
+          "duration_min": 35.4682243168354,
+          "distance": 3.12899,
+          "distance_unit": "mi",
+          "calories": 0,
+          "hr": 0,
+          "notes": "",
+          "source_name": "Andres’s Apple Watch"
+        },
+        "technogym": null
+      },
+      "preferred_metrics": {
+        "hr": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "calories": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "distance": {
+          "value": 3.12899,
+          "source": "AppleHealth",
+          "rationale": "Apple-only session",
+          "unit": "mi"
+        },
+        "power_avg": {
+          "value": null,
+          "source": null
+        },
+        "level": {
+          "value": null,
+          "source": null
+        },
+        "rpm_avg": {
+          "value": null,
+          "source": null
+        },
+        "vo2": {
+          "value": null,
+          "source": null,
+          "note": null
+        }
+      }
+    },
+    {
+      "session_id": "apple_0472",
+      "match_confidence": "unmatched",
+      "relationship": null,
+      "canonical_type": "Cycling",
+      "start_date": "2026-04-11 16:11:21 -0500",
+      "end_date": "2026-04-11 17:31:35 -0500",
+      "duration_min": 68.67331944704056,
+      "overlap_summary": null,
+      "sources": {
+        "apple": {
+          "source": "AppleHealth",
+          "raw_type": "HKWorkoutActivityTypeCycling",
+          "type": "Cycling",
+          "start_date": "2026-04-11 16:11:21 -0500",
+          "end_date": "2026-04-11 17:31:35 -0500",
+          "duration_min": 68.67331944704056,
+          "distance": 3.89328,
+          "distance_unit": "mi",
+          "calories": 0,
+          "hr": 0,
+          "notes": "",
+          "source_name": "Andres’s Apple Watch"
+        },
+        "technogym": null
+      },
+      "preferred_metrics": {
+        "hr": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "calories": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "distance": {
+          "value": 3.89328,
+          "source": "AppleHealth",
+          "rationale": "Apple-only session",
+          "unit": "mi"
+        },
+        "power_avg": {
+          "value": null,
+          "source": null
+        },
+        "level": {
+          "value": null,
+          "source": null
+        },
+        "rpm_avg": {
+          "value": null,
+          "source": null
+        },
+        "vo2": {
+          "value": null,
+          "source": null,
+          "note": null
+        }
+      }
+    },
+    {
+      "session_id": "apple_0473",
+      "match_confidence": "unmatched",
+      "relationship": null,
+      "canonical_type": "Swimming",
+      "start_date": "2026-04-12 14:48:24 -0500",
+      "end_date": "2026-04-12 15:10:19 -0500",
+      "duration_min": 21.91335371732712,
+      "overlap_summary": null,
+      "sources": {
+        "apple": {
+          "source": "AppleHealth",
+          "raw_type": "HKWorkoutActivityTypeSwimming",
+          "type": "Swimming",
+          "start_date": "2026-04-12 14:48:24 -0500",
+          "end_date": "2026-04-12 15:10:19 -0500",
+          "duration_min": 21.91335371732712,
+          "distance": 500,
+          "distance_unit": "yd",
+          "calories": 0,
+          "hr": 0,
+          "notes": "",
+          "source_name": "Andres’s Apple Watch"
+        },
+        "technogym": null
+      },
+      "preferred_metrics": {
+        "hr": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "calories": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "distance": {
+          "value": 500,
+          "source": "AppleHealth",
+          "rationale": "Apple-only session",
+          "unit": "yd"
+        },
+        "power_avg": {
+          "value": null,
+          "source": null
+        },
+        "level": {
+          "value": null,
+          "source": null
+        },
+        "rpm_avg": {
+          "value": null,
+          "source": null
+        },
+        "vo2": {
+          "value": null,
+          "source": null,
+          "note": null
+        }
+      }
+    },
+    {
+      "session_id": "apple_0474",
+      "match_confidence": "unmatched",
+      "relationship": null,
+      "canonical_type": "Cycling",
+      "start_date": "2026-04-12 16:50:57 -0500",
+      "end_date": "2026-04-12 17:26:11 -0500",
+      "duration_min": 35.23333333333333,
+      "overlap_summary": null,
+      "sources": {
+        "apple": {
+          "source": "AppleHealth",
+          "raw_type": "HKWorkoutActivityTypeCycling",
+          "type": "Cycling",
+          "start_date": "2026-04-12 16:50:57 -0500",
+          "end_date": "2026-04-12 17:26:11 -0500",
+          "duration_min": 35.23333333333333,
+          "distance": 2.02044,
+          "distance_unit": "mi",
+          "calories": 0,
+          "hr": 0,
+          "notes": "",
+          "source_name": "HealthFit"
+        },
+        "technogym": null
+      },
+      "preferred_metrics": {
+        "hr": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "calories": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "distance": {
+          "value": 2.02044,
+          "source": "AppleHealth",
+          "rationale": "Apple-only session",
+          "unit": "mi"
+        },
+        "power_avg": {
+          "value": null,
+          "source": null
+        },
+        "level": {
+          "value": null,
+          "source": null
+        },
+        "rpm_avg": {
+          "value": null,
+          "source": null
+        },
+        "vo2": {
+          "value": null,
+          "source": null,
+          "note": null
+        }
+      }
+    },
+    {
+      "session_id": "apple_0475",
+      "match_confidence": "unmatched",
+      "relationship": null,
+      "canonical_type": "Cycling",
+      "start_date": "2026-04-13 05:36:22 -0500",
+      "end_date": "2026-04-13 06:02:10 -0500",
+      "duration_min": 25.79998718301455,
+      "overlap_summary": null,
+      "sources": {
+        "apple": {
+          "source": "AppleHealth",
+          "raw_type": "HKWorkoutActivityTypeCycling",
+          "type": "Cycling",
+          "start_date": "2026-04-13 05:36:22 -0500",
+          "end_date": "2026-04-13 06:02:10 -0500",
+          "duration_min": 25.79998718301455,
+          "distance": 0,
+          "distance_unit": "",
+          "calories": 0,
+          "hr": 0,
+          "notes": "",
+          "source_name": "Andres’s Apple Watch"
+        },
+        "technogym": null
+      },
+      "preferred_metrics": {
+        "hr": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "calories": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "distance": {
+          "value": 0,
+          "source": "AppleHealth",
+          "rationale": "Apple-only session",
+          "unit": null
+        },
+        "power_avg": {
+          "value": null,
+          "source": null
+        },
+        "level": {
+          "value": null,
+          "source": null
+        },
+        "rpm_avg": {
+          "value": null,
+          "source": null
+        },
+        "vo2": {
+          "value": null,
+          "source": null,
+          "note": null
+        }
+      }
+    },
+    {
+      "session_id": "apple_0476",
+      "match_confidence": "unmatched",
+      "relationship": null,
+      "canonical_type": "Traditional Strength Training",
+      "start_date": "2026-04-13 06:03:17 -0500",
+      "end_date": "2026-04-13 06:57:46 -0500",
+      "duration_min": 54.4916385491689,
+      "overlap_summary": null,
+      "sources": {
+        "apple": {
+          "source": "AppleHealth",
+          "raw_type": "HKWorkoutActivityTypeTraditionalStrengthTraining",
+          "type": "Traditional Strength Training",
+          "start_date": "2026-04-13 06:03:17 -0500",
+          "end_date": "2026-04-13 06:57:46 -0500",
+          "duration_min": 54.4916385491689,
+          "distance": 0,
+          "distance_unit": "",
+          "calories": 0,
+          "hr": 0,
+          "notes": "",
+          "source_name": "Andres’s Apple Watch"
+        },
+        "technogym": null
+      },
+      "preferred_metrics": {
+        "hr": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "calories": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "distance": {
+          "value": 0,
+          "source": "AppleHealth",
+          "rationale": "Apple-only session",
+          "unit": null
+        },
+        "power_avg": {
+          "value": null,
+          "source": null
+        },
+        "level": {
+          "value": null,
+          "source": null
+        },
+        "rpm_avg": {
+          "value": null,
+          "source": null
+        },
+        "vo2": {
+          "value": null,
+          "source": null,
+          "note": null
+        }
+      }
+    },
+    {
+      "session_id": "apple_0477",
+      "match_confidence": "unmatched",
+      "relationship": null,
+      "canonical_type": "Cycling",
+      "start_date": "2026-04-13 08:53:37 -0500",
+      "end_date": "2026-04-13 09:34:06 -0500",
+      "duration_min": 35.16593333482742,
+      "overlap_summary": null,
+      "sources": {
+        "apple": {
+          "source": "AppleHealth",
+          "raw_type": "HKWorkoutActivityTypeCycling",
+          "type": "Cycling",
+          "start_date": "2026-04-13 08:53:37 -0500",
+          "end_date": "2026-04-13 09:34:06 -0500",
+          "duration_min": 35.16593333482742,
+          "distance": 4.70409,
+          "distance_unit": "mi",
+          "calories": 0,
+          "hr": 0,
+          "notes": "",
+          "source_name": "Cadence"
+        },
+        "technogym": null
+      },
+      "preferred_metrics": {
+        "hr": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "calories": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "distance": {
+          "value": 4.70409,
+          "source": "AppleHealth",
+          "rationale": "Apple-only session",
+          "unit": "mi"
+        },
+        "power_avg": {
+          "value": null,
+          "source": null
+        },
+        "level": {
+          "value": null,
+          "source": null
+        },
+        "rpm_avg": {
+          "value": null,
+          "source": null
+        },
+        "vo2": {
+          "value": null,
+          "source": null,
+          "note": null
+        }
+      }
+    },
+    {
+      "session_id": "apple_0478",
+      "match_confidence": "unmatched",
+      "relationship": null,
+      "canonical_type": "Cycling",
+      "start_date": "2026-04-13 17:32:37 -0500",
+      "end_date": "2026-04-13 17:53:30 -0500",
+      "duration_min": 20.87985000212987,
+      "overlap_summary": null,
+      "sources": {
+        "apple": {
+          "source": "AppleHealth",
+          "raw_type": "HKWorkoutActivityTypeCycling",
+          "type": "Cycling",
+          "start_date": "2026-04-13 17:32:37 -0500",
+          "end_date": "2026-04-13 17:53:30 -0500",
+          "duration_min": 20.87985000212987,
+          "distance": 3.23011,
+          "distance_unit": "mi",
+          "calories": 0,
+          "hr": 0,
+          "notes": "",
+          "source_name": "Cadence"
+        },
+        "technogym": null
+      },
+      "preferred_metrics": {
+        "hr": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "calories": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "distance": {
+          "value": 3.23011,
+          "source": "AppleHealth",
+          "rationale": "Apple-only session",
+          "unit": "mi"
+        },
+        "power_avg": {
+          "value": null,
+          "source": null
+        },
+        "level": {
+          "value": null,
+          "source": null
+        },
+        "rpm_avg": {
+          "value": null,
+          "source": null
+        },
+        "vo2": {
+          "value": null,
+          "source": null,
+          "note": null
+        }
+      }
+    },
+    {
+      "session_id": "apple_0479",
+      "match_confidence": "unmatched",
+      "relationship": null,
+      "canonical_type": "Swimming",
+      "start_date": "2026-04-14 05:42:05 -0500",
+      "end_date": "2026-04-14 06:28:46 -0500",
+      "duration_min": 46.67577806512515,
+      "overlap_summary": null,
+      "sources": {
+        "apple": {
+          "source": "AppleHealth",
+          "raw_type": "HKWorkoutActivityTypeSwimming",
+          "type": "Swimming",
+          "start_date": "2026-04-14 05:42:05 -0500",
+          "end_date": "2026-04-14 06:28:46 -0500",
+          "duration_min": 46.67577806512515,
+          "distance": 1100,
+          "distance_unit": "yd",
+          "calories": 0,
+          "hr": 0,
+          "notes": "",
+          "source_name": "Andres’s Apple Watch"
+        },
+        "technogym": null
+      },
+      "preferred_metrics": {
+        "hr": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "calories": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "distance": {
+          "value": 1100,
+          "source": "AppleHealth",
+          "rationale": "Apple-only session",
+          "unit": "yd"
+        },
+        "power_avg": {
+          "value": null,
+          "source": null
+        },
+        "level": {
+          "value": null,
+          "source": null
+        },
+        "rpm_avg": {
+          "value": null,
+          "source": null
+        },
+        "vo2": {
+          "value": null,
+          "source": null,
+          "note": null
+        }
+      }
+    },
+    {
+      "session_id": "apple_0480",
+      "match_confidence": "unmatched",
+      "relationship": null,
+      "canonical_type": "Running",
+      "start_date": "2026-04-14 09:36:09 -0500",
+      "end_date": "2026-04-14 09:39:50 -0500",
+      "duration_min": 3.698354933659236,
+      "overlap_summary": null,
+      "sources": {
+        "apple": {
+          "source": "AppleHealth",
+          "raw_type": "HKWorkoutActivityTypeRunning",
+          "type": "Running",
+          "start_date": "2026-04-14 09:36:09 -0500",
+          "end_date": "2026-04-14 09:39:50 -0500",
+          "duration_min": 3.698354933659236,
+          "distance": 0.373429,
+          "distance_unit": "mi",
+          "calories": 0,
+          "hr": 0,
+          "notes": "",
+          "source_name": "Andres’s Apple Watch"
+        },
+        "technogym": null
+      },
+      "preferred_metrics": {
+        "hr": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "calories": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "distance": {
+          "value": 0.373429,
+          "source": "AppleHealth",
+          "rationale": "Apple-only session",
+          "unit": "mi"
+        },
+        "power_avg": {
+          "value": null,
+          "source": null
+        },
+        "level": {
+          "value": null,
+          "source": null
+        },
+        "rpm_avg": {
+          "value": null,
+          "source": null
+        },
+        "vo2": {
+          "value": null,
+          "source": null,
+          "note": null
+        }
+      }
+    },
+    {
+      "session_id": "apple_0481",
+      "match_confidence": "unmatched",
+      "relationship": null,
+      "canonical_type": "Traditional Strength Training",
+      "start_date": "2026-04-14 09:41:30 -0500",
+      "end_date": "2026-04-14 10:52:27 -0500",
+      "duration_min": 70.94221381743749,
+      "overlap_summary": null,
+      "sources": {
+        "apple": {
+          "source": "AppleHealth",
+          "raw_type": "HKWorkoutActivityTypeTraditionalStrengthTraining",
+          "type": "Traditional Strength Training",
+          "start_date": "2026-04-14 09:41:30 -0500",
+          "end_date": "2026-04-14 10:52:27 -0500",
+          "duration_min": 70.94221381743749,
+          "distance": 0,
+          "distance_unit": "",
+          "calories": 0,
+          "hr": 0,
+          "notes": "",
+          "source_name": "Andres’s Apple Watch"
+        },
+        "technogym": null
+      },
+      "preferred_metrics": {
+        "hr": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "calories": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "distance": {
+          "value": 0,
+          "source": "AppleHealth",
+          "rationale": "Apple-only session",
+          "unit": null
+        },
+        "power_avg": {
+          "value": null,
+          "source": null
+        },
+        "level": {
+          "value": null,
+          "source": null
+        },
+        "rpm_avg": {
+          "value": null,
+          "source": null
+        },
+        "vo2": {
+          "value": null,
+          "source": null,
+          "note": null
+        }
+      }
+    },
+    {
+      "session_id": "apple_0482",
+      "match_confidence": "unmatched",
+      "relationship": null,
+      "canonical_type": "Cycling",
+      "start_date": "2026-04-16 05:53:50 -0500",
+      "end_date": "2026-04-16 06:15:31 -0500",
+      "duration_min": 21.68553735017776,
+      "overlap_summary": null,
+      "sources": {
+        "apple": {
+          "source": "AppleHealth",
+          "raw_type": "HKWorkoutActivityTypeCycling",
+          "type": "Cycling",
+          "start_date": "2026-04-16 05:53:50 -0500",
+          "end_date": "2026-04-16 06:15:31 -0500",
+          "duration_min": 21.68553735017776,
+          "distance": 0,
+          "distance_unit": "",
+          "calories": 0,
+          "hr": 0,
+          "notes": "",
+          "source_name": "Andres’s Apple Watch"
+        },
+        "technogym": null
+      },
+      "preferred_metrics": {
+        "hr": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "calories": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "distance": {
+          "value": 0,
+          "source": "AppleHealth",
+          "rationale": "Apple-only session",
+          "unit": null
+        },
+        "power_avg": {
+          "value": null,
+          "source": null
+        },
+        "level": {
+          "value": null,
+          "source": null
+        },
+        "rpm_avg": {
+          "value": null,
+          "source": null
+        },
+        "vo2": {
+          "value": null,
+          "source": null,
+          "note": null
+        }
+      }
+    },
+    {
+      "session_id": "apple_0483",
+      "match_confidence": "unmatched",
+      "relationship": null,
+      "canonical_type": "Swimming",
+      "start_date": "2026-04-16 06:24:09 -0500",
+      "end_date": "2026-04-16 06:47:10 -0500",
+      "duration_min": 23.02243934869766,
+      "overlap_summary": null,
+      "sources": {
+        "apple": {
+          "source": "AppleHealth",
+          "raw_type": "HKWorkoutActivityTypeSwimming",
+          "type": "Swimming",
+          "start_date": "2026-04-16 06:24:09 -0500",
+          "end_date": "2026-04-16 06:47:10 -0500",
+          "duration_min": 23.02243934869766,
+          "distance": 500,
+          "distance_unit": "yd",
+          "calories": 0,
+          "hr": 0,
+          "notes": "",
+          "source_name": "Andres’s Apple Watch"
+        },
+        "technogym": null
+      },
+      "preferred_metrics": {
+        "hr": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "calories": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "distance": {
+          "value": 500,
+          "source": "AppleHealth",
+          "rationale": "Apple-only session",
+          "unit": "yd"
+        },
+        "power_avg": {
+          "value": null,
+          "source": null
+        },
+        "level": {
+          "value": null,
+          "source": null
+        },
+        "rpm_avg": {
+          "value": null,
+          "source": null
+        },
+        "vo2": {
+          "value": null,
+          "source": null,
+          "note": null
+        }
+      }
+    },
+    {
+      "session_id": "apple_0484",
+      "match_confidence": "unmatched",
+      "relationship": null,
+      "canonical_type": "Running",
+      "start_date": "2026-04-16 09:35:56 -0500",
+      "end_date": "2026-04-16 09:39:36 -0500",
+      "duration_min": 3.666855015357335,
+      "overlap_summary": null,
+      "sources": {
+        "apple": {
+          "source": "AppleHealth",
+          "raw_type": "HKWorkoutActivityTypeRunning",
+          "type": "Running",
+          "start_date": "2026-04-16 09:35:56 -0500",
+          "end_date": "2026-04-16 09:39:36 -0500",
+          "duration_min": 3.666855015357335,
+          "distance": 0.38295,
+          "distance_unit": "mi",
+          "calories": 0,
+          "hr": 0,
+          "notes": "",
+          "source_name": "Andres’s Apple Watch"
+        },
+        "technogym": null
+      },
+      "preferred_metrics": {
+        "hr": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "calories": {
+          "value": 0,
+          "source": "AppleHealth"
+        },
+        "distance": {
+          "value": 0.38295,
+          "source": "AppleHealth",
+          "rationale": "Apple-only session",
+          "unit": "mi"
+        },
+        "power_avg": {
+          "value": null,
+          "source": null
+        },
+        "level": {
+          "value": null,
+          "source": null
+        },
+        "rpm_avg": {
+          "value": null,
+          "source": null
+        },
+        "vo2": {
+          "value": null,
+          "source": null,
+          "note": null
+        }
+      }
+    },
+    {
+      "session_id": "apple_0485",
+      "match_confidence": "unmatched",
+      "relationship": null,
+      "canonical_type": "Traditional Strength Training",
+      "start_date": "2026-04-16 09:39:51 -0500",
+      "end_date": "2026-04-16 10:50:00 -0500",
+      "duration_min": 70.14877988298734,
+      "overlap_summary": null,
+      "sources": {
+        "apple": {
+          "source": "AppleHealth",
+          "raw_type": "HKWorkoutActivityTypeTraditionalStrengthTraining",
+          "type": "Traditional Strength Training",
+          "start_date": "2026-04-16 09:39:51 -0500",
+          "end_date": "2026-04-16 10:50:00 -0500",
+          "duration_min": 70.14877988298734,
           "distance": 0,
           "distance_unit": "",
           "calories": 0,
