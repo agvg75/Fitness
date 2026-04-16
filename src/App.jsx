@@ -1575,6 +1575,85 @@ function getRecentSleepRecords(records, limit = 7) {
     .slice(0, limit)
 }
 
+function buildSleepOverviewModel(records, targetHours = 7.5) {
+  const mergedEpisodes = mergeAdjacentSleepSegments(records, 90)
+    .slice()
+    .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))
+
+  const mostRecentEpisode = mergedEpisodes.length ? mergedEpisodes[mergedEpisodes.length - 1] : null
+  const anchorDate = (() => {
+    if (mostRecentEpisode?.date) {
+      const date = new Date(`${mostRecentEpisode.date}T12:00:00`)
+      if (!Number.isNaN(date.getTime())) return date
+    }
+    const fallback = new Date()
+    fallback.setHours(12, 0, 0, 0)
+    fallback.setDate(fallback.getDate() - 1)
+    return fallback
+  })()
+
+  const byNightKey = new Map(mergedEpisodes.map(episode => [episode.date, episode]))
+
+  const nights = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(anchorDate)
+    date.setDate(date.getDate() - (6 - index))
+    const iso = date.toISOString().slice(0, 10)
+    const episode = byNightKey.get(iso) || null
+    const hours = episode ? sleepMinutesForReadiness(episode) / 60 : null
+    const status = hours == null ? "missing" : hours >= targetHours ? "good" : hours >= 6 ? "fair" : "poor"
+    return {
+      iso,
+      dayLabel: date.toLocaleDateString(undefined, { weekday: "short" }),
+      episode,
+      hours,
+      status,
+      bg: status === "good"
+        ? "rgba(74, 222, 128, 0.22)"
+        : status === "fair"
+          ? "rgba(251, 191, 36, 0.22)"
+          : status === "poor"
+            ? "rgba(239, 68, 68, 0.22)"
+            : "rgba(71, 85, 105, 0.18)",
+      border: status === "good"
+        ? "rgba(74, 222, 128, 0.45)"
+        : status === "fair"
+          ? "rgba(251, 191, 36, 0.45)"
+          : status === "poor"
+            ? "rgba(239, 68, 68, 0.45)"
+            : "rgba(100, 116, 139, 0.32)",
+      color: status === "missing"
+        ? "#64748b"
+        : status === "good"
+          ? "#4ade80"
+          : status === "fair"
+            ? "#fbbf24"
+            : "#ef4444"
+    }
+  })
+
+  const populatedNights = nights.filter(night => night.episode)
+  const avgHours = populatedNights.length
+    ? populatedNights.reduce((sum, night) => sum + (night.hours || 0), 0) / populatedNights.length
+    : null
+  const lastNight = mostRecentEpisode
+  const lastHours = lastNight ? sleepMinutesForReadiness(lastNight) / 60 : null
+  const nightsAtTarget = populatedNights.filter(night => (night.hours || 0) >= targetHours).length
+  const readinessImpact = avgHours == null ? 0 : avgHours < 5.5 ? -20 : avgHours < 6 ? -10 : 0
+
+  return {
+    targetHours,
+    mergedEpisodes,
+    mostRecentEpisode,
+    nights,
+    nightsLogged: populatedNights.length,
+    avgHours,
+    lastNight,
+    lastHours,
+    nightsAtTarget,
+    readinessImpact
+  }
+}
+
 function computeOcPredictedScore(item) {
   const hoursElapsed = (Date.now() - new Date(item.startDate).getTime()) / 3600000
   const halfLife = resolveOcHalfLifeHours(item)
@@ -14044,74 +14123,27 @@ return (
     {/* ── Sleep Quality Panel ───────────────────────────────────── */}
     {(() => {
       const TARGET_HOURS = 7.5
-      const sleepByDate = new Map(
-        mergedSleepEpisodes.map(record => [record.date, record])
-      )
-      const mostRecentMergedEpisode = mergedSleepEpisodes.length
-        ? mergedSleepEpisodes.slice().sort((a, b) => String(a.date || "").localeCompare(String(b.date || ""))).slice(-1)[0]
-        : null
-      const anchorDate = (() => {
-        if (mostRecentMergedEpisode?.date) {
-          const d = new Date(`${mostRecentMergedEpisode.date}T12:00:00`)
-          if (!Number.isNaN(d.getTime())) return d
-        }
-        const fallback = new Date()
-        fallback.setHours(12, 0, 0, 0)
-        fallback.setDate(fallback.getDate() - 1)
-        return fallback
-      })()
-      const lastSevenNights = Array.from({ length: 7 }, (_, index) => {
-        const date = new Date(anchorDate)
-        date.setDate(date.getDate() - (6 - index))
-        const iso = date.toISOString().slice(0, 10)
-        const record = sleepByDate.get(iso) || null
-        const hours = record ? sleepMinutesForReadiness(record) / 60 : null
-        const status = hours == null ? "missing" : hours >= TARGET_HOURS ? "good" : hours >= 6 ? "fair" : "poor"
-        const bg = status === "good"
-          ? "rgba(74, 222, 128, 0.22)"
-          : status === "fair"
-            ? "rgba(251, 191, 36, 0.22)"
-            : status === "poor"
-              ? "rgba(239, 68, 68, 0.22)"
-              : "rgba(71, 85, 105, 0.18)"
-        const border = status === "good"
-          ? "rgba(74, 222, 128, 0.45)"
-          : status === "fair"
-            ? "rgba(251, 191, 36, 0.45)"
-            : status === "poor"
-              ? "rgba(239, 68, 68, 0.45)"
-              : "rgba(100, 116, 139, 0.32)"
-        const color = status === "missing"
-          ? "#64748b"
-          : status === "good"
-            ? "#4ade80"
-            : status === "fair"
-              ? "#fbbf24"
-              : "#ef4444"
-        return {
-          iso,
-          record,
-          hours,
-          status,
-          bg,
-          border,
-          color,
-          dayLabel: date.toLocaleDateString(undefined, { weekday: "short" })
-        }
-      })
-      const recentSleep = getRecentSleepRecords(sleepRecords, 7)
+      const sleepOverviewModel = buildSleepOverviewModel(sleepRecords, TARGET_HOURS)
 
-      if (recentSleep.length === 0) return null
+      if (sleepOverviewModel.nightsLogged === 0) return null
 
-      const avgHours = recentSleep.reduce((s, r) => s + sleepMinutesForReadiness(r), 0) / recentSleep.length / 60
-      const lastNight = mostRecentMergedEpisode || recentSleep[0] || null
-      const lastHours = lastNight ? sleepMinutesForReadiness(lastNight) / 60 : null
+      const { nights, avgHours, lastNight, lastHours, nightsLogged, nightsAtTarget, readinessImpact } = sleepOverviewModel
       const avgPct = Math.min(100, Math.round((avgHours / TARGET_HOURS) * 100))
       const avgColor = avgHours >= 7 ? "#4ade80" : avgHours >= 6 ? "#fbbf24" : "#ef4444"
       const lastColor = lastHours == null ? "#667" : lastHours >= 7 ? "#4ade80" : lastHours >= 6 ? "#fbbf24" : "#ef4444"
 
       if (import.meta.env.DEV) {
-        console.log("[LIFT DEBUG] nightly sleep display values", lastSevenNights.map(night => ({
+        console.log("[LIFT DEBUG] sleep widget render cards", {
+          avgHours: avgHours == null ? null : Number(avgHours.toFixed(3)),
+          nightsLogged,
+          lastNight: lastNight ? {
+            date: lastNight.date,
+            hours: lastHours == null ? null : Number(lastHours.toFixed(3))
+          } : null,
+          nightsAtTarget,
+          readinessImpact
+        })
+        console.log("[LIFT DEBUG] nightly sleep display values", nights.map(night => ({
           date: night.iso,
           hours: night.hours == null ? null : Number(night.hours.toFixed(3)),
           status: night.status
@@ -14128,7 +14160,7 @@ return (
         <div style={{ ...cardStyle(), marginBottom: "16px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px", flexWrap: "wrap", gap: 8 }}>
             <div style={{ fontWeight: "bold" }}>Sleep (last 7 nights)</div>
-            <div style={{ fontSize: "11px", color: "#555" }}>target 7.5h · {recentSleep.length} nights logged</div>
+            <div style={{ fontSize: "11px", color: "#555" }}>target 7.5h · {nightsLogged} nights logged</div>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: "10px", marginBottom: "10px" }}>
             <div style={{ background: "#07080e", border: "1px solid #1a1b2e", borderRadius: "8px", padding: "10px", textAlign: "center" }}>
@@ -14146,20 +14178,20 @@ return (
             <div style={{ background: "#07080e", border: "1px solid #1a1b2e", borderRadius: "8px", padding: "10px", textAlign: "center" }}>
               <div style={{ fontSize: "10px", color: "#555", marginBottom: "3px" }}>Nights at target</div>
               <div style={{ fontSize: "26px", fontWeight: "800", color: "#ced2f0", lineHeight: 1 }}>
-                {recentSleep.filter(r => sleepMinutesForReadiness(r) / 60 >= TARGET_HOURS).length}
+                {nightsAtTarget}
               </div>
               <div style={{ fontSize: "10px", color: "#555" }}>of 7</div>
             </div>
             <div style={{ background: "#07080e", border: "1px solid #1a1b2e", borderRadius: "8px", padding: "10px", textAlign: "center" }}>
               <div style={{ fontSize: "10px", color: "#555", marginBottom: "3px" }}>Readiness impact</div>
-              <div style={{ fontSize: "26px", fontWeight: "800", color: avgHours < 5.5 ? "#ef4444" : avgHours < 6 ? "#fbbf24" : "#4ade80", lineHeight: 1 }}>
-                {avgHours < 5.5 ? "−20" : avgHours < 6 ? "−10" : "0"}
+              <div style={{ fontSize: "26px", fontWeight: "800", color: readinessImpact <= -20 ? "#ef4444" : readinessImpact < 0 ? "#fbbf24" : "#4ade80", lineHeight: 1 }}>
+                {readinessImpact}
               </div>
               <div style={{ fontSize: "10px", color: "#555" }}>pts penalty</div>
             </div>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: "6px" }}>
-            {lastSevenNights.map(night => (
+            {nights.map(night => (
               <div key={night.iso} style={{ display: "grid", gap: "4px" }}>
                 <div
                   title={night.hours != null ? `${fmtShortDate(night.iso)}: ${night.hours.toFixed(1)}h` : `${fmtShortDate(night.iso)}: no entry`}
@@ -14183,9 +14215,9 @@ return (
             ))}
           </div>
           <div style={{ fontSize: "10px", color: "#445", marginTop: "6px" }}>
-            {avgHours >= 7
+            {readinessImpact === 0
               ? "Sleep adequate. No penalty applied to readiness."
-              : avgHours >= 6
+              : readinessImpact === -10
               ? "Sleep marginally low. 10-point readiness penalty active."
               : "Sleep significantly low. 20-point readiness penalty active. Prioritize recovery."}
           </div>
