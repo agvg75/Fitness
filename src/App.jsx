@@ -8999,10 +8999,24 @@ Return ONLY a JSON object with this exact structure, no explanation:
         if (setSleepRecords) setSleepRecords(merged)
         committed += sleepResult.length
         if (supabase && STORE_USER_ID) {
-          await upsertSleepRecords(supabase, STORE_USER_ID, merged)
-          const remoteSleep = await loadSleepRecords(supabase, STORE_USER_ID)
-          localStorage.setItem("lift_sleep_records", JSON.stringify(remoteSleep))
-          if (setSleepRecords) setSleepRecords(remoteSleep)
+          try {
+            await upsertSleepRecords(supabase, STORE_USER_ID, merged)
+            try {
+              const remoteSleep = await loadSleepRecords(supabase, STORE_USER_ID)
+              if (Array.isArray(remoteSleep) && remoteSleep.length >= merged.length) {
+                localStorage.setItem("lift_sleep_records", JSON.stringify(remoteSleep))
+                if (setSleepRecords) setSleepRecords(remoteSleep)
+              } else {
+                localStorage.setItem("lift_sleep_records", JSON.stringify(merged))
+                if (setSleepRecords) setSleepRecords(merged)
+                console.warn("[LIFT] Remote sleep read-back had fewer rows than local merge, keeping local")
+              }
+            } catch (readBackErr) {
+              console.warn("[LIFT] Sleep read-back after commit failed, using local merge", readBackErr)
+            }
+          } catch (upsertErr) {
+            console.warn("[LIFT] Sleep upsert failed, sleep saved locally only", upsertErr)
+          }
         }
       }
       if (biometricResult.length) {
@@ -11037,7 +11051,7 @@ useEffect(() => {
     ;(async () => {
       const storedMeals = await store.get("ufd-meal-entries")
       const storedPresets = await store.get("ufd-meal-presets")
-      if (Array.isArray(storedMeals) && !session?.user?.id) setMealEntries(storedMeals)
+      if (Array.isArray(storedMeals)) setMealEntries(storedMeals)
       if (storedPresets && typeof storedPresets === "object") {
         setMealPresets({ ...defaultMealPresets, ...storedPresets })
       }

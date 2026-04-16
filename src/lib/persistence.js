@@ -6,7 +6,16 @@ function safeJsonString(value) {
   }
 }
 
-const SLEEP_UPSERT_TIMEOUT_MS = 20000
+const SLEEP_UPSERT_TIMEOUT_MS = 15000
+const SLEEP_UPSERT_BATCH_SIZE = 50
+
+const withTimeout = (promise, ms = SLEEP_UPSERT_TIMEOUT_MS) =>
+  Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`upsertSleepRecords: timeout after ${ms}ms`)), ms)
+    )
+  ])
 
 function stableHash(input) {
   const str = String(input || "")
@@ -444,30 +453,19 @@ export async function upsertSleepRecords(supabase, userId, records) {
     })
   }
   if (!rows.length) return []
-  const upsertResult = await Promise.race([
-    supabase
-      .from("sleep_records")
-      .upsert(rows, { onConflict: "user_id,sleep_id" })
-      .select(),
-    new Promise(resolve => {
-      window.setTimeout(() => resolve({
-        data: [],
-        error: null,
-        timedOut: true,
-      }), SLEEP_UPSERT_TIMEOUT_MS)
-    })
-  ])
-  if (upsertResult?.timedOut) {
-    console.warn("upsertSleepRecords timed out; allowing UI flow to continue", {
-      userId,
-      rowCount: rows.length,
-      timeoutMs: SLEEP_UPSERT_TIMEOUT_MS,
-    })
-    return []
+  const writtenRows = []
+  for (let index = 0; index < rows.length; index += SLEEP_UPSERT_BATCH_SIZE) {
+    const chunk = rows.slice(index, index + SLEEP_UPSERT_BATCH_SIZE)
+    const { data, error } = await withTimeout(
+      supabase
+        .from("sleep_records")
+        .upsert(chunk, { onConflict: "user_id,sleep_id" })
+        .select()
+    )
+    throwIfError(error, "upsertSleepRecords")
+    writtenRows.push(...(data || []))
   }
-  const { data, error } = upsertResult
-  throwIfError(error, "upsertSleepRecords")
-  return (data || []).map(rowToSleepRecord)
+  return writtenRows.map(rowToSleepRecord)
 }
 
 export async function migrateLocalSleepRecords(supabase, userId, { removeLocal = false } = {}) {
