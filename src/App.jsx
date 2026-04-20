@@ -2823,6 +2823,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       record
     ].sort((a, b) => String(getSleepRecordDate(a) || "").localeCompare(String(getSleepRecordDate(b) || "")))
     setSleepRecords(next)
+    localStorage.setItem("lift_sleep_records", JSON.stringify(next))
     try {
       if (supabase && session?.user?.id) {
         await upsertSleepRecords(supabase, session.user.id, [record])
@@ -6693,22 +6694,13 @@ function estimateCaloriesFromDuration(category, durationMin) {
 }
 
 function buildWeeklyTrainingBuckets(workouts) {
-  const startOfWeek = dateValue => {
-    const d = new Date(dateValue)
-    const day = d.getDay()
-    const diff = day === 0 ? -6 : 1 - day
-    d.setDate(d.getDate() + diff)
-    d.setHours(0, 0, 0, 0)
-    return d
-  }
-
 const buckets = {}
   const cutoffMs = Date.now() - 52 * 7 * 24 * 60 * 60 * 1000
   workouts.forEach(w => {
     const wMs = new Date(w.dateTime || w.date || w.start_date || 0).getTime()
     if (!Number.isFinite(wMs) || wMs < cutoffMs) return
-    const weekStart = startOfWeek(w.dateTime || w.date || w.start_date)
-    const key = weekStart.toISOString().slice(0, 10)
+    const key = getWeekStartIso(w.dateTime || w.date || w.start_date)
+    if (!key) return
 
     if (!buckets[key]) {
       buckets[key] = {
@@ -9200,24 +9192,28 @@ Return ONLY a JSON object with this exact structure, no explanation:
         if (setSleepRecords) setSleepRecords(merged)
         committed += sleepResult.length
         if (supabase && STORE_USER_ID) {
-          try {
-            await upsertSleepRecords(supabase, STORE_USER_ID, merged)
-            try {
-              const remoteSleep = await loadSleepRecords(supabase, STORE_USER_ID)
-              if (Array.isArray(remoteSleep) && remoteSleep.length >= merged.length) {
-                localStorage.setItem("lift_sleep_records", JSON.stringify(remoteSleep))
-                if (setSleepRecords) setSleepRecords(remoteSleep)
-              } else {
-                localStorage.setItem("lift_sleep_records", JSON.stringify(merged))
-                if (setSleepRecords) setSleepRecords(merged)
-                console.warn("[LIFT] Remote sleep read-back had fewer rows than local merge, keeping local")
-              }
-            } catch (readBackErr) {
-              console.warn("[LIFT] Sleep read-back after commit failed, using local merge", readBackErr)
-            }
-          } catch (upsertErr) {
-            console.warn("[LIFT] Sleep upsert failed, sleep saved locally only", upsertErr)
-          }
+          // Fire-and-forget with timeout — local save already complete above
+          const sleepSyncTimeout = new Promise(resolve => setTimeout(resolve, 15000))
+          Promise.race([
+            upsertSleepRecords(supabase, STORE_USER_ID, merged)
+              .then(async () => {
+                try {
+                  const remoteSleep = await loadSleepRecords(supabase, STORE_USER_ID)
+                  if (Array.isArray(remoteSleep) && remoteSleep.length >= merged.length) {
+                    localStorage.setItem("lift_sleep_records", JSON.stringify(remoteSleep))
+                    if (setSleepRecords) setSleepRecords(remoteSleep)
+                  }
+                } catch (readBackErr) {
+                  console.warn("[LIFT] Sleep read-back after commit failed, using local merge", readBackErr)
+                }
+              })
+              .catch(upsertErr => {
+                console.warn("[LIFT] Sleep upsert failed, sleep saved locally only", upsertErr)
+              }),
+            sleepSyncTimeout.then(() => {
+              console.warn("[LIFT] Sleep Supabase sync timed out after 15s, local save is authoritative")
+            })
+          ])
         }
       }
       if (biometricResult.length) {
@@ -11980,7 +11976,7 @@ async function persistMealEntries(nextEntries, currentUserId) {
 
   async function addPresetMeal(preset) {
     const entry = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      id: crypto.randomUUID(),
       date: mealDate,
       meal_type: mealTab,
       preset_name: preset.name,
@@ -12000,7 +11996,7 @@ async function persistMealEntries(nextEntries, currentUserId) {
 
   async function addCustomMeal() {
     const entry = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      id: crypto.randomUUID(),
       date: mealDate,
       meal_type: mealTab,
       preset_name: customMealName || "Custom",
