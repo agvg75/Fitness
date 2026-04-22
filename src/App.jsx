@@ -5,7 +5,7 @@ import {
   dedupeCanonicalSessions,
   getCanonicalSessionDuplicateKey,
   makeCanonicalSessionFromScheduleLog,
-  mergeCanonicalSessionsPreferPrimary,
+  mergeCanonicalSessionsPreferPrimary, 
   mergeCanonicalSessionsWithScheduleSeeds
 } from "./lib/canonicalSessions.js"
 import {
