@@ -120,6 +120,7 @@ function canonicalSessionToRow(session, userId) {
     overlap_summary: session?.overlap_summary || null,
     sources: session?.sources || {},
     preferred_metrics: session?.preferred_metrics || {},
+    id: session?.id ?? crypto.randomUUID(),
   }
 }
 
@@ -303,6 +304,7 @@ function mergeCanonicalSessionRow(existing, incoming) {
     sources: mergedSources,
     preferred_metrics: mergedPreferredMetrics,
     created_at: existing.created_at || incoming.created_at,
+    id: existing.id ?? incoming.id,
   }
 }
 
