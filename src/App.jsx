@@ -9718,7 +9718,6 @@ const SCH_META = {
               Sat: { label:"Saturday",  theme:"Long Swim",                    venue:"YMCA", color:"#d97706" },
                 Sun: { label:"Sunday",    theme:"Long Run",                     venue:"—",    color:"#444"    },
                 };
-}
 const schDefaultForDay = day => {
   const data = {};
   (PLAN[day]?.sections || []).forEach(sec =>
