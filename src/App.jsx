@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { PROG, CARDIO } from "./scheduleData.js"
 import {
-  applyCanonicalSessionMergePolicy,
+  applyCanonicalSessionMergePolicy, 
   dedupeCanonicalSessions,
   getCanonicalSessionDuplicateKey,
   makeCanonicalSessionFromScheduleLog,
