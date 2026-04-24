@@ -9710,14 +9710,15 @@ function parseKnrJsonSessions(text, existingSessions = []) {
 const SCH_DAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 const _SCHED_V = 2;
 const SCH_META = {
-  Mon: { label:"Monday",    theme:"Upper Push + Bike",       venue:"YMCA", color:"#d97706" },
-  Tue: { label:"Tuesday",   theme:"Legs + Swim",             venue:"KNR",  color:"#3b82f6" },
-  Wed: { label:"Wednesday", theme:"Recovery",                venue:"—",    color:"#444"    },
-  Thu: { label:"Thursday",  theme:"Upper / Arms + Bike",     venue:"KNR",  color:"#3b82f6" },
-  Fri: { label:"Friday",    theme:"Hips / Core + Long Bike", venue:"YMCA", color:"#d97706" },
-  Sat: { label:"Saturday",  theme:"Long Run",                venue:"—",    color:"#444"    },
-  Sun: { label:"Sunday",    theme:"Aerobic Recovery",        venue:"—",    color:"#444"    },
-};
+    Mon: { label:"Monday",    theme:"Chest & Triceps + Long Bike",  venue:"YMCA", color:"#d97706" },
+      Tue: { label:"Tuesday",   theme:"Legs + Swim",                  venue:"YMCA", color:"#d97706" },
+        Wed: { label:"Wednesday", theme:"Rest / Recovery",              venue:"—",    color:"#444"    },
+          Thu: { label:"Thursday",  theme:"Back & Arms + Run",            venue:"YMCA", color:"#d97706" },
+            Fri: { label:"Friday",    theme:"Legs Volume + Hip + Swim",     venue:"YMCA", color:"#d97706" },
+              Sat: { label:"Saturday",  theme:"Long Swim",                    venue:"YMCA", color:"#d97706" },
+                Sun: { label:"Sunday",    theme:"Long Run",                     venue:"—",    color:"#444"    },
+                };
+}
 const schDefaultForDay = day => {
   const data = {};
   (PLAN[day]?.sections || []).forEach(sec =>
