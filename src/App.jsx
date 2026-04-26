@@ -386,206 +386,193 @@ function todayISO() {
 const SDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 const SMETA = {
-  Mon: { label:"Monday",    theme:"Upper Push + Bike",       venue:"YMCA", color:"#d97706" },
-  Tue: { label:"Tuesday",   theme:"Legs + Swim",             venue:"KNR",  color:"#3b82f6" },
-  Wed: { label:"Wednesday", theme:"Recovery",                venue:"—",    color:"#444"    },
-  Thu: { label:"Thursday",  theme:"Upper / Arms + Bike",     venue:"KNR",  color:"#3b82f6" },
-  Fri: { label:"Friday",    theme:"Hips / Core + Long Bike", venue:"YMCA", color:"#d97706" },
-  Sat: { label:"Saturday",  theme:"Long Run",                venue:"—",    color:"#444"    },
-  Sun: { label:"Sunday",    theme:"Aerobic Recovery",        venue:"—",    color:"#444"    },
+  Mon: { label:"Monday",    theme:"Chest & Triceps + Long Bike",  venue:"YMCA", color:"#d97706" },
+  Tue: { label:"Tuesday",   theme:"Legs + Swim",                  venue:"YMCA", color:"#d97706" },
+  Wed: { label:"Wednesday", theme:"Rest / Recovery",              venue:"—",    color:"#444"    },
+  Thu: { label:"Thursday",  theme:"Back & Arms + Run",            venue:"YMCA", color:"#d97706" },
+  Fri: { label:"Friday",    theme:"Legs Volume + Hip + Swim",     venue:"YMCA", color:"#d97706" },
+  Sat: { label:"Saturday",  theme:"Long Swim",                    venue:"YMCA", color:"#d97706" },
+  Sun: { label:"Sunday",    theme:"Long Run",                     venue:"—",    color:"#444"    },
 };
 
 const mk = (r, w) => ({ r: String(r), w: String(w) })
 
 const PLAN = {
-Mon: {
-    cardio: "Walk/jog intervals · 2.5 mi total · (walk ½mi → jog ½mi → walk ¼mi) × 2 · KNR prescribed · Do AFTER strength",
-    warmup: [
-      "Cable shoulder ER/IR  2×10 @ 10 lb",
-      "Banded X's  2×8 each side",
-      "Arm circles  2×30 sec each direction",
-    ],
-    topNote: null,
+
+  // ─── MONDAY: Chest & Triceps + Long Bike ─────────────────────────────────
+  Mon: {
+    cardio: "Long bike · 45–50 min · Zone 2–3 · Stationary or spin · Do AFTER strength · This is the weekly long bike anchor session",
+    warmup: [],
+    topNote: "YMCA only — KNR suspended until September. Arrive by 5:00 am. Full 5:00–7:00 window. Chest heavy day (4–8 reps). Shoulder hypertrophy added to replace lost Wednesday volume.",
+    tendonWork: [],
     sections: [
-      { h: "A — Chest", ex: [
-        { id:"m1", name:"Chest Press",           sub:"Technogym / machine",          def:[mk(6,110),mk(6,110),mk(6,110)],           note:"2-0-2 tempo · full ROM · KNR baseline 110 lb" },
-        { id:"m2", name:"Incline Chest Press",   sub:"Smith machine · low angle",    def:[mk(6,90),mk(6,90),mk(6,90)],              note:"Low incline · shoulder-safe · KNR baseline 90 lb" },
-        { id:"m3", name:"Machine Flys",          sub:"Cable or pec deck",            def:[mk(6,30),mk(6,30),mk(6,30)],              note:"Full stretch · controlled return · KNR baseline 30 lb" },
+      { h: "A — Chest (Heavy)", ex: [
+        { id:"m1", name:"Chest Press",        sub:"Technogym / machine",           def:[mk(6,110),mk(6,110),mk(6,110)],               note:"2-0-2 tempo · full ROM · 4–8 rep range" },
+        { id:"m2", name:"Incline Chest Press",sub:"Smith machine · low angle",     def:[mk(6,90),mk(6,90),mk(6,90)],                 note:"Low incline · shoulder-safe · heavy day" },
+        { id:"m3", name:"Machine Flys",       sub:"Cable or pec deck",             def:[mk(6,30),mk(6,30),mk(6,30)],                 note:"Full stretch · controlled return · chest isolation" },
       ]},
-      { h: "B — Triceps", ex: [
-        { id:"m4", name:"Triceps Pulldown",      sub:"Cable pressdown",              def:[mk(6,25),mk(6,25),mk(6,25)],              note:"Elbows fixed · full extension · KNR baseline 25 lb" },
+      { h: "B — Shoulder (Hypertrophy · replaces Wed volume)", ex: [
+        { id:"m4", name:"Lateral Raise",      sub:"Cable or DB · 3×12–15",         def:[mk("12-15","—"),mk("12-15","—"),mk("12-15","—")], note:"3-sec lower · no swing · medial delt" },
+        { id:"m5", name:"Rear Delt Fly",      sub:"Reverse pec deck or incline DB",def:[mk("12-15","—"),mk("12-15","—"),mk("12-15","—")], note:"Light · 2-1-2 tempo · rear delt + cuff" },
+        { id:"m6", name:"Face Pull / ER",     sub:"Cable or resistance band",      def:[mk("12-15","—"),mk("12-15","—"),mk("12-15","—")], note:"Elbows high · rear delt + rotator cuff" },
       ]},
-      { h: "C — Core", ex: [
-        { id:"m5", name:"Pushup Plank w/ Shoulder Touch", sub:"Bodyweight · 2×10e", def:[mk("10e","BW"),mk("10e","BW")],              note:"Hips level · no rotation · controlled" },
-        { id:"m6", name:"Pallof Press",          sub:"Cable · split stance · 40 lb", def:[mk("10e",40),mk("10e",40)],                 note:"Brace · press slowly · zero rotation" },
+      { h: "C — Triceps (Heavy)", ex: [
+        { id:"m7", name:"Triceps Pulldown",   sub:"Cable pressdown",               def:[mk(6,25),mk(6,25),mk(6,25)],                 note:"Elbows fixed · full extension · heavy day" },
+        { id:"m8", name:"Triceps Overhead",   sub:"Cable / 30 lb DB",              def:[mk("6-8",30),mk("6-8",30)],                  note:"Full stretch at top · smooth lockout" },
+      ]},
+      { h: "D — Core", ex: [
+        { id:"m9",  name:"Pushup Plank w/ Shoulder Touch", sub:"Bodyweight · 2×10e", def:[mk("10e","BW"),mk("10e","BW")],           note:"Pelvic neutral · don't let hip drop" },
+        { id:"m10", name:"Pallof Press",      sub:"Cable · split stance · 40 lb",  def:[mk("10e",40),mk("10e",40)],                  note:"Brace · press slowly · zero rotation" },
       ]},
     ],
   },
 
+  // ─── TUESDAY: Legs (Heavy) + Swim ────────────────────────────────────────
   Tue: {
-    cardio: null,
+    cardio: "Medium swim · 25–35 min · 600–900 yards · Zone 2 · No backstroke · Pull buoy if toe irritated · Do AFTER strength · No run today: swim covers cardio without MTP or leg fatigue overlap",
     warmup: [
-      "Stationary bike  5–10 min · light → moderate · get blood flowing",
-      "Standing calf raises  2×8 off plate/step · full stretch at bottom",
-      "Bodyweight squat  2×8 · band around knees if form OK",
-      "⚑ TOE/ANKLE BLOCK — do not skip · MTP protection",
-      "Ankle (L) inversion + dorsiflexion  2×10 · band assisted",
-      "Towel scrunches (L)  5 sets · intrinsic foot strength",
+      "Stationary bike 5–10 min · light → moderate · get blood flowing",
+      "Standing calf raises 2×8 off plate/step · full stretch at bottom",
+      "Bodyweight squat 2×8 · band around knees if form OK",
+      "TOE/ANKLE BLOCK — do not skip · MTP protection",
+      "Ankle (L) inversion + dorsiflexion 2×10 · band assisted",
+      "Towel scrunches (L) 5 sets · intrinsic foot strength",
     ],
-    topNote: "KNR Day 2 — Legs. Toe/ankle warm-up block is non-optional given MTP history. If kinesiologist skips it, confirm reason and log.",
+    topNote: "YMCA Day — Legs heavy (4–8 rep range). 49hr gap from Tuesday legs to Thursday run preserved. Tendon Work before main program. Toe/ankle block in warm-up is non-optional.",
+    tendonWork: [
+      "MTP Weight-Bearing Balance · L1: 2×20s each side · Flat floor, eyes open, foot completely flat · Feel ball of foot pressing floor · No toe curling · L3 target: 3×45s + slight heel rise · Advance only after 3 sessions zero MTP irritation next day · Search: single leg balance great toe MTP physical therapy",
+      "Eccentric Calf Raise · L1: 2×8 each leg · Off step or plate · Both feet up, one foot down · 3-sec lowering · Bodyweight only · Full heel drop at bottom · L3 target: 3×12 + 10–15 lb DB · Advance: 3 sessions zero Achilles next-day soreness · Search: Alfredson protocol eccentric calf raise Achilles",
+      "Tibialis Raise (Shin Raise) · L1: 2×15 · Heels on floor back against wall · Raise toes as high as possible · 1-sec hold at top · Stop if sharp shin pain · L3 target: 3×25 + light ankle weight · Advance: 3 sessions zero shin soreness · Search: tibialis anterior raise wall running injury prevention",
+      "Terminal Knee Extension (TKE) · L1: 2×10 each side · Light loop band anchored at knee height behind you · Band in crease of knee · Drive to full extension · 1-sec hold · Small ROM — not a squat · L3 target: 3×15 medium band 3-sec hold · Advance: 3 sessions zero knee irritation · Search: TKE band patellar tendon physical therapy",
+      "Single-Leg Balance · L1: 2×20s each side · Eyes open · Flat floor · Knee slightly bent · Arch neutral, toes flat · L3 target: 3×30s eyes closed · Search: single leg balance proprioception ankle rehabilitation",
+    ],
     sections: [
       { h: "Glutes / Hips", ex: [
-        { id:"t1", name:"Hip Thrust",             sub:"Smith machine",                def:[mk(10,115),mk(10,145),mk(10,155)],       note:"Full hip ext · pause at top · ribs down · working range 115–155 lb" },
+        { id:"t1", name:"Hip Thrust",              sub:"Smith machine",                def:[mk(10,115),mk(8,135),mk(8,165)],             note:"Full hip ext · pause at top · ribs down" },
       ]},
       { h: "Posterior Chain", ex: [
-        { id:"t2", name:"Leg Press — Heel Drive", sub:"Machine · endurance protocol", def:[mk(15,160),mk(15,160),mk(15,160)],      note:"Heels high on plate · 15 reps · aerobic intent · not strength failure" },
-        { id:"t3", name:"TB DL / KB RDL",         sub:"KB 50 lb interim · TB DL when ready", def:[mk(10,50),mk(10,50),mk(10,50)], note:"Hinge not squat · flat back · TB DL = trap bar deadlift progression" },
+        { id:"t2", name:"Leg Press — Heel Drive",  sub:"Machine · endurance protocol", def:[mk(15,160),mk(15,160),mk(15,160)],           note:"Heels high · controlled · endurance mode" },
+        { id:"t3", name:"TB DL / KB RDL",          sub:"KB 50 lb interim",             def:[mk(10,50),mk(10,50),mk(10,50)],              note:"Hinge not squat · flat back" },
       ]},
       { h: "Hip Stability", ex: [
-        { id:"t4", name:"Lateral Band Walk",      sub:"Green band · 2 laps (~60 ft)", def:[mk("2 laps","green"),mk("2 laps","green")], note:"Band at ankles or above knees per KNR instruction · maintain tension" },
-        { id:"t5", name:"Hip Drive Marches",      sub:"Band · replaces leg curl in current protocol", def:[mk("10e","grn"),mk("10e","grn"),mk("10e","grn")], note:"Pelvic neutral · controlled · per KNR 3/24 substitution" },
+        { id:"t4", name:"Lateral Band Walk",       sub:"Green band · 2 laps (~60 ft)", def:[mk("2 laps","green"),mk("2 laps","green")],   note:"Maintain tension throughout" },
+        { id:"t5", name:"Hip Drive Marches",       sub:"Band · replaces leg curl",     def:[mk("10e","band"),mk("10e","band"),mk("10e","band")], note:"Pelvic neutral · don't let hip drop" },
       ]},
       { h: "Quads", ex: [
-        { id:"t6", name:"Leg Extension",          sub:"Machine",                      def:[mk(12,80),mk(12,80),mk(12,80)],          note:"Full extension · controlled eccentric · 80 lb confirmed" },
+        { id:"t6", name:"Leg Extension",           sub:"Machine",                      def:[mk(12,80),mk(12,80),mk(12,80)],              note:"Full extension · controlled" },
       ]},
       { h: "Core", ex: [
-        { id:"t7", name:"Plank",                  sub:"3×60 sec",                     def:[mk("60s","BW"),mk("60s","BW"),mk("60s","BW")], note:"Neutral spine · breathe · do not let hips sag" },
-        { id:"t8", name:"90/90 Deadbugs",         sub:"2×15 each side",               def:[mk("15e","BW"),mk("15e","BW")],             note:"Back flat on floor · slow · full extension" },
+        { id:"t7", name:"Plank",                   sub:"3×60 sec",                     def:[mk("60s","BW"),mk("60s","BW"),mk("60s","BW")], note:"Neutral spine · breathe" },
+        { id:"t8", name:"90/90 Deadbugs",          sub:"2×15 each side",               def:[mk("15e","BW"),mk("15e","BW")],               note:"Back flat · slow · controlled" },
       ]},
     ],
   },
 
+  // ─── WEDNESDAY: Rest / Recovery + Optional Lunch Run ─────────────────────
   Wed: {
-  cardio: "Easy run, 30 min, Zone 2, conversational pace, run before lifting",
-  warmup: [],
-  topNote: null,
-  sections: [
-    {
-      h: "Rear / Side Delt",
-      ex: [
-        { id: "w1", name: "Rear Delt Fly", sub: "Reverse pec deck / cable", def: [mk(12,7), mk(12,7), mk(12,7)], note: "Perfect control" },
-        { id: "w2", name: "Lateral Raise", sub: "Cable / DB", def: [mk(12,"—"), mk(12,"—"), mk(12,"—"), mk(12,"—")], note: "No swing" }
-      ]
-    },
-    {
-      h: "Shoulder Health",
-      ex: [
-        { id: "w3", name: "Face Pull / ER", sub: "Cable / band", def: [mk(12,"—"), mk(12,"—")], note: "Skip if done Monday" }
-      ]
-    },
-    {
-      h: "Triceps",
-      ex: [
-        { id: "w4", name: "Triceps Pushdown", sub: "Cable pressdown", def: [mk(10,35), mk(10,35), mk(10,35)], note: "2-0-2 tempo" }
-      ]
-    }
-  ]
-},
+    cardio: "Optional lunch run · 1.5–2 miles · Zone 2 · Conversational pace · Spring/Fall only (weather permitting) · Run at lunch not morning · Third weekly run — DROP FIRST if Tuesday legs felt heavy, MTP above 0 this week, or sleep below 5.5 hrs last night · Gap from Tuesday legs (5am) to Wed lunch run (~12pm) is ~31 hours — short of 48hr rule so easy pace is non-negotiable",
+    warmup: [],
+    topNote: "Rest/recovery day — no YMCA, no morning strength or cardio. Sleep extension priority: return to sleep after 4:30 wake if possible. Optional easy bike commute (~7 miles, Zone 1, no performance target). Wednesday lunch run is the most expendable session of the week.",
+    tendonWork: [],
+    sections: [],
+  },
 
+  // ─── THURSDAY: Back & Arms + Run ─────────────────────────────────────────
   Thu: {
-    cardio: null,
+    cardio: "Medium run · 25–35 min · 2–3 miles · Zone 2 · Do AFTER strength · Optional short bike 15–20 min / 4–6 miles if time remains · 49hr gap from Tuesday legs to Thursday run ✓",
     warmup: [
-      "Wall slides  8e · pause at top · scapular upward rotation",
-      "Scap pushups  2×10 · on wall or bench · protraction/retraction",
-      "Face pulls w/ band  2×10 · light band",
-      "Pull aparts w/ band  2×10",
+      "Wall slides 8e · pause at top · scapular upward rotation",
+      "Scap pushups 2×10 · on wall or bench · protraction/retraction",
+      "Face pulls w/ band 2×10 · light band",
+      "Pull aparts w/ band 2×10",
     ],
-    topNote: "KNR Day 4 — Back / Biceps. Single-arm cable row weight (53–63 lb) reflects one-arm variant, not bilateral. Do not compare to bilateral archive baseline of 80–85 lb.",
+    topNote: "YMCA Day — Back and Arms. Mix of heavy (4–8) and volume (8–15) sets. No swim today: arm day swim constraint. Run is buffered 49hr from Tuesday legs. Tendon Work before main program.",
+    tendonWork: [
+      "Eccentric Lateral Raise · L1: 2×8 each arm · 5 lb DB · Raise with BOTH arms together to shoulder height, lower with ONE arm only (4-sec lower) · Reset and repeat · The slow lowering is the entire stimulus — do not rush it · L3 target: 3×12 each arm at 8–10 lb · Advance: 3 sessions zero outer shoulder next-day soreness · Search: eccentric lateral raise supraspinatus rotator cuff rehab",
+      "Eccentric Biceps Curl · L1: 2×5 each arm · 15 lb DB (lighter than working weight) · Curl up with BOTH arms, lower with ONE arm (4-sec lower) · Elbow stays at side · This is significantly harder than it looks at slow tempo · L3 target: 3×8 each arm at 25 lb 5-sec lower · Advance: 3 sessions zero elbow/biceps next-day soreness · Search: eccentric biceps curl tendon loading physical therapy",
+      "Face Pull (Loaded Tendon Stimulus) · 2×15 · Cable or band · Slow pull and controlled 3-sec return · This is the loaded version not just warm-up activation · Maintain indefinitely — no progression target",
+      "Pre-Run Ankle Primer · 2×10 each side · Simple calf raise, bodyweight, flat floor · Activation only before the run · Do not use eccentric protocol here — save that for Tuesday · Skip if calf is acutely tight",
+    ],
     sections: [
       { h: "Back Primary", ex: [
-        { id:"th1", name:"Cable Row (mid) — Single Arm", sub:"Cable · mid-height · SA", def:[mk("6e",53),mk("6e",53),mk("6e",63)],  note:"SLOW tempo · full retraction · working range 53–80 lb SA" },
-        { id:"th2", name:"Lat Pulldown",               sub:"Machine or cable",          def:[mk(6,105),mk(6,110),mk(6,120)],         note:"Chest up · elbows to ribs · 2-1-2 · progressing 105→120 lb" },
+        { id:"th1", name:"Cable Row (mid) — Single Arm", sub:"Cable · mid-height · SA",   def:[mk(6,67),mk(6,67),mk(6,67)],              note:"Single-arm · scapula retraction · don't round" },
+        { id:"th2", name:"Lat Pulldown",                 sub:"Machine or cable",           def:[mk("6-8",120),mk("6-8",120),mk("6-8",120)], note:"Chest up · elbows to ribs · 2-1-2" },
+        { id:"th3", name:"Straight Arm Pulldowns",       sub:"Cable · Wolverines · 40 lb", def:[mk(8,40),mk(8,40),mk(8,40)],               note:"Arms straight · lat isolation" },
+        { id:"th4", name:"Inverted Row",                 sub:"TRX or bar · 3–4 sets",      def:[mk(8,"BW"),mk(8,"BW"),mk(8,"BW")],         note:"Full ROM · chest to bar" },
       ]},
       { h: "Biceps", ex: [
-        { id:"th3", name:"Biceps Curl — DB/BB Palms Up", sub:"DB or barbell · palms up", def:[mk(8,60),mk(8,60),mk(8,60)],          note:"No sway · full elbow extension · 2-0-2 · 60 lb confirmed" },
-        { id:"th4", name:"Cable D2 Flexion",             sub:"Cable · unsheathing sword motion", def:[mk("8e",7),mk("8e",7)],           note:"Rotator cuff + shoulder health · light load only · 7 lb · diagonal pattern" },
-        { id:"th5", name:"Biceps Curl — Cable Rope Neutral", sub:"Cable w/ rope · neutral grip", def:[mk(8,47),mk(8,57),mk(8,57)],  note:"Neutral grip · full ROM · working range 43–57 lb" },
+        { id:"th5", name:"Biceps Curl — DB/BB Palms Up",    sub:"DB or barbell · palms up", def:[mk(5,75),mk(5,75),mk(5,75)],              note:"No sway · full elbow extension · heavy day" },
+        { id:"th6", name:"Cable D2 Flexion",                sub:"Cable · unsheathing sword", def:[mk(8,"—"),mk(8,"—"),mk(8,"—")],           note:"Full diagonal ROM · controlled" },
+        { id:"th7", name:"Biceps Curl — Cable Rope Neutral",sub:"Cable w/ rope · neutral",   def:[mk(6,60),mk(6,60),mk(6,60)],              note:"Neutral grip · elbow fixed · squeeze at top" },
+        { id:"th8", name:"Hammer Curl",                     sub:"DB alternating",             def:[mk("10-12","—"),mk("10-12","—")],          note:"Neutral grip · full ROM" },
       ]},
       { h: "Core", ex: [
-        { id:"th6", name:"Straight Arm Pulldowns",      sub:"Cable · Wolverines · 40 lb", def:[mk(8,40),mk(8,40),mk(8,40)],         note:"3×8 · arms straight · lat engagement · shoulder health" },
-        { id:"th7", name:"Inverted Row",                sub:"TRX or bar · 3–4 sets",      def:[mk(8,"BW"),mk(8,"BW"),mk(8,"BW")],   note:"Scapular retraction focus · horizontal pull · bodyweight" },
-        { id:"th8", name:"Suitcase Carry",              sub:"DB 60 lb · 2 laps each arm (1 lap ≈ 30 ft)", def:[mk("2 laps",60),mk("2 laps",60)], note:"Optional finisher · core anti-lateral-flexion · upright posture" },
+        { id:"th9", name:"Suitcase Carry", sub:"DB 60 lb · 2 laps each arm (~30 ft/lap)", def:[mk("2 laps",60),mk("2 laps",60)], note:"Upright · no lateral lean · core braced" },
       ]},
     ],
   },
 
-Fri: {
-  cardio: "Swim, 1000 m, no backstroke, pull buoy or fins if toe irritated",
-  warmup: [
-    "Cat/Cows 10 slow",
-    "Glute Bridges 2x10",
-    "Hip CARs 8 each side",
-    "Arm circles 2x30 sec"
-  ],
-  topNote: null,
-  sections: [
-    {
-      h: "Hip",
-      ex: [
-        { id: "f1", name: "Hip Abduction", sub: "Abductor machine", def: [mk(10,100), mk(10,100), mk(10,100)], note: "Controlled return" },
-        { id: "f2", name: "Hip Adduction", sub: "Adductor machine", def: [mk(10,60), mk(10,60), mk(10,60)], note: "Pelvic control" },
-        { id: "f3", name: "KB Swing", sub: "Kettlebell", def: [mk(10,25), mk(10,25), mk(10,25)], note: "Power from glutes" }
-      ]
-    },
-    {
-      h: "Anti-rotation Core",
-      ex: [
-        { id: "f4", name: "Pallof Press", sub: "Cable", def: [mk("10e",30), mk("10e",30), mk("10e",30)], note: "No rotation" }
-      ]
-    },
-    {
-      h: "Shoulder Health",
-      ex: [
-        { id: "f5", name: "Shoulder Clock w/ Band", sub: "Band", def: [mk("5e","band"), mk("5e","band"), mk("5e","band")], note: "Light only" }
-      ]
-    },
-    {
-      h: "Core",
-      ex: [
-        { id: "f6", name: "Russian Twists", sub: "3x30 sec", def: [mk("30s","BW"), mk("30s","BW"), mk("30s","BW")], note: "Controlled" }
-      ]
-    }
-  ]
-},
+  // ─── FRIDAY: Legs Volume + Hip + Chest (Volume) + Swim ───────────────────
+  Fri: {
+    cardio: "Short swim · 20–25 min · 400–600 yards · Zone 2 · No backstroke · Pull buoy if toe irritated · Do AFTER strength · NOT a run day — preserves 49hr gap to Sunday long run ✓ Friday 5am legs → Sunday 6am run = 49hr. If MTP signals anything after this session, hold Sunday run distance.",
+    warmup: [
+      "Cat/Cows 10 slow",
+      "Glute Bridges 2×10",
+      "Hip CARs 8e slow",
+      "Arm circles 2×30 sec each direction",
+    ],
+    topNote: "YMCA Day — Legs volume (8–15 reps, lighter than Tuesday) + hip/core + second chest frequency. Swim only — no run today. Tendon Work after main program (primer for Sunday).",
+    tendonWork: [
+      "Tibialis Raise · 2×15 · Wall shin raises · Anterior chain primer for Sunday run · Always stay at Level 1 on Friday regardless of Tuesday progression level · This is activation not loading · Search: tibialis anterior raise wall",
+      "Eccentric Calf Raise (Lighter Friday Version) · 2×6 each leg · Bodyweight only · 3-sec lower · ALWAYS keep Friday version at Level 1 regardless of Tuesday level · Purpose is priming Sunday's long run, not adding Achilles stimulus",
+      "Hip Flexor Isometric Hold · L1: 2×20s each side · Stand upright, lift one knee to 90°, hold completely still · No load · Feel deep sustained effort at front of hip (not a cramp) · If cramping reduce to 12 sec · L3 target: 3×30s + light ankle weight · Advance: 3 sessions zero hip flexor next-day soreness · Search: hip flexor isometric hold running prehab",
+    ],
+    sections: [
+      { h: "Chest (Volume Day · 2nd Frequency)", ex: [
+        { id:"f0", name:"Cable Crossover",    sub:"Low-to-high or mid · 3×12–15",   def:[mk("12-15","—"),mk("12-15","—"),mk("12-15","—")], note:"Full stretch at start · squeeze at top · volume not load · second chest frequency" },
+      ]},
+      { h: "Hip", ex: [
+        { id:"f1", name:"Hip Abduction",           sub:"Abductor machine",             def:[mk(8,120),mk(8,120),mk(8,120)],              note:"Full ROM · controlled return" },
+        { id:"f2", name:"Hip Adduction",           sub:"Adductor machine",             def:[mk(8,80),mk(8,80),mk(8,80)],                 note:"Pelvic control throughout" },
+        { id:"f3", name:"KB Swing",                sub:"Kettlebell · hip hinge drive", def:[mk(10,25),mk(10,25),mk(10,25)],              note:"Power from glutes · not arms" },
+        { id:"f4", name:"Hip Thrust",              sub:"Smith machine · volume load",  def:[mk("10-12","—"),mk("10-12","—"),mk("10-12","—")], note:"Lighter than Tuesday · can sub glute bridge" },
+      ]},
+      { h: "Posterior Chain", ex: [
+        { id:"f5", name:"Romanian Deadlift",       sub:"DB or barbell",                def:[mk("10-12","—"),mk("10-12","—"),mk("10-12","—")], note:"Hinge · flat back · 3-1-2 tempo" },
+        { id:"f6", name:"Hamstring Eccentric Curl",sub:"Leg curl · 4s eccentric",      def:[mk("8-10","—"),mk("8-10","—"),mk("8-10","—")], note:"4-second lowering · slow control" },
+      ]},
+      { h: "Anti-Rotation Core", ex: [
+        { id:"f7", name:"Pallof Press",            sub:"Cable · split stance",          def:[mk("8e",30),mk("8e",30),mk("8e",30)],        note:"Brace · press slowly · zero rotation" },
+      ]},
+      { h: "Shoulder Health", ex: [
+        { id:"f8", name:"Shoulder Clock w/ Band",  sub:"Resistance band",              def:[mk("5e","band"),mk("5e","band"),mk("5e","band")], note:"Full range · light load only" },
+      ]},
+      { h: "Core", ex: [
+        { id:"f9", name:"Russian Twists",          sub:"3×30 sec",                     def:[mk("30s","BW"),mk("30s","BW"),mk("30s","BW")], note:"Feet elevated optional · controlled" },
+      ]},
+    ],
+  },
 
-Sat: {
-  cardio: "Long easy run, 45 to 60 min, Zone 2, conversational, run before lifting",
-  warmup: [],
-  topNote: null,
-  sections: [
-    {
-      h: "A, Calf / Ankle",
-      ex: [
-        { id: "s1", name: "Seated Calf Raise", sub: "Machine or seated DB", def: [mk(12,"—"), mk(12,"—"), mk(12,"—"), mk(12,"—")], note: "Soleus focus" },
-        { id: "s2", name: "Single-Leg Calf Raise", sub: "DB or BW", def: [mk("10/leg","BW"), mk("10/leg","BW"), mk("10/leg","BW")], note: "3-count lower" },
-        { id: "s3", name: "Tibialis Raise", sub: "Wall shin raises", def: [mk(15,"BW"), mk(15,"BW"), mk(15,"BW")], note: "Toes up" }
-      ]
-    },
-    {
-      h: "B, Hip-Dominant Posterior Chain",
-      ex: [
-        { id: "s4", name: "Romanian Deadlift", sub: "DB or barbell", def: [mk(10,"—"), mk(10,"—"), mk(10,"—")], note: "Flat back" },
-        { id: "s5", name: "Hamstring Eccentric Curl", sub: "Leg curl", def: [mk(10,"—"), mk(10,"—"), mk(10,"—")], note: "4 sec lowering" },
-        { id: "s6", name: "Hip Thrust", sub: "Machine or Smith", def: [mk(10,"—"), mk(10,"—"), mk(10,"—")], note: "Lighter than Tue" }
-      ]
-    },
-    {
-      h: "C, Hip Stability / Core",
-      ex: [
-        { id: "s7", name: "Adductor Machine", sub: "Inner thigh", def: [mk(10,"—"), mk(10,"—"), mk(10,"—")], note: "Progress slowly" },
-        { id: "s8", name: "Pallof Press", sub: "Cable anti-rotation", def: [mk(10,"—"), mk(10,"—"), mk(10,"—")], note: "Brace" }
-      ]
-    }
-  ]
-},
+  // ─── SATURDAY: Long Swim ──────────────────────────────────────────────────
+  Sat: {
+    cardio: "Long swim · 50–60 min · 1000–1500 yards · Zone 2 aerobic · No backstroke · YMCA pool · Primary Saturday session · Weekly long swim anchor.",
+    warmup: [],
+    topNote: "Swim-only day. No strength training. YMCA opens 6am — arrive at 6:00. Afternoon: optional easy walk or mobility during nap. Not a training session. Sunday–Saturday order can swap to accommodate races.",
+    tendonWork: [],
+    sections: [],
+  },
 
-Sun: {
-  cardio: "Rest or easy swim, optional 20 to 30 min, no resistance training today",
-  warmup: [],
-  topNote: null,
-  sections: []
-  }
+  // ─── SUNDAY: Long Run ─────────────────────────────────────────────────────
+  Sun: {
+    cardio: "Long run · Zone 2 · Conversational pace · Current target 3.3 miles building under 10% weekly progression rule · MTP protocol applies: do not advance distance if score above 0 at any point this week · YMCA opens 6am · Afternoon optional easy bike 20–30 min Zone 1 during nap if MTP score = 0 and energy is high",
+    warmup: [],
+    topNote: "Run-only day. No strength training. This is the primary run of the week and the main driver of half marathon progression. Sunday–Saturday order can swap to accommodate races. Afternoon easy bike is informal and not counted in weekly cardio totals.",
+    tendonWork: [],
+    sections: [],
+  },
+
 }
+
 
 const defaultForDay = d => {
   const o = {}
