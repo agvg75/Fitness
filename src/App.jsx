@@ -2378,6 +2378,8 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const [inlineItemForm, setInlineItemForm] = useState(null) // { day, section } | null
   const [inlineItemName, setInlineItemName] = useState("")
   const [inlineItemDetail, setInlineItemDetail] = useState("")
+  const [sleepInputDate, setSleepInputDate] = useState(todayISO())
+  const [sleepInputHours, setSleepInputHours] = useState("")
   const [inlineExForm, setInlineExForm] = useState(null)   // day | null
   const [inlineExName, setInlineExName] = useState("")
   const [highlightedLogEntryId, setHighlightedLogEntryId] = useState(null)
@@ -2397,7 +2399,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     [schedLog]
   )
 
-  const SPLIT_DAYS = ["Tue", "Thu"]
+  const SPLIT_DAYS = []
   const isSplitDay = SPLIT_DAYS.includes(activeDay)
 
   const VENUE_TIMES = { ymca: "05:30", knr: "09:35" }
@@ -3663,8 +3665,8 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <input
               type="date"
-              defaultValue={sessionDate}
-              id="manualSleepDate"
+              value={sleepInputDate}
+              onChange={e => setSleepInputDate(e.target.value)}
               style={{ padding: "5px 8px", borderRadius: 5, fontSize: 12, background: "#111", border: "0.5px solid #252525", color: "#e8e8e8", fontFamily: "inherit", outline: "none" }}
             />
             <input
@@ -3673,14 +3675,16 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
               max="16"
               step="0.25"
               placeholder="hours (e.g. 7.5)"
-              id="manualSleepHours"
+              value={sleepInputHours}
+              onChange={e => setSleepInputHours(e.target.value)}
               style={{ width: 130, padding: "5px 8px", borderRadius: 5, fontSize: 12, background: "#111", border: "0.5px solid #252525", color: "#e8e8e8", fontFamily: "inherit", outline: "none" }}
             />
             <button
               onClick={() => {
-                const d = document.getElementById("manualSleepDate")?.value
-                const h = document.getElementById("manualSleepHours")?.value
-                if (d && h) addManualSleepEntry(d, h)
+                if (sleepInputDate && sleepInputHours) {
+                  addManualSleepEntry(sleepInputDate, sleepInputHours)
+                  setSleepInputHours("")
+                }
               }}
               style={{ padding: "5px 14px", borderRadius: 20, fontSize: 11, fontWeight: 700, background: "#7F77DD22", color: "#7F77DD", border: "0.5px solid #7F77DD", cursor: "pointer", fontFamily: "inherit" }}
             >
@@ -3925,7 +3929,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
             </div>
             {isSplitDay && (
               <div style={{ fontSize: 11, color: "#555", marginTop: 4 }}>
-                YMCA 5:30–7:00 am · KNR 9:35–10:45 am
+                YMCA 5:00–7:00 am
               </div>
             )}
           </div>
@@ -4868,54 +4872,138 @@ if (w.category === "Strength") {
         </div>
 
         {(() => {
-          const KEY_EXERCISES = [
-            { name: "Hip Thrust",   match: "hip thrust",   baseline: null },
-            { name: "Leg Press",    match: "leg press",     baseline: 320 },
-            { name: "Leg Curl",     match: "leg curl",      baseline: 125 },
-            { name: "Lat Pulldown", match: "lat pulldown",  baseline: 133 },
-            { name: "Cable Row",    match: "cable row",     baseline: 133 },
-            { name: "Bicep Curl",   match: "bicep curl",    baseline: 75 },
+          const EXERCISE_GROUPS = [
+            {
+              group: "Upper Body — Chest & Shoulders",
+              color: "#f97316",
+              exercises: [
+                { name: "Chest Press",       match: "chest press",      baseline: 110 },
+                { name: "Incline Press",      match: "incline",          baseline: 90  },
+                { name: "Machine Flys",       match: "fly",              baseline: 30  },
+                { name: "Triceps Pulldown",   match: "tricep",           baseline: 25  },
+                { name: "Lateral Raise",      match: "lateral raise",    baseline: null },
+              ]
+            },
+            {
+              group: "Back & Arms",
+              color: "#4a9ee8",
+              exercises: [
+                { name: "Lat Pulldown",       match: "lat pulldown",     baseline: 133 },
+                { name: "Cable Row",          match: "cable row",        baseline: 133 },
+                { name: "Bicep Curl",         match: "bicep curl",       baseline: 75  },
+                { name: "Hammer Curl",        match: "hammer curl",      baseline: null },
+                { name: "Inverted Row",       match: "inverted row",     baseline: null },
+              ]
+            },
+            {
+              group: "Lower Body",
+              color: "#ffd166",
+              exercises: [
+                { name: "Hip Thrust",         match: "hip thrust",       baseline: null },
+                { name: "Leg Press",          match: "leg press",        baseline: 320  },
+                { name: "Leg Extension",      match: "leg extension",    baseline: null },
+                { name: "Leg Curl",           match: "leg curl",         baseline: 125  },
+                { name: "KB RDL",             match: "rdl",              baseline: null },
+                { name: "Hip Abduction",      match: "abduction",        baseline: null },
+                { name: "Hip Adduction",      match: "adduction",        baseline: null },
+              ]
+            },
+            {
+              group: "Tendons & Connective",
+              color: "#f59e0b",
+              exercises: [
+                { name: "Eccentric Calf",     match: "eccentric calf",   baseline: null },
+                { name: "Eccentric Lateral",  match: "eccentric lateral",baseline: null },
+                { name: "Eccentric Biceps",   match: "eccentric biceps", baseline: null },
+                { name: "Pallof Press",       match: "pallof",           baseline: null },
+                { name: "Suitcase Carry",     match: "suitcase",         baseline: null },
+                { name: "KB Swing",           match: "kb swing",         baseline: null },
+              ]
+            },
           ]
+
           const log = Array.isArray(schedLog) ? schedLog : []
-          const charts = KEY_EXERCISES.map(({ name, match, baseline }) => {
-            const points = []
-            for (const sess of log) {
-              const ex = (sess.exercises || []).find(e =>
-                (e.exercise_name || "").toLowerCase().includes(match)
-              )
-              if (!ex) continue
-              const w = parseFloat(ex.actual?.load)
-              if (!Number.isFinite(w) || w <= 0) continue
-              points.push({ date: (sess.date || "").slice(0, 10), weight: w })
-            }
-            const sorted = points.sort((a, b) => a.date.localeCompare(b.date))
-            return { name, baseline, data: sorted }
-          }).filter(c => c.data.length > 0)
-          if (!charts.length) return null
-          return (
-            <div style={{ background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: "12px", padding: "16px" }}>
-              <div style={{ fontSize: "14px", fontWeight: "700", color: "#ced2f0", marginBottom: "12px" }}>
-                Strength Progression
+          // Also pull from canonical sessions as a fallback source
+          const allSessions = [...log]
+
+          const renderGroup = ({ group, color, exercises }) => {
+            const charts = exercises.map(({ name, match, baseline }) => {
+              const points = []
+              for (const sess of allSessions) {
+                const ex = (sess.exercises || []).find(e =>
+                  (e.exercise_name || "").toLowerCase().includes(match.toLowerCase())
+                )
+                if (!ex) continue
+                const w = parseFloat(ex.actual?.load ?? ex.load)
+                if (!Number.isFinite(w) || w <= 0) continue
+                const r = parseFloat(ex.actual?.reps ?? ex.reps)
+                // Use e1RM if reps available (Epley: w * (1 + r/30)), cap at 15 reps
+                const e1rm = Number.isFinite(r) && r > 0 && r <= 15
+                  ? Math.round(w * (1 + r / 30))
+                  : w
+                points.push({ date: (sess.date || sess.start_date || "").slice(0, 10), weight: e1rm })
+              }
+              const sorted = points
+                .filter(p => p.date)
+                .sort((a, b) => a.date.localeCompare(b.date))
+              return { name, baseline, data: sorted }
+            }).filter(c => c.data.length > 0)
+
+            if (!charts.length) return null
+
+            return (
+              <div key={group} style={{ background: "#0d0e1c", border: `1px solid ${color}22`, borderRadius: 10, padding: "14px" }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color, marginBottom: 10, borderBottom: `1px solid ${color}33`, paddingBottom: 6 }}>
+                  {group}
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12 }}>
+                  {charts.map(({ name, baseline, data }) => (
+                    <div key={name}>
+                      <div style={{ fontSize: 10, fontWeight: 600, color: "#8fa8d8", marginBottom: 3 }}>{name}</div>
+                      <ResponsiveContainer width="100%" height={100}>
+                        <LineChart data={data} margin={{ top: 4, right: 4, left: 0, bottom: 4 }}>
+                          <CartesianGrid stroke="#1a1b2e" />
+                          <XAxis dataKey="date" tick={{ fontSize: 8 }} interval="preserveStartEnd" />
+                          <YAxis tick={{ fontSize: 8 }} width={32} />
+                          <Tooltip formatter={v => [`${v} lb`, "e1RM"]} labelFormatter={l => l} />
+                          <Line type="monotone" dataKey="weight" stroke={color} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+                          {baseline != null && (
+                            <ReferenceLine y={baseline} stroke="#4a9ee8" strokeDasharray="4 2"
+                              label={{ value: `B ${baseline}`, position: "insideTopRight", fontSize: 8, fill: "#4a9ee8" }} />
+                          )}
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "16px" }}>
-                {charts.map(({ name, baseline, data }) => (
-                  <div key={name}>
-                    <div style={{ fontSize: "11px", fontWeight: "600", color: "#8fa8d8", marginBottom: "4px" }}>{name}</div>
-                    <ResponsiveContainer width="100%" height={120}>
-                      <LineChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
-                        <CartesianGrid stroke="#1a1b2e" />
-                        <XAxis dataKey="date" tick={{ fontSize: 9 }} interval="preserveStartEnd" />
-                        <YAxis tick={{ fontSize: 9 }} width={36} />
-                        <Tooltip formatter={v => [`${v} lb`, "Weight"]} />
-                        <Line type="monotone" dataKey="weight" stroke="#ffd166" strokeWidth={2} dot={{ r: 3 }} connectNulls />
-                        {baseline != null && (
-                          <ReferenceLine y={baseline} stroke="#4a9ee8" strokeDasharray="4 2"
-                            label={{ value: `Baseline ${baseline}`, position: "insideTopRight", fontSize: 9, fill: "#4a9ee8" }} />
-                        )}
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                ))}
+            )
+          }
+
+          const anyData = EXERCISE_GROUPS.some(g =>
+            g.exercises.some(({ match }) =>
+              allSessions.some(sess =>
+                (sess.exercises || []).some(e =>
+                  (e.exercise_name || "").toLowerCase().includes(match.toLowerCase())
+                )
+              )
+            )
+          )
+
+          if (!anyData) return (
+            <div style={{ background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: 12, padding: 16, color: "#555", fontSize: 12 }}>
+              Strength Progression — no logged sessions yet. Log sessions in the Schedule tab to populate these charts.
+            </div>
+          )
+
+          return (
+            <div style={{ background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: 12, padding: 16 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#ced2f0", marginBottom: 14 }}>
+                Strength Progression
+                <span style={{ fontSize: 10, fontWeight: 400, color: "#555", marginLeft: 8 }}>e1RM where reps logged · raw load otherwise</span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 16 }}>
+                {EXERCISE_GROUPS.map(g => renderGroup(g))}
               </div>
             </div>
           )
@@ -14915,7 +15003,11 @@ return (
               width={30}
               allowDecimals={false}
             />
-            <Tooltip />
+            <Tooltip formatter={(v, name) => {
+              if (name === "Normalized training load") return [Math.round(v) + "%", name]
+              if (name === "Strength sessions") return [Math.round(v), name]
+              return [Number(v).toFixed(1) + " mi", name]
+            }} />
             <Legend verticalAlign="top" height={0} content={() => null} />
 
             <Area
