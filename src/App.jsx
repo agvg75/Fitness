@@ -686,13 +686,24 @@ const SDAY_TYPES = {
 }
 
 const DEFAULT_TENDON_WORK_BY_DAY = {
+  Tue: [
+    { id: "mtp_balance", name: "MTP Weight-Bearing Balance", sets: "2", reps: "20s each side", load: "BW", notes: "L1 start. Stand on one foot, flat floor, eyes open. Feel ball of foot pressing floor. No toe curling. L3 target: 3×45s + slight heel rise. Search: single leg balance great toe MTP physical therapy" },
+    { id: "eccentric_calf_raise", name: "Eccentric Calf Raise", sets: "2", reps: "8 each leg", load: "BW", notes: "L1 start. Off step: both feet up, one foot down, 3-sec lower, full heel drop. L3 target: 3×12 + 10–15 lb DB. Search: Alfredson protocol eccentric calf raise Achilles" },
+    { id: "tibialis_raise_dorsiflexion", name: "Tibialis Raise (Shin Raise)", sets: "2", reps: "15", load: "BW", notes: "L1 start. Back against wall, heels on floor, raise toes as high as possible, 1-sec hold at top. Stop if sharp shin pain. L3 target: 3×25 + ankle weight. Search: tibialis anterior raise wall running injury prevention" },
+    { id: "tke_patellar", name: "Terminal Knee Extension (TKE)", sets: "2", reps: "10 each side", load: "light band", notes: "L1 start. Anchor band at knee height behind you, band in crease of knee, drive to full extension, 1-sec hold. Small ROM — not a squat. L3 target: 3×15 medium band 3-sec hold. Search: TKE band patellar tendon physical therapy" },
+    { id: "single_leg_balance", name: "Single-Leg Balance", sets: "2", reps: "20s each side", load: "BW", notes: "L1 start. Eyes open, flat floor, knee slightly bent, arch neutral, toes flat. L3 target: 3×30s eyes closed. Search: single leg balance proprioception ankle rehabilitation" },
+  ],
+  Thu: [
+    { id: "eccentric_lateral_raise", name: "Eccentric Lateral Raise", sets: "2", reps: "8 each arm", load: "5 lb", notes: "L1 start. RAISE with both arms together to shoulder height, LOWER with one arm only (4-sec lower). The slow lowering is the entire stimulus. L3 target: 3×12 each arm at 8–10 lb. Search: eccentric lateral raise supraspinatus rotator cuff rehab" },
+    { id: "eccentric_biceps_curl", name: "Eccentric Biceps Curl", sets: "2", reps: "5 each arm", load: "15 lb", notes: "L1 start. CURL UP with both arms, LOWER with one arm (4-sec lower). 15 lb is lighter than working weight by design. L3 target: 3×8 each arm at 25 lb, 5-sec lower. Search: eccentric biceps curl tendon loading physical therapy" },
+    { id: "face_pull_tendon", name: "Face Pull (Tendon Stimulus)", sets: "2", reps: "15", load: "band/cable", notes: "Slow pull and controlled 3-sec return. This is the loaded tendon stimulus version, not just warm-up activation. Maintain indefinitely — no progression target." },
+    { id: "pre_run_ankle_primer", name: "Pre-Run Ankle Primer", sets: "2", reps: "10 each side", load: "BW", notes: "Simple calf raise, flat floor. Activation only before the run. Do not use eccentric protocol here — save that for Tuesday. Skip if calf is acutely tight." },
+  ],
   Fri: [
-    { id: "standing_calf_raise", name: "Standing calf raise", sets: "3", reps: "8-12", load: "", notes: "Heavy slow focus. Full range with controlled lowering." },
-    { id: "seated_bent_knee_calf_raise", name: "Seated or bent-knee calf raise", sets: "3", reps: "8-12", load: "", notes: "Soleus-focused. Use seated machine or bent-knee variation." },
-    { id: "tibialis_raise_dorsiflexion", name: "Tibialis raise or dorsiflexion", sets: "2-3", reps: "12-20", load: "", notes: "Controlled dorsiflexion. Band or tib bar both count." },
-    { id: "toe_extensor_intrinsic", name: "Toe extensor or foot intrinsic work", sets: "2-3", reps: "12-20", load: "", notes: "Treat as tendon support, not optional filler." },
-    { id: "lateral_ankle_band", name: "Optional lateral ankle band work", sets: "2", reps: "12-15", load: "", notes: "Useful when ankle stability or forefoot control needs support." },
-  ]
+    { id: "tibialis_raise_primer", name: "Tibialis Raise (Friday Primer)", sets: "2", reps: "15", load: "BW", notes: "Anterior chain primer for Sunday run. Always stay at Level 1 on Friday regardless of Tuesday progression. This is activation not loading. Search: tibialis anterior raise wall" },
+    { id: "eccentric_calf_lighter", name: "Eccentric Calf Raise (Lighter Version)", sets: "2", reps: "6 each leg", load: "BW", notes: "ALWAYS keep Friday version at Level 1 regardless of Tuesday level. Purpose is priming Sunday's long run, not adding Achilles stimulus." },
+    { id: "hip_flexor_isometric", name: "Hip Flexor Isometric Hold", sets: "2", reps: "20s each side", load: "BW", notes: "L1 start. Stand upright, lift one knee to 90°, hold completely still. Feel deep sustained effort at front of hip — not a cramp. If cramping reduce to 12 sec. L3 target: 3×30s + light ankle weight. Search: hip flexor isometric hold running prehab" },
+  ],
 }
 
 const TENDON_EXERCISE_PATTERNS = [
