@@ -10023,6 +10023,52 @@ class ErrorBoundary extends React.Component {
   }
 }
 
+// ── DEXA Regional Lean Mass (hardcoded from scan PDFs) ─────────────────────
+// All values in grams, directly from Hologic Horizon W reports.
+// Update after each scan; regional data is not in dexa_summary.json.
+const DEXA_REGIONAL = [
+  {
+    label: "Aug '25", date: "2026-08-26",
+    trunk: 24858, rLeg: 7822, lLeg: 7898, rArm: 3056, lArm: 2782,
+    fatPct: 33.9, fatMass: 26728, leanMass: 49785, leanBmc: 52175, totalMass: 78903,
+    vatArea: 155, bmd: 1.121,
+  },
+  {
+    label: "Nov '25", date: "2025-11-19",
+    trunk: 24537, rLeg: 7637, lLeg: 7967, rArm: 3241, lArm: 2758,
+    fatPct: 31.4, fatMass: 23669, leanMass: 49470, leanBmc: 51805, totalMass: 75474,
+    vatArea: 120, bmd: 1.110,
+  },
+  {
+    label: "Jan '26", date: "2026-01-14",
+    trunk: 24296, rLeg: 7677, lLeg: 7726, rArm: 3053, lArm: 2889,
+    fatPct: 29.8, fatMass: 21764, leanMass: 48939, leanBmc: 51308, totalMass: 73072,
+    vatArea: 135, bmd: 1.120,
+  },
+  {
+    label: "Apr '26", date: "2026-04-27",
+    trunk: 26477, rLeg: 8524, lLeg: 7888, rArm: 3256, lArm: 3031,
+    fatPct: 25.4, fatMass: 18722, leanMass: 52484, leanBmc: 54875, totalMass: 73597,
+    vatArea: 122, bmd: 1.161,
+  },
+]
+// Baseline (Aug 2025) values for % change calculations
+const DEXA_BASE = DEXA_REGIONAL[0]
+const dexaRegionalPct = DEXA_REGIONAL.map(s => ({
+  label: s.label,
+  date:  s.date,
+  fatMassPct:  Number((((s.fatMass  - DEXA_BASE.fatMass)  / DEXA_BASE.fatMass)  * 100).toFixed(1)),
+  leanMassPct: Number((((s.leanMass - DEXA_BASE.leanMass) / DEXA_BASE.leanMass) * 100).toFixed(1)),
+  totalMassPct:Number((((s.totalMass- DEXA_BASE.totalMass)/ DEXA_BASE.totalMass)* 100).toFixed(1)),
+  fatPctChg:   Number((s.fatPct - DEXA_BASE.fatPct).toFixed(1)),
+  trunkPct:    Number((((s.trunk - DEXA_BASE.trunk) / DEXA_BASE.trunk) * 100).toFixed(1)),
+  rLegPct:     Number((((s.rLeg  - DEXA_BASE.rLeg)  / DEXA_BASE.rLeg)  * 100).toFixed(1)),
+  lLegPct:     Number((((s.lLeg  - DEXA_BASE.lLeg)  / DEXA_BASE.lLeg)  * 100).toFixed(1)),
+  rArmPct:     Number((((s.rArm  - DEXA_BASE.rArm)  / DEXA_BASE.rArm)  * 100).toFixed(1)),
+  lArmPct:     Number((((s.lArm  - DEXA_BASE.lArm)  / DEXA_BASE.lArm)  * 100).toFixed(1)),
+}))
+// ───────────────────────────────────────────────────────────────────────────
+
 export default function App() {
 
   // ── LIFT Calibration Config ─────────────────────────────────────────────
@@ -10041,11 +10087,14 @@ export default function App() {
     },
 
     // Body composition — update after each DEXA scan
-    ffm_lb: 113.1,             // fat-free mass, January 2026 DEXA
-    scale_bias_pp: 2.7,        // home scale reads this many pp LOW vs DEXA
+    ffm_lb: 115.8,             // lean mass (excl. BMC), April 2026 DEXA
+    lean_bmc_lb: 121.0,        // lean + BMC, April 2026 DEXA
+    fat_lb: 41.3,              // fat mass, April 2026 DEXA
+    pct_fat: 25.4,             // body fat %, April 2026 DEXA
+    scale_bias_pp: 0.6,        // DEXA BF% (25.4) minus scale-derived estimate at ~159 lb; update Sep 2026
     protein_target_g: 140,     // g/day — ~2.7 g/kg lean mass
-    dexa_anchor_date: "2026-01-16",  // date of last DEXA scan
-    next_dexa_date:   "2026-04-01",  // next planned scan
+    dexa_anchor_date: "2026-04-27",  // date of last DEXA scan (April 2026)
+    next_dexa_date:   "2026-09-19",  // next planned scan — St. Jude 10K context
 
     // Calorie targets — empirically calibrated, scale-derived, April 2026
     bmr: 1520,
@@ -15254,7 +15303,7 @@ return (
                     +{SCALE_BIAS_PP} pp DEXA correction applied
                   </div>
                   <div style={{ fontSize: "10px", color: "#445", marginTop: "4px" }}>
-                    Bias quantified vs Jan 2026 DEXA anchor. Update after April 2026 scan.
+                    Bias quantified vs Apr 2026 DEXA anchor. Update after Sep 2026 scan.
                   </div>
                 </div>
               )
@@ -15290,13 +15339,82 @@ return (
               </ResponsiveContainer>
             </div>
           </div>
+
+          {/* ── DEXA % Change from Baseline ─────────────────────────────── */}
+          <div style={{ ...cardStyle(), marginBottom: "16px" }}>
+            <div style={{ fontWeight: "bold", marginBottom: "4px" }}>Body Composition — % Change from Baseline (Aug 2025)</div>
+            <div style={{ fontSize: 11, color: "#667", marginBottom: 10 }}>
+              Fat mass (red) · Lean mass (teal) · Total mass (gray, dashed) · Body fat % (amber).
+              Baseline = Aug 26, 2025 scan.
+            </div>
+            <ResponsiveContainer width="100%" height={280}>
+              <LineChart data={dexaRegionalPct} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                <CartesianGrid stroke="#1a1b2e" />
+                <XAxis dataKey="label" />
+                <YAxis tickFormatter={v => `${v > 0 ? "+" : ""}${v}%`} />
+                <Tooltip formatter={(v, name) => [`${v > 0 ? "+" : ""}${v}%`, name]} />
+                <Legend verticalAlign="top" height={32} />
+                <ReferenceLine y={0} stroke="#444" strokeDasharray="3 3" />
+                <Line type="monotone" dataKey="fatMassPct"   name="Fat mass"    stroke="#C0392B" strokeWidth={2.5} dot={{ r: 5 }} />
+                <Line type="monotone" dataKey="leanMassPct"  name="Lean mass"   stroke="#1D9E75" strokeWidth={2.5} dot={{ r: 5 }} />
+                <Line type="monotone" dataKey="totalMassPct" name="Total mass"  stroke="#888780" strokeWidth={1.8} strokeDasharray="5 3" dot={{ r: 4 }} />
+                <Line type="monotone" dataKey="fatPctChg"    name="Body fat pp" stroke="#BA7517" strokeWidth={2.5} dot={{ r: 5 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* ── DEXA Regional Lean Mass % Change ────────────────────────── */}
+          <div style={{ ...cardStyle(), marginBottom: "16px" }}>
+            <div style={{ fontWeight: "bold", marginBottom: "4px" }}>Regional Lean Mass — % Change from Baseline</div>
+            <div style={{ fontSize: 11, color: "#667", marginBottom: 10 }}>
+              Left leg (amber) flat across all scans — consistent with left MTP unloading throughout the training period.
+              Right leg and trunk drove the Apr '26 lean mass gain.
+            </div>
+            <ResponsiveContainer width="100%" height={280}>
+              <LineChart data={dexaRegionalPct} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                <CartesianGrid stroke="#1a1b2e" />
+                <XAxis dataKey="label" />
+                <YAxis tickFormatter={v => `${v > 0 ? "+" : ""}${v}%`} />
+                <Tooltip formatter={(v, name) => [`${v > 0 ? "+" : ""}${v}%`, name]} />
+                <Legend verticalAlign="top" height={32} />
+                <ReferenceLine y={0} stroke="#444" strokeDasharray="3 3" />
+                <Line type="monotone" dataKey="trunkPct" name="Trunk"  stroke="#7F77DD" strokeWidth={2} dot={{ r: 5 }} />
+                <Line type="monotone" dataKey="rLegPct"  name="R leg"  stroke="#D85A30" strokeWidth={2} dot={{ r: 5 }} />
+                <Line type="monotone" dataKey="lLegPct"  name="L leg"  stroke="#BA7517" strokeWidth={2} dot={{ r: 5 }} />
+                <Line type="monotone" dataKey="rArmPct"  name="R arm"  stroke="#1D9E75" strokeWidth={2} dot={{ r: 5 }} />
+                <Line type="monotone" dataKey="lArmPct"  name="L arm"  stroke="#378ADD" strokeWidth={2} dot={{ r: 5 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* ── VAT and BMD ─────────────────────────────────────────────── */}
+          <div style={{ ...cardStyle(), marginBottom: "16px" }}>
+            <div style={{ fontWeight: "bold", marginBottom: "4px" }}>VAT Area and Bone Mineral Density</div>
+            <div style={{ fontSize: 11, color: "#667", marginBottom: 10 }}>
+              VAT area (cm², left axis) — lower-risk threshold ≈ 100 cm². BMD (g/cm², right axis) — T-score 0.0 in Apr '26.
+            </div>
+            <ResponsiveContainer width="100%" height={240}>
+              <ComposedChart data={DEXA_REGIONAL} margin={{ top: 8, right: 48, left: 0, bottom: 0 }}>
+                <CartesianGrid stroke="#1a1b2e" />
+                <XAxis dataKey="label" />
+                <YAxis yAxisId="vat" domain={[90, 170]} tickFormatter={v => `${v}`}
+                  label={{ value: "VAT cm²", angle: -90, position: "insideLeft", fill: "#C0392B", fontSize: 11 }} />
+                <YAxis yAxisId="bmd" orientation="right" domain={[1.08, 1.20]} tickFormatter={v => v.toFixed(3)}
+                  label={{ value: "BMD g/cm²", angle: 90, position: "insideRight", fill: "#378ADD", fontSize: 11 }} />
+                <Tooltip />
+                <Legend verticalAlign="top" height={32} />
+                <ReferenceLine yAxisId="vat" y={100} stroke="#C0392B" strokeDasharray="4 2" label={{ value: "100 cm²", fill: "#C0392B", fontSize: 10 }} />
+                <Line yAxisId="vat" type="monotone" dataKey="vatArea" name="VAT area (cm²)" stroke="#C0392B" strokeWidth={2.5} dot={{ r: 5 }} />
+                <Line yAxisId="bmd" type="monotone" dataKey="bmd"     name="BMD (g/cm²)"   stroke="#378ADD" strokeWidth={2.5} dot={{ r: 5 }} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+
         </div>
       )}
 
       {tab === "Calories" && (
         <div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
-            <h3 style={{ marginTop: 0 }}>Calories</h3>
             <button onClick={() => setShowMealDialog(true)} style={buttonStyle(true)}>Add meal</button>
           </div>
 
