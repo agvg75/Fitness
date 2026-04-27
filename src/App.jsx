@@ -15415,6 +15415,8 @@ return (
 
       {tab === "Calories" && (
         <div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+            <h3 style={{ marginTop: 0 }}>Calories</h3>
             <button onClick={() => setShowMealDialog(true)} style={buttonStyle(true)}>Add meal</button>
           </div>
 
