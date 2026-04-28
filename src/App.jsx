@@ -11052,7 +11052,7 @@ useEffect(() => {
             console.warn("[LIFT] body_weight.json fetch threw:", err?.message || err)
             return []
           })
-        const dx = await fetch(`${base}data/dexa_summary.json`).then(r => {
+        const dx = await fetch(`${base}data/dexa_summary.json?v=20260427`).then(r => {
           if (!r.ok) throw new Error("dexa_summary.json failed")
           return r.json()
         })
@@ -15415,8 +15415,6 @@ return (
 
       {tab === "Calories" && (
         <div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
-            <h3 style={{ marginTop: 0 }}>Calories</h3>
             <button onClick={() => setShowMealDialog(true)} style={buttonStyle(true)}>Add meal</button>
           </div>
 
