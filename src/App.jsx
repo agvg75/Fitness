@@ -10305,6 +10305,7 @@ function normalizeWorkoutType(type, workout) {
   if (t.includes("running")) return "Running"
   if (t.includes("walking")) return "Walking"
   if (t.includes("cycling")) return "Cycling"
+  if (t.includes("bike")) return "Cycling"
   if (t.includes("swimming")) return "Swimming"
   if (t.includes("elliptical")) return "Elliptical"
   if (t.includes("rowing")) return "Rowing"
@@ -10314,10 +10315,10 @@ function normalizeWorkoutType(type, workout) {
   if (cardioModalities.includes("bike")) return "Cycling"
   if (cardioModalities.includes("swim")) return "Swimming"
   if (cardioModalities.includes("row")) return "Rowing"
-    if (t === "strength") return "Strength"
-      if (t === "run") return "Running"
-        if (t === "bike") return "Cycling"
-          if (t === "swim") return "Swimming"
+  if (t === "strength") return "Strength"
+  if (t === "run") return "Running"
+  if (t === "bike") return "Cycling"
+  if (t === "swim") return "Swimming"
 
   // For Machine Cardio, check rpm_avg as the definitive bike signal,
   // then fall back to sub-type string matching
