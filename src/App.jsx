@@ -10351,6 +10351,11 @@ function normalizeWorkoutType(type, workout) {
     if (t.includes("machine cardio")) return "Machine Cardio"
   }
 
+  if (t === "strength") return "Strength"
+    if (t === "running") return "Running"
+      if (t === "cycling") return "Cycling"
+        if (t === "swimming") return "Swimming"
+          if (t === "yoga" || t === "flexibility" || t === "hiit") return "Strength"
   return "Other"
 }
 
