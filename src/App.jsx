@@ -10353,13 +10353,13 @@ function normalizeWorkoutType(type, workout) {
     if (tgType.includes("strength") || tgType.includes("weight") || tgType.includes("train")) return "Strength"
     // Default Machine Cardio stays as-is so it still gets cardioMinutes credit
     if (t.includes("machine cardio")) return "Machine Cardio"
+    if (t === "strength") return "Strength"
+      if (t === "running") return "Running"
+        if (t === "cycling") return "Cycling"
+          if (t === "swimming") return "Swimming"
+            if (t === "yoga" || t === "flexibility" || t === "hiit") return "Strength"
+              return "Other"
   }
-
-  if (t === "strength") return "Strength"
-    if (t === "running") return "Running"
-      if (t === "cycling") return "Cycling"
-        if (t === "swimming") return "Swimming"
-          if (t === "yoga" || t === "flexibility" || t === "hiit") return "Strength"
   return "Other"
 }
 
