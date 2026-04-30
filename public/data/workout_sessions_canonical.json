@@ -144007,8 +144007,26 @@
       "canonical_type": "swim",
       "match_confidence": "1",
       "relationship": "single",
-      "sources": "[{\"type\":\"healthfit\",\"activity\":\"Pool Swim\",\"device\":\"Andres’s Apple Watch\",\"file\":\"2026-04-12-144824-Pool Swim-Andres’s Apple Watch.csv\"}]",
-      "preferred_metrics": "{\"avg_hr\":117,\"max_hr\":138,\"distance_mi\":457.2,\"distance_km\":735.79,\"calories\":null,\"vo2_max\":null,\"elevation_m\":null,\"workout_type\":\"Pool Swim\",\"source_device\":\"Andres’s Apple Watch\",\"synced_at\":\"2026-04-25T11:02:58.139Z\"}",
+      "sources": [
+        {
+          "type": "healthfit",
+          "activity": "Pool Swim",
+          "device": "Andres’s Apple Watch",
+          "file": "2026-04-12-144824-Pool Swim-Andres’s Apple Watch.csv"
+        }
+      ],
+      "preferred_metrics": {
+        "avg_hr": 117,
+        "max_hr": 138,
+        "distance_mi": 457.2,
+        "distance_km": 735.79,
+        "calories": null,
+        "vo2_max": null,
+        "elevation_m": null,
+        "workout_type": "Pool Swim",
+        "source_device": "Andres’s Apple Watch",
+        "synced_at": "2026-04-25T11:02:58.139Z"
+      },
       "overlap_summary": null,
       "created_at": "2026-04-25T10:42:06.956643+00:00",
       "updated_at": "2026-04-25T11:02:58.208657+00:00"
@@ -144207,8 +144225,26 @@
       "canonical_type": "bike",
       "match_confidence": "1",
       "relationship": "single",
-      "sources": "[{\"type\":\"healthfit\",\"activity\":\"Indoor Cycling\",\"device\":\"Andres’s Apple Watch\",\"file\":\"2026-04-13-053622-Indoor Cycling-Andres’s Apple Watch.csv\"}]",
-      "preferred_metrics": "{\"avg_hr\":109,\"max_hr\":139,\"distance_mi\":null,\"distance_km\":null,\"calories\":null,\"vo2_max\":null,\"elevation_m\":null,\"workout_type\":\"Indoor Cycling\",\"source_device\":\"Andres’s Apple Watch\",\"synced_at\":\"2026-04-26T08:50:45.060Z\"}",
+      "sources": [
+        {
+          "type": "healthfit",
+          "activity": "Indoor Cycling",
+          "device": "Andres’s Apple Watch",
+          "file": "2026-04-13-053622-Indoor Cycling-Andres’s Apple Watch.csv"
+        }
+      ],
+      "preferred_metrics": {
+        "avg_hr": 109,
+        "max_hr": 139,
+        "distance_mi": null,
+        "distance_km": null,
+        "calories": null,
+        "vo2_max": null,
+        "elevation_m": null,
+        "workout_type": "Indoor Cycling",
+        "source_device": "Andres’s Apple Watch",
+        "synced_at": "2026-04-26T08:50:45.060Z"
+      },
       "overlap_summary": null,
       "created_at": "2026-04-25T10:42:06.178272+00:00",
       "updated_at": "2026-04-26T08:50:45.170796+00:00"
@@ -144223,8 +144259,26 @@
       "canonical_type": "strength",
       "match_confidence": "1",
       "relationship": "single",
-      "sources": "[{\"type\":\"healthfit\",\"activity\":\"Strength Training\",\"device\":\"Andres’s Apple Watch\",\"file\":\"2026-04-13-060317-Strength Training-Andres’s Apple Watch.csv\"}]",
-      "preferred_metrics": "{\"avg_hr\":101,\"max_hr\":124,\"distance_mi\":null,\"distance_km\":null,\"calories\":null,\"vo2_max\":null,\"elevation_m\":null,\"workout_type\":\"Strength Training\",\"source_device\":\"Andres’s Apple Watch\",\"synced_at\":\"2026-04-26T08:50:43.934Z\"}",
+      "sources": [
+        {
+          "type": "healthfit",
+          "activity": "Strength Training",
+          "device": "Andres’s Apple Watch",
+          "file": "2026-04-13-060317-Strength Training-Andres’s Apple Watch.csv"
+        }
+      ],
+      "preferred_metrics": {
+        "avg_hr": 101,
+        "max_hr": 124,
+        "distance_mi": null,
+        "distance_km": null,
+        "calories": null,
+        "vo2_max": null,
+        "elevation_m": null,
+        "workout_type": "Strength Training",
+        "source_device": "Andres’s Apple Watch",
+        "synced_at": "2026-04-26T08:50:43.934Z"
+      },
       "overlap_summary": null,
       "created_at": "2026-04-25T10:42:05.344775+00:00",
       "updated_at": "2026-04-26T08:50:44.096583+00:00"
@@ -144239,8 +144293,26 @@
       "canonical_type": "bike",
       "match_confidence": "1",
       "relationship": "single",
-      "sources": "[{\"type\":\"healthfit\",\"activity\":\"Outdoor Cycling\",\"device\":\"Cadence\",\"file\":\"2026-04-13-085337-Outdoor Cycling-Cadence.csv\"}]",
-      "preferred_metrics": "{\"avg_hr\":123,\"max_hr\":160,\"distance_mi\":7570.326,\"distance_km\":12183.23,\"calories\":null,\"vo2_max\":null,\"elevation_m\":244.233,\"workout_type\":\"Outdoor Cycling\",\"source_device\":\"Cadence\",\"synced_at\":\"2026-04-26T08:50:42.847Z\"}",
+      "sources": [
+        {
+          "type": "healthfit",
+          "activity": "Outdoor Cycling",
+          "device": "Cadence",
+          "file": "2026-04-13-085337-Outdoor Cycling-Cadence.csv"
+        }
+      ],
+      "preferred_metrics": {
+        "avg_hr": 123,
+        "max_hr": 160,
+        "distance_mi": 7570.326,
+        "distance_km": 12183.23,
+        "calories": null,
+        "vo2_max": null,
+        "elevation_m": 244.233,
+        "workout_type": "Outdoor Cycling",
+        "source_device": "Cadence",
+        "synced_at": "2026-04-26T08:50:42.847Z"
+      },
       "overlap_summary": null,
       "created_at": "2026-04-25T10:42:04.553628+00:00",
       "updated_at": "2026-04-26T08:50:42.984762+00:00"
@@ -144409,8 +144481,26 @@
       "canonical_type": "bike",
       "match_confidence": "1",
       "relationship": "single",
-      "sources": "[{\"type\":\"healthfit\",\"activity\":\"Outdoor Cycling\",\"device\":\"Cadence\",\"file\":\"2026-04-13-173237-Outdoor Cycling-Cadence.csv\"}]",
-      "preferred_metrics": "{\"avg_hr\":104,\"max_hr\":117,\"distance_mi\":5197.908,\"distance_km\":8365.2,\"calories\":null,\"vo2_max\":null,\"elevation_m\":256.568,\"workout_type\":\"Outdoor Cycling\",\"source_device\":\"Cadence\",\"synced_at\":\"2026-04-26T08:50:41.662Z\"}",
+      "sources": [
+        {
+          "type": "healthfit",
+          "activity": "Outdoor Cycling",
+          "device": "Cadence",
+          "file": "2026-04-13-173237-Outdoor Cycling-Cadence.csv"
+        }
+      ],
+      "preferred_metrics": {
+        "avg_hr": 104,
+        "max_hr": 117,
+        "distance_mi": 5197.908,
+        "distance_km": 8365.2,
+        "calories": null,
+        "vo2_max": null,
+        "elevation_m": 256.568,
+        "workout_type": "Outdoor Cycling",
+        "source_device": "Cadence",
+        "synced_at": "2026-04-26T08:50:41.662Z"
+      },
       "overlap_summary": null,
       "created_at": "2026-04-25T10:42:03.714897+00:00",
       "updated_at": "2026-04-26T08:50:41.756698+00:00"
@@ -144477,8 +144567,26 @@
       "canonical_type": "swim",
       "match_confidence": "1",
       "relationship": "single",
-      "sources": "[{\"type\":\"healthfit\",\"activity\":\"Pool Swim\",\"device\":\"Andres’s Apple Watch\",\"file\":\"2026-04-14-054205-Pool Swim-Andres’s Apple Watch.csv\"}]",
-      "preferred_metrics": "{\"avg_hr\":113,\"max_hr\":131,\"distance_mi\":1005.84,\"distance_km\":1618.74,\"calories\":null,\"vo2_max\":null,\"elevation_m\":null,\"workout_type\":\"Pool Swim\",\"source_device\":\"Andres’s Apple Watch\",\"synced_at\":\"2026-04-27T08:50:38.351Z\"}",
+      "sources": [
+        {
+          "type": "healthfit",
+          "activity": "Pool Swim",
+          "device": "Andres’s Apple Watch",
+          "file": "2026-04-14-054205-Pool Swim-Andres’s Apple Watch.csv"
+        }
+      ],
+      "preferred_metrics": {
+        "avg_hr": 113,
+        "max_hr": 131,
+        "distance_mi": 1005.84,
+        "distance_km": 1618.74,
+        "calories": null,
+        "vo2_max": null,
+        "elevation_m": null,
+        "workout_type": "Pool Swim",
+        "source_device": "Andres’s Apple Watch",
+        "synced_at": "2026-04-27T08:50:38.351Z"
+      },
       "overlap_summary": null,
       "created_at": "2026-04-25T10:42:02.847839+00:00",
       "updated_at": "2026-04-27T08:50:38.408028+00:00"
@@ -144493,8 +144601,26 @@
       "canonical_type": "run",
       "match_confidence": "1",
       "relationship": "single",
-      "sources": "[{\"type\":\"healthfit\",\"activity\":\"Outdoor Running\",\"device\":\"Andres’s Apple Watch\",\"file\":\"2026-04-14-093609-Outdoor Running-Andres’s Apple Watch.csv\"}]",
-      "preferred_metrics": "{\"avg_hr\":144,\"max_hr\":147,\"distance_mi\":599.707,\"distance_km\":965.13,\"calories\":null,\"vo2_max\":null,\"elevation_m\":240.615,\"workout_type\":\"Outdoor Running\",\"source_device\":\"Andres’s Apple Watch\",\"synced_at\":\"2026-04-27T08:50:37.423Z\"}",
+      "sources": [
+        {
+          "type": "healthfit",
+          "activity": "Outdoor Running",
+          "device": "Andres’s Apple Watch",
+          "file": "2026-04-14-093609-Outdoor Running-Andres’s Apple Watch.csv"
+        }
+      ],
+      "preferred_metrics": {
+        "avg_hr": 144,
+        "max_hr": 147,
+        "distance_mi": 599.707,
+        "distance_km": 965.13,
+        "calories": null,
+        "vo2_max": null,
+        "elevation_m": 240.615,
+        "workout_type": "Outdoor Running",
+        "source_device": "Andres’s Apple Watch",
+        "synced_at": "2026-04-27T08:50:37.423Z"
+      },
       "overlap_summary": null,
       "created_at": "2026-04-25T10:42:02.025778+00:00",
       "updated_at": "2026-04-27T08:50:37.471185+00:00"
@@ -144509,8 +144635,26 @@
       "canonical_type": "strength",
       "match_confidence": "1",
       "relationship": "single",
-      "sources": "[{\"type\":\"healthfit\",\"activity\":\"Strength Training\",\"device\":\"Andres’s Apple Watch\",\"file\":\"2026-04-14-094130-Strength Training-Andres’s Apple Watch.csv\"}]",
-      "preferred_metrics": "{\"avg_hr\":102,\"max_hr\":142,\"distance_mi\":null,\"distance_km\":null,\"calories\":null,\"vo2_max\":null,\"elevation_m\":null,\"workout_type\":\"Strength Training\",\"source_device\":\"Andres’s Apple Watch\",\"synced_at\":\"2026-04-27T08:50:36.145Z\"}",
+      "sources": [
+        {
+          "type": "healthfit",
+          "activity": "Strength Training",
+          "device": "Andres’s Apple Watch",
+          "file": "2026-04-14-094130-Strength Training-Andres’s Apple Watch.csv"
+        }
+      ],
+      "preferred_metrics": {
+        "avg_hr": 102,
+        "max_hr": 142,
+        "distance_mi": null,
+        "distance_km": null,
+        "calories": null,
+        "vo2_max": null,
+        "elevation_m": null,
+        "workout_type": "Strength Training",
+        "source_device": "Andres’s Apple Watch",
+        "synced_at": "2026-04-27T08:50:36.145Z"
+      },
       "overlap_summary": null,
       "created_at": "2026-04-25T10:42:00.888543+00:00",
       "updated_at": "2026-04-27T08:50:36.233894+00:00"
@@ -144948,8 +145092,26 @@
       "canonical_type": "bike",
       "match_confidence": "1",
       "relationship": "single",
-      "sources": "[{\"type\":\"healthfit\",\"activity\":\"Indoor Cycling\",\"device\":\"Andres’s Apple Watch\",\"file\":\"2026-04-16-055350-Indoor Cycling-Andres’s Apple Watch.csv\"}]",
-      "preferred_metrics": "{\"avg_hr\":101,\"max_hr\":123,\"distance_mi\":null,\"distance_km\":null,\"calories\":null,\"vo2_max\":null,\"elevation_m\":null,\"workout_type\":\"Indoor Cycling\",\"source_device\":\"Andres’s Apple Watch\",\"synced_at\":\"2026-04-29T23:33:38.432Z\"}",
+      "sources": [
+        {
+          "type": "healthfit",
+          "activity": "Indoor Cycling",
+          "device": "Andres’s Apple Watch",
+          "file": "2026-04-16-055350-Indoor Cycling-Andres’s Apple Watch.csv"
+        }
+      ],
+      "preferred_metrics": {
+        "avg_hr": 101,
+        "max_hr": 123,
+        "distance_mi": null,
+        "distance_km": null,
+        "calories": null,
+        "vo2_max": null,
+        "elevation_m": null,
+        "workout_type": "Indoor Cycling",
+        "source_device": "Andres’s Apple Watch",
+        "synced_at": "2026-04-29T23:33:38.432Z"
+      },
       "overlap_summary": null,
       "created_at": "2026-04-25T10:41:59.178893+00:00",
       "updated_at": "2026-04-29T23:33:38.543605+00:00"
@@ -144964,8 +145126,26 @@
       "canonical_type": "swim",
       "match_confidence": "1",
       "relationship": "single",
-      "sources": "[{\"type\":\"healthfit\",\"activity\":\"Pool Swim\",\"device\":\"Andres’s Apple Watch\",\"file\":\"2026-04-16-062409-Pool Swim-Andres’s Apple Watch.csv\"}]",
-      "preferred_metrics": "{\"avg_hr\":104,\"max_hr\":122,\"distance_mi\":457.2,\"distance_km\":735.79,\"calories\":null,\"vo2_max\":null,\"elevation_m\":null,\"workout_type\":\"Pool Swim\",\"source_device\":\"Andres’s Apple Watch\",\"synced_at\":\"2026-04-29T23:33:39.359Z\"}",
+      "sources": [
+        {
+          "type": "healthfit",
+          "activity": "Pool Swim",
+          "device": "Andres’s Apple Watch",
+          "file": "2026-04-16-062409-Pool Swim-Andres’s Apple Watch.csv"
+        }
+      ],
+      "preferred_metrics": {
+        "avg_hr": 104,
+        "max_hr": 122,
+        "distance_mi": 457.2,
+        "distance_km": 735.79,
+        "calories": null,
+        "vo2_max": null,
+        "elevation_m": null,
+        "workout_type": "Pool Swim",
+        "source_device": "Andres’s Apple Watch",
+        "synced_at": "2026-04-29T23:33:39.359Z"
+      },
       "overlap_summary": null,
       "created_at": "2026-04-25T10:42:00.008001+00:00",
       "updated_at": "2026-04-29T23:33:39.461336+00:00"
@@ -144980,8 +145160,26 @@
       "canonical_type": "run",
       "match_confidence": "1",
       "relationship": "single",
-      "sources": "[{\"type\":\"healthfit\",\"activity\":\"Outdoor Running\",\"device\":\"Andres’s Apple Watch\",\"file\":\"2026-04-16-093556-Outdoor Running-Andres’s Apple Watch.csv\"}]",
-      "preferred_metrics": "{\"avg_hr\":146,\"max_hr\":152,\"distance_mi\":616.126,\"distance_km\":991.56,\"calories\":null,\"vo2_max\":null,\"elevation_m\":239.204,\"workout_type\":\"Outdoor Running\",\"source_device\":\"Andres’s Apple Watch\",\"synced_at\":\"2026-04-29T23:33:37.535Z\"}",
+      "sources": [
+        {
+          "type": "healthfit",
+          "activity": "Outdoor Running",
+          "device": "Andres’s Apple Watch",
+          "file": "2026-04-16-093556-Outdoor Running-Andres’s Apple Watch.csv"
+        }
+      ],
+      "preferred_metrics": {
+        "avg_hr": 146,
+        "max_hr": 152,
+        "distance_mi": 616.126,
+        "distance_km": 991.56,
+        "calories": null,
+        "vo2_max": null,
+        "elevation_m": 239.204,
+        "workout_type": "Outdoor Running",
+        "source_device": "Andres’s Apple Watch",
+        "synced_at": "2026-04-29T23:33:37.535Z"
+      },
       "overlap_summary": null,
       "created_at": "2026-04-25T10:41:58.393611+00:00",
       "updated_at": "2026-04-29T23:33:37.628807+00:00"
@@ -144996,8 +145194,26 @@
       "canonical_type": "strength",
       "match_confidence": "1",
       "relationship": "single",
-      "sources": "[{\"type\":\"healthfit\",\"activity\":\"Strength Training\",\"device\":\"Andres’s Apple Watch\",\"file\":\"2026-04-16-093951-Strength Training-Andres’s Apple Watch.csv\"}]",
-      "preferred_metrics": "{\"avg_hr\":102,\"max_hr\":144,\"distance_mi\":null,\"distance_km\":null,\"calories\":null,\"vo2_max\":null,\"elevation_m\":null,\"workout_type\":\"Strength Training\",\"source_device\":\"Andres’s Apple Watch\",\"synced_at\":\"2026-04-29T23:33:36.609Z\"}",
+      "sources": [
+        {
+          "type": "healthfit",
+          "activity": "Strength Training",
+          "device": "Andres’s Apple Watch",
+          "file": "2026-04-16-093951-Strength Training-Andres’s Apple Watch.csv"
+        }
+      ],
+      "preferred_metrics": {
+        "avg_hr": 102,
+        "max_hr": 144,
+        "distance_mi": null,
+        "distance_km": null,
+        "calories": null,
+        "vo2_max": null,
+        "elevation_m": null,
+        "workout_type": "Strength Training",
+        "source_device": "Andres’s Apple Watch",
+        "synced_at": "2026-04-29T23:33:36.609Z"
+      },
       "overlap_summary": null,
       "created_at": "2026-04-25T10:41:57.609931+00:00",
       "updated_at": "2026-04-29T23:33:36.720638+00:00"
@@ -145352,11 +145568,29 @@
       "canonical_type": "bike",
       "match_confidence": "1",
       "relationship": "single",
-      "sources": "[{\"type\":\"healthfit\",\"activity\":\"Indoor Cycling\",\"device\":\"Andres’s Apple Watch\",\"file\":\"2026-04-20-054950-Indoor Cycling-Andres’s Apple Watch.csv\"}]",
-      "preferred_metrics": "{\"avg_hr\":122,\"max_hr\":136,\"distance_mi\":null,\"distance_km\":null,\"calories\":null,\"vo2_max\":null,\"elevation_m\":null,\"workout_type\":\"Indoor Cycling\",\"source_device\":\"Andres’s Apple Watch\",\"synced_at\":\"2026-04-30T00:36:06.456Z\"}",
+      "sources": [
+        {
+          "type": "healthfit",
+          "activity": "Indoor Cycling",
+          "device": "Andres’s Apple Watch",
+          "file": "2026-04-20-054950-Indoor Cycling-Andres’s Apple Watch.csv"
+        }
+      ],
+      "preferred_metrics": {
+        "avg_hr": 122,
+        "max_hr": 136,
+        "distance_mi": null,
+        "distance_km": null,
+        "calories": null,
+        "vo2_max": null,
+        "elevation_m": null,
+        "workout_type": "Indoor Cycling",
+        "source_device": "Andres’s Apple Watch",
+        "synced_at": "2026-04-30T00:51:04.751Z"
+      },
       "overlap_summary": null,
       "created_at": "2026-04-25T10:41:56.744522+00:00",
-      "updated_at": "2026-04-30T00:36:06.554315+00:00"
+      "updated_at": "2026-04-30T00:51:04.820485+00:00"
     },
     {
       "id": "dc39621c-f58c-4a43-9aae-77c5b0e35139",
@@ -145368,11 +145602,29 @@
       "canonical_type": "strength",
       "match_confidence": "1",
       "relationship": "single",
-      "sources": "[{\"type\":\"healthfit\",\"activity\":\"Strength Training\",\"device\":\"Andres’s Apple Watch\",\"file\":\"2026-04-20-060452-Strength Training-Andres’s Apple Watch.csv\"}]",
-      "preferred_metrics": "{\"avg_hr\":103,\"max_hr\":130,\"distance_mi\":null,\"distance_km\":null,\"calories\":null,\"vo2_max\":null,\"elevation_m\":null,\"workout_type\":\"Strength Training\",\"source_device\":\"Andres’s Apple Watch\",\"synced_at\":\"2026-04-30T00:36:05.659Z\"}",
+      "sources": [
+        {
+          "type": "healthfit",
+          "activity": "Strength Training",
+          "device": "Andres’s Apple Watch",
+          "file": "2026-04-20-060452-Strength Training-Andres’s Apple Watch.csv"
+        }
+      ],
+      "preferred_metrics": {
+        "avg_hr": 103,
+        "max_hr": 130,
+        "distance_mi": null,
+        "distance_km": null,
+        "calories": null,
+        "vo2_max": null,
+        "elevation_m": null,
+        "workout_type": "Strength Training",
+        "source_device": "Andres’s Apple Watch",
+        "synced_at": "2026-04-30T00:51:04.031Z"
+      },
       "overlap_summary": null,
       "created_at": "2026-04-25T10:41:55.944064+00:00",
-      "updated_at": "2026-04-30T00:36:05.72825+00:00"
+      "updated_at": "2026-04-30T00:51:04.11681+00:00"
     },
     {
       "id": "e10a53a2-5909-4f87-8055-60d75ab3b546",
@@ -145687,11 +145939,29 @@
       "canonical_type": "run",
       "match_confidence": "1",
       "relationship": "single",
-      "sources": "[{\"type\":\"healthfit\",\"activity\":\"Outdoor Running\",\"device\":\"Andres’s Apple Watch\",\"file\":\"2026-04-21-053959-Outdoor Running-Andres’s Apple Watch.csv\"}]",
-      "preferred_metrics": "{\"avg_hr\":128,\"max_hr\":142,\"distance_mi\":3242.261,\"distance_km\":5217.9,\"calories\":null,\"vo2_max\":null,\"elevation_m\":238.315,\"workout_type\":\"Outdoor Running\",\"source_device\":\"Andres’s Apple Watch\",\"synced_at\":\"2026-04-30T00:36:04.856Z\"}",
+      "sources": [
+        {
+          "type": "healthfit",
+          "activity": "Outdoor Running",
+          "device": "Andres’s Apple Watch",
+          "file": "2026-04-21-053959-Outdoor Running-Andres’s Apple Watch.csv"
+        }
+      ],
+      "preferred_metrics": {
+        "avg_hr": 128,
+        "max_hr": 142,
+        "distance_mi": 3242.261,
+        "distance_km": 5217.9,
+        "calories": null,
+        "vo2_max": null,
+        "elevation_m": 238.315,
+        "workout_type": "Outdoor Running",
+        "source_device": "Andres’s Apple Watch",
+        "synced_at": "2026-04-30T00:51:03.173Z"
+      },
       "overlap_summary": null,
       "created_at": "2026-04-25T10:41:55.066645+00:00",
-      "updated_at": "2026-04-30T00:36:04.933248+00:00"
+      "updated_at": "2026-04-30T00:51:03.303998+00:00"
     },
     {
       "id": "093465ab-3966-4096-b621-4759a697bdea",
@@ -145703,11 +145973,29 @@
       "canonical_type": "swim",
       "match_confidence": "1",
       "relationship": "single",
-      "sources": "[{\"type\":\"healthfit\",\"activity\":\"Pool Swim\",\"device\":\"Andres’s Apple Watch\",\"file\":\"2026-04-21-062504-Pool Swim-Andres’s Apple Watch.csv\"}]",
-      "preferred_metrics": "{\"avg_hr\":113,\"max_hr\":122,\"distance_mi\":457.2,\"distance_km\":735.79,\"calories\":null,\"vo2_max\":null,\"elevation_m\":null,\"workout_type\":\"Pool Swim\",\"source_device\":\"Andres’s Apple Watch\",\"synced_at\":\"2026-04-30T00:36:03.936Z\"}",
+      "sources": [
+        {
+          "type": "healthfit",
+          "activity": "Pool Swim",
+          "device": "Andres’s Apple Watch",
+          "file": "2026-04-21-062504-Pool Swim-Andres’s Apple Watch.csv"
+        }
+      ],
+      "preferred_metrics": {
+        "avg_hr": 113,
+        "max_hr": 122,
+        "distance_mi": 457.2,
+        "distance_km": 735.79,
+        "calories": null,
+        "vo2_max": null,
+        "elevation_m": null,
+        "workout_type": "Pool Swim",
+        "source_device": "Andres’s Apple Watch",
+        "synced_at": "2026-04-30T00:51:02.396Z"
+      },
       "overlap_summary": null,
       "created_at": "2026-04-25T10:41:54.22832+00:00",
-      "updated_at": "2026-04-30T00:36:04.046057+00:00"
+      "updated_at": "2026-04-30T00:51:02.47424+00:00"
     },
     {
       "id": "e762b51b-15b6-405d-8d47-e1d8f8c72960",
@@ -145993,11 +146281,29 @@
       "canonical_type": "bike",
       "match_confidence": "1",
       "relationship": "single",
-      "sources": "[{\"type\":\"healthfit\",\"activity\":\"Outdoor Cycling\",\"device\":\"Cadence\",\"file\":\"2026-04-22-083854-Outdoor Cycling-Cadence.csv\"}]",
-      "preferred_metrics": "{\"avg_hr\":119,\"max_hr\":157,\"distance_mi\":7392.894,\"distance_km\":11897.68,\"calories\":null,\"vo2_max\":null,\"elevation_m\":240.473,\"workout_type\":\"Outdoor Cycling\",\"source_device\":\"Cadence\",\"synced_at\":\"2026-04-30T00:36:03.147Z\"}",
+      "sources": [
+        {
+          "type": "healthfit",
+          "activity": "Outdoor Cycling",
+          "device": "Cadence",
+          "file": "2026-04-22-083854-Outdoor Cycling-Cadence.csv"
+        }
+      ],
+      "preferred_metrics": {
+        "avg_hr": 119,
+        "max_hr": 157,
+        "distance_mi": 7392.894,
+        "distance_km": 11897.68,
+        "calories": null,
+        "vo2_max": null,
+        "elevation_m": 240.473,
+        "workout_type": "Outdoor Cycling",
+        "source_device": "Cadence",
+        "synced_at": "2026-04-30T00:51:01.708Z"
+      },
       "overlap_summary": null,
       "created_at": "2026-04-25T10:41:53.484916+00:00",
-      "updated_at": "2026-04-30T00:36:03.223135+00:00"
+      "updated_at": "2026-04-30T00:51:01.797152+00:00"
     },
     {
       "id": "6b29991c-e3bf-4635-9dfc-80ae543e9237",
@@ -146061,11 +146367,29 @@
       "canonical_type": "run",
       "match_confidence": "1",
       "relationship": "single",
-      "sources": "[{\"type\":\"healthfit\",\"activity\":\"Outdoor Running\",\"device\":\"Andres’s Apple Watch\",\"file\":\"2026-04-23-060744-Outdoor Running-Andres’s Apple Watch.csv\"}]",
-      "preferred_metrics": "{\"avg_hr\":134,\"max_hr\":158,\"distance_mi\":4857.796,\"distance_km\":7817.85,\"calories\":null,\"vo2_max\":null,\"elevation_m\":257.126,\"workout_type\":\"Outdoor Running\",\"source_device\":\"Andres’s Apple Watch\",\"synced_at\":\"2026-04-30T00:36:01.469Z\"}",
+      "sources": [
+        {
+          "type": "healthfit",
+          "activity": "Outdoor Running",
+          "device": "Andres’s Apple Watch",
+          "file": "2026-04-23-060744-Outdoor Running-Andres’s Apple Watch.csv"
+        }
+      ],
+      "preferred_metrics": {
+        "avg_hr": 134,
+        "max_hr": 158,
+        "distance_mi": 4857.796,
+        "distance_km": 7817.85,
+        "calories": null,
+        "vo2_max": null,
+        "elevation_m": 257.126,
+        "workout_type": "Outdoor Running",
+        "source_device": "Andres’s Apple Watch",
+        "synced_at": "2026-04-30T00:51:00.119Z"
+      },
       "overlap_summary": null,
       "created_at": "2026-04-25T10:41:51.808557+00:00",
-      "updated_at": "2026-04-30T00:36:01.547753+00:00"
+      "updated_at": "2026-04-30T00:51:00.19984+00:00"
     },
     {
       "id": "5605489a-a92c-4c3c-bddd-075bb629ac44",
@@ -146077,11 +146401,29 @@
       "canonical_type": "other",
       "match_confidence": "1",
       "relationship": "single",
-      "sources": "[{\"type\":\"healthfit\",\"activity\":\"Cooldown\",\"device\":\"Andres’s Apple Watch\",\"file\":\"2026-04-23-064306-Cooldown-Andres’s Apple Watch.csv\"}]",
-      "preferred_metrics": "{\"avg_hr\":114,\"max_hr\":127,\"distance_mi\":null,\"distance_km\":null,\"calories\":null,\"vo2_max\":null,\"elevation_m\":null,\"workout_type\":\"Cooldown\",\"source_device\":\"Andres’s Apple Watch\",\"synced_at\":\"2026-04-30T00:36:02.299Z\"}",
+      "sources": [
+        {
+          "type": "healthfit",
+          "activity": "Cooldown",
+          "device": "Andres’s Apple Watch",
+          "file": "2026-04-23-064306-Cooldown-Andres’s Apple Watch.csv"
+        }
+      ],
+      "preferred_metrics": {
+        "avg_hr": 114,
+        "max_hr": 127,
+        "distance_mi": null,
+        "distance_km": null,
+        "calories": null,
+        "vo2_max": null,
+        "elevation_m": null,
+        "workout_type": "Cooldown",
+        "source_device": "Andres’s Apple Watch",
+        "synced_at": "2026-04-30T00:51:00.901Z"
+      },
       "overlap_summary": null,
       "created_at": "2026-04-25T10:41:52.641863+00:00",
-      "updated_at": "2026-04-30T00:36:02.373043+00:00"
+      "updated_at": "2026-04-30T00:51:00.981768+00:00"
     },
     {
       "id": "7b6bcc9f-db3c-454a-952a-a7c9dbb33701",
@@ -146093,11 +146435,29 @@
       "canonical_type": "strength",
       "match_confidence": "1",
       "relationship": "single",
-      "sources": "[{\"type\":\"healthfit\",\"activity\":\"Strength Training\",\"device\":\"Andres’s Apple Watch\",\"file\":\"2026-04-23-093705-Strength Training-Andres’s Apple Watch.csv\"}]",
-      "preferred_metrics": "{\"avg_hr\":98,\"max_hr\":124,\"distance_mi\":null,\"distance_km\":null,\"calories\":null,\"vo2_max\":null,\"elevation_m\":null,\"workout_type\":\"Strength Training\",\"source_device\":\"Andres’s Apple Watch\",\"synced_at\":\"2026-04-30T00:36:00.688Z\"}",
+      "sources": [
+        {
+          "type": "healthfit",
+          "activity": "Strength Training",
+          "device": "Andres’s Apple Watch",
+          "file": "2026-04-23-093705-Strength Training-Andres’s Apple Watch.csv"
+        }
+      ],
+      "preferred_metrics": {
+        "avg_hr": 98,
+        "max_hr": 124,
+        "distance_mi": null,
+        "distance_km": null,
+        "calories": null,
+        "vo2_max": null,
+        "elevation_m": null,
+        "workout_type": "Strength Training",
+        "source_device": "Andres’s Apple Watch",
+        "synced_at": "2026-04-30T00:50:59.109Z"
+      },
       "overlap_summary": null,
       "created_at": "2026-04-25T10:41:49.915034+00:00",
-      "updated_at": "2026-04-30T00:36:00.771465+00:00"
+      "updated_at": "2026-04-30T00:50:59.205869+00:00"
     },
     {
       "id": "a281ece0-4946-4193-82f2-8111ea1cfc78",
@@ -146263,11 +146623,29 @@
       "canonical_type": "strength",
       "match_confidence": "1",
       "relationship": "single",
-      "sources": "[{\"type\":\"healthfit\",\"activity\":\"Functional Strength Training\",\"device\":\"Andres’s Apple Watch\",\"file\":\"2026-04-24-053407-Functional Strength Training-Andres’s Apple Watch.csv\"}]",
-      "preferred_metrics": "{\"avg_hr\":82,\"max_hr\":111,\"distance_mi\":null,\"distance_km\":null,\"calories\":null,\"vo2_max\":null,\"elevation_m\":null,\"workout_type\":\"Functional Strength Training\",\"source_device\":\"Andres’s Apple Watch\",\"synced_at\":\"2026-04-30T00:35:59.152Z\"}",
+      "sources": [
+        {
+          "type": "healthfit",
+          "activity": "Functional Strength Training",
+          "device": "Andres’s Apple Watch",
+          "file": "2026-04-24-053407-Functional Strength Training-Andres’s Apple Watch.csv"
+        }
+      ],
+      "preferred_metrics": {
+        "avg_hr": 82,
+        "max_hr": 111,
+        "distance_mi": null,
+        "distance_km": null,
+        "calories": null,
+        "vo2_max": null,
+        "elevation_m": null,
+        "workout_type": "Functional Strength Training",
+        "source_device": "Andres’s Apple Watch",
+        "synced_at": "2026-04-30T00:50:57.473Z"
+      },
       "overlap_summary": null,
       "created_at": "2026-04-25T10:41:48.94725+00:00",
-      "updated_at": "2026-04-30T00:35:59.237712+00:00"
+      "updated_at": "2026-04-30T00:50:57.552457+00:00"
     },
     {
       "id": "bce226a9-10d9-4063-b740-987e4cc655fb",
@@ -146279,11 +146657,29 @@
       "canonical_type": "strength",
       "match_confidence": "1",
       "relationship": "single",
-      "sources": "[{\"type\":\"healthfit\",\"activity\":\"Strength Training\",\"device\":\"Andres’s Apple Watch\",\"file\":\"2026-04-24-055632-Strength Training-Andres’s Apple Watch.csv\"}]",
-      "preferred_metrics": "{\"avg_hr\":93,\"max_hr\":114,\"distance_mi\":null,\"distance_km\":null,\"calories\":null,\"vo2_max\":null,\"elevation_m\":null,\"workout_type\":\"Strength Training\",\"source_device\":\"Andres’s Apple Watch\",\"synced_at\":\"2026-04-30T00:35:58.323Z\"}",
+      "sources": [
+        {
+          "type": "healthfit",
+          "activity": "Strength Training",
+          "device": "Andres’s Apple Watch",
+          "file": "2026-04-24-055632-Strength Training-Andres’s Apple Watch.csv"
+        }
+      ],
+      "preferred_metrics": {
+        "avg_hr": 93,
+        "max_hr": 114,
+        "distance_mi": null,
+        "distance_km": null,
+        "calories": null,
+        "vo2_max": null,
+        "elevation_m": null,
+        "workout_type": "Strength Training",
+        "source_device": "Andres’s Apple Watch",
+        "synced_at": "2026-04-30T00:50:56.527Z"
+      },
       "overlap_summary": null,
       "created_at": "2026-04-25T10:41:48.066515+00:00",
-      "updated_at": "2026-04-30T00:35:58.407142+00:00"
+      "updated_at": "2026-04-30T00:50:56.633677+00:00"
     },
     {
       "id": "1a4a9ca0-6d17-4f5a-8fd3-8a85f5559b00",
@@ -146295,11 +146691,29 @@
       "canonical_type": "swim",
       "match_confidence": "1",
       "relationship": "single",
-      "sources": "[{\"type\":\"healthfit\",\"activity\":\"Pool Swim\",\"device\":\"Andres’s Apple Watch\",\"file\":\"2026-04-24-064402-Pool Swim-Andres’s Apple Watch.csv\"}]",
-      "preferred_metrics": "{\"avg_hr\":111,\"max_hr\":144,\"distance_mi\":274.32,\"distance_km\":441.47,\"calories\":null,\"vo2_max\":null,\"elevation_m\":null,\"workout_type\":\"Pool Swim\",\"source_device\":\"Andres’s Apple Watch\",\"synced_at\":\"2026-04-30T00:35:57.462Z\"}",
+      "sources": [
+        {
+          "type": "healthfit",
+          "activity": "Pool Swim",
+          "device": "Andres’s Apple Watch",
+          "file": "2026-04-24-064402-Pool Swim-Andres’s Apple Watch.csv"
+        }
+      ],
+      "preferred_metrics": {
+        "avg_hr": 111,
+        "max_hr": 144,
+        "distance_mi": 274.32,
+        "distance_km": 441.47,
+        "calories": null,
+        "vo2_max": null,
+        "elevation_m": null,
+        "workout_type": "Pool Swim",
+        "source_device": "Andres’s Apple Watch",
+        "synced_at": "2026-04-30T00:50:55.721Z"
+      },
       "overlap_summary": null,
       "created_at": "2026-04-25T10:41:47.242682+00:00",
-      "updated_at": "2026-04-30T00:35:57.54503+00:00"
+      "updated_at": "2026-04-30T00:50:55.806768+00:00"
     },
     {
       "id": "1eab8469-06df-45ad-9fef-ea26e900c82e",
@@ -146311,11 +146725,29 @@
       "canonical_type": "bike",
       "match_confidence": "1",
       "relationship": "single",
-      "sources": "[{\"type\":\"healthfit\",\"activity\":\"Outdoor Cycling\",\"device\":\"Cadence\",\"file\":\"2026-04-24-085227-Outdoor Cycling-Cadence.csv\"}]",
-      "preferred_metrics": "{\"avg_hr\":118,\"max_hr\":146,\"distance_mi\":7601.108,\"distance_km\":12232.77,\"calories\":null,\"vo2_max\":null,\"elevation_m\":241.875,\"workout_type\":\"Outdoor Cycling\",\"source_device\":\"Cadence\",\"synced_at\":\"2026-04-30T00:35:56.627Z\"}",
+      "sources": [
+        {
+          "type": "healthfit",
+          "activity": "Outdoor Cycling",
+          "device": "Cadence",
+          "file": "2026-04-24-085227-Outdoor Cycling-Cadence.csv"
+        }
+      ],
+      "preferred_metrics": {
+        "avg_hr": 118,
+        "max_hr": 146,
+        "distance_mi": 7601.108,
+        "distance_km": 12232.77,
+        "calories": null,
+        "vo2_max": null,
+        "elevation_m": 241.875,
+        "workout_type": "Outdoor Cycling",
+        "source_device": "Cadence",
+        "synced_at": "2026-04-30T00:50:54.979Z"
+      },
       "overlap_summary": null,
       "created_at": "2026-04-25T10:41:46.312234+00:00",
-      "updated_at": "2026-04-30T00:35:56.709975+00:00"
+      "updated_at": "2026-04-30T00:50:55.085895+00:00"
     },
     {
       "id": "12e7bf69-8186-4e04-ad70-88601017aa87",
@@ -146327,11 +146759,29 @@
       "canonical_type": "bike",
       "match_confidence": "1",
       "relationship": "single",
-      "sources": "[{\"type\":\"healthfit\",\"activity\":\"Outdoor Cycling\",\"device\":\"Cadence\",\"file\":\"2026-04-24-172934-Outdoor Cycling-Cadence.csv\"}]",
-      "preferred_metrics": "{\"avg_hr\":null,\"max_hr\":null,\"distance_mi\":5151.323,\"distance_km\":8290.23,\"calories\":null,\"vo2_max\":null,\"elevation_m\":254.299,\"workout_type\":\"Outdoor Cycling\",\"source_device\":\"Cadence\",\"synced_at\":\"2026-04-30T00:35:55.644Z\"}",
+      "sources": [
+        {
+          "type": "healthfit",
+          "activity": "Outdoor Cycling",
+          "device": "Cadence",
+          "file": "2026-04-24-172934-Outdoor Cycling-Cadence.csv"
+        }
+      ],
+      "preferred_metrics": {
+        "avg_hr": null,
+        "max_hr": null,
+        "distance_mi": 5151.323,
+        "distance_km": 8290.23,
+        "calories": null,
+        "vo2_max": null,
+        "elevation_m": 254.299,
+        "workout_type": "Outdoor Cycling",
+        "source_device": "Cadence",
+        "synced_at": "2026-04-30T00:50:54.181Z"
+      },
       "overlap_summary": null,
       "created_at": "2026-04-25T10:41:45.169493+00:00",
-      "updated_at": "2026-04-30T00:35:55.720099+00:00"
+      "updated_at": "2026-04-30T00:50:54.28776+00:00"
     },
     {
       "id": "54859d76-7ac3-4c39-ba05-524de742fabe",
@@ -146343,11 +146793,29 @@
       "canonical_type": "swim",
       "match_confidence": "1",
       "relationship": "single",
-      "sources": "[{\"type\":\"healthfit\",\"activity\":\"Pool Swim\",\"device\":\"Andres’s Apple Watch\",\"file\":\"2026-04-25-061645-Pool Swim-Andres’s Apple Watch.csv\"}]",
-      "preferred_metrics": "{\"avg_hr\":104,\"max_hr\":126,\"distance_mi\":457.2,\"distance_km\":735.79,\"calories\":null,\"vo2_max\":null,\"elevation_m\":null,\"workout_type\":\"Pool Swim\",\"source_device\":\"Andres’s Apple Watch\",\"synced_at\":\"2026-04-30T00:35:54.832Z\"}",
+      "sources": [
+        {
+          "type": "healthfit",
+          "activity": "Pool Swim",
+          "device": "Andres’s Apple Watch",
+          "file": "2026-04-25-061645-Pool Swim-Andres’s Apple Watch.csv"
+        }
+      ],
+      "preferred_metrics": {
+        "avg_hr": 104,
+        "max_hr": 126,
+        "distance_mi": 457.2,
+        "distance_km": 735.79,
+        "calories": null,
+        "vo2_max": null,
+        "elevation_m": null,
+        "workout_type": "Pool Swim",
+        "source_device": "Andres’s Apple Watch",
+        "synced_at": "2026-04-30T00:50:53.165Z"
+      },
       "overlap_summary": null,
       "created_at": "2026-04-26T08:50:14.863143+00:00",
-      "updated_at": "2026-04-30T00:35:54.912115+00:00"
+      "updated_at": "2026-04-30T00:50:53.276267+00:00"
     },
     {
       "id": "0b407010-020e-45c6-945e-9c3f001b9d2e",
@@ -146359,11 +146827,29 @@
       "canonical_type": "run",
       "match_confidence": "1",
       "relationship": "single",
-      "sources": "[{\"type\":\"healthfit\",\"activity\":\"Outdoor Running\",\"device\":\"Andres’s Apple Watch\",\"file\":\"2026-04-26-120931-Outdoor Running-Andres’s Apple Watch.csv\"}]",
-      "preferred_metrics": "{\"avg_hr\":149,\"max_hr\":161,\"distance_mi\":6472.858,\"distance_km\":10417.03,\"calories\":null,\"vo2_max\":null,\"elevation_m\":251.869,\"workout_type\":\"Outdoor Running\",\"source_device\":\"Andres’s Apple Watch\",\"synced_at\":\"2026-04-30T00:35:54.008Z\"}",
+      "sources": [
+        {
+          "type": "healthfit",
+          "activity": "Outdoor Running",
+          "device": "Andres’s Apple Watch",
+          "file": "2026-04-26-120931-Outdoor Running-Andres’s Apple Watch.csv"
+        }
+      ],
+      "preferred_metrics": {
+        "avg_hr": 149,
+        "max_hr": 161,
+        "distance_mi": 6472.858,
+        "distance_km": 10417.03,
+        "calories": null,
+        "vo2_max": null,
+        "elevation_m": 251.869,
+        "workout_type": "Outdoor Running",
+        "source_device": "Andres’s Apple Watch",
+        "synced_at": "2026-04-30T00:50:52.341Z"
+      },
       "overlap_summary": null,
       "created_at": "2026-04-27T08:50:18.692608+00:00",
-      "updated_at": "2026-04-30T00:35:54.103153+00:00"
+      "updated_at": "2026-04-30T00:50:52.436422+00:00"
     },
     {
       "id": "701f8f8e-a2da-4ec2-841a-30baf6a5b9b4",
@@ -146375,11 +146861,29 @@
       "canonical_type": "bike",
       "match_confidence": "1",
       "relationship": "single",
-      "sources": "[{\"type\":\"healthfit\",\"activity\":\"Outdoor Cycling\",\"device\":\"Cadence\",\"file\":\"2026-04-26-172925-Outdoor Cycling-Cadence.csv\"}]",
-      "preferred_metrics": "{\"avg_hr\":98,\"max_hr\":108,\"distance_mi\":1004.251,\"distance_km\":1616.18,\"calories\":null,\"vo2_max\":null,\"elevation_m\":254.99,\"workout_type\":\"Outdoor Cycling\",\"source_device\":\"Cadence\",\"synced_at\":\"2026-04-30T00:35:52.144Z\"}",
+      "sources": [
+        {
+          "type": "healthfit",
+          "activity": "Outdoor Cycling",
+          "device": "Cadence",
+          "file": "2026-04-26-172925-Outdoor Cycling-Cadence.csv"
+        }
+      ],
+      "preferred_metrics": {
+        "avg_hr": 98,
+        "max_hr": 108,
+        "distance_mi": 1004.251,
+        "distance_km": 1616.18,
+        "calories": null,
+        "vo2_max": null,
+        "elevation_m": 254.99,
+        "workout_type": "Outdoor Cycling",
+        "source_device": "Cadence",
+        "synced_at": "2026-04-30T00:50:50.395Z"
+      },
       "overlap_summary": null,
       "created_at": "2026-04-27T08:50:16.706519+00:00",
-      "updated_at": "2026-04-30T00:35:52.230723+00:00"
+      "updated_at": "2026-04-30T00:50:50.491006+00:00"
     },
     {
       "id": "501f23e3-08cb-442a-8f63-e0c41217a2ac",
@@ -146391,11 +146895,29 @@
       "canonical_type": "bike",
       "match_confidence": "1",
       "relationship": "single",
-      "sources": "[{\"type\":\"healthfit\",\"activity\":\"Outdoor Cycling\",\"device\":\"Andres’s Apple Watch\",\"file\":\"2026-04-26-173344-Outdoor Cycling-Andres’s Apple Watch.csv\"}]",
-      "preferred_metrics": "{\"avg_hr\":98,\"max_hr\":107,\"distance_mi\":602.71,\"distance_km\":969.97,\"calories\":null,\"vo2_max\":null,\"elevation_m\":255.951,\"workout_type\":\"Outdoor Cycling\",\"source_device\":\"Andres’s Apple Watch\",\"synced_at\":\"2026-04-30T00:35:52.983Z\"}",
+      "sources": [
+        {
+          "type": "healthfit",
+          "activity": "Outdoor Cycling",
+          "device": "Andres’s Apple Watch",
+          "file": "2026-04-26-173344-Outdoor Cycling-Andres’s Apple Watch.csv"
+        }
+      ],
+      "preferred_metrics": {
+        "avg_hr": 98,
+        "max_hr": 107,
+        "distance_mi": 602.71,
+        "distance_km": 969.97,
+        "calories": null,
+        "vo2_max": null,
+        "elevation_m": 255.951,
+        "workout_type": "Outdoor Cycling",
+        "source_device": "Andres’s Apple Watch",
+        "synced_at": "2026-04-30T00:50:51.278Z"
+      },
       "overlap_summary": null,
       "created_at": "2026-04-27T08:50:17.653486+00:00",
-      "updated_at": "2026-04-30T00:35:53.07301+00:00"
+      "updated_at": "2026-04-30T00:50:51.376749+00:00"
     },
     {
       "id": "113e0fcd-4860-424c-90a1-8f862672f5e2",
@@ -146407,11 +146929,29 @@
       "canonical_type": "bike",
       "match_confidence": "1",
       "relationship": "single",
-      "sources": "[{\"type\":\"healthfit\",\"activity\":\"Outdoor Cycling\",\"device\":\"Andres’s Apple Watch\",\"file\":\"2026-04-26-180558-Outdoor Cycling-Andres’s Apple Watch.csv\"}]",
-      "preferred_metrics": "{\"avg_hr\":97,\"max_hr\":113,\"distance_mi\":860.067,\"distance_km\":1384.14,\"calories\":null,\"vo2_max\":null,\"elevation_m\":247.175,\"workout_type\":\"Outdoor Cycling\",\"source_device\":\"Andres’s Apple Watch\",\"synced_at\":\"2026-04-30T00:35:51.242Z\"}",
+      "sources": [
+        {
+          "type": "healthfit",
+          "activity": "Outdoor Cycling",
+          "device": "Andres’s Apple Watch",
+          "file": "2026-04-26-180558-Outdoor Cycling-Andres’s Apple Watch.csv"
+        }
+      ],
+      "preferred_metrics": {
+        "avg_hr": 97,
+        "max_hr": 113,
+        "distance_mi": 860.067,
+        "distance_km": 1384.14,
+        "calories": null,
+        "vo2_max": null,
+        "elevation_m": 247.175,
+        "workout_type": "Outdoor Cycling",
+        "source_device": "Andres’s Apple Watch",
+        "synced_at": "2026-04-30T00:50:49.537Z"
+      },
       "overlap_summary": null,
       "created_at": "2026-04-27T08:50:15.804983+00:00",
-      "updated_at": "2026-04-30T00:35:51.357646+00:00"
+      "updated_at": "2026-04-30T00:50:49.649278+00:00"
     },
     {
       "id": "b24ca28f-d27e-4fe6-b893-f0847d7f6dec",
@@ -146423,11 +146963,29 @@
       "canonical_type": "bike",
       "match_confidence": "1",
       "relationship": "single",
-      "sources": "[{\"type\":\"healthfit\",\"activity\":\"Outdoor Cycling\",\"device\":\"Cadence\",\"file\":\"2026-04-26-191744-Outdoor Cycling-Cadence.csv\"}]",
-      "preferred_metrics": "{\"avg_hr\":107,\"max_hr\":122,\"distance_mi\":1545.401,\"distance_km\":2487.08,\"calories\":null,\"vo2_max\":null,\"elevation_m\":254.968,\"workout_type\":\"Outdoor Cycling\",\"source_device\":\"Cadence\",\"synced_at\":\"2026-04-30T00:35:50.521Z\"}",
+      "sources": [
+        {
+          "type": "healthfit",
+          "activity": "Outdoor Cycling",
+          "device": "Cadence",
+          "file": "2026-04-26-191744-Outdoor Cycling-Cadence.csv"
+        }
+      ],
+      "preferred_metrics": {
+        "avg_hr": 107,
+        "max_hr": 122,
+        "distance_mi": 1545.401,
+        "distance_km": 2487.08,
+        "calories": null,
+        "vo2_max": null,
+        "elevation_m": 254.968,
+        "workout_type": "Outdoor Cycling",
+        "source_device": "Cadence",
+        "synced_at": "2026-04-30T00:50:48.740Z"
+      },
       "overlap_summary": null,
       "created_at": "2026-04-27T08:50:14.649683+00:00",
-      "updated_at": "2026-04-30T00:35:50.609486+00:00"
+      "updated_at": "2026-04-30T00:50:48.812113+00:00"
     },
     {
       "id": "a1f77c97-1cb3-4d06-8f49-14376a4920b9",
@@ -146439,11 +146997,29 @@
       "canonical_type": "strength",
       "match_confidence": "1",
       "relationship": "single",
-      "sources": "[{\"type\":\"healthfit\",\"activity\":\"Strength Training\",\"device\":\"Andres’s Apple Watch\",\"file\":\"2026-04-27-050455-Strength Training-Andres’s Apple Watch.csv\"}]",
-      "preferred_metrics": "{\"avg_hr\":88,\"max_hr\":120,\"distance_mi\":null,\"distance_km\":null,\"calories\":null,\"vo2_max\":null,\"elevation_m\":null,\"workout_type\":\"Strength Training\",\"source_device\":\"Andres’s Apple Watch\",\"synced_at\":\"2026-04-30T00:35:49.017Z\"}",
+      "sources": [
+        {
+          "type": "healthfit",
+          "activity": "Strength Training",
+          "device": "Andres’s Apple Watch",
+          "file": "2026-04-27-050455-Strength Training-Andres’s Apple Watch.csv"
+        }
+      ],
+      "preferred_metrics": {
+        "avg_hr": 88,
+        "max_hr": 120,
+        "distance_mi": null,
+        "distance_km": null,
+        "calories": null,
+        "vo2_max": null,
+        "elevation_m": null,
+        "workout_type": "Strength Training",
+        "source_device": "Andres’s Apple Watch",
+        "synced_at": "2026-04-30T00:50:47.260Z"
+      },
       "overlap_summary": null,
       "created_at": "2026-04-28T08:50:14.474474+00:00",
-      "updated_at": "2026-04-30T00:35:49.093207+00:00"
+      "updated_at": "2026-04-30T00:50:47.370629+00:00"
     },
     {
       "id": "6ea28553-1d03-4b64-9067-e2c202377c11",
@@ -146455,11 +147031,29 @@
       "canonical_type": "bike",
       "match_confidence": "1",
       "relationship": "single",
-      "sources": "[{\"type\":\"healthfit\",\"activity\":\"Indoor Cycling\",\"device\":\"Andres’s Apple Watch\",\"file\":\"2026-04-27-064551-Indoor Cycling-Andres’s Apple Watch.csv\"}]",
-      "preferred_metrics": "{\"avg_hr\":113,\"max_hr\":127,\"distance_mi\":null,\"distance_km\":null,\"calories\":null,\"vo2_max\":null,\"elevation_m\":null,\"workout_type\":\"Indoor Cycling\",\"source_device\":\"Andres’s Apple Watch\",\"synced_at\":\"2026-04-30T00:35:49.807Z\"}",
+      "sources": [
+        {
+          "type": "healthfit",
+          "activity": "Indoor Cycling",
+          "device": "Andres’s Apple Watch",
+          "file": "2026-04-27-064551-Indoor Cycling-Andres’s Apple Watch.csv"
+        }
+      ],
+      "preferred_metrics": {
+        "avg_hr": 113,
+        "max_hr": 127,
+        "distance_mi": null,
+        "distance_km": null,
+        "calories": null,
+        "vo2_max": null,
+        "elevation_m": null,
+        "workout_type": "Indoor Cycling",
+        "source_device": "Andres’s Apple Watch",
+        "synced_at": "2026-04-30T00:50:48.000Z"
+      },
       "overlap_summary": null,
       "created_at": "2026-04-28T08:50:15.770496+00:00",
-      "updated_at": "2026-04-30T00:35:49.892477+00:00"
+      "updated_at": "2026-04-30T00:50:48.078669+00:00"
     },
     {
       "id": "2ce40d75-29cb-4cfa-b528-bcfc0b4d3c4e",
@@ -146471,11 +147065,29 @@
       "canonical_type": "strength",
       "match_confidence": "1",
       "relationship": "single",
-      "sources": "[{\"type\":\"healthfit\",\"activity\":\"Strength Training\",\"device\":\"Andres’s Apple Watch\",\"file\":\"2026-04-28-100235-Strength Training-Andres’s Apple Watch.csv\"}]",
-      "preferred_metrics": "{\"avg_hr\":101,\"max_hr\":142,\"distance_mi\":null,\"distance_km\":null,\"calories\":null,\"vo2_max\":null,\"elevation_m\":null,\"workout_type\":\"Strength Training\",\"source_device\":\"Andres’s Apple Watch\",\"synced_at\":\"2026-04-30T00:35:48.036Z\"}",
+      "sources": [
+        {
+          "type": "healthfit",
+          "activity": "Strength Training",
+          "device": "Andres’s Apple Watch",
+          "file": "2026-04-28-100235-Strength Training-Andres’s Apple Watch.csv"
+        }
+      ],
+      "preferred_metrics": {
+        "avg_hr": 101,
+        "max_hr": 142,
+        "distance_mi": null,
+        "distance_km": null,
+        "calories": null,
+        "vo2_max": null,
+        "elevation_m": null,
+        "workout_type": "Strength Training",
+        "source_device": "Andres’s Apple Watch",
+        "synced_at": "2026-04-30T00:50:46.379Z"
+      },
       "overlap_summary": null,
       "created_at": "2026-04-28T22:07:52.279834+00:00",
-      "updated_at": "2026-04-30T00:35:48.147393+00:00"
+      "updated_at": "2026-04-30T00:50:46.484569+00:00"
     },
     {
       "id": "de0d78b9-7fed-4a5a-834a-004e3906c8ee",
@@ -146487,11 +147099,29 @@
       "canonical_type": "run",
       "match_confidence": "1",
       "relationship": "single",
-      "sources": "[{\"type\":\"healthfit\",\"activity\":\"Outdoor Running\",\"device\":\"Andres’s Apple Watch\",\"file\":\"2026-04-29-055640-Outdoor Running-Andres’s Apple Watch.csv\"}]",
-      "preferred_metrics": "{\"avg_hr\":112,\"max_hr\":124,\"distance_mi\":3232.366,\"distance_km\":5201.98,\"calories\":null,\"vo2_max\":null,\"elevation_m\":257.534,\"workout_type\":\"Outdoor Running\",\"source_device\":\"Andres’s Apple Watch\",\"synced_at\":\"2026-04-30T00:35:47.117Z\"}",
+      "sources": [
+        {
+          "type": "healthfit",
+          "activity": "Outdoor Running",
+          "device": "Andres’s Apple Watch",
+          "file": "2026-04-29-055640-Outdoor Running-Andres’s Apple Watch.csv"
+        }
+      ],
+      "preferred_metrics": {
+        "avg_hr": 112,
+        "max_hr": 124,
+        "distance_mi": 3232.366,
+        "distance_km": 5201.98,
+        "calories": null,
+        "vo2_max": null,
+        "elevation_m": 257.534,
+        "workout_type": "Outdoor Running",
+        "source_device": "Andres’s Apple Watch",
+        "synced_at": "2026-04-30T00:50:45.539Z"
+      },
       "overlap_summary": null,
       "created_at": "2026-04-29T14:54:21.791133+00:00",
-      "updated_at": "2026-04-30T00:35:47.218978+00:00"
+      "updated_at": "2026-04-30T00:50:45.64668+00:00"
     },
     {
       "id": "603d04d7-a538-4603-98c6-73def4f45c89",
@@ -146503,11 +147133,29 @@
       "canonical_type": "strength",
       "match_confidence": "1",
       "relationship": "single",
-      "sources": "[{\"type\":\"healthfit\",\"activity\":\"Strength Training\",\"device\":\"Andres’s Apple Watch\",\"file\":\"2026-04-29-062631-Strength Training-Andres’s Apple Watch.csv\"}]",
-      "preferred_metrics": "{\"avg_hr\":102,\"max_hr\":127,\"distance_mi\":null,\"distance_km\":null,\"calories\":null,\"vo2_max\":null,\"elevation_m\":null,\"workout_type\":\"Strength Training\",\"source_device\":\"Andres’s Apple Watch\",\"synced_at\":\"2026-04-30T00:35:46.183Z\"}",
+      "sources": [
+        {
+          "type": "healthfit",
+          "activity": "Strength Training",
+          "device": "Andres’s Apple Watch",
+          "file": "2026-04-29-062631-Strength Training-Andres’s Apple Watch.csv"
+        }
+      ],
+      "preferred_metrics": {
+        "avg_hr": 102,
+        "max_hr": 127,
+        "distance_mi": null,
+        "distance_km": null,
+        "calories": null,
+        "vo2_max": null,
+        "elevation_m": null,
+        "workout_type": "Strength Training",
+        "source_device": "Andres’s Apple Watch",
+        "synced_at": "2026-04-30T00:50:44.465Z"
+      },
       "overlap_summary": null,
       "created_at": "2026-04-29T14:54:20.600459+00:00",
-      "updated_at": "2026-04-30T00:35:46.301414+00:00"
+      "updated_at": "2026-04-30T00:50:44.673186+00:00"
     },
     {
       "id": "80c0cc51-4d01-454b-afea-26b50655d15d",
@@ -146519,11 +147167,29 @@
       "canonical_type": "bike",
       "match_confidence": "1",
       "relationship": "single",
-      "sources": "[{\"type\":\"healthfit\",\"activity\":\"Outdoor Cycling\",\"device\":\"Cadence\",\"file\":\"2026-04-29-085223-Outdoor Cycling-Cadence.csv\"}]",
-      "preferred_metrics": "{\"avg_hr\":109,\"max_hr\":138,\"distance_mi\":7632.351,\"distance_km\":12283.05,\"calories\":null,\"vo2_max\":null,\"elevation_m\":239.114,\"workout_type\":\"Outdoor Cycling\",\"source_device\":\"Cadence\",\"synced_at\":\"2026-04-30T00:35:45.351Z\"}",
+      "sources": [
+        {
+          "type": "healthfit",
+          "activity": "Outdoor Cycling",
+          "device": "Cadence",
+          "file": "2026-04-29-085223-Outdoor Cycling-Cadence.csv"
+        }
+      ],
+      "preferred_metrics": {
+        "avg_hr": 109,
+        "max_hr": 138,
+        "distance_mi": 7632.351,
+        "distance_km": 12283.05,
+        "calories": null,
+        "vo2_max": null,
+        "elevation_m": 239.114,
+        "workout_type": "Outdoor Cycling",
+        "source_device": "Cadence",
+        "synced_at": "2026-04-30T00:50:43.468Z"
+      },
       "overlap_summary": null,
       "created_at": "2026-04-29T14:54:19.35794+00:00",
-      "updated_at": "2026-04-30T00:35:45.459686+00:00"
+      "updated_at": "2026-04-30T00:50:43.675097+00:00"
     },
     {
       "id": "3659b7fc-2473-4e30-8a3a-c51821f7bd9e",
@@ -146535,11 +147201,29 @@
       "canonical_type": "bike",
       "match_confidence": "1",
       "relationship": "single",
-      "sources": "[{\"type\":\"healthfit\",\"activity\":\"Outdoor Cycling\",\"device\":\"Andres’s Apple Watch\",\"file\":\"2026-04-29-085446-Outdoor Cycling-Andres’s Apple Watch.csv\"}]",
-      "preferred_metrics": "{\"avg_hr\":102,\"max_hr\":138,\"distance_mi\":7702.132,\"distance_km\":12395.35,\"calories\":null,\"vo2_max\":null,\"elevation_m\":244.302,\"workout_type\":\"Outdoor Cycling\",\"source_device\":\"Andres’s Apple Watch\",\"synced_at\":\"2026-04-30T00:35:44.430Z\"}",
+      "sources": [
+        {
+          "type": "healthfit",
+          "activity": "Outdoor Cycling",
+          "device": "Andres’s Apple Watch",
+          "file": "2026-04-29-085446-Outdoor Cycling-Andres’s Apple Watch.csv"
+        }
+      ],
+      "preferred_metrics": {
+        "avg_hr": 102,
+        "max_hr": 138,
+        "distance_mi": 7702.132,
+        "distance_km": 12395.35,
+        "calories": null,
+        "vo2_max": null,
+        "elevation_m": 244.302,
+        "workout_type": "Outdoor Cycling",
+        "source_device": "Andres’s Apple Watch",
+        "synced_at": "2026-04-30T00:50:42.323Z"
+      },
       "overlap_summary": null,
       "created_at": "2026-04-29T23:33:09.186586+00:00",
-      "updated_at": "2026-04-30T00:35:44.608211+00:00"
+      "updated_at": "2026-04-30T00:50:42.584752+00:00"
     },
     {
       "id": "0fe9f344-771a-4368-93fc-c985b9aac603",
@@ -146551,11 +147235,29 @@
       "canonical_type": "bike",
       "match_confidence": "1",
       "relationship": "single",
-      "sources": "[{\"type\":\"healthfit\",\"activity\":\"Outdoor Cycling\",\"device\":\"Cadence\",\"file\":\"2026-04-29-174346-Outdoor Cycling-Cadence.csv\"}]",
-      "preferred_metrics": "{\"avg_hr\":null,\"max_hr\":null,\"distance_mi\":5192.981,\"distance_km\":8357.27,\"calories\":null,\"vo2_max\":null,\"elevation_m\":254.072,\"workout_type\":\"Outdoor Cycling\",\"source_device\":\"Cadence\",\"synced_at\":\"2026-04-30T00:35:43.292Z\"}",
+      "sources": [
+        {
+          "type": "healthfit",
+          "activity": "Outdoor Cycling",
+          "device": "Cadence",
+          "file": "2026-04-29-174346-Outdoor Cycling-Cadence.csv"
+        }
+      ],
+      "preferred_metrics": {
+        "avg_hr": null,
+        "max_hr": null,
+        "distance_mi": 5192.981,
+        "distance_km": 8357.27,
+        "calories": null,
+        "vo2_max": null,
+        "elevation_m": 254.072,
+        "workout_type": "Outdoor Cycling",
+        "source_device": "Cadence",
+        "synced_at": "2026-04-30T00:50:40.834Z"
+      },
       "overlap_summary": null,
       "created_at": "2026-04-29T23:33:07.92387+00:00",
-      "updated_at": "2026-04-30T00:35:43.588926+00:00"
+      "updated_at": "2026-04-30T00:50:41.368673+00:00"
     }
   ]
 }
