@@ -11224,11 +11224,6 @@ useEffect(() => {
         remoteHealthFitDaily,
         remoteBiometricRecords
       ] = remoteReadResults.map(result => (result.status === "fulfilled" ? result.value : []))
-
-            // Parse stringified JSON fields from Supabase rows before merge
-                  const parseSupabaseSession = s => { const p = {...s}; if (typeof p.sources === 'string') { try { p.sources = JSON.parse(p.sources) } catch(e) {} } if (typeof p.preferred_metrics === 'string') { try { p.preferred_metrics = JSON.parse(p.preferred_metrics) } catch(e) {} } if (typeof p.overlap_summary === 'string') { try { p.overlap_summary = JSON.parse(p.overlap_summary) } catch(e) {} } return p }
-                        const parsedRemoteCanonical = remoteCanonicalSessions.map(parseSupabaseSession)
-                              const remoteCanonicalSessions = parsedRemoteCanonical // shadow with parsed version
       remoteReadResults.forEach((result, index) => {
         if (result.status === "fulfilled") return
         const tableName = ["canonical_sessions", "sleep_records", "healthfit_daily", "biometric_records"][index]
