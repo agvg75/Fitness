@@ -5238,26 +5238,30 @@ function getWorkoutCategoryForSummary(workout) {
     ? schedule.cardio.map(cardio => String(cardio?.modality || "").toLowerCase())
     : []
 
-  if (rawType.includes("traditional strength")) return "Strength"
-  if (rawType.includes("functional strength")) return "Strength"
-  if (rawType.includes("core")) return "Strength"
-  if (hasStrengthExercises) return "Strength"
+if (rawType.includes("traditional strength")) return "Strength"
+if (rawType.includes("functional strength")) return "Strength"
+if (rawType.includes("core")) return "Strength"
+if (hasStrengthExercises) return "Strength"
 
-  if (rawType.includes("running")) return "Running"
-  if (rawType.includes("walking")) return "Walking"
-  if (rawType.includes("cycling")) return "Cycling"
-  if (rawType.includes("swimming")) return "Swimming"
-  if (rawType.includes("elliptical")) return "Elliptical"
-  if (rawType.includes("rowing")) return "Rowing"
-  if (rawType.includes("stair")) return "Stairs"
+if (rawType.includes("running")) return "Running"
+if (rawType.includes("walking")) return "Walking"
+if (rawType.includes("cycling")) return "Cycling"
+if (rawType.includes("swimming")) return "Swimming"
+if (rawType.includes("elliptical")) return "Elliptical"
+if (rawType.includes("rowing")) return "Rowing"
+if (rawType.includes("stair")) return "Stairs"
 
-  if (cardioModalities.includes("run")) return "Running"
-  if (cardioModalities.includes("walk")) return "Walking"
-  if (cardioModalities.includes("bike")) return "Cycling"
-  if (cardioModalities.includes("swim")) return "Swimming"
-  if (cardioModalities.includes("row")) return "Rowing"
+// Explicit mappings for Supabase canonical types
+if (rawType === "bike") return "Cycling"
+if (rawType === "run") return "Running"
 
-  return "Other"
+if (cardioModalities.includes("run")) return "Running"
+if (cardioModalities.includes("walk")) return "Walking"
+if (cardioModalities.includes("bike")) return "Cycling"
+if (cardioModalities.includes("swim")) return "Swimming"
+if (cardioModalities.includes("row")) return "Rowing"
+
+return "Other"
 }
 
 function buildTrainingSummary(workouts) {
