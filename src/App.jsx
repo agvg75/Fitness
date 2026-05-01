@@ -6812,7 +6812,12 @@ const buckets = {}
       }
     }
 
-   const wCat = w.category || normalizeWorkoutType(w.canonical_type || w.type || "", w)
+const _raw = (w.canonical_type || w.type || "").toLowerCase()
+    const wCat = w.category ||
+      (_raw.includes("run") ? "Running" :
+      _raw.includes("bike") || _raw.includes("cycl") ? "Cycling" :
+      _raw.includes("swim") ? "Swimming" :
+      _raw.includes("strength") ? "Strength" : "Other")
     if (wCat === "Running") {
       const loggedMiles = getWorkoutDistanceMiles(w)
       if (w.source !== "ManualSchedule") {
