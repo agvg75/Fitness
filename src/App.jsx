@@ -5605,11 +5605,14 @@ function extractRunDistanceMiles(workout) {
   const type = getWorkoutTypeLabel(workout)
   if (!type.includes("run") && !type.includes("jog") && type !== "running") return 0
 
+  const pm = typeof workout?.preferred_metrics === "object" && workout.preferred_metrics !== null
+    ? workout.preferred_metrics : {}
   const miles =
     safeNum(workout?.distanceMiles) ||
     safeNum(workout?.miles) ||
     safeNum(workout?.distance_miles) ||
-    safeNum(workout?.distance)
+    safeNum(workout?.distance) ||
+    safeNum(pm?.distance_mi)
 
   if (miles > 0) return miles
 
