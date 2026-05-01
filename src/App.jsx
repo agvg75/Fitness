@@ -5072,11 +5072,17 @@ function getWorkoutDistanceMiles(workout) {
   )
   if (technogymMiles > 0) return technogymMiles
 
-  return distanceValueToMiles(
+const appleMiles = distanceValueToMiles(
     workout?.sources?.apple?.distance,
     workout?.sources?.apple?.distance_unit,
     workout
   )
+  if (appleMiles > 0) return appleMiles
+
+  const flatM = Number(workout?.preferred_metrics?.distance_mi)
+  if (flatM > 0) return flatM / 1609.34
+
+  return 0
 }
 
 // Returns cycling distance in miles.
@@ -6806,22 +6812,23 @@ const buckets = {}
       }
     }
 
-    if (w.category === "Running") {
+   const wCat = w.category || normalizeWorkoutType(w.canonical_type || w.type || "", w)
+    if (wCat === "Running") {
       const loggedMiles = getWorkoutDistanceMiles(w)
       if (w.source !== "ManualSchedule") {
         buckets[key].running += loggedMiles
       }
       buckets[key].cardioMinutes += Number(w.dur || 0)
-    } else if (w.category === "Swimming") {
+    } else if (wCat === "Swimming") {
       buckets[key].swimming += getWorkoutDistanceMiles(w)
       buckets[key].cardioMinutes += Number(w.dur || 0)
-    } else if (w.category === "Cycling") {
+    } else if (wCat === "Cycling") {
       buckets[key].cycling += getCyclingDistanceMiles(w)
       buckets[key].cardioMinutes += Number(w.dur || 0)
-    } else if (w.category === "Strength") {
+    } else if (wCat === "Strength") {
       buckets[key].strength += 1
     } else if (
-      ["Elliptical", "Rowing", "Stairs", "Machine Cardio", "Indoor Cycling"].includes(w.category)
+      ["Elliptical", "Rowing", "Stairs", "Machine Cardio", "Indoor Cycling"].includes(wCat)
     ) {
       buckets[key].cardioMinutes += Number(w.dur || 0)
     }
