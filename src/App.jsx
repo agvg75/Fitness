@@ -5612,7 +5612,7 @@ function extractRunDistanceMiles(workout) {
     safeNum(workout?.miles) ||
     safeNum(workout?.distance_miles) ||
     safeNum(workout?.distance) ||
-    safeNum(pm?.distance_mi)
+    (safeNum(pm?.distance_mi) > 0 ? safeNum(pm?.distance_mi) / 1609.34 : 0)
 
   if (miles > 0) return miles
 
