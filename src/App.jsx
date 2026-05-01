@@ -4985,11 +4985,17 @@ function getWorkoutDistanceMiles(workout) {
   )
   if (technogymMiles > 0) return technogymMiles
 
-  return distanceValueToMiles(
+  const appleMiles = distanceValueToMiles(
     workout?.sources?.apple?.distance,
     workout?.sources?.apple?.distance_unit,
     workout
   )
+  if (appleMiles > 0) return appleMiles
+
+  const flatM = Number(workout?.preferred_metrics?.distance_mi)
+  if (flatM > 0) return flatM / 1609.34
+
+  return 0
 }
 
 // Returns cycling distance in miles.
