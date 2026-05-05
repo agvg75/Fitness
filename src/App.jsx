@@ -2352,6 +2352,128 @@ function DailyReadinessPanel({ readinessScore, latestHealthFit, ocItems, compute
 }
 
 // ─── TabSchedule ──────────────────────────────────────────────────────────────
+
+// ── Exercise Guide: Free Exercise DB (Unlicense / public domain) ─────────────
+let _exDbCache = null
+const EX_DB_URL = "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/dist/exercises.json"
+const EX_IMG_BASE = "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/"
+
+// Manual overrides: SCH_PLAN exercise id => exact DB id (null = force YouTube fallback)
+const EX_DB_OVERRIDE = {
+  m3:  null,                     // Machine Flys: not in DB
+  m7:  "Triceps_Pushdown",       // better match than fuzzy result
+  t4:  null,                     // Lateral Band Walk: not in DB
+  t5:  null,                     // Hip Drive Marches: not in DB
+  t8:  null,                     // 90/90 Deadbugs: not in DB
+  th6: null,                     // Cable D2 Flexion: not in DB
+  th9: "Farmers_Walk",           // closest available substitute
+  f1:  "Hip_Abductions",         // machine hip abduction
+  f6:  "Lying_Leg_Curls",        // machine leg curl, correct variant
+  f8:  null,                     // Shoulder Clock w/ Band: not in DB
+}
+
+async function loadExDb() {
+  if (_exDbCache) return _exDbCache
+  try {
+    const res = await fetch(EX_DB_URL)
+    _exDbCache = await res.json()
+  } catch { _exDbCache = [] }
+  return _exDbCache
+}
+
+function normExName(s) {
+  return String(s || "").toLowerCase()
+    .replace(/barbell|dumbbell|cable|machine|smith|kettlebell|\bkb\b|\bdb\b/g, "")
+    .replace(/[-\u2013\u2014\/\(\)]/g, " ")
+    .replace(/\s+/g, " ").trim()
+}
+
+function findDbExercise(db, name) {
+  const n = normExName(name)
+  if (!n || !db.length) return null
+  const exact = db.find(e => normExName(e.name) === n)
+  if (exact) return exact
+  const sub = db.find(e => normExName(e.name).includes(n) || n.includes(normExName(e.name)))
+  if (sub) return sub
+  const words = n.split(" ").filter(w => w.length > 3)
+  if (!words.length) return null
+  const scored = db
+    .map(e => ({ score: words.filter(w => normExName(e.name).includes(w)).length, e }))
+    .sort((a, b) => b.score - a.score)
+  return scored[0]?.score >= 2 ? scored[0].e : null
+}
+
+function ExerciseGuidePanel({ exId, exName, exNote }) {
+  const [guideState, setGuideState] = React.useState({ status: "idle", entry: null })
+
+  React.useEffect(() => {
+    setGuideState({ status: "loading", entry: null })
+
+    // Check manual override table first
+    if (Object.prototype.hasOwnProperty.call(EX_DB_OVERRIDE, exId)) {
+      const dbId = EX_DB_OVERRIDE[exId]
+      if (!dbId) { setGuideState({ status: "youtube", entry: null }); return }
+      loadExDb().then(db => {
+        const match = db.find(e => e.id === dbId)
+        setGuideState({ status: match ? "found" : "youtube", entry: match || null })
+      })
+      return
+    }
+
+    loadExDb().then(db => {
+      const match = findDbExercise(db, exName)
+      setGuideState({ status: match ? "found" : "youtube", entry: match || null })
+    })
+  }, [exId, exName])
+
+  const searchMatch = String(exNote || "").match(/Search:\s*(.+)/)
+  const ytQuery = searchMatch ? searchMatch[1].trim() : exName
+  const panelStyle = { marginTop: 8, paddingTop: 10, borderTop: "1px solid #1a1b2e" }
+
+  if (guideState.status === "loading" || guideState.status === "idle") return (
+    <div style={{ ...panelStyle, color: "#444", fontSize: 11 }}>Loading guide...</div>
+  )
+
+  if (guideState.status === "youtube") return (
+    <div style={panelStyle}>
+      <div style={{ fontSize: 11, color: "#555", marginBottom: 5 }}>No visual guide available in library for this exercise.</div>
+      <a href={`https://www.youtube.com/results?search_query=${encodeURIComponent(ytQuery)}`}
+        target="_blank" rel="noopener noreferrer"
+        style={{ fontSize: 11, color: "#4a9ee8", textDecoration: "underline" }}>
+        Search YouTube: {ytQuery}
+      </a>
+    </div>
+  )
+
+  const e = guideState.entry
+  return (
+    <div style={panelStyle}>
+      <div style={{ fontSize: 10, color: "#4a9ee8", fontWeight: 600, marginBottom: 6 }}>{e.name}</div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+        {[0, 1].map(i => (
+          <img key={i}
+            src={`${EX_IMG_BASE}${e.id}/${i}.jpg`}
+            alt={`${e.name} step ${i + 1}`}
+            style={{ width: "48%", borderRadius: 5, border: "1px solid #1e1e2e", background: "#111", display: "block" }}
+            onError={ev => { ev.currentTarget.style.display = "none" }}
+          />
+        ))}
+      </div>
+      {(e.primaryMuscles?.length > 0 || e.secondaryMuscles?.length > 0) && (
+        <div style={{ fontSize: 10, color: "#6b7280", marginBottom: 6 }}>
+          {(e.primaryMuscles || []).join(", ")}
+          {(e.secondaryMuscles || []).length > 0 ? ` \u00b7 secondary: ${e.secondaryMuscles.join(", ")}` : ""}
+        </div>
+      )}
+      <ol style={{ margin: 0, paddingLeft: 14 }}>
+        {(e.instructions || []).map((step, i) => (
+          <li key={i} style={{ fontSize: 11, color: "#9ca3af", marginBottom: 4, lineHeight: 1.5 }}>{step}</li>
+        ))}
+      </ol>
+    </div>
+  )
+}
+
 function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, setSchedLog, readinessScore, latestHealthFit = null, ocItems = [], computedTSB = null, tsbV2Panel = null, progressionReadiness = "progress", progressionReasons = [], tendonStatus = { painScore: 0, stiffness: false, override: null }, scheduleFeedback = [] }) {
   const safeScheduleFeedback = Array.isArray(scheduleFeedback) ? scheduleFeedback : []
   const [activeDay, setActiveDay] = useState(todayDayKey())
@@ -2385,6 +2507,12 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const [highlightedLogEntryId, setHighlightedLogEntryId] = useState(null)
   const [showSetTimer, setShowSetTimer] = useState(false)
   const [expandedCards, setExpandedCards] = useState({})
+  const [guideOpenIds, setGuideOpenIds] = React.useState(new Set())
+  const toggleGuide = id => setGuideOpenIds(prev => {
+    const next = new Set(prev)
+    next.has(id) ? next.delete(id) : next.add(id)
+    return next
+  })
   const [isMobileLayout, setIsMobileLayout] = useState(() => typeof window !== "undefined" ? window.innerWidth < 768 : true)
   const [scheduleInfoOpen, setScheduleInfoOpen] = useState({ tendon: false })
   const logEntryRefs = useRef({})
@@ -3333,6 +3461,19 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
                 Remove
               </button>
             )}
+            <button
+              onClick={() => toggleGuide(ex.id)}
+              title="Toggle form guide"
+              style={{
+                padding: "2px 8px", borderRadius: 4, fontSize: 10, fontWeight: 600,
+                cursor: "pointer", marginLeft: 2,
+                border: `0.5px solid ${guideOpenIds.has(ex.id) ? "#3b5a8e" : "#1e2a3a"}`,
+                background: guideOpenIds.has(ex.id) ? "rgba(74,158,232,0.15)" : "transparent",
+                color: guideOpenIds.has(ex.id) ? "#4a9ee8" : "#3d5a78",
+              }}
+            >
+              form
+            </button>
             <div style={{ fontSize: 11, color: "#555", marginLeft: 4 }}>{collapsed ? "▸" : "▾"}</div>
           </div>
         </div>
@@ -3370,6 +3511,13 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
             onChange={e => isCustom ? setCustomExF(day, ex.id, "notes", e.target.value) : setF(day, ex.id, "notes", e.target.value)}
             placeholder="Session note (optional)" rows={1}
             style={{ width: "100%", marginTop: 4, padding: "4px 7px", border: "0.5px solid #1e1e1e", borderRadius: 5, fontSize: 11, color: "#666", background: "#111", fontFamily: "inherit", resize: "none", outline: "none" }} />
+          {guideOpenIds.has(ex.id) && (
+            <ExerciseGuidePanel
+              exId={ex.id}
+              exName={ex.n || ex.name || ""}
+              exNote={v?.note || ex.note || ex.notes || ""}
+            />
+          )}
         </div>
         )}
       </div>
