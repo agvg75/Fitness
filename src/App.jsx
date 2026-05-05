@@ -1468,21 +1468,40 @@ function getSleepRecordDate(record) {
 
 function mergeAdjacentSleepSegments(records, gapMinutes = 90) {
   const gapMs = gapMinutes * 60000
-  const normalized = (Array.isArray(records) ? records : [])
-    .map(record => {
-      const start = getSleepRecordStartInfo(record)
-      const end = getSleepRecordEndInfo(record)
-      const durationMin = sleepMinutesForReadiness(record)
-      return {
-        record,
-        startNormalized: start.normalized,
-        endNormalized: end.normalized,
-        startMs: start.ms,
-        endMs: end.ms,
-        durationMin,
+const normalized = (Array.isArray(records) ? records : [])
+  .map(record => {
+    const start = getSleepRecordStartInfo(record)
+    const end = getSleepRecordEndInfo(record)
+    const durationMin = sleepMinutesForReadiness(record)
+    let startNormalized = start.normalized
+    let endNormalized = end.normalized
+    let startMs = start.ms
+    let endMs = end.ms
+    // Synthesize timestamps for date-only records (manual entries, or CSV rows
+    // where bedtime/wake columns are absent). Anchor to 07:00 wake-up on the
+    // record date and back-compute start from duration.
+    if ((!Number.isFinite(startMs) || !Number.isFinite(endMs)) && durationMin > 0) {
+      const dateIso = getSleepRecordDate(record)
+      if (dateIso) {
+        const wakeMs = new Date(`${dateIso}T07:00:00`).getTime()
+        if (Number.isFinite(wakeMs)) {
+          endMs = wakeMs
+          startMs = wakeMs - durationMin * 60000
+          endNormalized = new Date(endMs).toISOString()
+          startNormalized = new Date(startMs).toISOString()
+        }
       }
-    })
-    .filter(row => Number.isFinite(row.startMs) && Number.isFinite(row.endMs) && row.endMs > row.startMs)
+    }
+    return {
+      record,
+      startNormalized,
+      endNormalized,
+      startMs,
+      endMs,
+      durationMin,
+    }
+  })
+  .filter(row => Number.isFinite(row.startMs) && Number.isFinite(row.endMs) && row.endMs > row.startMs)
     .sort((a, b) => a.startMs - b.startMs)
 
   const episodes = []
