@@ -2403,16 +2403,14 @@ function findDbExercise(db, name) {
   return scored[0]?.score >= 2 ? scored[0].e : null
 }
 
-function ExerciseGuidePanel({ exId, exName, exNote }) {
+function ExerciseGuidePanel({ exId, exName, exNote, dbId = null }) {
   const [guideState, setGuideState] = React.useState({ status: "idle", entry: null })
 
   React.useEffect(() => {
     setGuideState({ status: "loading", entry: null })
 
-    // Check manual override table first
-    if (Object.prototype.hasOwnProperty.call(EX_DB_OVERRIDE, exId)) {
-      const dbId = EX_DB_OVERRIDE[exId]
-      if (!dbId) { setGuideState({ status: "youtube", entry: null }); return }
+    // Priority 1: explicit DB id from picker — no matching needed
+    if (dbId) {
       loadExDb().then(db => {
         const match = db.find(e => e.id === dbId)
         setGuideState({ status: match ? "found" : "youtube", entry: match || null })
@@ -2420,11 +2418,23 @@ function ExerciseGuidePanel({ exId, exName, exNote }) {
       return
     }
 
+    // Priority 2: manual override table (SCH_PLAN exercises)
+    if (Object.prototype.hasOwnProperty.call(EX_DB_OVERRIDE, exId)) {
+      const overrideId = EX_DB_OVERRIDE[exId]
+      if (!overrideId) { setGuideState({ status: "youtube", entry: null }); return }
+      loadExDb().then(db => {
+        const match = db.find(e => e.id === overrideId)
+        setGuideState({ status: match ? "found" : "youtube", entry: match || null })
+      })
+      return
+    }
+
+    // Priority 3: fuzzy name match
     loadExDb().then(db => {
       const match = findDbExercise(db, exName)
       setGuideState({ status: match ? "found" : "youtube", entry: match || null })
     })
-  }, [exId, exName])
+  }, [exId, exName, dbId])
 
   const searchMatch = String(exNote || "").match(/Search:\s*(.+)/)
   const ytQuery = searchMatch ? searchMatch[1].trim() : exName
@@ -2504,6 +2514,8 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const [sleepInputHours, setSleepInputHours] = useState("")
   const [inlineExForm, setInlineExForm] = useState(null)   // day | null
   const [inlineExName, setInlineExName] = useState("")
+  const [inlineExDbId, setInlineExDbId] = useState(null)   // DB id when user picks from library
+  const [inlineExResults, setInlineExResults] = useState([]) // [{name, dbId, source}]
   const [highlightedLogEntryId, setHighlightedLogEntryId] = useState(null)
   const [showSetTimer, setShowSetTimer] = useState(false)
   const [expandedCards, setExpandedCards] = useState({})
@@ -2890,17 +2902,27 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const addCustomExercise = (day) => {
     setInlineExForm(day)
     setInlineExName("")
+    setInlineExDbId(null)
+    setInlineExResults([])
+    loadExDb()  // pre-warm cache so results are instant when user types
   }
 
   const commitCustomExercise = () => {
     if (!inlineExForm || !inlineExName.trim()) return
     const day = inlineExForm
-    const newEx = { id: `custom_${Date.now()}`, n: inlineExName.trim(), sets: "3", reps: "10", load: "", notes: "" }
+    const newEx = {
+      id: `custom_${Date.now()}`,
+      n: inlineExName.trim(),
+      dbId: inlineExDbId || null,  // stored so guide panel works without fuzzy matching
+      sets: "3", reps: "10", load: "", notes: ""
+    }
     const updated = { ...customExercises, [day]: [...getCustomExercises(day), newEx] }
     setCustomExercises(updated)
     saveScheduleKey("wt-custom-exercises", updated)
     setInlineExForm(null)
     setInlineExName("")
+    setInlineExDbId(null)
+    setInlineExResults([])
   }
 
   const removeCustomExercise = (day, exId) => {
@@ -3516,6 +3538,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
               exId={ex.id}
               exName={ex.n || ex.name || ""}
               exNote={v?.note || ex.note || ex.notes || ""}
+              dbId={ex.dbId || null}
             />
           )}
         </div>
@@ -4123,27 +4146,83 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
                   : <div style={{ textAlign: "center", padding: 16, color: "#444", fontSize: 13 }}>Active recovery — no resistance training today.</div>}
                 {getCustomExercises(activeDay).map(ex => exCard(ex, activeDay, true))}
                 {inlineExForm === activeDay ? (
-                  <div style={{ marginTop: 8, padding: "8px", background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: 6 }}>
+                  <div style={{ marginTop: 8, padding: "8px", background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: 6, position: "relative" }}>
                     <input
                       autoFocus
                       value={inlineExName}
-                      onChange={e => setInlineExName(e.target.value)}
-                      onKeyDown={e => { if (e.key === "Enter") commitCustomExercise(); if (e.key === "Escape") setInlineExForm(null) }}
-                      list="exercise-history-datalist"
-                      placeholder="Exercise name or pick from history"
-                      style={{ ...inputStyle(), marginBottom: 8, fontSize: 12, padding: "6px 8px" }}
+                      onChange={e => {
+                        const val = e.target.value
+                        setInlineExName(val)
+                        setInlineExDbId(null)
+                        if (!val || val.length < 2) { setInlineExResults([]); return }
+                        const q = val.toLowerCase()
+                        const qNorm = normExName(val)
+                        // DB matches (from cache — pre-warmed when form opened)
+                        const dbMatches = (_exDbCache || [])
+                          .filter(ex => {
+                            const n = normExName(ex.name)
+                            return n.includes(qNorm) ||
+                              qNorm.split(" ").filter(w => w.length > 2).some(w => n.includes(w))
+                          })
+                          .slice(0, 6)
+                          .map(ex => ({ name: ex.name, dbId: ex.id, source: "library" }))
+                        // History matches
+                        const histMatches = historicalExerciseNames
+                          .filter(n => n.toLowerCase().includes(q))
+                          .slice(0, 3)
+                          .map(n => ({ name: n, dbId: null, source: "history" }))
+                        setInlineExResults([...dbMatches, ...histMatches])
+                      }}
+                      onKeyDown={e => {
+                        if (e.key === "Enter") { setInlineExResults([]); commitCustomExercise() }
+                        if (e.key === "Escape") { setInlineExForm(null); setInlineExResults([]) }
+                      }}
+                      placeholder="Search exercises (e.g. hip thrust, lat pulldown)"
+                      style={{ ...inputStyle(), marginBottom: 4, fontSize: 12, padding: "6px 8px" }}
                     />
-                    <datalist id="exercise-history-datalist">
-                      {historicalExerciseNames.map(name => (
-                        <option key={name} value={name} />
-                      ))}
-                    </datalist>
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <button onClick={commitCustomExercise}
+                    {inlineExResults.length > 0 && !inlineExDbId && (
+                      <div style={{
+                        position: "absolute", left: 8, right: 8, top: 46,
+                        background: "#0d0e1c", border: "1px solid #1e2a3a",
+                        borderRadius: 5, zIndex: 200, maxHeight: 220, overflowY: "auto",
+                        boxShadow: "0 4px 12px rgba(0,0,0,0.5)"
+                      }}>
+                        {inlineExResults.map((r, i) => (
+                          <div key={i}
+                            onMouseDown={e => {
+                              e.preventDefault()  // keep input focused
+                              setInlineExName(r.name)
+                              setInlineExDbId(r.dbId)
+                              setInlineExResults([])
+                            }}
+                            style={{
+                              padding: "7px 10px", cursor: "pointer", fontSize: 12,
+                              borderBottom: i < inlineExResults.length - 1 ? "1px solid #1a1b2e" : "none",
+                              display: "flex", justifyContent: "space-between", alignItems: "center",
+                              background: "transparent"
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.background = "#131428"}
+                            onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                          >
+                            <span style={{ color: "#d8d8d8" }}>{r.name}</span>
+                            <span style={{ fontSize: 10, color: r.source === "library" ? "#4a9ee8" : "#555", marginLeft: 8, flexShrink: 0 }}>
+                              {r.source}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {inlineExDbId && (
+                      <div style={{ fontSize: 10, color: "#4a9ee8", marginBottom: 4, marginTop: 2 }}>
+                        Linked to library — form guide will be available
+                      </div>
+                    )}
+                    <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                      <button onClick={() => { setInlineExResults([]); commitCustomExercise() }}
                         style={{ flex: 1, padding: "5px 0", background: "#185FA5", border: "none", borderRadius: 5, color: "#fff", fontSize: 12, cursor: "pointer" }}>
                         Add exercise
                       </button>
-                      <button onClick={() => setInlineExForm(null)}
+                      <button onClick={() => { setInlineExForm(null); setInlineExResults([]) }}
                         style={{ padding: "5px 10px", background: "transparent", border: "0.5px solid #333", borderRadius: 5, color: "#555", fontSize: 12, cursor: "pointer" }}>
                         Cancel
                       </button>
