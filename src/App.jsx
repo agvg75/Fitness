@@ -4890,8 +4890,16 @@ function TrainingDashboard({ workouts, recentNutrition, healthFitDaily = [], sch
 if (w.category === "Strength") {
   const strengthDate = String(w.date || w.start_date || w.dateTime || "").slice(0, 10)
   const hasValidStrengthDate = /^\d{4}-\d{2}-\d{2}$/.test(strengthDate)
-  const strengthDurationMin = Number(w.duration_min || 0)
-  if (rangeMode !== "weekly" || (hasValidStrengthDate && strengthDurationMin >= 5)) {
+  const strengthSource = String(w.source || "")
+  const isScheduleSource = strengthSource === "LIFT Schedule Tab" || strengthSource === "ManualSchedule"
+  const hasDuration = w.duration_min != null && w.duration_min !== ""
+  const strengthDurationMin = hasDuration ? Number(w.duration_min) : null
+  const isValidStrengthSession = hasValidStrengthDate && (
+    isScheduleSource ||
+    !hasDuration ||
+    strengthDurationMin >= 5
+  )
+  if (rangeMode !== "weekly" || isValidStrengthSession) {
     grouped[key].strengthSessions += 1
   }
 } else if (
