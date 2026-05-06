@@ -2484,7 +2484,7 @@ function ExerciseGuidePanel({ exId, exName, exNote, dbId = null }) {
   )
 }
 
-function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, setSchedLog, readinessScore, latestHealthFit = null, ocItems = [], computedTSB = null, tsbV2Panel = null, progressionReadiness = "progress", progressionReasons = [], tendonStatus = { painScore: 0, stiffness: false, override: null }, scheduleFeedback = [] }) {
+function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, setSchedLog, readinessScore, latestHealthFit = null, ocItems = [], computedTSB = null, tsbV2Panel = null, progressionReadiness = "progress", progressionReasons = [], tendonStatus = { painScore: 0, stiffness: false, override: null }, scheduleFeedback = [], sleepRecords = [], setSleepRecords = () => {} }) {
   const safeScheduleFeedback = Array.isArray(scheduleFeedback) ? scheduleFeedback : []
   const [activeDay, setActiveDay] = useState(todayDayKey())
   const [schedView, setSchedView] = useState("schedule")
@@ -16071,6 +16071,8 @@ return (
     progressionReasons={ocConstraintState?.gate?.progressionReasons ?? []}
     tendonStatus={ocConstraintState?.tendon ?? { painScore: 0, stiffness: false, override: null }}
     scheduleFeedback={Array.isArray(adaptiveTrainingState?.feedback) ? adaptiveTrainingState.feedback : []}
+    sleepRecords={sleepRecords}
+    setSleepRecords={setSleepRecords}
   />
 )}
 
