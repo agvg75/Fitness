@@ -5198,6 +5198,11 @@ if (w.category === "Strength") {
                 { name: "Machine Flys",       match: "fly",              baseline: 30  },
                 { name: "Triceps Pulldown",   match: "tricep",           baseline: 25  },
                 { name: "Lateral Raise",      match: "lateral raise",    baseline: null },
+                { name: "Face Pull",          match: "face pull",        baseline: null },
+                { name: "Rear Delt Fly",      match: "rear delt",        baseline: null },
+                { name: "Triceps Overhead",   match: "tricep overhead",  baseline: null },
+                { name: "Cable Crossover",    match: "crossover",        baseline: null },
+                { name: "Pushup Plank",       match: "pushup plank",     baseline: null },
               ]
             },
             {
@@ -5209,6 +5214,9 @@ if (w.category === "Strength") {
                 { name: "Bicep Curl",         match: "bicep curl",       baseline: 75  },
                 { name: "Hammer Curl",        match: "hammer curl",      baseline: null },
                 { name: "Inverted Row",       match: "inverted row",     baseline: null },
+                { name: "Straight Arm Pulldown", match: "straight arm",  baseline: null },
+                { name: "Pull ups",           match: "pull up",          baseline: null },
+                { name: "Reverse Biceps",     match: "reverse bicep",    baseline: null },
               ]
             },
             {
@@ -5234,6 +5242,10 @@ if (w.category === "Strength") {
                 { name: "Pallof Press",       match: "pallof",           baseline: null },
                 { name: "Suitcase Carry",     match: "suitcase",         baseline: null },
                 { name: "KB Swing",           match: "kb swing",         baseline: null },
+                { name: "Shoulder Clock",     match: "shoulder clock",   baseline: null },
+                { name: "Tibialis Raise",     match: "tibialis",         baseline: null },
+                { name: "Calf Raise",         match: "calf raise",       baseline: null },
+                { name: "Russian Twists",     match: "russian twist",    baseline: null },
               ]
             },
           ]
@@ -5263,7 +5275,13 @@ if (w.category === "Strength") {
                 .filter(p => p.date)
                 .sort((a, b) => a.date.localeCompare(b.date))
               return { name, baseline, data: sorted }
-            }).filter(c => c.data.length > 0)
+            }).filter(c => {
+                if (!c.data.length) return false
+                const cutoff = new Date()
+                cutoff.setDate(cutoff.getDate() - 90)
+                const cutoffStr = cutoff.toISOString().slice(0, 10)
+                return c.data.some(p => p.date >= cutoffStr)
+              })
 
             if (!charts.length) return null
 
