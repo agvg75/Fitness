@@ -2503,7 +2503,7 @@ function ExerciseGuidePanel({ exId, exName, exNote, dbId = null }) {
   )
 }
 
-function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, setSchedLog, readinessScore, latestHealthFit = null, ocItems = [], computedTSB = null, tsbV2Panel = null, progressionReadiness = "progress", progressionReasons = [], tendonStatus = { painScore: 0, stiffness: false, override: null }, scheduleFeedback = [], sleepRecords = [], setSleepRecords = () => {} }) {
+function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, setSchedLog, readinessScore, latestHealthFit = null, ocItems = [], computedTSB = null, tsbV2Panel = null, progressionReadiness = "progress", progressionReasons = [], tendonStatus = { painScore: 0, stiffness: false, override: null }, scheduleFeedback = [], sleepRecords = [], setSleepRecords = () => {}, scheduleTarget = null, clearScheduleTarget = () => {} }) {
   const safeScheduleFeedback = Array.isArray(scheduleFeedback) ? scheduleFeedback : []
   const [activeDay, setActiveDay] = useState(todayDayKey())
   const [schedView, setSchedView] = useState("schedule")
@@ -2681,6 +2681,15 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     setActiveDay(day)
     requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }))
   }, [])
+
+  // Apply pre-populated day + date when navigating from a missed-workout alert
+  useEffect(() => {
+    if (!scheduleTarget) return
+    const { day, date } = scheduleTarget
+    if (day) switchScheduleDay(day)
+    if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) setSessionDate(date)
+    clearScheduleTarget()
+  }, [scheduleTarget]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const CARDIO_INJURY_REGIONS = {
     run:  ["Ankle", "Toe", "Knee", "Shin"],
@@ -10473,6 +10482,21 @@ export default function App() {
   }
 
   const [tab, setTab] = useState("Overview")
+  // Pre-populate Schedule tab when navigating from a missed-workout alert
+  const [scheduleTarget, setScheduleTarget] = useState(null) // { day, date } | null
+  // URD: ISO dates the user has explicitly marked as Unscheduled Recovery Days
+  const [urdDays, setUrdDays] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem("lift-urd-days") || "[]")) }
+    catch { return new Set() }
+  })
+  const markURD = (iso) => {
+    setUrdDays(prev => {
+      const next = new Set(prev)
+      next.add(iso)
+      localStorage.setItem("lift-urd-days", JSON.stringify([...next]))
+      return next
+    })
+  }
   const [rangeKey, setRangeKey] = useState("180D")
   const [workouts, setWorkouts] = useState([])
   const [daily, setDaily] = useState([])
@@ -14721,7 +14745,7 @@ return (
         const dow = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getDay()]
         const meta = TRAINING_DAYS[dow]
         if (!meta) continue
-        if (loggedDates.has(iso)) continue
+        if (loggedDates.has(iso) || urdDays.has(iso)) continue
         // Only alert if past the tolerance window
         if (daysBack <= meta.tolerance) continue
         alerts.push({ iso, dow, label: meta.label, theme: meta.theme, daysBack })
@@ -14763,12 +14787,24 @@ return (
                   Planned: {a.theme} · {a.daysBack} day{a.daysBack !== 1 ? "s" : ""} ago
                 </div>
               </div>
-              <button
-                onClick={() => { setTab("Schedule") }}
-                style={{ fontSize: "11px", padding: "5px 12px", background: "rgba(249,115,22,0.15)", border: "1px solid rgba(249,115,22,0.35)", borderRadius: "6px", color: "#f97316", cursor: "pointer" }}
-              >
-                Log now
-              </button>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button
+                  onClick={() => {
+                    setScheduleTarget({ day: a.dow, date: a.iso })
+                    setTab("Schedule")
+                  }}
+                  style={{ fontSize: "11px", padding: "5px 12px", background: "rgba(249,115,22,0.15)", border: "1px solid rgba(249,115,22,0.35)", borderRadius: "6px", color: "#f97316", cursor: "pointer" }}
+                >
+                  Log now
+                </button>
+                <button
+                  onClick={() => markURD(a.iso)}
+                  title="Unscheduled Recovery Day — mark this session as intentionally skipped"
+                  style={{ fontSize: "11px", padding: "5px 12px", background: "rgba(100,100,120,0.15)", border: "1px solid rgba(100,100,120,0.35)", borderRadius: "6px", color: "#9ca3af", cursor: "pointer", letterSpacing: "0.04em" }}
+                >
+                  URD
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -16139,6 +16175,8 @@ return (
     scheduleFeedback={Array.isArray(adaptiveTrainingState?.feedback) ? adaptiveTrainingState.feedback : []}
     sleepRecords={sleepRecords}
     setSleepRecords={setSleepRecords}
+    scheduleTarget={scheduleTarget}
+    clearScheduleTarget={() => setScheduleTarget(null)}
   />
 )}
 
