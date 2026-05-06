@@ -1364,9 +1364,9 @@ const OC_REGION_COORDS = {
 // Body silhouette images — coordinates in OC_REGION_COORDS are CSS percentages
 // (0–100) of the container's width/height, matching the 364×952 PNG dimensions.
 function BodySilhouetteImg({ side }) {
-  const src = side === "back" ? "/back_body_clean.png" : "/front_body_clean.png"
+  const src = side === "back" ? "/back_body_holo.png" : "/front_body_holo.png"
   return (
-   <img src={src} alt={side + " body"} style={{ width: "100%", display: "block" }} />
+  <img src={src} alt={side + " body"} style={{ width: "100%", display: "block", borderRadius: 8 }} />
 
   )
 }// Keep a thin shim so any remaining references compile during transition
