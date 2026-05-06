@@ -1366,8 +1366,9 @@ const OC_REGION_COORDS = {
 function BodySilhouetteImg({ side }) {
   const src = side === "back" ? "/back_body_holo.png" : "/front_body_holo.png"
   return (
-  <img src={src} alt={side + " body"} style={{ width: "100%", display: "block", borderRadius: 8 }} />
-
+    <div style={{ width: "100%", aspectRatio: "364 / 952", position: "relative", overflow: "hidden", borderRadius: 8 }}>
+      <img src={src} alt={side + " body"} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain" }} />
+    </div>
   )
 }// Keep a thin shim so any remaining references compile during transition
 function BodySilhouetteSVG() {
@@ -2196,11 +2197,11 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
           <div style={{ fontSize: "10px", letterSpacing: "0.15em", textTransform: "uppercase", color: "#555", marginBottom: "10px" }}>
             Body Map — tap a dot to inspect
           </div>
-          <div style={{ display: "flex", gap: "16px", justifyContent: "center" }}>
+          <div style={{ display: "flex", gap: "16px", justifyContent: "center", alignItems: "flex-start" }}>
             {["front", "back"].map(side => (
-              <div key={side} style={{ flex: "0 0 auto", width: "170px" }}>
+              <div key={side} style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: "9px", color: "#444", textAlign: "center", marginBottom: "3px", letterSpacing: "0.1em" }}>{side.toUpperCase()}</div>
-                {renderSilhouette(side)}
+                <div style={{ flex: 1, minWidth: 0 }}>{renderSilhouette(side)}</div>
               </div>
             ))}
           </div>
