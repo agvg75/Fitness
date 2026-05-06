@@ -4260,11 +4260,32 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
                           })
                           .slice(0, 6)
                           .map(ex => ({ name: ex.name, dbId: ex.id, source: "library" }))
-                        // History matches
-                        const histMatches = historicalExerciseNames
-                          .filter(n => n.toLowerCase().includes(q))
-                          .slice(0, 3)
-                          .map(n => ({ name: n, dbId: null, source: "history" }))
+                        // Name canonicalization — collapse known variant spellings to a
+                        // single representative name so the history list isn't cluttered
+                        const CANONICAL_NAMES = {
+                          "bicep curls": "Biceps Curl",
+                          "bicep curl": "Biceps Curl",
+                          "bicep curls (db / bb)": "Biceps Curl",
+                          "biceps curl (db/bb)": "Biceps Curl",
+                          "bicep curls — cable / rope (neutral grip)": "Biceps Curl — Cable Rope",
+                          "hammer curls": "Hammer Curl",
+                          "leg curl machine": "Leg Curl",
+                          "leg curls": "Leg Curl",
+                          "hip thrust bilateral": "Hip Thrust",
+                          "romanian deadlift": "Romanian Deadlift",
+                          "rdl": "Romanian Deadlift",
+                          "lat pull down": "Lat Pulldown",
+                          "lateral raises": "Lateral Raise",
+                          "face pulls": "Face Pull",
+                          "pallof press": "Pallof Press",
+                          "russian twist": "Russian Twists",
+                        }
+                        const canonicalize = n => CANONICAL_NAMES[n.toLowerCase()] || n
+                        const histMatches = [...new Map(
+                          historicalExerciseNames
+                            .filter(n => n.toLowerCase().includes(q))
+                            .map(n => [canonicalize(n).toLowerCase(), { name: canonicalize(n), dbId: null, source: "history" }])
+                        ).values()].slice(0, 3)
                         setInlineExResults([...dbMatches, ...histMatches])
                       }}
                       onKeyDown={e => {
