@@ -4273,7 +4273,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
                       <div style={{
                         position: "absolute", left: 8, right: 8, top: 46,
                         background: "#0d0e1c", border: "1px solid #1e2a3a",
-                        borderRadius: 5, zIndex: 200, maxHeight: 220, overflowY: "auto",
+                        borderRadius: 5, zIndex: 200, maxHeight: 300, overflowY: "auto",
                         boxShadow: "0 4px 12px rgba(0,0,0,0.5)"
                       }}>
                         {inlineExResults.map((r, i) => (
@@ -4293,8 +4293,8 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
                             onMouseEnter={e => e.currentTarget.style.background = "#131428"}
                             onMouseLeave={e => e.currentTarget.style.background = "transparent"}
                           >
-                            <span style={{ color: "#d8d8d8" }}>{r.name}</span>
-                            <span style={{ fontSize: 10, color: r.source === "library" ? "#4a9ee8" : "#555", marginLeft: 8, flexShrink: 0 }}>
+                            <span style={{ color: "#d8d8d8", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginRight: 8 }}>{r.name}</span>
+                            <span style={{ fontSize: 10, color: r.source === "library" ? "#4a9ee8" : "#555", flexShrink: 0, minWidth: 44, textAlign: "right" }}>
                               {r.source}
                             </span>
                           </div>
