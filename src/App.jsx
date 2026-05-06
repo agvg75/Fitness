@@ -5261,6 +5261,21 @@ if (w.category === "Strength") {
                 { name: "Russian Twists",     match: "russian twist",    baseline: null },
               ]
             },
+            {
+              group: "Single-Limb Progressions",
+              color: "#a78bfa",
+              exercises: [
+                { name: "Leg Press — SL",    match: "leg press — sl",    baseline: null },
+                { name: "Hip Thrust — SL",   match: "hip thrust — sl",   baseline: null },
+                { name: "Leg Curl — SL",     match: "leg curl — sl",     baseline: null },
+                { name: "Calf Raise — SL",   match: "calf raise — sl",   baseline: null },
+                { name: "Cable Row — SA",    match: "cable row — sa",    baseline: null },
+                { name: "Lat Pulldown — SA", match: "lat pulldown — sa", baseline: null },
+                { name: "Chest Press — SA",  match: "chest press — sa",  baseline: null },
+                { name: "Leg Press SL",      match: "leg press sl",      baseline: null },
+                { name: "Cable Row SA",      match: "cable row sa",      baseline: null },
+              ]
+            },
           ]
 
           const log = Array.isArray(schedLog) ? schedLog : []
