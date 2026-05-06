@@ -10363,7 +10363,7 @@ class ErrorBoundary extends React.Component {
 // Update after each scan; regional data is not in dexa_summary.json.
 const DEXA_REGIONAL = [
   {
-    label: "Aug '25", date: "2026-08-26",
+    label: "Aug '25", date: "2025-08-26",
     trunk: 24858, rLeg: 7822, lLeg: 7898, rArm: 3056, lArm: 2782,
     fatPct: 33.9, fatMass: 26728, leanMass: 49785, leanBmc: 52175, totalMass: 78903,
     vatArea: 155, bmd: 1.121,
