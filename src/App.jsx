@@ -2988,7 +2988,10 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       sleep_date: dateStr
     }
     const next = [
-      ...(Array.isArray(sleepRecords) ? sleepRecords.filter(r => getSleepRecordDate(r) !== dateStr) : []),
+      ...(Array.isArray(sleepRecords) ? sleepRecords.filter(r => {
+        const d = getSleepRecordDate(r)
+        return d !== dateStr && r.date !== dateStr && r.sleep_date !== dateStr
+      }) : []),
       record
     ].sort((a, b) => String(getSleepRecordDate(a) || "").localeCompare(String(getSleepRecordDate(b) || "")))
     setSleepRecords(next)
@@ -3001,6 +3004,21 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       console.warn("Manual sleep upsert failed", e)
     }
     showToast(`Sleep logged: ${hours}h on ${dateStr}`)
+  }
+
+  const deleteSleepEntry = async (dateStr) => {
+    const next = (Array.isArray(sleepRecords) ? sleepRecords : []).filter(r => {
+      const d = getSleepRecordDate(r)
+      return d !== dateStr && r.date !== dateStr && r.sleep_date !== dateStr
+    })
+    setSleepRecords(next)
+    localStorage.setItem('lift_sleep_records', JSON.stringify(next))
+    try {
+      if (supabase && session?.user?.id) {
+        await supabase.from('sleep_records').delete().eq('user_id', session.user.id).eq('sleep_date', dateStr)
+      }
+    } catch (e) { console.warn('Sleep delete failed', e) }
+    showToast(`Sleep entry removed for ${dateStr}`)
   }
 
   const addCardioEntry = (day) => {
@@ -3882,6 +3900,49 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
             </button>
           </div>
         </div>
+
+        {/* Recent sleep entries — editable */}
+        {(() => {
+          const recent = (Array.isArray(sleepRecords) ? sleepRecords : [])
+            .filter(r => getSleepRecordDate(r))
+            .sort((a, b) => String(getSleepRecordDate(b)).localeCompare(String(getSleepRecordDate(a))))
+            .slice(0, 10)
+          if (!recent.length) return null
+          return (
+            <div style={{ marginTop: 10, padding: '10px 14px', background: '#0a0a12', border: '0.5px solid #1e1e2e', borderRadius: 8 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#7F77DD', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
+                Recent sleep entries
+              </div>
+              {recent.map(r => {
+                const d = getSleepRecordDate(r)
+                const hrs = r.duration_min ? (r.duration_min / 60).toFixed(1) : '?'
+                const src = r.source || 'manual'
+                return (
+                  <div key={d} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: '0.5px solid #1a1b2e' }}>
+                    <span style={{ fontSize: 12, color: '#bbb' }}>{d}</span>
+                    <span style={{ fontSize: 12, color: '#e8e8e8', fontWeight: 600 }}>{hrs}h</span>
+                    <span style={{ fontSize: 10, color: '#555' }}>{src}</span>
+                    <button
+                      onClick={() => {
+                        setSleepInputDate(d)
+                        setSleepInputHours(hrs)
+                      }}
+                      style={{ fontSize: 10, color: '#4a9ee8', background: 'transparent', border: 'none', cursor: 'pointer', padding: '2px 6px' }}
+                    >
+                      edit
+                    </button>
+                    <button
+                      onClick={() => deleteSleepEntry(d)}
+                      style={{ fontSize: 10, color: '#ef4444', background: 'transparent', border: 'none', cursor: 'pointer', padding: '2px 6px' }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          )
+        })()}
 
         {justUndone && (
           <div style={{ padding: "10px 14px", background: "rgba(153,60,29,0.15)", border: "0.5px solid #993C1D", borderRadius: 8, marginBottom: 8 }}>
