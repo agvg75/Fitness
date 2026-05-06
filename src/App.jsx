@@ -4888,7 +4888,12 @@ function TrainingDashboard({ workouts, recentNutrition, healthFitDaily = [], sch
       grouped[key].totalWorkouts += 1
 
 if (w.category === "Strength") {
-  grouped[key].strengthSessions += 1
+  const strengthDate = String(w.date || w.start_date || w.dateTime || "").slice(0, 10)
+  const hasValidStrengthDate = /^\d{4}-\d{2}-\d{2}$/.test(strengthDate)
+  const strengthDurationMin = Number(w.duration_min || 0)
+  if (rangeMode !== "weekly" || (hasValidStrengthDate && strengthDurationMin >= 5)) {
+    grouped[key].strengthSessions += 1
+  }
 } else if (
   ["Running", "Walking", "Cycling", "Swimming", "Elliptical", "Rowing", "Stairs", "Machine Cardio", "Indoor Cycling"].includes(w.category)
 ) {
