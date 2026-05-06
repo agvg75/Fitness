@@ -1471,12 +1471,31 @@ function mergeAdjacentSleepSegments(records, gapMinutes = 90) {
       const start = getSleepRecordStartInfo(record)
       const end = getSleepRecordEndInfo(record)
       const durationMin = sleepMinutesForReadiness(record)
+      let startNormalized = start.normalized
+      let endNormalized = end.normalized
+      let startMs = start.ms
+      let endMs = end.ms
+      // Synthesize timestamps for manual entries that have date + duration
+      // but no explicit start/end times. Anchor wake-up to 07:00 on the
+      // record date and back-compute start from duration.
+      if ((!Number.isFinite(startMs) || !Number.isFinite(endMs)) && durationMin > 0) {
+        const dateIso = getSleepRecordDate(record)
+        if (dateIso) {
+          const wakeMs = new Date(`${dateIso}T07:00:00`).getTime()
+          if (Number.isFinite(wakeMs)) {
+            endMs = wakeMs
+            startMs = wakeMs - durationMin * 60000
+            endNormalized = new Date(endMs).toISOString()
+            startNormalized = new Date(startMs).toISOString()
+          }
+        }
+      }
       return {
         record,
-        startNormalized: start.normalized,
-        endNormalized: end.normalized,
-        startMs: start.ms,
-        endMs: end.ms,
+        startNormalized,
+        endNormalized,
+        startMs,
+        endMs,
         durationMin,
       }
     })
