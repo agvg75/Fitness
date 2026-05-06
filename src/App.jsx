@@ -12021,30 +12021,16 @@ const overviewWeightDomain = useMemo(() => {
   return [low, high]
 }, [weightSmoothed])
   const dexaSeries = useMemo(() => {
-    if (!dexa.length) return []
-
-    return dexa
-      .map((row, idx) => {
-        const date = row["Scan date"]?.slice?.(0, 10) ?? row.date ?? `scan-${idx + 1}`
-        const totalLb = kgToLb(row["Total mass (kg)"])
-        const fatLb = kgToLb(row["Fat mass (kg)"])
-        const leanLb = kgToLb(row["Lean mass (kg)"])
-        const leanBmcLb = kgToLb(row["Lean+BMC (kg)"])
-        const pctFat = row["% fat"] == null ? null : Number(row["% fat"])
-        const label = date && !String(date).startsWith("scan-") ? String(date).slice(0, 7) : `scan-${idx + 1}`
-
-        return {
-          date,
-          label,
-          total_lb: totalLb == null ? null : Number(totalLb.toFixed(1)),
-          fat_lb: fatLb == null ? null : Number(fatLb.toFixed(1)),
-          lean_lb: leanLb == null ? null : Number(leanLb.toFixed(1)),
-          lean_bmc_lb: leanBmcLb == null ? null : Number(leanBmcLb.toFixed(1)),
-          pct_fat: pctFat
-        }
-      })
-      .sort((a, b) => String(a.date).localeCompare(String(b.date)))
-  }, [dexa])
+    return DEXA_REGIONAL.map(s => ({
+      date: s.date,
+      label: s.label,
+      total_lb: Number((s.totalMass / 1000 * 2.20462).toFixed(1)),
+      fat_lb: Number((s.fatMass / 1000 * 2.20462).toFixed(1)),
+      lean_lb: Number((s.leanMass / 1000 * 2.20462).toFixed(1)),
+      lean_bmc_lb: Number((s.leanBmc / 1000 * 2.20462).toFixed(1)),
+      pct_fat: s.fatPct
+    }))
+  }, [])
 
   const latestDexa = useMemo(() => {
     if (!dexaSeries.length) return null
