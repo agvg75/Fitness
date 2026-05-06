@@ -2530,6 +2530,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const [inlineItemName, setInlineItemName] = useState("")
   const [inlineItemDetail, setInlineItemDetail] = useState("")
   const [sleepInputDate, setSleepInputDate] = useState(todayISO())
+  const [sleepEntriesOpen, setSleepEntriesOpen] = useState(false)
   const [sleepInputHours, setSleepInputHours] = useState("")
   const [inlineExForm, setInlineExForm] = useState(null)   // day | null
   const [inlineExName, setInlineExName] = useState("")
@@ -3919,10 +3920,14 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
           if (!recent.length) return null
           return (
             <div style={{ marginTop: 10, padding: '10px 14px', background: '#0a0a12', border: '0.5px solid #1e1e2e', borderRadius: 8 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: '#7F77DD', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
-                Recent sleep entries
-              </div>
-              {recent.map(r => {
+              <button
+                onClick={() => setSleepEntriesOpen(o => !o)}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, fontWeight: 700, color: '#7F77DD', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: sleepEntriesOpen ? 8 : 0, background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'inherit', width: '100%' }}
+              >
+                <span>{sleepEntriesOpen ? '▾' : '▸'}</span>
+                <span>Recent sleep entries</span>
+              </button>
+              {sleepEntriesOpen && recent.map(r => {
                 const d = getSleepRecordDate(r)
                 const hrs = r.duration_min ? (r.duration_min / 60).toFixed(1) : '?'
                 const src = r.source || 'manual'
