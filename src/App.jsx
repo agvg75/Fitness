@@ -2661,6 +2661,10 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     return () => window.removeEventListener("resize", onResize)
   }, [])
 
+  useEffect(() => {
+    if (!quickLog) setCheckedExIds(new Set())
+  }, [quickLog])
+
   const readScheduleKeyFromSupabase = async key => {
     if (!supabase || !session?.user?.id) return null
     const { data, error } = await supabase
@@ -3608,7 +3612,8 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     const chg = isCustom ? false : isChanged(day, ex.id)
     const includedInLog = isChecked(day, "exercise", ex.id)
     const quickChecked = checkedExIds.has(ex.id)
-    const collapsed = expandedCards[cardKey] == null ? (quickLog ? true : isMobileLayout) : !expandedCards[cardKey]
+    const quickExpanded = !!expandedCards[ex.id]
+    const collapsed = quickLog ? !quickExpanded : (expandedCards[cardKey] == null ? isMobileLayout : !expandedCards[cardKey])
     const vColors = { machine: "#3b82f6", db: "#22c55e", friendly: "#f97316" }
     const vBgs = { machine: "rgba(59,130,246,0.12)", db: "rgba(34,197,94,0.12)", friendly: "rgba(249,115,22,0.12)" }
     const fl = ex.fi === "toe" ? "Toe-safe" : "Shoulder-safe"
@@ -3635,11 +3640,6 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     const displaySummary = `${displaySets || "—"}×${displayReps || "—"} @ ${displayLoad || "—"}`
 
     const toggleExpanded = () => setExpandedCards(prev => ({ ...prev, [cardKey]: collapsed }))
-    const toggleQuickExercise = () => {
-      const willCheck = !checkedExIds.has(ex.id)
-      if (willCheck) fillQuickLogExercise(day, ex, isCustom)
-      toggleChecked(ex.id)
-    }
 
     const variantControls = !isCustom && Object.keys(ex.variants || {}).length > 1 && ["machine", "db", "friendly"].map(k => {
       if (!ex.variants[k]) return null
@@ -3666,36 +3666,98 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       </div>
     )
 
+    const expandedEditor = (
+      <>
+        <div style={{ padding: "0 12px 8px", background: "#0a0a0a", borderTop: "1px solid #151515" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", padding: "8px 0 6px", flexWrap: "wrap" }}>
+            <div style={{ fontSize: 11, color: "#7b8794" }}>{v?.n || null}</div>
+            <div style={{ fontSize: 11, color: "#cbd5e1" }}>{formatRxSummary(displaySets, displayReps, displayLoad)}</div>
+          </div>
+        </div>
+        <div style={{ padding: "4px 12px 10px", background: "#0a0a0a", borderTop: "1px solid #1a1a1a" }}>
+          {quickLog && (
+            <div style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap", marginBottom: 6 }}>
+              {variantControls}
+              {isCustom && (
+                <button onClick={() => removeCustomExercise(day, ex.id)}
+                  style={{ padding: "3px 7px", borderRadius: 4, fontSize: 10, cursor: "pointer", border: "0.5px solid #333", background: "transparent", color: "#555" }}>
+                  Remove
+                </button>
+              )}
+            </div>
+          )}
+          {!isCustom && <div style={{ fontSize: 11, color: "#555", padding: "4px 0 6px" }}>{v?.n}</div>}
+          <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 6 }}>
+            Suggested modification: <span style={{ color: "#e5e7eb" }}>{workoutSuggestion.modification}</span>
+          </div>
+          <div style={{ fontSize: 10, color: "#666", marginBottom: 6 }}>
+            Reason: {workoutSuggestion.reason}
+          </div>
+          <div style={{ display: "flex", gap: 8, marginBottom: 6 }}>
+            {fieldInput("Sets", "sets", v?.sets)}
+            {fieldInput("Reps", "reps", v?.reps)}
+            {fieldInput("Load", "load", v?.load)}
+          </div>
+          {v?.note && <div style={{ fontSize: 11, color: "#555", lineHeight: 1.4, paddingTop: 5, borderTop: "1px solid #1a1a1a", marginBottom: 4 }}>{v.note}</div>}
+          {!isCustom && injuryTag(getInjuryNote(
+            ex.fi === "shoulder" ? ["Shoulder"] : ex.fi === "toe" ? ["Toe", "Ankle"] : null
+          ))}
+          {(() => { const flag = getExerciseFlag(ex.n, ocItems); return flag.flagged ? (
+            <div style={{ fontSize: 11, color: "#ff8c42", marginTop: 4, display: "flex", alignItems: "flex-start", gap: 4 }}>
+              <span style={{ flexShrink: 0 }}>●</span>
+              <span>{flag.note}</span>
+            </div>
+          ) : null })()}
+          <textarea value={(isCustom ? ex.notes : f.notes) || ""}
+            onChange={e => isCustom ? setCustomExF(day, ex.id, "notes", e.target.value) : setF(day, ex.id, "notes", e.target.value)}
+            placeholder="Session note (optional)" rows={1}
+            style={{ width: "100%", marginTop: 4, padding: "4px 7px", border: "0.5px solid #1e1e1e", borderRadius: 5, fontSize: 11, color: "#666", background: "#111", fontFamily: "inherit", resize: "none", outline: "none" }} />
+          {guideOpenIds.has(ex.id) && (
+            <ExerciseGuidePanel
+              exId={ex.id}
+              exName={ex.n || ex.name || ""}
+              exNote={v?.note || ex.note || ex.notes || ""}
+              dbId={ex.dbId || null}
+            />
+          )}
+        </div>
+      </>
+    )
+
     return (
-      <div key={ex.id} style={{ marginTop: 10, border: `0.5px solid ${chg ? "#d97706" : "#1e1e1e"}`, borderRadius: 7, overflow: "hidden", opacity: includedInLog ? 1 : 0.92 }}>
+      <div key={ex.id} style={{ marginTop: 10, border: `0.5px solid ${chg ? "#d97706" : "#1e1e1e"}`, borderRadius: 7, overflow: "hidden", opacity: includedInLog ? 1 : 0.92, position: quickLog ? "relative" : "static" }}>
         {quickLog ? (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", borderBottom: !collapsed ? "1px solid #0d0e1c" : "none", minHeight: 40, background: "#0d0d0d" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", borderBottom: "1px solid #0d0e1c", minHeight: 40, background: checkedExIds?.has(ex.id) ? "rgba(74,158,232,0.06)" : "transparent" }}>
             <input
               type="checkbox"
               checked={quickChecked}
-              onChange={toggleQuickExercise}
-              style={{ width: 16, height: 16, cursor: "pointer", flexShrink: 0, accentColor: "#4a9ee8" }}
+              onChange={() => setCheckedExIds(prev => {
+                const next = new Set(prev)
+                next.has(ex.id) ? next.delete(ex.id) : next.add(ex.id)
+                return next
+              })}
+              style={{ width: 15, height: 15, cursor: "pointer", flexShrink: 0, accentColor: "#4a9ee8" }}
             />
             <span
-              onClick={toggleExpanded}
-              style={{ flex: 1, fontSize: 12, color: quickChecked ? "#555" : "#d8d8d8", cursor: "pointer", textDecoration: quickChecked ? "line-through" : "none" }}
+              onClick={() => setExpandedCards(prev => ({ ...prev, [ex.id]: !prev[ex.id] }))}
+              style={{ flex: 1, fontSize: 12, cursor: "pointer", color: quickChecked ? "#444" : "#d8d8d8", textDecoration: quickChecked ? "line-through" : "none" }}
             >
               {ex.n || ex.name}
             </span>
             <span style={{ fontSize: 11, color: "#555", flexShrink: 0 }}>
-              {displaySummary}
+              {(v?.sets || ex.def?.[0]?.[0] || "3")}×{(v?.reps || ex.def?.[0]?.[1] || "—")} @ {(v?.load || ex.def?.[0]?.[2] || "—")}
             </span>
-            {historySparkline && (
-              <svg width="44" height="16" viewBox="0 0 80 24" style={{ flexShrink: 0, opacity: 0.8 }}>
-                <polyline points={historySparkline.pts} fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" />
-              </svg>
-            )}
             <button
               onClick={() => toggleGuide(ex.id)}
               style={{ fontSize: 10, color: "#3d5a78", background: "transparent", border: "none", cursor: "pointer", padding: "2px 4px", flexShrink: 0 }}
             >
               form
             </button>
+            {expandedCards[ex.id] && (
+              <div style={{ position: "absolute", left: 0, right: 0, top: "100%", zIndex: 100, background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: 6, padding: 10, marginTop: 4 }}>
+                {expandedEditor}
+              </div>
+            )}
           </div>
         ) : (
           <div
@@ -3751,63 +3813,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
             </div>
           </div>
         )}
-        {!collapsed && (
-          <>
-            <div style={{ padding: "0 12px 8px", background: "#0a0a0a", borderTop: "1px solid #151515" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", padding: "8px 0 6px", flexWrap: "wrap" }}>
-                <div style={{ fontSize: 11, color: "#7b8794" }}>{v?.n || null}</div>
-                <div style={{ fontSize: 11, color: "#cbd5e1" }}>{formatRxSummary(displaySets, displayReps, displayLoad)}</div>
-              </div>
-            </div>
-            <div style={{ padding: "4px 12px 10px", background: "#0a0a0a", borderTop: "1px solid #1a1a1a" }}>
-              {quickLog && (
-                <div style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap", marginBottom: 6 }}>
-                  {variantControls}
-                  {isCustom && (
-                    <button onClick={() => removeCustomExercise(day, ex.id)}
-                      style={{ padding: "3px 7px", borderRadius: 4, fontSize: 10, cursor: "pointer", border: "0.5px solid #333", background: "transparent", color: "#555" }}>
-                      Remove
-                    </button>
-                  )}
-                </div>
-              )}
-              {!isCustom && <div style={{ fontSize: 11, color: "#555", padding: "4px 0 6px" }}>{v?.n}</div>}
-              <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 6 }}>
-                Suggested modification: <span style={{ color: "#e5e7eb" }}>{workoutSuggestion.modification}</span>
-              </div>
-              <div style={{ fontSize: 10, color: "#666", marginBottom: 6 }}>
-                Reason: {workoutSuggestion.reason}
-              </div>
-              <div style={{ display: "flex", gap: 8, marginBottom: 6 }}>
-                {fieldInput("Sets", "sets", v?.sets)}
-                {fieldInput("Reps", "reps", v?.reps)}
-                {fieldInput("Load", "load", v?.load)}
-              </div>
-              {v?.note && <div style={{ fontSize: 11, color: "#555", lineHeight: 1.4, paddingTop: 5, borderTop: "1px solid #1a1a1a", marginBottom: 4 }}>{v.note}</div>}
-              {!isCustom && injuryTag(getInjuryNote(
-                ex.fi === "shoulder" ? ["Shoulder"] : ex.fi === "toe" ? ["Toe", "Ankle"] : null
-              ))}
-              {(() => { const flag = getExerciseFlag(ex.n, ocItems); return flag.flagged ? (
-                <div style={{ fontSize: 11, color: "#ff8c42", marginTop: 4, display: "flex", alignItems: "flex-start", gap: 4 }}>
-                  <span style={{ flexShrink: 0 }}>●</span>
-                  <span>{flag.note}</span>
-                </div>
-              ) : null })()}
-              <textarea value={(isCustom ? ex.notes : f.notes) || ""}
-                onChange={e => isCustom ? setCustomExF(day, ex.id, "notes", e.target.value) : setF(day, ex.id, "notes", e.target.value)}
-                placeholder="Session note (optional)" rows={1}
-                style={{ width: "100%", marginTop: 4, padding: "4px 7px", border: "0.5px solid #1e1e1e", borderRadius: 5, fontSize: 11, color: "#666", background: "#111", fontFamily: "inherit", resize: "none", outline: "none" }} />
-              {guideOpenIds.has(ex.id) && (
-                <ExerciseGuidePanel
-                  exId={ex.id}
-                  exName={ex.n || ex.name || ""}
-                  exNote={v?.note || ex.note || ex.notes || ""}
-                  dbId={ex.dbId || null}
-                />
-              )}
-            </div>
-          </>
-        )}
+        {!quickLog && !collapsed && expandedEditor}
       </div>
     )
   }
