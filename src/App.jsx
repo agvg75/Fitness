@@ -1705,6 +1705,20 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
   const readiness = rd.score
   const readinessColor = readiness >= 80 ? "#4ade80" : readiness >= 60 ? "#fbbf24" : readiness >= 40 ? "#f97316" : "#ef4444"
   const active = rd.active
+  const mapItems = useMemo(() => {
+    const sorted = [...ocItems].sort((a, b) => {
+      const aDate = String(a.lastResolvedDate || a.startDate || "")
+      const bDate = String(b.lastResolvedDate || b.startDate || "")
+      return bDate.localeCompare(aDate)
+    })
+    const seen = new Set()
+    return sorted.filter(item => {
+      const key = `${item.key}__${item.location}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+  }, [ocItems])
   const maxReg = active.filter(i => OC_KEY_META[i.key]?.scope === "regional").reduce((m, i) => Math.max(m, i.currentScore), 0)
   const maxGlb = active.filter(i => OC_KEY_META[i.key]?.scope === "global").reduce((m, i) => Math.max(m, i.currentScore), 0)
 
@@ -1869,23 +1883,23 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
   const renderSilhouette = side => {
     const ck = side === "front" ? "f" : "b"
     const handleBodyMapClick = (x, y) => {
-      const candidates = active
-        .map(item => {
-          const coords = OC_REGION_COORDS[item.location]?.[ck]
+      const candidates = OC_BODY_REGIONS
+        .map(location => {
+          const coords = OC_REGION_COORDS[location]?.[ck]
           if (!coords) return null
           const dx = coords[0] - x * 100
           const dy = coords[1] - y * 100
-          return { id: item.id, distance: Math.hypot(dx, dy) }
+          return { location, distance: Math.hypot(dx, dy) }
         })
         .filter(Boolean)
         .sort((a, b) => a.distance - b.distance)
 
       const nearest = candidates[0]
       if (!nearest) {
-        setSelectedId(null)
         return
       }
-      setSelectedId(prev => prev === nearest.id ? null : nearest.id)
+      setAddForm(prev => ({ ...prev, location: nearest.location }))
+      setSelectedId(null)
     }
     return (
       <div style={{ position: "relative" }}>
@@ -1898,23 +1912,28 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
             handleBodyMapClick(x, y)
           }}
         />
-        {active.map(item => {
+        {mapItems.map(item => {
           const coords = OC_REGION_COORDS[item.location]?.[ck]
           if (!coords) return null
           const meta = OC_KEY_META[item.key] || OC_KEY_META.muscleStatus
-          const sz = 8 + item.currentScore * 4
+          const isResolved = Number(item.currentScore || 0) === 0
+          const sz = isResolved ? 10 : 8 + item.currentScore * 4
           const chronic = item.chronicity === "chronic"
           return (
             <div
               key={item.id}
-              onClick={() => setSelectedId(selectedId === item.id ? null : item.id)}
+              onClick={e => {
+                e.stopPropagation()
+                setSelectedId(selectedId === item.id ? null : item.id)
+              }}
               title={`${item.location} — ${SCORE_LABELS[item.currentScore]}`}
               style={{
                 position: "absolute", left: `${coords[0]}%`, top: `${coords[1]}%`,
                 width: sz, height: sz, borderRadius: "50%",
                 transform: "translate(-50%, -50%)",
-                background: chronic ? "transparent" : meta.color,
-                border: `2px solid ${meta.color}`,
+                opacity: isResolved ? 0.25 : 1,
+                background: isResolved || chronic ? "transparent" : meta.color,
+                border: isResolved ? "1.5px solid #444" : `2px solid ${meta.color}`,
                 boxShadow: selectedId === item.id ? `0 0 10px ${meta.color}` : "none",
                 cursor: "pointer", zIndex: 10, transition: "box-shadow 0.15s",
               }}
@@ -2226,7 +2245,7 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
         {/* RIGHT: Body map silhouettes */}
         <div style={cardStyle()}>
           <div style={{ fontSize: "10px", letterSpacing: "0.15em", textTransform: "uppercase", color: "#555", marginBottom: "10px" }}>
-            Body Map — tap a dot to inspect
+            Body Map — tap a region to log
           </div>
           <div style={{ display: "flex", gap: "16px", justifyContent: "center", alignItems: "flex-start" }}>
             {["front", "back"].map(side => (
@@ -2254,6 +2273,14 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
               )}
             </div>
             <button onClick={() => setSelectedId(null)} style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: "16px", lineHeight: 1 }}>✕</button>
+          </div>
+          <div style={{ display: "grid", gap: "4px", fontSize: "11px", color: "#667", marginBottom: "12px" }}>
+            <span>Location: {selectedItem.location}</span>
+            {Number(selectedItem.currentScore || 0) === 0 && (
+              <span>Resolved — last active {fmtShortDate(String(selectedItem.lastResolvedDate || selectedItem.startDate || "").slice(0, 10))}</span>
+            )}
+            <span>Episode count: {selectedItem.episodeCount || 0}</span>
+            <span>Peak score: {Math.max(Number(selectedItem.initialScore || 0), Number(selectedItem.currentScore || 0))}/5</span>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: window.innerWidth < 600 ? "1fr" : "1fr 1fr", gap: "16px", marginBottom: "12px" }}>
             <div>
