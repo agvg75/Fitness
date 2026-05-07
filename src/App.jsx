@@ -4300,7 +4300,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
                           "bicep curl": "Biceps Curl",
                           "bicep curls (db / bb)": "Biceps Curl",
                           "biceps curl — db/bb palms up": "Biceps Curl",
-                          "biceps curl — cable rope neutral": "Biceps Curl — Cable",
+                          "biceps curl — cable rope neutral": "Biceps Curl",
                           "biceps curl (db/bb)": "Biceps Curl",
                           "bicep curls — cable / rope (neutral grip)": "Biceps Curl — Cable Rope",
                           "hammer curls": "Hammer Curl",
