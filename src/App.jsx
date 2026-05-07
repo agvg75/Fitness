@@ -4220,7 +4220,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
           )}
 
           {/* Main program */}
-          <div style={{ border: "0.5px solid #1a1a1a", borderRadius: 8, marginBottom: 10, overflow: "hidden" }}>
+          <div style={{ border: "0.5px solid #1a1a1a", borderRadius: 8, marginBottom: 10, overflow: "visible" }}>
             {secHdr("main", "Main Program", "#185FA5", `${prog.exercises?.filter(ex => isChecked(activeDay, "exercise", ex.id)).length || 0}/${prog.exercises?.length || 0} selected`)}
             {openSections.main && (
               <div style={{ padding: "4px 14px 12px" }}>
@@ -4241,7 +4241,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
                   : <div style={{ textAlign: "center", padding: 16, color: "#444", fontSize: 13 }}>Active recovery — no resistance training today.</div>}
                 {getCustomExercises(activeDay).map(ex => exCard(ex, activeDay, true))}
                 {inlineExForm === activeDay ? (
-                  <div style={{ marginTop: 8, padding: "8px", background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: 6, position: "relative" }}>
+                  <div style={{ marginTop: 8, padding: "8px", background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: 6, position: "static" }}>
                     <input
                       autoFocus
                       value={inlineExName}
