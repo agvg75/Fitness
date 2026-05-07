@@ -1364,11 +1364,14 @@ const OC_REGION_COORDS = {
 
 // Body silhouette images — coordinates in OC_REGION_COORDS are CSS percentages
 // (0–100) of the container's width/height, matching the 364×952 PNG dimensions.
-function BodySilhouetteImg({ side }) {
+function BodySilhouetteImg({ side, onClick = null }) {
   const src = side === "back" ? "/back_body_holo.png" : "/front_body_holo.png"
   return (
-    <div style={{ width: "100%", aspectRatio: "364 / 952", position: "relative", overflow: "hidden", borderRadius: 8 }}>
-      <img src={src} alt={side + " body"} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain" }} />
+    <div
+      onClick={onClick}
+      style={{ width: "100%", aspectRatio: "364 / 952", position: "relative", overflow: "hidden", borderRadius: 8, cursor: onClick ? "crosshair" : "default" }}
+    >
+      <img src={src} alt={side + " body"} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", pointerEvents: "none" }} />
     </div>
   )
 }// Keep a thin shim so any remaining references compile during transition
@@ -1865,9 +1868,36 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
 
   const renderSilhouette = side => {
     const ck = side === "front" ? "f" : "b"
+    const handleBodyMapClick = (x, y) => {
+      const candidates = active
+        .map(item => {
+          const coords = OC_REGION_COORDS[item.location]?.[ck]
+          if (!coords) return null
+          const dx = coords[0] - x * 100
+          const dy = coords[1] - y * 100
+          return { id: item.id, distance: Math.hypot(dx, dy) }
+        })
+        .filter(Boolean)
+        .sort((a, b) => a.distance - b.distance)
+
+      const nearest = candidates[0]
+      if (!nearest) {
+        setSelectedId(null)
+        return
+      }
+      setSelectedId(prev => prev === nearest.id ? null : nearest.id)
+    }
     return (
       <div style={{ position: "relative" }}>
-        <BodySilhouetteImg side={side} />
+        <BodySilhouetteImg
+          side={side}
+          onClick={(e) => {
+            const rect = e.currentTarget.getBoundingClientRect()
+            const x = (e.clientX - rect.left) / rect.width
+            const y = (e.clientY - rect.top) / rect.height
+            handleBodyMapClick(x, y)
+          }}
+        />
         {active.map(item => {
           const coords = OC_REGION_COORDS[item.location]?.[ck]
           if (!coords) return null
@@ -2201,7 +2231,6 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
           <div style={{ display: "flex", gap: "16px", justifyContent: "center", alignItems: "flex-start" }}>
             {["front", "back"].map(side => (
               <div key={side} style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: "9px", color: "#444", textAlign: "center", marginBottom: "3px", letterSpacing: "0.1em" }}>{side.toUpperCase()}</div>
                 <div style={{ flex: 1, minWidth: 0 }}>{renderSilhouette(side)}</div>
               </div>
             ))}
@@ -2541,9 +2570,16 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const [inlineExResults, setInlineExResults] = useState([]) // [{name, dbId, source}]
   const [highlightedLogEntryId, setHighlightedLogEntryId] = useState(null)
   const [showSetTimer, setShowSetTimer] = useState(false)
+  const [quickLog, setQuickLog] = useState(false)
   const [expandedCards, setExpandedCards] = useState({})
+  const [checkedExIds, setCheckedExIds] = useState(new Set())
   const [guideOpenIds, setGuideOpenIds] = React.useState(new Set())
   const toggleGuide = id => setGuideOpenIds(prev => {
+    const next = new Set(prev)
+    next.has(id) ? next.delete(id) : next.add(id)
+    return next
+  })
+  const toggleChecked = id => setCheckedExIds(prev => {
     const next = new Set(prev)
     next.has(id) ? next.delete(id) : next.add(id)
     return next
@@ -2975,6 +3011,66 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       const updated = { ...prev, [day]: arr }
       saveScheduleKey("wt-custom-exercises", updated)
       return updated
+    })
+  }
+
+  const getLastLoggedExerciseValues = (exerciseName, exerciseId = null) => {
+    const lower = String(exerciseName || "").toLowerCase()
+    if (!lower || !Array.isArray(schedLog) || !schedLog.length) return null
+    for (const sessionEntry of schedLog) {
+      const match = (sessionEntry?.exercises || []).find(entry => {
+        const entryName = String(entry?.exercise_name || entry?.name || "").toLowerCase()
+        if (!entryName) return false
+        if (exerciseId && String(entry?.exercise_id || "") === String(exerciseId)) return true
+        return entryName === lower || entryName.includes(lower) || lower.includes(entryName.split(" ")[0] || "")
+      })
+      if (!match) continue
+      const actual = match.actual || {}
+      return {
+        sets: String(actual.sets ?? match.sets ?? match.prescribed?.sets ?? ""),
+        reps: String(actual.reps ?? match.reps ?? match.prescribed?.reps ?? ""),
+        load: String(actual.load ?? match.load ?? match.prescribed?.load ?? ""),
+      }
+    }
+    return null
+  }
+
+  const fillQuickLogExercise = (day, ex, isCustom = false) => {
+    const nextValues = getLastLoggedExerciseValues(ex.n || ex.name, ex.id) || (
+      isCustom
+        ? {
+            sets: String(ex.sets ?? "3"),
+            reps: String(ex.reps ?? "10"),
+            load: String(ex.load ?? ""),
+          }
+        : (() => {
+            const f = getF(day, ex.id)
+            return {
+              sets: String(f.sets ?? ""),
+              reps: String(f.reps ?? ""),
+              load: String(f.load ?? ""),
+            }
+          })()
+    )
+
+    if (isCustom) {
+      setCustomExF(day, ex.id, "sets", nextValues.sets)
+      setCustomExF(day, ex.id, "reps", nextValues.reps)
+      setCustomExF(day, ex.id, "load", nextValues.load)
+      return
+    }
+
+    setFields(prev => {
+      const k = `${day}_${ex.id}`
+      return {
+        ...prev,
+        [k]: {
+          ...(prev[k] || {}),
+          sets: nextValues.sets,
+          reps: nextValues.reps,
+          load: nextValues.load,
+        }
+      }
     })
   }
 
@@ -3483,16 +3579,55 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     const v = isCustom ? ex : ex.variants?.[vk]
     const f = isCustom ? ex : getF(day, ex.id)
     const chg = isCustom ? false : isChanged(day, ex.id)
-    const checked = isChecked(day, "exercise", ex.id)
-    const collapsed = expandedCards[cardKey] == null ? isMobileLayout : !expandedCards[cardKey]
+    const includedInLog = isChecked(day, "exercise", ex.id)
+    const quickChecked = checkedExIds.has(ex.id)
+    const collapsed = expandedCards[cardKey] == null ? (quickLog ? true : isMobileLayout) : !expandedCards[cardKey]
     const vColors = { machine: "#3b82f6", db: "#22c55e", friendly: "#f97316" }
-    const vBgs    = { machine: "rgba(59,130,246,0.12)", db: "rgba(34,197,94,0.12)", friendly: "rgba(249,115,22,0.12)" }
+    const vBgs = { machine: "rgba(59,130,246,0.12)", db: "rgba(34,197,94,0.12)", friendly: "rgba(249,115,22,0.12)" }
     const fl = ex.fi === "toe" ? "Toe-safe" : "Shoulder-safe"
     const workoutSuggestion = chooseTodayWorkout(
       { type: "strength", modality: "strength", name: ex.n },
       progressionReadiness,
       tendonStatus
     )
+    const history = !isCustom ? getExerciseHistory(ex.n, schedLog) : []
+    const historySparkline = !isCustom && history.length >= 3 ? (() => {
+      const weights = history.map(h => h.weight)
+      const minW = Math.min(...weights)
+      const maxW = Math.max(...weights)
+      const range = maxW - minW || 1
+      const pts = weights.map((w, i) => `${(i / (weights.length - 1)) * 78 + 1},${23 - ((w - minW) / range) * 22}`).join(" ")
+      const lastW = weights[weights.length - 1]
+      const last3Same = weights.slice(-3).every(w => w === lastW)
+      const suggested = last3Same && readinessScore >= 70 ? lastW + 5 : readinessScore < 60 ? Math.round(lastW * 0.9) : lastW
+      return { pts, suggested }
+    })() : null
+    const displaySets = resolveEditableField(f, "sets", v?.sets)
+    const displayReps = resolveEditableField(f, "reps", v?.reps)
+    const displayLoad = resolveEditableField(f, "load", v?.load)
+    const displaySummary = `${displaySets || "—"}×${displayReps || "—"} @ ${displayLoad || "—"}`
+
+    const toggleExpanded = () => setExpandedCards(prev => ({ ...prev, [cardKey]: collapsed }))
+    const toggleQuickExercise = () => {
+      const willCheck = !checkedExIds.has(ex.id)
+      if (willCheck) fillQuickLogExercise(day, ex, isCustom)
+      toggleChecked(ex.id)
+    }
+
+    const variantControls = !isCustom && Object.keys(ex.variants || {}).length > 1 && ["machine", "db", "friendly"].map(k => {
+      if (!ex.variants[k]) return null
+      const lbl = k === "machine" ? "Machine" : k === "db" ? "DB" : fl
+      const active = vk === k
+      return (
+        <button
+          key={k}
+          onClick={() => setVariantFn(day, ex.id, k)}
+          style={{ padding: "3px 7px", borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: "pointer", border: `0.5px solid ${active ? vColors[k] : "#222"}`, background: active ? vBgs[k] : "transparent", color: active ? vColors[k] : "#444" }}
+        >
+          {lbl}
+        </button>
+      )
+    })
 
     const fieldInput = (lbl, fKey, rxVal) => (
       <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 3 }}>
@@ -3505,125 +3640,146 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     )
 
     return (
-      <div key={ex.id} style={{ marginTop: 10, border: `0.5px solid ${chg ? "#d97706" : "#1e1e1e"}`, borderRadius: 7, overflow: "hidden", opacity: checked ? 1 : 0.92 }}>
-        <div
-          onClick={() => setExpandedCards(prev => ({ ...prev, [cardKey]: collapsed }))}
-          style={{ padding: "8px 12px 7px", display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, flexWrap: "wrap", background: "#0d0d0d", cursor: "pointer" }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+      <div key={ex.id} style={{ marginTop: 10, border: `0.5px solid ${chg ? "#d97706" : "#1e1e1e"}`, borderRadius: 7, overflow: "hidden", opacity: includedInLog ? 1 : 0.92 }}>
+        {quickLog ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", borderBottom: !collapsed ? "1px solid #0d0e1c" : "none", minHeight: 40, background: "#0d0d0d" }}>
             <input
               type="checkbox"
-              checked={checked}
-              onChange={e => {
-                e.stopPropagation()
-                toggleCheck(day, "exercise", ex.id)
-              }}
-              onClick={e => e.stopPropagation()}
-              style={{ accentColor: "#4a9ee8", width: 14, height: 14, cursor: "pointer" }}
+              checked={quickChecked}
+              onChange={toggleQuickExercise}
+              style={{ width: 16, height: 16, cursor: "pointer", flexShrink: 0, accentColor: "#4a9ee8" }}
             />
-            <span style={{ fontSize: 13, fontWeight: 600, color: "#d8d8d8" }}>{ex.n}</span>
-            {chg && <span style={{ fontSize: 9, fontWeight: 700, color: "#d97706", background: "rgba(217,119,6,0.15)", borderRadius: 3, padding: "1px 5px" }}>modified</span>}
-            {isCustom && <span style={{ fontSize: 9, color: "#7F77DD", background: "rgba(127,119,221,0.15)", borderRadius: 3, padding: "1px 5px" }}>custom</span>}
-            {!checked && <span style={{ fontSize: 9, fontWeight: 700, color: "#9ca3af", background: "rgba(148,163,184,0.16)", borderRadius: 3, padding: "1px 5px" }}>excluded from log</span>}
-            {!isCustom && (() => {
-              const hist = getExerciseHistory(ex.n, schedLog)
-              if (hist.length < 3) return null
-              const weights = hist.map(h => h.weight)
-              const minW = Math.min(...weights), maxW = Math.max(...weights)
-              const range = maxW - minW || 1
-              const pts = weights.map((w, i) => `${(i / (weights.length - 1)) * 78 + 1},${23 - ((w - minW) / range) * 22}`).join(" ")
-              const lastW = weights[weights.length - 1]
-              const last3Same = weights.slice(-3).every(w => w === lastW)
-              const suggested = last3Same && readinessScore >= 70 ? lastW + 5 : readinessScore < 60 ? Math.round(lastW * 0.9) : lastW
-              return (
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-                  <svg width="80" height="24" style={{ verticalAlign: "middle" }}>
-                    <polyline points={pts} fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" />
-                  </svg>
-                  <span style={{ fontSize: 10, color: "#666" }}>Suggested: {suggested} lb</span>
-                </span>
-              )
-            })()}
-          </div>
-          <div style={{ display: "flex", gap: 4, alignItems: "center" }} onClick={e => e.stopPropagation()}>
-            {!isCustom && Object.keys(ex.variants || {}).length > 1 && ["machine", "db", "friendly"].map(k => {
-              if (!ex.variants[k]) return null
-              const lbl = k === "machine" ? "Machine" : k === "db" ? "DB" : fl
-              const active = vk === k
-              return (
-                <button key={k} onClick={() => setVariantFn(day, ex.id, k)}
-                  style={{ padding: "3px 7px", borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: "pointer", border: `0.5px solid ${active ? vColors[k] : "#222"}`, background: active ? vBgs[k] : "transparent", color: active ? vColors[k] : "#444" }}>
-                  {lbl}
-                </button>
-              )
-            })}
-            {isCustom && (
-              <button onClick={() => removeCustomExercise(day, ex.id)}
-                style={{ padding: "3px 7px", borderRadius: 4, fontSize: 10, cursor: "pointer", border: "0.5px solid #333", background: "transparent", color: "#555" }}>
-                Remove
-              </button>
+            <span
+              onClick={toggleExpanded}
+              style={{ flex: 1, fontSize: 12, color: quickChecked ? "#555" : "#d8d8d8", cursor: "pointer", textDecoration: quickChecked ? "line-through" : "none" }}
+            >
+              {ex.n || ex.name}
+            </span>
+            <span style={{ fontSize: 11, color: "#555", flexShrink: 0 }}>
+              {displaySummary}
+            </span>
+            {historySparkline && (
+              <svg width="44" height="16" viewBox="0 0 80 24" style={{ flexShrink: 0, opacity: 0.8 }}>
+                <polyline points={historySparkline.pts} fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" />
+              </svg>
             )}
             <button
               onClick={() => toggleGuide(ex.id)}
-              title="Toggle form guide"
-              style={{
-                padding: "2px 8px", borderRadius: 4, fontSize: 10, fontWeight: 600,
-                cursor: "pointer", marginLeft: 2,
-                border: `0.5px solid ${guideOpenIds.has(ex.id) ? "#3b5a8e" : "#1e2a3a"}`,
-                background: guideOpenIds.has(ex.id) ? "rgba(74,158,232,0.15)" : "transparent",
-                color: guideOpenIds.has(ex.id) ? "#4a9ee8" : "#3d5a78",
-              }}
+              style={{ fontSize: 10, color: "#3d5a78", background: "transparent", border: "none", cursor: "pointer", padding: "2px 4px", flexShrink: 0 }}
             >
               form
             </button>
-            <div style={{ fontSize: 11, color: "#555", marginLeft: 4 }}>{collapsed ? "▸" : "▾"}</div>
           </div>
-        </div>
-        {!collapsed && (
-        <>
-        <div style={{ padding: "0 12px 8px", background: "#0a0a0a", borderTop: "1px solid #151515" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", padding: "8px 0 6px", flexWrap: "wrap" }}>
-            <div style={{ fontSize: 11, color: "#7b8794" }}>{v?.n || null}</div>
-            <div style={{ fontSize: 11, color: "#cbd5e1" }}>{formatRxSummary(resolveEditableField(f, "sets", v?.sets), resolveEditableField(f, "reps", v?.reps), resolveEditableField(f, "load", v?.load))}</div>
-          </div>
-        </div>
-        <div style={{ padding: "4px 12px 10px", background: "#0a0a0a", borderTop: "1px solid #1a1a1a" }}>
-          {!isCustom && <div style={{ fontSize: 11, color: "#555", padding: "4px 0 6px" }}>{v?.n}</div>}
-          <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 6 }}>
-            Suggested modification: <span style={{ color: "#e5e7eb" }}>{workoutSuggestion.modification}</span>
-          </div>
-          <div style={{ fontSize: 10, color: "#666", marginBottom: 6 }}>
-            Reason: {workoutSuggestion.reason}
-          </div>
-          <div style={{ display: "flex", gap: 8, marginBottom: 6 }}>
-            {fieldInput("Sets", "sets", v?.sets)}
-            {fieldInput("Reps", "reps", v?.reps)}
-            {fieldInput("Load", "load", v?.load)}
-          </div>
-          {v?.note && <div style={{ fontSize: 11, color: "#555", lineHeight: 1.4, paddingTop: 5, borderTop: "1px solid #1a1a1a", marginBottom: 4 }}>{v.note}</div>}
-          {!isCustom && injuryTag(getInjuryNote(
-            ex.fi === "shoulder" ? ["Shoulder"] : ex.fi === "toe" ? ["Toe", "Ankle"] : null
-          ))}
-          {(() => { const flag = getExerciseFlag(ex.n, ocItems); return flag.flagged ? (
-            <div style={{ fontSize: 11, color: "#ff8c42", marginTop: 4, display: "flex", alignItems: "flex-start", gap: 4 }}>
-              <span style={{ flexShrink: 0 }}>●</span>
-              <span>{flag.note}</span>
+        ) : (
+          <div
+            onClick={toggleExpanded}
+            style={{ padding: "8px 12px 7px", display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, flexWrap: "wrap", background: "#0d0d0d", cursor: "pointer" }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+              <input
+                type="checkbox"
+                checked={includedInLog}
+                onChange={e => {
+                  e.stopPropagation()
+                  toggleCheck(day, "exercise", ex.id)
+                }}
+                onClick={e => e.stopPropagation()}
+                style={{ accentColor: "#4a9ee8", width: 14, height: 14, cursor: "pointer" }}
+              />
+              <span style={{ fontSize: 13, fontWeight: 600, color: "#d8d8d8" }}>{ex.n}</span>
+              {chg && <span style={{ fontSize: 9, fontWeight: 700, color: "#d97706", background: "rgba(217,119,6,0.15)", borderRadius: 3, padding: "1px 5px" }}>modified</span>}
+              {isCustom && <span style={{ fontSize: 9, color: "#7F77DD", background: "rgba(127,119,221,0.15)", borderRadius: 3, padding: "1px 5px" }}>custom</span>}
+              {!includedInLog && <span style={{ fontSize: 9, fontWeight: 700, color: "#9ca3af", background: "rgba(148,163,184,0.16)", borderRadius: 3, padding: "1px 5px" }}>excluded from log</span>}
+              {historySparkline && (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                  <svg width="80" height="24" style={{ verticalAlign: "middle" }}>
+                    <polyline points={historySparkline.pts} fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" />
+                  </svg>
+                  <span style={{ fontSize: 10, color: "#666" }}>Suggested: {historySparkline.suggested} lb</span>
+                </span>
+              )}
             </div>
-          ) : null })()}
-          <textarea value={(isCustom ? ex.notes : f.notes) || ""}
-            onChange={e => isCustom ? setCustomExF(day, ex.id, "notes", e.target.value) : setF(day, ex.id, "notes", e.target.value)}
-            placeholder="Session note (optional)" rows={1}
-            style={{ width: "100%", marginTop: 4, padding: "4px 7px", border: "0.5px solid #1e1e1e", borderRadius: 5, fontSize: 11, color: "#666", background: "#111", fontFamily: "inherit", resize: "none", outline: "none" }} />
-          {guideOpenIds.has(ex.id) && (
-            <ExerciseGuidePanel
-              exId={ex.id}
-              exName={ex.n || ex.name || ""}
-              exNote={v?.note || ex.note || ex.notes || ""}
-              dbId={ex.dbId || null}
-            />
-          )}
-        </div>
-        </>
+            <div style={{ display: "flex", gap: 4, alignItems: "center" }} onClick={e => e.stopPropagation()}>
+              {variantControls}
+              {isCustom && (
+                <button onClick={() => removeCustomExercise(day, ex.id)}
+                  style={{ padding: "3px 7px", borderRadius: 4, fontSize: 10, cursor: "pointer", border: "0.5px solid #333", background: "transparent", color: "#555" }}>
+                  Remove
+                </button>
+              )}
+              <button
+                onClick={() => toggleGuide(ex.id)}
+                title="Toggle form guide"
+                style={{
+                  padding: "2px 8px", borderRadius: 4, fontSize: 10, fontWeight: 600,
+                  cursor: "pointer", marginLeft: 2,
+                  border: `0.5px solid ${guideOpenIds.has(ex.id) ? "#3b5a8e" : "#1e2a3a"}`,
+                  background: guideOpenIds.has(ex.id) ? "rgba(74,158,232,0.15)" : "transparent",
+                  color: guideOpenIds.has(ex.id) ? "#4a9ee8" : "#3d5a78",
+                }}
+              >
+                form
+              </button>
+              <div style={{ fontSize: 11, color: "#555", marginLeft: 4 }}>{collapsed ? "▸" : "▾"}</div>
+            </div>
+          </div>
+        )}
+        {!collapsed && (
+          <>
+            <div style={{ padding: "0 12px 8px", background: "#0a0a0a", borderTop: "1px solid #151515" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", padding: "8px 0 6px", flexWrap: "wrap" }}>
+                <div style={{ fontSize: 11, color: "#7b8794" }}>{v?.n || null}</div>
+                <div style={{ fontSize: 11, color: "#cbd5e1" }}>{formatRxSummary(displaySets, displayReps, displayLoad)}</div>
+              </div>
+            </div>
+            <div style={{ padding: "4px 12px 10px", background: "#0a0a0a", borderTop: "1px solid #1a1a1a" }}>
+              {quickLog && (
+                <div style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap", marginBottom: 6 }}>
+                  {variantControls}
+                  {isCustom && (
+                    <button onClick={() => removeCustomExercise(day, ex.id)}
+                      style={{ padding: "3px 7px", borderRadius: 4, fontSize: 10, cursor: "pointer", border: "0.5px solid #333", background: "transparent", color: "#555" }}>
+                      Remove
+                    </button>
+                  )}
+                </div>
+              )}
+              {!isCustom && <div style={{ fontSize: 11, color: "#555", padding: "4px 0 6px" }}>{v?.n}</div>}
+              <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 6 }}>
+                Suggested modification: <span style={{ color: "#e5e7eb" }}>{workoutSuggestion.modification}</span>
+              </div>
+              <div style={{ fontSize: 10, color: "#666", marginBottom: 6 }}>
+                Reason: {workoutSuggestion.reason}
+              </div>
+              <div style={{ display: "flex", gap: 8, marginBottom: 6 }}>
+                {fieldInput("Sets", "sets", v?.sets)}
+                {fieldInput("Reps", "reps", v?.reps)}
+                {fieldInput("Load", "load", v?.load)}
+              </div>
+              {v?.note && <div style={{ fontSize: 11, color: "#555", lineHeight: 1.4, paddingTop: 5, borderTop: "1px solid #1a1a1a", marginBottom: 4 }}>{v.note}</div>}
+              {!isCustom && injuryTag(getInjuryNote(
+                ex.fi === "shoulder" ? ["Shoulder"] : ex.fi === "toe" ? ["Toe", "Ankle"] : null
+              ))}
+              {(() => { const flag = getExerciseFlag(ex.n, ocItems); return flag.flagged ? (
+                <div style={{ fontSize: 11, color: "#ff8c42", marginTop: 4, display: "flex", alignItems: "flex-start", gap: 4 }}>
+                  <span style={{ flexShrink: 0 }}>●</span>
+                  <span>{flag.note}</span>
+                </div>
+              ) : null })()}
+              <textarea value={(isCustom ? ex.notes : f.notes) || ""}
+                onChange={e => isCustom ? setCustomExF(day, ex.id, "notes", e.target.value) : setF(day, ex.id, "notes", e.target.value)}
+                placeholder="Session note (optional)" rows={1}
+                style={{ width: "100%", marginTop: 4, padding: "4px 7px", border: "0.5px solid #1e1e1e", borderRadius: 5, fontSize: 11, color: "#666", background: "#111", fontFamily: "inherit", resize: "none", outline: "none" }} />
+              {guideOpenIds.has(ex.id) && (
+                <ExerciseGuidePanel
+                  exId={ex.id}
+                  exName={ex.n || ex.name || ""}
+                  exNote={v?.note || ex.note || ex.notes || ""}
+                  dbId={ex.dbId || null}
+                />
+              )}
+            </div>
+          </>
         )}
       </div>
     )
@@ -4197,6 +4353,17 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
 	          <button onClick={() => setShowSetTimer(true)} style={buttonStyle(true)}>
 	            Set Timer
 	          </button>
+          <button
+            onClick={() => setQuickLog(q => !q)}
+            style={{
+              padding: "5px 12px", borderRadius: 6, fontSize: 11, fontWeight: 700,
+              border: `1px solid ${quickLog ? "#4a9ee8" : "#1e2a3a"}`,
+              background: quickLog ? "rgba(74,158,232,0.15)" : "transparent",
+              color: quickLog ? "#4a9ee8" : "#555", cursor: "pointer"
+            }}
+          >
+            Quick
+          </button>
 	          <button onClick={() => setSchedView(v => v === "log" ? "schedule" : "log")} style={buttonStyle(false)}>
 	            {schedView === "log" ? "◀ Schedule" : `Log (${schedLog.length})`}
 	          </button>
