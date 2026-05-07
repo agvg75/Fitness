@@ -501,9 +501,8 @@ const PLAN = {
         { id:"th4", name:"Inverted Row",                 sub:"TRX or bar · 3–4 sets",      def:[mk(8,"BW"),mk(8,"BW"),mk(8,"BW")],         note:"Full ROM · chest to bar" },
       ]},
       { h: "Biceps", ex: [
-        { id:"th5", name:"Biceps Curl — DB/BB Palms Up",    sub:"DB or barbell · palms up", def:[mk(5,75),mk(5,75),mk(5,75)],              note:"No sway · full elbow extension · heavy day" },
+        { id:"th5", name:"Biceps Curl",                      sub:"DB or barbell · palms up", def:[mk(5,75),mk(5,75),mk(5,75)],              note:"No sway · full elbow extension · heavy day" },
         { id:"th6", name:"Cable D2 Flexion",                sub:"Cable · unsheathing sword", def:[mk(8,"—"),mk(8,"—"),mk(8,"—")],           note:"Full diagonal ROM · controlled" },
-        { id:"th7", name:"Biceps Curl — Cable Rope Neutral",sub:"Cable w/ rope · neutral",   def:[mk(6,60),mk(6,60),mk(6,60)],              note:"Neutral grip · elbow fixed · squeeze at top" },
         { id:"th8", name:"Hammer Curl",                     sub:"DB alternating",             def:[mk("10-12","—"),mk("10-12","—")],          note:"Neutral grip · full ROM" },
       ]},
       { h: "Core", ex: [
@@ -4313,6 +4312,8 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
                           "bicep curls": "Biceps Curl",
                           "bicep curl": "Biceps Curl",
                           "bicep curls (db / bb)": "Biceps Curl",
+                          "biceps curl — db/bb palms up": "Biceps Curl",
+                          "biceps curl — cable rope neutral": "Biceps Curl — Cable",
                           "biceps curl (db/bb)": "Biceps Curl",
                           "bicep curls — cable / rope (neutral grip)": "Biceps Curl — Cable Rope",
                           "hammer curls": "Hammer Curl",
