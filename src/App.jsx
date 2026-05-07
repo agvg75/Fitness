@@ -3579,13 +3579,14 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
             <div style={{ fontSize: 11, color: "#555", marginLeft: 4 }}>{collapsed ? "▸" : "▾"}</div>
           </div>
         </div>
+        {!collapsed && (
+        <>
         <div style={{ padding: "0 12px 8px", background: "#0a0a0a", borderTop: "1px solid #151515" }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", padding: "8px 0 6px", flexWrap: "wrap" }}>
-            <div style={{ fontSize: 11, color: "#7b8794" }}>{v?.n || ex.sub || "Exercise"}</div>
+            <div style={{ fontSize: 11, color: "#7b8794" }}>{v?.n || null}</div>
             <div style={{ fontSize: 11, color: "#cbd5e1" }}>{formatRxSummary(resolveEditableField(f, "sets", v?.sets), resolveEditableField(f, "reps", v?.reps), resolveEditableField(f, "load", v?.load))}</div>
           </div>
         </div>
-        {!collapsed && (
         <div style={{ padding: "4px 12px 10px", background: "#0a0a0a", borderTop: "1px solid #1a1a1a" }}>
           {!isCustom && <div style={{ fontSize: 11, color: "#555", padding: "4px 0 6px" }}>{v?.n}</div>}
           <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 6 }}>
@@ -3622,6 +3623,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
             />
           )}
         </div>
+        </>
         )}
       </div>
     )
