@@ -423,6 +423,7 @@ const PLAN = {
       { h: "D — Core", ex: [
         { id:"m9",  name:"Pushup Plank w/ Shoulder Touch", sub:"Bodyweight · 2×10e", def:[mk("10e","BW"),mk("10e","BW")],           note:"Pelvic neutral · don't let hip drop" },
         { id:"m10", name:"Pallof Press",      sub:"Cable · split stance · 40 lb",  def:[mk("10e",40),mk("10e",40)],                  note:"Brace · press slowly · zero rotation" },
+        { id:"m11", name:"Chin-ups",          sub:"bodyweight · full ROM",          def:[mk(5,"BW"),mk(5,"BW"),mk(5,"BW")],           note:"Full dead hang start. Add weight via belt once 3×8 bodyweight is consistent." },
       ]},
     ],
   },
@@ -507,6 +508,7 @@ const PLAN = {
       ]},
       { h: "Core", ex: [
         { id:"th9", name:"Suitcase Carry", sub:"DB 60 lb · 2 laps each arm (~30 ft/lap)", def:[mk("2 laps",60),mk("2 laps",60)], note:"Upright · no lateral lean · core braced" },
+        { id:"th10", name:"Chin-ups", sub:"bodyweight · full ROM",  def:[mk(5,"BW"),mk(5,"BW"),mk(5,"BW")], note:"Full dead hang start. Add weight via belt once 3×8 bodyweight is consistent." },
       ]},
     ],
   },
@@ -5304,6 +5306,7 @@ if (w.category === "Strength") {
                 { name: "Straight Arm Pulldown", match: "straight arm",  baseline: null },
                 { name: "Pull ups",           match: "pull up",          baseline: null },
                 { name: "Reverse Biceps",     match: "reverse bicep",    baseline: null },
+                { name: "Chin-ups",           match: "chin-up",          baseline: null },
               ]
             },
             {
