@@ -2525,8 +2525,6 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const [savedEntries, setSavedEntries] = useState({})   // { day: { ymca: entry|null, knr: entry|null } }
   const [justUndone, setJustUndone] = useState(null)    // "ymca" | "knr" | null
   const [sessionDate, setSessionDate] = useState(todayISO())
-  const DRAFT_KEY = "lift-session-draft"
-  const DRAFT_MAX_AGE_MS = 4 * 60 * 60 * 1000
   const [pendingVenue, setPendingVenue] = useState(null)   // venue awaiting exercise selection
   const [pendingChecked, setPendingChecked] = useState({}) // { [exercise_id]: bool }
   const [sessionRPE, setSessionRPE] = useState({})         // { day_venue: 1-10 }
@@ -2536,6 +2534,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const [sleepInputDate, setSleepInputDate] = useState(todayISO())
   const [sleepEntriesOpen, setSleepEntriesOpen] = useState(false)
   const [sleepInputHours, setSleepInputHours] = useState("")
+  const SESSION_DRAFT_KEY = "lift-session-draft-v1"
   const [inlineExForm, setInlineExForm] = useState(null)   // day | null
   const [inlineExName, setInlineExName] = useState("")
   const [inlineExDbId, setInlineExDbId] = useState(null)   // DB id when user picks from library
@@ -2590,15 +2589,6 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     if (Object.keys(newFields).length) setFields(prev => ({ ...prev, ...newFields }))
     if (Object.keys(newVariants).length) setVariants(prev => ({ ...prev, ...newVariants }))
   }, [])
-
-  const hasFreshSessionDraft = useCallback(() => {
-    try {
-      const meta = JSON.parse(localStorage.getItem(DRAFT_KEY) || "null")
-      return Boolean(meta?.savedAt) && (Date.now() - meta.savedAt) < DRAFT_MAX_AGE_MS
-    } catch {
-      return false
-    }
-  }, [DRAFT_KEY, DRAFT_MAX_AGE_MS])
 
   useEffect(() => {
     if (typeof window === "undefined") return undefined
@@ -2677,15 +2667,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       } else if (Array.isArray(lg)) {
         setSchedLog(lg)
       }
-      if (hasFreshSessionDraft()) {
-        try {
-          const draft = JSON.parse(localStorage.getItem(DRAFT_KEY + "-sessions") || "null")
-          if (draft) hydrateSessionStore(draft)
-          else if (ss && typeof ss === "object") hydrateSessionStore(ss)
-        } catch {
-          if (ss && typeof ss === "object") hydrateSessionStore(ss)
-        }
-      } else if (ss && typeof ss === "object") {
+      if (ss && typeof ss === "object") {
         hydrateSessionStore(ss)
       }
       if (ci && typeof ci === "object") setCustomItems(ci)
@@ -2693,16 +2675,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       if (tw && typeof tw === "object") setTendonEntries(tw)
       if (ck && typeof ck === "object") setCheckedItems(ck)
     })()
-  }, [session?.user?.id, DRAFT_KEY, hasFreshSessionDraft, hydrateSessionStore])
-
-  useEffect(() => {
-    try {
-      const meta = JSON.parse(localStorage.getItem(DRAFT_KEY) || "null")
-      if (!meta?.savedAt || (Date.now() - meta.savedAt) >= DRAFT_MAX_AGE_MS) return
-      const draft = JSON.parse(localStorage.getItem(DRAFT_KEY + "-sessions") || "null")
-      if (draft) hydrateSessionStore(draft)
-    } catch {}
-  }, [DRAFT_KEY, DRAFT_MAX_AGE_MS, hydrateSessionStore])
+  }, [session?.user?.id, hydrateSessionStore])
 
   const showToast = useCallback((msg) => {
     setToast(msg)
@@ -2865,12 +2838,6 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       const k = `${day}_${exId}`
       return { ...prev, [k]: { ...(prev[k] || {}), [fKey]: val } }
     })
-    // Auto-persist draft to localStorage
-    setTimeout(() => {
-      try {
-        localStorage.setItem(DRAFT_KEY, JSON.stringify({ day: activeDay, date: sessionDate, savedAt: Date.now() }))
-      } catch {}
-    }, 0)
   }
 
   const setVariantFn = (day, exId, vk) => {
@@ -3105,9 +3072,26 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
 
   useEffect(() => {
     try {
-      localStorage.setItem(DRAFT_KEY + "-sessions", JSON.stringify(buildSessionsStore()))
+      const raw = localStorage.getItem(SESSION_DRAFT_KEY)
+      if (!raw) return
+      const draft = JSON.parse(raw)
+      if (!draft || !draft.sessions) return
+      const age = Date.now() - (draft.savedAt || 0)
+      if (age < 8 * 60 * 60 * 1000) {
+        hydrateSessionStore(draft.sessions)
+        if (draft.activeDay) setActiveDay(draft.activeDay)
+        if (draft.sessionDate) setSessionDate(draft.sessionDate)
+      }
     } catch {}
-  }, [fields, variants])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SESSION_DRAFT_KEY, JSON.stringify({
+        sessions: buildSessionsStore(), savedAt: Date.now(), activeDay, sessionDate
+      }))
+    } catch {}
+  }, [fields, variants, activeDay, sessionDate])
 
   // ── Log session ────────────────────────────────────────────────────────
   const logSession = async (venue, checkedIds = null) => {
@@ -3211,6 +3195,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       if (Array.isArray(savedWorkouts)) setStoredWorkouts(savedWorkouts)
     }
 
+    try { localStorage.removeItem(SESSION_DRAFT_KEY) } catch {}
     showToast(`${VENUE_LABELS[venue] || "Session"} logged`)
   }
 
