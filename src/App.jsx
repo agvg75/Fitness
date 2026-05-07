@@ -2524,6 +2524,8 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const [savedEntries, setSavedEntries] = useState({})   // { day: { ymca: entry|null, knr: entry|null } }
   const [justUndone, setJustUndone] = useState(null)    // "ymca" | "knr" | null
   const [sessionDate, setSessionDate] = useState(todayISO())
+  const DRAFT_KEY = "lift-session-draft"
+  const DRAFT_MAX_AGE_MS = 4 * 60 * 60 * 1000
   const [pendingVenue, setPendingVenue] = useState(null)   // venue awaiting exercise selection
   const [pendingChecked, setPendingChecked] = useState({}) // { [exercise_id]: bool }
   const [sessionRPE, setSessionRPE] = useState({})         // { day_venue: 1-10 }
@@ -2569,6 +2571,33 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const writeLocalScheduleKey = (key, value) => {
     try { localStorage.setItem(key, JSON.stringify(value)) } catch {}
   }
+
+  const hydrateSessionStore = useCallback((ss) => {
+    if (!ss || typeof ss !== "object") return
+    const newFields = {}
+    const newVariants = {}
+    SDAYS.forEach(d => {
+      if (!ss[d]) return
+      Object.keys(ss[d]).forEach(exId => {
+        const v = ss[d][exId]
+        if (v && typeof v === "object" && !Array.isArray(v) && v.sets) {
+          newFields[`${d}_${exId}`] = { sets: v.sets, reps: v.reps, load: v.load, notes: v.notes || "" }
+          if (v.variant) newVariants[exId] = v.variant
+        }
+      })
+    })
+    if (Object.keys(newFields).length) setFields(prev => ({ ...prev, ...newFields }))
+    if (Object.keys(newVariants).length) setVariants(prev => ({ ...prev, ...newVariants }))
+  }, [])
+
+  const hasFreshSessionDraft = useCallback(() => {
+    try {
+      const meta = JSON.parse(localStorage.getItem(DRAFT_KEY) || "null")
+      return Boolean(meta?.savedAt) && (Date.now() - meta.savedAt) < DRAFT_MAX_AGE_MS
+    } catch {
+      return false
+    }
+  }, [DRAFT_KEY, DRAFT_MAX_AGE_MS])
 
   useEffect(() => {
     if (typeof window === "undefined") return undefined
@@ -2647,27 +2676,32 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       } else if (Array.isArray(lg)) {
         setSchedLog(lg)
       }
-      if (ss && typeof ss === "object") {
-        const newFields = {}, newVariants = {}
-        SDAYS.forEach(d => {
-          if (!ss[d]) return
-          Object.keys(ss[d]).forEach(exId => {
-            const v = ss[d][exId]
-            if (v && typeof v === "object" && !Array.isArray(v) && v.sets) {
-              newFields[`${d}_${exId}`] = { sets: v.sets, reps: v.reps, load: v.load, notes: v.notes || "" }
-              if (v.variant) newVariants[exId] = v.variant
-            }
-          })
-        })
-        if (Object.keys(newFields).length) setFields(prev => ({ ...prev, ...newFields }))
-        if (Object.keys(newVariants).length) setVariants(prev => ({ ...prev, ...newVariants }))
+      if (hasFreshSessionDraft()) {
+        try {
+          const draft = JSON.parse(localStorage.getItem(DRAFT_KEY + "-sessions") || "null")
+          if (draft) hydrateSessionStore(draft)
+          else if (ss && typeof ss === "object") hydrateSessionStore(ss)
+        } catch {
+          if (ss && typeof ss === "object") hydrateSessionStore(ss)
+        }
+      } else if (ss && typeof ss === "object") {
+        hydrateSessionStore(ss)
       }
       if (ci && typeof ci === "object") setCustomItems(ci)
       if (cx && typeof cx === "object") setCustomExercises(cx)
       if (tw && typeof tw === "object") setTendonEntries(tw)
       if (ck && typeof ck === "object") setCheckedItems(ck)
     })()
-  }, [session?.user?.id])
+  }, [session?.user?.id, DRAFT_KEY, hasFreshSessionDraft, hydrateSessionStore])
+
+  useEffect(() => {
+    try {
+      const meta = JSON.parse(localStorage.getItem(DRAFT_KEY) || "null")
+      if (!meta?.savedAt || (Date.now() - meta.savedAt) >= DRAFT_MAX_AGE_MS) return
+      const draft = JSON.parse(localStorage.getItem(DRAFT_KEY + "-sessions") || "null")
+      if (draft) hydrateSessionStore(draft)
+    } catch {}
+  }, [DRAFT_KEY, DRAFT_MAX_AGE_MS, hydrateSessionStore])
 
   const showToast = useCallback((msg) => {
     setToast(msg)
@@ -2830,6 +2864,12 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       const k = `${day}_${exId}`
       return { ...prev, [k]: { ...(prev[k] || {}), [fKey]: val } }
     })
+    // Auto-persist draft to localStorage
+    setTimeout(() => {
+      try {
+        localStorage.setItem(DRAFT_KEY, JSON.stringify({ day: activeDay, date: sessionDate, savedAt: Date.now() }))
+      } catch {}
+    }, 0)
   }
 
   const setVariantFn = (day, exId, vk) => {
@@ -3061,6 +3101,12 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     })
     return out
   }
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(DRAFT_KEY + "-sessions", JSON.stringify(buildSessionsStore()))
+    } catch {}
+  }, [fields, variants])
 
   // ── Log session ────────────────────────────────────────────────────────
   const logSession = async (venue, checkedIds = null) => {
