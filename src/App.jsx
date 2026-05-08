@@ -1695,15 +1695,14 @@ function computeOcRecoveryDate(item) {
 // ─── TabOperationalCapacity ────────────────────────────────────────────────────
 function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapacityData, healthFitDaily, sleepRecords, tsbFallback = null, runSessions = [] }) {
   const [selectedId, setSelectedId] = useState(null)
-  const todayDate = new Date().toISOString().slice(0, 10)
   const [addForm, setAddForm] = useState({
     key: "muscleStatus",
     location: "Quad L",
     currentScore: 1,
     halfLifeHours: null,
-    startDate: todayDate,
-    historicalEpisode: false,
-    lastResolvedDate: "",
+    isHistorical: false,
+    historicalStartDate: "",
+    historicalResolvedDate: "",
   })
   const [capacityInfoOpen, setCapacityInfoOpen] = useState({ tendonPain: false })
   const MTP_LOCATION = "Toe R"
@@ -1715,7 +1714,11 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
   const readinessColor = readiness >= 80 ? "#4ade80" : readiness >= 60 ? "#fbbf24" : readiness >= 40 ? "#f97316" : "#ef4444"
   const active = rd.active
   const mapItems = useMemo(() => {
-    const sorted = [...ocItems].sort((a, b) => {
+    const renderableItems = ocItems.filter(i =>
+      Number(i.currentScore) > 0 ||
+      (i.chronicity === "chronic" && Number(i.currentScore) === 0)
+    )
+    const sorted = [...renderableItems].sort((a, b) => {
       const aDate = String(a.lastResolvedDate || a.startDate || "")
       const bDate = String(b.lastResolvedDate || b.startDate || "")
       return bDate.localeCompare(aDate)
@@ -1804,28 +1807,79 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
   const addItem = () => {
     if (!addForm.currentScore) return
     const meta = OC_KEY_META[addForm.key] || OC_KEY_META.muscleStatus
-    const startDate = addForm.startDate || todayDate
-    const lastResolvedDate = addForm.historicalEpisode && addForm.lastResolvedDate
-      ? addForm.lastResolvedDate
+
+    const isHistorical = addForm.isHistorical &&
+      addForm.historicalStartDate && addForm.historicalResolvedDate
+
+    const startDate = isHistorical
+      ? new Date(addForm.historicalStartDate).toISOString()
+      : new Date().toISOString()
+
+    const resolvedDate = isHistorical
+      ? new Date(addForm.historicalResolvedDate).toISOString()
       : null
-    const resolvedBeforeToday = lastResolvedDate && lastResolvedDate < todayDate
-    const initialScore = Number(addForm.currentScore)
+
+    // For historical episodes: currentScore is 0 (already resolved)
+    const currentScore = isHistorical ? 0 : Number(addForm.currentScore)
+
+    // Compute chronicity: check existing items for same key+location to
+    // determine prior episode count and last resolution interval.
+    const sameRegionItems = ocItems.filter(
+      i => i.key === addForm.key && i.location === addForm.location
+    )
+    const priorEpisodeCount = sameRegionItems.reduce(
+      (sum, i) => sum + (i.episodeCount || 0) + (Number(i.initialScore || 0) > 0 ? 1 : 0), 0
+    )
+    const newEpisodeCount = priorEpisodeCount + (Number(addForm.currentScore) > 0 ? 1 : 0)
+
+    const mostRecentResolved = sameRegionItems
+      .map(i => i.lastResolvedDate)
+      .filter(Boolean)
+      .sort()
+      .pop()
+    const daysSinceLast = mostRecentResolved
+      ? (new Date(startDate).getTime() - new Date(mostRecentResolved).getTime()) / 86400000
+      : null
+
+    const chronicity =
+      newEpisodeCount >= 3 || (daysSinceLast != null && daysSinceLast < 90)
+        ? "chronic"
+        : "acute"
+
     const item = {
       id: Date.now(),
       key: addForm.key,
       location: addForm.location,
       label: `${meta.label} — ${addForm.location}`,
-      currentScore: resolvedBeforeToday ? 0 : initialScore,
-      initialScore,
-      startDate: `${startDate}T12:00:00.000Z`,
+      currentScore,
+      initialScore: Number(addForm.currentScore),
+      startDate,
       halfLifeHours: Number(addForm.halfLifeHours) || meta.halfLifeHours,
-      episodeCount: 0,
-      lastResolvedDate: lastResolvedDate ? `${lastResolvedDate}T12:00:00.000Z` : null,
-      chronicity: "acute",
+      episodeCount: isHistorical ? 1 : 0,
+      lastResolvedDate: resolvedDate,
+      chronicity,
+      ...(isHistorical ? { eventType: "historical_entry" } : {}),
     }
-    const updated = [item, ...ocItems]
+
+    const updated = chronicity === "chronic"
+      ? [item, ...ocItems.map(existing =>
+          existing.key === addForm.key && existing.location === addForm.location
+            ? { ...existing, chronicity: "chronic" }
+            : existing
+        )]
+      : [item, ...ocItems]
     setOcItems(updated)
     saveOcItems(updated)
+
+    // Reset form, preserving key/location for rapid multi-episode entry.
+    setAddForm(f => ({
+      ...f,
+      currentScore: 1,
+      halfLifeHours: null,
+      isHistorical: false,
+      historicalStartDate: "",
+      historicalResolvedDate: "",
+    }))
   }
 
   const updateItem = (id, changes) => {
@@ -1931,9 +1985,8 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
           const coords = OC_REGION_COORDS[item.location]?.[ck]
           if (!coords) return null
           const meta = OC_KEY_META[item.key] || OC_KEY_META.muscleStatus
-          const isResolved = Number(item.currentScore || 0) === 0
-          const sz = isResolved ? 10 : 8 + item.currentScore * 4
-          const chronic = item.chronicity === "chronic"
+          const isChronic = item.chronicity === "chronic" && Number(item.currentScore) === 0
+          const sz = isChronic ? 10 : 8 + item.currentScore * 4
           return (
             <div
               key={item.id}
@@ -1946,9 +1999,9 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
                 position: "absolute", left: `${coords[0]}%`, top: `${coords[1]}%`,
                 width: sz, height: sz, borderRadius: "50%",
                 transform: "translate(-50%, -50%)",
-                opacity: isResolved ? 0.25 : 1,
-                background: isResolved || chronic ? "transparent" : meta.color,
-                border: isResolved ? "1.5px solid #444" : `2px solid ${meta.color}`,
+                background: isChronic ? "transparent" : meta.color,
+                border: isChronic ? `2px dashed ${meta.color}` : "none",
+                opacity: isChronic ? 0.5 : 1,
                 boxShadow: selectedId === item.id ? `0 0 10px ${meta.color}` : "none",
                 cursor: "pointer", zIndex: 10, transition: "box-shadow 0.15s",
               }}
@@ -2198,38 +2251,6 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
                 {OC_BODY_REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
               </select>
               <div>
-                <div style={{ fontSize: "11px", color: "#666", marginBottom: "4px" }}>Start date</div>
-                <input
-                  type="date"
-                  value={addForm.startDate || todayDate}
-                  onChange={e => setAddForm(f => ({ ...f, startDate: e.target.value }))}
-                  style={{ ...inputStyle(), padding: "6px 10px" }}
-                />
-              </div>
-              <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "11px", color: "#666" }}>
-                <input
-                  type="checkbox"
-                  checked={Boolean(addForm.historicalEpisode)}
-                  onChange={e => setAddForm(f => ({
-                    ...f,
-                    historicalEpisode: e.target.checked,
-                    lastResolvedDate: e.target.checked ? f.lastResolvedDate : "",
-                  }))}
-                />
-                Historical episode (past start date)
-              </label>
-              {addForm.historicalEpisode && (
-                <div>
-                  <div style={{ fontSize: "11px", color: "#666", marginBottom: "4px" }}>Resolved date</div>
-                  <input
-                    type="date"
-                    value={addForm.lastResolvedDate || ""}
-                    onChange={e => setAddForm(f => ({ ...f, lastResolvedDate: e.target.value }))}
-                    style={{ ...inputStyle(), padding: "6px 10px" }}
-                  />
-                </div>
-              )}
-              <div>
                 <div style={{ fontSize: "11px", color: "#666", marginBottom: "4px" }}>
                   Severity: {addForm.currentScore}/5 — {SCORE_LABELS[Number(addForm.currentScore)]}
                 </div>
@@ -2247,7 +2268,48 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
                   onChange={e => setAddForm(f => ({ ...f, halfLifeHours: e.target.value ? Number(e.target.value) : null }))}
                   style={{ ...inputStyle(), padding: "6px 10px" }} />
               </div>
-              <button onClick={addItem} style={{ ...buttonStyle(true), fontSize: "12px" }}>+ Add Issue</button>
+              <div style={{ marginTop: "4px" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "11px", color: "#666", cursor: "pointer" }}>
+                  <input
+                    type="checkbox"
+                    checked={addForm.isHistorical}
+                    onChange={e => setAddForm(f => ({ ...f, isHistorical: e.target.checked }))}
+                  />
+                  Historical episode (past dates)
+                </label>
+              </div>
+              {addForm.isHistorical && (
+                <div style={{ display: "grid", gap: "6px", padding: "8px", background: "#0a0b14", borderRadius: "4px", border: "1px solid #1a1b2e" }}>
+                  <div style={{ fontSize: "10px", color: "#555", letterSpacing: "0.1em" }}>EPISODE DATES</div>
+                  <div>
+                    <div style={{ fontSize: "11px", color: "#666", marginBottom: "2px" }}>Started</div>
+                    <input
+                      type="date"
+                      value={addForm.historicalStartDate}
+                      max={addForm.historicalResolvedDate || new Date().toISOString().slice(0, 10)}
+                      onChange={e => setAddForm(f => ({ ...f, historicalStartDate: e.target.value }))}
+                      style={{ ...inputStyle(), padding: "6px 10px" }}
+                    />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: "11px", color: "#666", marginBottom: "2px" }}>Resolved</div>
+                    <input
+                      type="date"
+                      value={addForm.historicalResolvedDate}
+                      min={addForm.historicalStartDate || undefined}
+                      max={new Date().toISOString().slice(0, 10)}
+                      onChange={e => setAddForm(f => ({ ...f, historicalResolvedDate: e.target.value }))}
+                      style={{ ...inputStyle(), padding: "6px 10px" }}
+                    />
+                  </div>
+                  <div style={{ fontSize: "10px", color: "#444", lineHeight: "1.4" }}>
+                    Severity above = peak score at onset. Episode will be marked resolved automatically.
+                  </div>
+                </div>
+              )}
+              <button onClick={addItem} style={{ ...buttonStyle(true), fontSize: "12px" }}>
+                {addForm.isHistorical ? "+ Add Historical Episode" : "+ Add Issue"}
+              </button>
             </div>
           </div>
 
@@ -2281,9 +2343,42 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
                 </div>
               )
             })}
-            {ocItems.filter(i => i.currentScore === 0 && i.episodeCount > 0).length > 0 && (
-              <div style={{ fontSize: "10px", color: "#333", marginTop: "8px", textAlign: "center" }}>
-                {ocItems.filter(i => i.currentScore === 0 && i.episodeCount > 0).length} resolved
+            {ocItems.filter(i => Number(i.currentScore) === 0 && (i.episodeCount > 0 || Number(i.initialScore) > 0)).length > 0 && (
+              <div style={{ marginTop: "12px", borderTop: "1px solid #1a1b2e", paddingTop: "10px" }}>
+                <div style={{ fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase", color: "#444", marginBottom: "6px" }}>
+                  Episode History
+                </div>
+                {ocItems
+                  .filter(i => Number(i.currentScore) === 0 && (i.episodeCount > 0 || Number(i.initialScore) > 0))
+                  .sort((a, b) => String(b.startDate).localeCompare(String(a.startDate)))
+                  .map(item => {
+                    const meta = OC_KEY_META[item.key] || OC_KEY_META.muscleStatus
+                    const startStr = item.startDate ? String(item.startDate).slice(0, 10) : "—"
+                    const resolvedStr = item.lastResolvedDate ? String(item.lastResolvedDate).slice(0, 10) : "—"
+                    const durationDays = item.startDate && item.lastResolvedDate
+                      ? Math.round((new Date(item.lastResolvedDate) - new Date(item.startDate)) / 86400000)
+                      : null
+                    return (
+                      <div key={item.id} style={{
+                        padding: "6px 8px", marginBottom: "4px", borderRadius: "4px",
+                        border: `1px solid ${item.chronicity === "chronic" ? "rgba(239,68,68,0.2)" : "#1a1b2e"}`,
+                        background: item.chronicity === "chronic" ? "rgba(239,68,68,0.04)" : "transparent",
+                      }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <span style={{ fontSize: "11px", color: meta.color }}>{item.location}</span>
+                          <span style={{ fontSize: "10px", color: item.chronicity === "chronic" ? "#ef4444" : "#555" }}>
+                            {item.chronicity === "chronic" ? "chronic" : "resolved"}
+                          </span>
+                          <span style={{ fontSize: "11px", color: "#555" }}>peak {item.initialScore}/5</span>
+                        </div>
+                        <div style={{ fontSize: "10px", color: "#444", marginTop: "2px" }}>
+                          {startStr} → {resolvedStr}
+                          {durationDays != null ? ` (${durationDays}d)` : ""}
+                        </div>
+                      </div>
+                    )
+                  })
+                }
               </div>
             )}
           </div>
