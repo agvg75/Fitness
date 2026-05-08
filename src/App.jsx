@@ -1695,7 +1695,16 @@ function computeOcRecoveryDate(item) {
 // ─── TabOperationalCapacity ────────────────────────────────────────────────────
 function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapacityData, healthFitDaily, sleepRecords, tsbFallback = null, runSessions = [] }) {
   const [selectedId, setSelectedId] = useState(null)
-  const [addForm, setAddForm] = useState({ key: "muscleStatus", location: "Quad L", currentScore: 1, halfLifeHours: null })
+  const todayDate = new Date().toISOString().slice(0, 10)
+  const [addForm, setAddForm] = useState({
+    key: "muscleStatus",
+    location: "Quad L",
+    currentScore: 1,
+    halfLifeHours: null,
+    startDate: todayDate,
+    historicalEpisode: false,
+    lastResolvedDate: "",
+  })
   const [capacityInfoOpen, setCapacityInfoOpen] = useState({ tendonPain: false })
   const MTP_LOCATION = "Toe R"
   const MTP_KEY = "jointStatus"
@@ -1795,17 +1804,23 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
   const addItem = () => {
     if (!addForm.currentScore) return
     const meta = OC_KEY_META[addForm.key] || OC_KEY_META.muscleStatus
+    const startDate = addForm.startDate || todayDate
+    const lastResolvedDate = addForm.historicalEpisode && addForm.lastResolvedDate
+      ? addForm.lastResolvedDate
+      : null
+    const resolvedBeforeToday = lastResolvedDate && lastResolvedDate < todayDate
+    const initialScore = Number(addForm.currentScore)
     const item = {
       id: Date.now(),
       key: addForm.key,
       location: addForm.location,
       label: `${meta.label} — ${addForm.location}`,
-      currentScore: Number(addForm.currentScore),
-      initialScore: Number(addForm.currentScore),
-      startDate: new Date().toISOString(),
+      currentScore: resolvedBeforeToday ? 0 : initialScore,
+      initialScore,
+      startDate: `${startDate}T12:00:00.000Z`,
       halfLifeHours: Number(addForm.halfLifeHours) || meta.halfLifeHours,
       episodeCount: 0,
-      lastResolvedDate: null,
+      lastResolvedDate: lastResolvedDate ? `${lastResolvedDate}T12:00:00.000Z` : null,
       chronicity: "acute",
     }
     const updated = [item, ...ocItems]
@@ -2182,6 +2197,38 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
               <select value={addForm.location} onChange={e => setAddForm(f => ({ ...f, location: e.target.value }))} style={inputStyle()}>
                 {OC_BODY_REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
               </select>
+              <div>
+                <div style={{ fontSize: "11px", color: "#666", marginBottom: "4px" }}>Start date</div>
+                <input
+                  type="date"
+                  value={addForm.startDate || todayDate}
+                  onChange={e => setAddForm(f => ({ ...f, startDate: e.target.value }))}
+                  style={{ ...inputStyle(), padding: "6px 10px" }}
+                />
+              </div>
+              <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "11px", color: "#666" }}>
+                <input
+                  type="checkbox"
+                  checked={Boolean(addForm.historicalEpisode)}
+                  onChange={e => setAddForm(f => ({
+                    ...f,
+                    historicalEpisode: e.target.checked,
+                    lastResolvedDate: e.target.checked ? f.lastResolvedDate : "",
+                  }))}
+                />
+                Historical episode (past start date)
+              </label>
+              {addForm.historicalEpisode && (
+                <div>
+                  <div style={{ fontSize: "11px", color: "#666", marginBottom: "4px" }}>Resolved date</div>
+                  <input
+                    type="date"
+                    value={addForm.lastResolvedDate || ""}
+                    onChange={e => setAddForm(f => ({ ...f, lastResolvedDate: e.target.value }))}
+                    style={{ ...inputStyle(), padding: "6px 10px" }}
+                  />
+                </div>
+              )}
               <div>
                 <div style={{ fontSize: "11px", color: "#666", marginBottom: "4px" }}>
                   Severity: {addForm.currentScore}/5 — {SCORE_LABELS[Number(addForm.currentScore)]}
