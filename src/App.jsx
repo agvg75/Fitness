@@ -11988,6 +11988,16 @@ useEffect(() => {
             console.warn("[LIFT] body_weight.json fetch threw:", err?.message || err)
             return []
           })
+        fetch(`${base}data/weight_daily.json`)
+          .then(r => r.ok ? r.json() : [])
+          .then(weightSeed => {
+            if (!Array.isArray(weightSeed) || !weightSeed.length) return
+            setBiometricRecords(prev => {
+              if (Array.isArray(prev) && prev.length > 0) return prev
+              return weightSeed.filter(r => r.measured_date && r.weight_lb && Number(r.weight_lb) > 140)
+            })
+          })
+          .catch(() => {})
         const dx = await fetch(`${base}data/dexa_summary.json?v=20260427`).then(r => {
           if (!r.ok) throw new Error("dexa_summary.json failed")
           return r.json()
@@ -12753,6 +12763,17 @@ const overviewWeightDomain = useMemo(() => {
     if (!wt || wt <= 0) return null
     return ((wt - latestLeanAnchor) / wt) * 100
   }, [latestWeight, latestLeanAnchor, dexaSeries])
+
+  const vo2Series = useMemo(() => {
+    return (Array.isArray(healthFitDaily) ? healthFitDaily : [])
+      .filter(r => r.metric_date && r.vo2_max != null && Number(r.vo2_max) > 20)
+      .map(r => ({
+        date: r.metric_date,
+        label: fmtShortDate(r.metric_date),
+        vo2: Number(Number(r.vo2_max).toFixed(1))
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date))
+  }, [healthFitDaily])
 
   const mealDerivedDays = useMemo(() => deriveDailyNutrition(mealEntries), [mealEntries])
 
@@ -16419,6 +16440,50 @@ return (
               </ComposedChart>
             </ResponsiveContainer>
           </div>
+
+          {vo2Series.length >= 2 && (
+            <div style={{ marginTop: 24, background: '#0d0f1e', border: '1px solid #1a1b2e', borderRadius: 8, padding: '18px 20px' }}>
+              <div style={{ fontWeight: 'bold', marginBottom: 6, fontSize: 13 }}>
+                VO₂ Max Trend
+              </div>
+              <div style={{ fontSize: 11, color: '#555', marginBottom: 10 }}>
+                Apple Watch aerobic estimate. Useful for within-person trend tracking; modality bias may apply (swimming underestimates).
+                Current: <span style={{ color: '#4ade80', fontWeight: 600 }}>{vo2Series[vo2Series.length - 1]?.vo2}</span> ml/kg/min
+              </div>
+              <ResponsiveContainer width="100%" height={200}>
+                <LineChart data={vo2Series} margin={{ top: 8, right: 20, left: 0, bottom: 18 }}>
+                  <CartesianGrid stroke="#1a1b2e" />
+                  <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                  <YAxis
+                    domain={['auto', 'auto']}
+                    tick={{ fontSize: 10 }}
+                    width={34}
+                    label={{ value: 'ml/kg/min', angle: -90, position: 'insideLeft', fill: '#555', fontSize: 10 }}
+                  />
+                  <Tooltip
+                    content={({ active, payload, label }) => {
+                      if (!active || !payload?.length) return null
+                      return (
+                        <div style={{ background: '#0d0f1e', border: '1px solid #222', borderRadius: 6, padding: '8px 12px', fontSize: 12 }}>
+                          <div style={{ color: '#888', marginBottom: 4 }}>{label}</div>
+                          <div style={{ color: '#4ade80' }}>VO₂ max: {payload[0]?.value} ml/kg/min</div>
+                        </div>
+                      )
+                    }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="vo2"
+                    stroke="#4ade80"
+                    strokeWidth={2.5}
+                    dot={{ r: 5, fill: '#4ade80' }}
+                    activeDot={{ r: 7 }}
+                    name="VO₂ Max"
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
 
         </div>
       )}
