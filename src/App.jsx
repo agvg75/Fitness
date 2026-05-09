@@ -40,6 +40,7 @@ import {
   ReferenceLine
 } from "recharts"
 import { createClient } from "@supabase/supabase-js"
+import { generateTrainerReport } from './exportReport'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -6118,20 +6119,49 @@ const last28 = workouts.filter(w => new Date(w.dateTime || w.date || w.start_dat
   }
 }
 function linearSlope(data, getValue) {
+  // Legacy: kept for any callers that don't need weighting.
+  // Prefer weightedLinearSlope for forecast use.
   if (!data || data.length < 2) return 0
-
   const first = data[0]
   const last = data[data.length - 1]
-
-  const days =
-    (new Date(last.date) - new Date(first.date)) /
-    (1000 * 60 * 60 * 24)
-
+  const days = (new Date(last.date) - new Date(first.date)) / 86400000
   if (days === 0) return 0
+  return (getValue(last) - getValue(first)) / days
+}
 
-  const change = getValue(last) - getValue(first)
+function weightedLinearSlope(data, getValue, halfLifeDays = 21) {
+  // Exponentially weighted least-squares regression.
+  // Recent observations receive higher weight; weight decays with half-life
+  // halfLifeDays as you go backward in time.
+  // Returns slope in units-per-day.
+  if (!data || data.length < 2) return 0
 
-  return change / days
+  const pts = data
+    .map(d => {
+      const x = new Date(d.date).getTime() / 86400000  // days since epoch
+      const y = getValue(d)
+      return { x, y }
+    })
+    .filter(p => Number.isFinite(p.x) && Number.isFinite(p.y))
+
+  if (pts.length < 2) return 0
+
+  const lambda = Math.log(2) / halfLifeDays
+  const lastX = pts[pts.length - 1].x
+
+  // Weight = exp(-lambda * (lastX - x))  =>  most recent point = 1.0
+  const ws = pts.map(p => Math.exp(-lambda * (lastX - p.x)))
+
+  const W   = ws.reduce((s, w) => s + w, 0)
+  const Wx  = ws.reduce((s, w, i) => s + w * pts[i].x, 0)
+  const Wy  = ws.reduce((s, w, i) => s + w * pts[i].y, 0)
+  const Wxx = ws.reduce((s, w, i) => s + w * pts[i].x ** 2, 0)
+  const Wxy = ws.reduce((s, w, i) => s + w * pts[i].x * pts[i].y, 0)
+
+  const denom = W * Wxx - Wx * Wx
+  if (Math.abs(denom) < 1e-10) return 0
+
+  return (W * Wxy - Wx * Wy) / denom  // lb per day
 }
 
 function projectValue(current, slopePerDay, days, floor = 0) {
@@ -6203,8 +6233,10 @@ function buildBodyForecast({
 
   const currentWeight = weightRows[weightRows.length - 1]._weight
 
-  const recentWeights = weightRows.slice(-28)
-  const observedSlope = linearSlope(recentWeights, d => d._weight)
+  // Weighted regression over last 90 days; half-life 21 days so recent
+  // weeks drive the trend while older data provides stabilizing context.
+  const longWeights = weightRows.slice(-90)
+  const observedSlope = weightedLinearSlope(longWeights, d => d._weight, 21)
 
   const estimatedMaintenance = estimateMaintenanceCalories({
     currentWeight,
@@ -6230,10 +6262,13 @@ function buildBodyForecast({
       ? (avgLoggedCalories - estimatedMaintenance) / 3500
       : observedSlope
 
+  // Give observed trend 60% weight when calorie logging coverage is high,
+  // since the weighted regression is already well-calibrated from actual data.
+  // Give it 85% weight when logging coverage is low (trust the scale more).
   let blendedSlope =
     loggingCoverage >= 0.5
-      ? observedSlope * 0.35 + energyBalanceSlope * 0.65
-      : observedSlope
+      ? observedSlope * 0.60 + energyBalanceSlope * 0.40
+      : observedSlope * 0.85 + energyBalanceSlope * 0.15
 
   if (!Number.isFinite(blendedSlope)) blendedSlope = observedSlope
   if (!Number.isFinite(blendedSlope)) blendedSlope = 0
@@ -9493,7 +9528,7 @@ function makeImportFileReviewRow(fileInfo, reason) {
   }
 }
 
-function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily, setSleepRecords, setBiometricRecords, setSchedLog }) {
+function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily, setSleepRecords, setBiometricRecords, setSchedLog, healthFitDaily, biometricRecords, ocItems }) {
   const [queuedFiles, setQueuedFiles] = useState([])  // [{file, detected, firstChunk}]
   const [status, setStatus] = useState("Drop files to import")
   const [progress, setProgress] = useState(null)
@@ -9511,6 +9546,16 @@ function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily,
   const [photoExtracting, setPhotoExtracting] = useState(false)
   const [photoResult, setPhotoResult] = useState(null)
   const [photoError, setPhotoError] = useState(null)
+
+  const handleExportReport = () => {
+    generateTrainerReport({
+      healthFitDaily: healthFitDaily || [],
+      biometricRecords: biometricRecords || [],
+      dexaData: typeof DEXA_REGIONAL !== 'undefined' ? DEXA_REGIONAL : [],
+      ocItems: ocItems || [],
+      snapshotDate: new Date().toISOString().slice(0, 10),
+    })
+  }
 
   const worker = useMemo(() => createInlineImportWorker(), [])
   const pendingFileReviewRowsRef = useRef([])
@@ -10240,6 +10285,45 @@ Return ONLY a JSON object with this exact structure, no explanation:
         )}
       </div>
 
+      <div style={{
+        marginTop: 24,
+        padding: '18px 20px',
+        background: '#0b0d14',
+        border: '1px solid #1a1b2e',
+        borderRadius: 8,
+      }}>
+        <div style={{
+          fontSize: 11,
+          letterSpacing: '0.14em',
+          color: '#444',
+          textTransform: 'uppercase',
+          marginBottom: 8,
+        }}>
+          Trainer Report Export
+        </div>
+        <div style={{ fontSize: 12, color: '#555', marginBottom: 14, lineHeight: 1.6 }}>
+          Generates a self-contained HTML snapshot of your current data — training load,
+          body composition, running protocol, schedule, and operational capacity —
+          formatted for your trainer. Open in any browser, no login required.
+        </div>
+        <button
+          onClick={handleExportReport}
+          style={{
+            background: '#0d1a0d',
+            border: '1px solid #1a3a1a',
+            borderRadius: 6,
+            color: '#4a8a4a',
+            fontSize: 12,
+            letterSpacing: '0.08em',
+            padding: '9px 20px',
+            cursor: 'pointer',
+            fontWeight: 600,
+          }}
+        >
+          Generate Trainer Report ↓
+        </button>
+      </div>
+
       <div style={{ marginTop: 24, padding: "16px", background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: 12 }}>
         <div style={{ fontWeight: "bold", marginBottom: 8, fontSize: 13 }}>
           Import from KNR Sheet Photo
@@ -10895,9 +10979,19 @@ export default function App() {
     tsbModerateRiskThreshold: -7,
     tsbHighRiskThreshold: -9,
     ocHalfLifeOverrides: {
-      "MTP joint": 840,
-      toe: 840,
-      foot: 672,
+      // Empirical half-lives from actual resolution times (Andrés, 2025-2026)
+      // Shoulder: Nov 10 onset, lingered to ~Feb 2026 = ~90 days observed
+      "Shoulder R":   1440,   // 60 days — conservative empirical fit
+      "Shoulder L":   1440,
+      // Left MTP: three episodes, each 4-6 weeks to resolve
+      "Toe L":        1008,   // 42 days = 6 weeks — mid-range empirical
+      "Toe R":        1008,
+      "MTP L":        1008,
+      "MTP R":        1008,
+      "Foot L":        840,   // 35 days — less specific forefoot issues
+      "Foot R":        840,
+      foot:            672,
+      toe:            1008,
     },
 
     // Body composition — update after each DEXA scan
@@ -12626,11 +12720,39 @@ const overviewWeightDomain = useMemo(() => {
   }, [latestDexa])
 
   const estimatedCurrentBF = useMemo(() => {
+    // Primary method: fit weighted linear regression to DEXA pct_fat values
+    // and project forward to today. More accurate than lean-mass-constant
+    // assumption because it uses the actual fat loss trend across all scans.
+    if (dexaSeries.length >= 2) {
+      const dexaForRegression = dexaSeries
+        .filter(d => d.date && d.pct_fat != null)
+        .map(d => ({ date: d.date, val: Number(d.pct_fat) }))
+        .filter(d => Number.isFinite(d.val))
+
+      if (dexaForRegression.length >= 2) {
+        // Use long half-life (180 days) so all DEXA scans contribute equally —
+        // we have only 4 points and cannot afford to discount older ones heavily.
+        const slopePerDay = weightedLinearSlope(
+          dexaForRegression,
+          d => d.val,
+          180
+        )
+        const lastScan = dexaForRegression[dexaForRegression.length - 1]
+        const daysSinceLastScan =
+          (new Date().getTime() - new Date(lastScan.date).getTime()) / 86400000
+        const projected = lastScan.val + slopePerDay * daysSinceLastScan
+        if (Number.isFinite(projected) && projected > 5 && projected < 60) {
+          return projected
+        }
+      }
+    }
+
+    // Fallback: lean-mass-constant method (original logic)
     if (!latestWeight || latestLeanAnchor == null) return null
     const wt = Number(latestWeight.weight_lb)
     if (!wt || wt <= 0) return null
     return ((wt - latestLeanAnchor) / wt) * 100
-  }, [latestWeight, latestLeanAnchor])
+  }, [latestWeight, latestLeanAnchor, dexaSeries])
 
   const mealDerivedDays = useMemo(() => deriveDailyNutrition(mealEntries), [mealEntries])
 
@@ -13996,22 +14118,46 @@ const bodyCompositionOverviewData = useMemo(() => {
         }))
     : []
 
+  // Current estimated BF (today, from regression)
   const currentPt =
     estimatedCurrentBF != null
       ? [{
           date: new Date().toISOString().slice(0, 10),
-          label: dailyWithBiometrics?.length ? fmtShortDate(dailyWithBiometrics[dailyWithBiometrics.length - 1]?.date) : "Current",
+          label: "Now (est.)",
           dexaBF: null,
-          estimatedBF: Number(estimatedCurrentBF)
+          estimatedBF: Number(estimatedCurrentBF.toFixed(1))
         }]
       : []
 
-  const merged = [...dexaPts, ...currentPt]
+  // Projected DEXA point: project forward to next planned DEXA date using
+  // the same regression slope that drives estimatedCurrentBF.
+  const nextDexaDate = LIFT_CONFIG.next_dexa_date  // "2026-09-19"
+  const projectedDexaPt = (() => {
+    if (!estimatedCurrentBF || !nextDexaDate) return []
+    const dexaForRegression = dexaSeries
+      .filter(d => d.date && d.pct_fat != null)
+      .map(d => ({ date: d.date, val: Number(d.pct_fat) }))
+      .filter(d => Number.isFinite(d.val))
+    if (dexaForRegression.length < 2) return []
+    const slopePerDay = weightedLinearSlope(dexaForRegression, d => d.val, 180)
+    const lastScan = dexaForRegression[dexaForRegression.length - 1]
+    const daysToNext = (new Date(nextDexaDate).getTime() - new Date(lastScan.date).getTime()) / 86400000
+    const projected = lastScan.val + slopePerDay * daysToNext
+    if (!Number.isFinite(projected) || projected < 5 || projected > 60) return []
+    return [{
+      date: nextDexaDate,
+      label: fmtShortDate(nextDexaDate) + " (proj.)",
+      dexaBF: null,
+      estimatedBF: Number(projected.toFixed(1))
+    }]
+  })()
+
+  const merged = [...dexaPts, ...currentPt, ...projectedDexaPt]
     .filter(row => row.date)
     .sort((a, b) => String(a.date).localeCompare(String(b.date)))
 
   return merged
-}, [dexaSeries, estimatedCurrentBF, dailyWithBiometrics])
+}, [dexaSeries, estimatedCurrentBF])
 
 const bodyCompositionOverviewDomain = useMemo(() => {
   const vals = bodyCompositionOverviewData
@@ -17254,6 +17400,9 @@ return (
     setSleepRecords={setSleepRecords}
     setBiometricRecords={setBiometricRecords}
     setSchedLog={setSchedLog}
+    healthFitDaily={healthFitDaily}
+    biometricRecords={biometricRecords}
+    ocItems={ocItems}
   />
 )}
 
