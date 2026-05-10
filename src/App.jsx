@@ -526,18 +526,18 @@ const PLAN = {
 
   // ─── SATURDAY: Long Swim ──────────────────────────────────────────────────
   Sat: {
-    cardio: "Long swim · 50–60 min · 1000–1500 yards · Zone 2 aerobic · No backstroke · YMCA pool · Primary Saturday session · Weekly long swim anchor.",
+    cardio: "Race day or long run · If racing: treat as primary cardio session, no additional strength · If not racing: long swim 50–60 min · Race weeks shift long run to Saturday",
     warmup: [],
-    topNote: "Swim-only day. No strength training. YMCA opens 6am — arrive at 6:00. Afternoon: optional easy walk or mobility during nap. Not a training session. Sunday–Saturday order can swap to accommodate races.",
+    topNote: "Race weeks: Saturday is primary run. Adjust Thursday to easy 2–3 miles only. Sunday becomes full rest. Non-race weeks: long swim as primary Saturday session.",
     tendonWork: [],
     sections: [],
   },
 
   // ─── SUNDAY: Long Run ─────────────────────────────────────────────────────
   Sun: {
-    cardio: "Long run · Zone 2 · Conversational pace · Current target 3.3 miles building under 10% weekly progression rule · MTP protocol applies: do not advance distance if score above 0 at any point this week · YMCA opens 6am · Afternoon optional easy bike 20–30 min Zone 1 during nap if MTP score = 0 and energy is high",
+    cardio: "Long run · Zone 2 · Current ceiling 4.0 miles · Next milestone 4.4 · MTP protocol applies · Race weeks: full rest — do not run day after a Saturday race",
     warmup: [],
-    topNote: "Run-only day. No strength training. This is the primary run of the week and the main driver of half marathon progression. Sunday–Saturday order can swap to accommodate races. Afternoon easy bike is informal and not counted in weekly cardio totals.",
+    topNote: "Non-race weeks: primary long run day. Race weeks: rest and recovery only. The following Tuesday resumes normal schedule.",
     tendonWork: [],
     sections: [],
   },
@@ -1254,6 +1254,8 @@ const OC_SEVERITY_LABELS = {
   4: "Severe — prevents normal training, present at rest",
   5: "Unable — cannot bear load or complete session",
 }
+const MTP_CURRENT_CEILING = 4.0
+const MTP_NEXT_MILESTONE = 4.4
 const DEFAULT_TSB_THRESHOLDS = {
   moderate: -7,
   high: -9,
@@ -2234,10 +2236,15 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
 
         const PROGRESSION_THRESHOLD = 3
         const progressPct = Math.min(100, Math.round((streak / PROGRESSION_THRESHOLD) * 100))
-        const nextDistanceMilestone = recentMax > 0 ? (recentMax * 1.1).toFixed(2) : null
-        const nextDistanceText = nextDistanceMilestone ? `${nextDistanceMilestone} mi` : "the next distance step"
+        const currentCeilingMiles = MTP_CURRENT_CEILING
+        const nextDistanceMilestone = MTP_NEXT_MILESTONE.toFixed(1)
+        const nextDistanceText = `${nextDistanceMilestone} mi`
         const remainingScoreZeroSessions = Math.max(0, PROGRESSION_THRESHOLD - streak)
         const latestZeroCheckDate = zeroChecks[0]?.date || null
+        // MTP history to log once observation logging is implemented:
+        // 2026-05-03 (approx): 4.0 miles, score 1 from mi 3.2–3.6, resolved before mi 4.0
+        // 2026-05-10: Rivian 5K (3.1 miles), score 0 throughout — race context
+        // Next planned: 2026-05-13 easy 2 miles, 2026-05-15 or 2026-05-16 first 4.4-mile attempt
         const nextMilestoneDate = (() => {
           if (streak >= PROGRESSION_THRESHOLD) return "Cleared"
           const projected = new Date()
@@ -2281,7 +2288,7 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
               <div style={{ background: "#07080e", border: "1px solid #1a1b2e", borderRadius: "8px", padding: "10px", textAlign: "center" }}>
                 <div style={{ fontSize: "10px", color: "#555", marginBottom: "3px" }}>Current ceiling</div>
                 <div style={{ fontSize: "24px", fontWeight: "800", color: "#ced2f0", lineHeight: 1 }}>
-                  {recentMax > 0 ? recentMax.toFixed(2) : "—"}
+                  {currentCeilingMiles.toFixed(1)}
                 </div>
                 <div style={{ fontSize: "10px", color: "#555" }}>mi</div>
               </div>
@@ -2310,7 +2317,7 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
               {isActive
                 ? `Resolve MTP to score 0 before resuming progression. ${sortedRuns.length > 0 ? `Last run: ${fmtShortDate(sortedRuns[0]?.date)}.` : ""}`
                 : streak >= PROGRESSION_THRESHOLD
-                  ? `Threshold met. Advance from ${recentMax.toFixed(2)} mi to ${nextDistanceText} on next run.`
+                  ? `Threshold met. Advance from ${currentCeilingMiles.toFixed(1)} mi to ${nextDistanceText} on next run.`
                   : streak > 0
                     ? `${remainingScoreZeroSessions} more explicit score-0 check${remainingScoreZeroSessions === 1 ? "" : "s"} required before advancing to ${nextDistanceText}. Expected by ${nextMilestoneDate}.`
                     : "No explicit score-0 checks logged yet. Missing data does not advance progression."
@@ -11331,7 +11338,7 @@ export default function App() {
     { date: "2026-05-02", name: "Lake Run 7K",                 city: "Lake Bloomington", dist_mi: 4.35, recommended: true,  note: "First race above 5K. Use as long run substitute." },
     { date: "2026-05-03", name: "Unit 5 Foundation 5K",        city: "Normal",       dist_mi: 3.1,  recommended: false, note: "Day after Lake Run — too close. Skip." },
     { date: "2026-05-09", name: "Rivian 5K",                   city: "Normal",       dist_mi: 3.1,  recommended: true,  note: "Easy 5K training run. No racing." },
-    { date: "2026-05-17", name: "Donut Run",                   city: "Bloomington",  dist_mi: 3.0,  recommended: true,  note: "Low-key 3-mile option. Good tempo effort." },
+    { date: "2026-05-17", name: "Donut Run 5K",                city: "Bloomington IL", dist_mi: 3.1, recommended: true,  note: "Race-week option. Use as the primary Saturday run with Sunday full rest." },
     { date: "2026-06-06", name: "Steamboat Classic 4 Mile",    city: "Peoria",       dist_mi: 4.0,  recommended: true,  note: "Choose the 4-mile, not 15K. Use as long run." },
     { date: "2026-06-14", name: "Mackinaw Valley Wine Run",    city: "Mackinaw",     dist_mi: 3.1,  recommended: true,  note: "Easy 5K. Good aerobic session mid-build." },
     { date: "2026-07-04", name: "Park 2 Park",                 city: "Normal",       dist_mi: 5.0,  recommended: true,  note: "Ideal long run substitute at this phase." },
@@ -11340,7 +11347,8 @@ export default function App() {
     { date: "2026-08-02", name: "Dawson Lake Dash",            city: "Moraine View SP", dist_mi: 3.5, recommended: true, note: "Short race in peak build. Run easy, not hard." },
     { date: "2026-08-22", name: "Route 66 (6.6)",              city: "McLean",       dist_mi: 4.1,  recommended: true,  note: "Good 4-mile effort 4 weeks out. No heroics." },
     { date: "2026-09-07", name: "Bridge to Bridge Run",        city: "Peoria",       dist_mi: 4.0,  recommended: true,  note: "Taper window. Easy effort only." },
-    { date: "2026-09-19", name: "St. Jude Half Marathon",      city: "Bloomington",  dist_mi: 13.1, recommended: true,  note: "Goal race. Finish comfortable, injury-free." },
+    { date: "2026-09-19", name: "St. Jude 10K",                city: "Bloomington IL", dist_mi: 6.2, recommended: true,  note: "Primary fall 10K target. Controlled effort, no late-race spike." },
+    { date: "2026-10-18", name: "Naperville Half Marathon",    city: "Naperville IL", dist_mi: 13.1, recommended: true,  note: "Half marathon goal race. Finish comfortable and injury-free." },
   ]
 
   // ── ChatGPT Plan: weekly long run targets (week-start Monday → miles) ───
