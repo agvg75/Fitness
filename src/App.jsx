@@ -1665,7 +1665,15 @@ function computeOcRecoveryDate(item) {
 // ─── TabOperationalCapacity ────────────────────────────────────────────────────
 function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapacityData, healthFitDaily, sleepRecords, tsbFallback = null, runSessions = [] }) {
   const [selectedId, setSelectedId] = useState(null)
-  const [addForm, setAddForm] = useState({ key: "muscleStatus", location: "Quad L", currentScore: 1, halfLifeHours: null })
+  const [addForm, setAddForm] = useState({
+    key: "muscleStatus",
+    location: "Quad L",
+    currentScore: 1,
+    halfLifeHours: null,
+    isHistorical: false,
+    historicalStartDate: "",
+    historicalResolvedDate: "",
+  })
   const [capacityInfoOpen, setCapacityInfoOpen] = useState({ tendonPain: false })
   const MTP_LOCATION = "Toe R"
   const MTP_KEY = "jointStatus"
@@ -1676,7 +1684,11 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
   const readinessColor = readiness >= 80 ? "#4ade80" : readiness >= 60 ? "#fbbf24" : readiness >= 40 ? "#f97316" : "#ef4444"
   const active = rd.active
   const mapItems = useMemo(() => {
-    const sorted = [...ocItems].sort((a, b) => {
+    const renderableItems = ocItems.filter(i =>
+      Number(i.currentScore) > 0 ||
+      (i.chronicity === "chronic" && Number(i.currentScore) === 0)
+    )
+    const sorted = [...renderableItems].sort((a, b) => {
       const aDate = String(a.lastResolvedDate || a.startDate || "")
       const bDate = String(b.lastResolvedDate || b.startDate || "")
       return bDate.localeCompare(aDate)
@@ -1765,22 +1777,79 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
   const addItem = () => {
     if (!addForm.currentScore) return
     const meta = OC_KEY_META[addForm.key] || OC_KEY_META.muscleStatus
+
+    const isHistorical = addForm.isHistorical &&
+      addForm.historicalStartDate && addForm.historicalResolvedDate
+
+    const startDate = isHistorical
+      ? new Date(addForm.historicalStartDate).toISOString()
+      : new Date().toISOString()
+
+    const resolvedDate = isHistorical
+      ? new Date(addForm.historicalResolvedDate).toISOString()
+      : null
+
+    // For historical episodes: currentScore is 0 (already resolved)
+    const currentScore = isHistorical ? 0 : Number(addForm.currentScore)
+
+    // Compute chronicity: check existing items for same key+location to
+    // determine prior episode count and last resolution interval.
+    const sameRegionItems = ocItems.filter(
+      i => i.key === addForm.key && i.location === addForm.location
+    )
+    const priorEpisodeCount = sameRegionItems.reduce(
+      (sum, i) => sum + (i.episodeCount || 0) + (Number(i.initialScore || 0) > 0 ? 1 : 0), 0
+    )
+    const newEpisodeCount = priorEpisodeCount + (Number(addForm.currentScore) > 0 ? 1 : 0)
+
+    const mostRecentResolved = sameRegionItems
+      .map(i => i.lastResolvedDate)
+      .filter(Boolean)
+      .sort()
+      .pop()
+    const daysSinceLast = mostRecentResolved
+      ? (new Date(startDate).getTime() - new Date(mostRecentResolved).getTime()) / 86400000
+      : null
+
+    const chronicity =
+      newEpisodeCount >= 3 || (daysSinceLast != null && daysSinceLast < 90)
+        ? "chronic"
+        : "acute"
+
     const item = {
       id: Date.now(),
       key: addForm.key,
       location: addForm.location,
       label: `${meta.label} — ${addForm.location}`,
-      currentScore: Number(addForm.currentScore),
+      currentScore,
       initialScore: Number(addForm.currentScore),
-      startDate: new Date().toISOString(),
+      startDate,
       halfLifeHours: Number(addForm.halfLifeHours) || meta.halfLifeHours,
-      episodeCount: 0,
-      lastResolvedDate: null,
-      chronicity: "acute",
+      episodeCount: isHistorical ? 1 : 0,
+      lastResolvedDate: resolvedDate,
+      chronicity,
+      ...(isHistorical ? { eventType: "historical_entry" } : {}),
     }
-    const updated = [item, ...ocItems]
+
+    const updated = chronicity === "chronic"
+      ? [item, ...ocItems.map(existing =>
+          existing.key === addForm.key && existing.location === addForm.location
+            ? { ...existing, chronicity: "chronic" }
+            : existing
+        )]
+      : [item, ...ocItems]
     setOcItems(updated)
     saveOcItems(updated)
+
+    // Reset form, preserving key/location for rapid multi-episode entry.
+    setAddForm(f => ({
+      ...f,
+      currentScore: 1,
+      halfLifeHours: null,
+      isHistorical: false,
+      historicalStartDate: "",
+      historicalResolvedDate: "",
+    }))
   }
 
   const updateItem = (id, changes) => {
@@ -1886,9 +1955,8 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
           const coords = OC_REGION_COORDS[item.location]?.[ck]
           if (!coords) return null
           const meta = OC_KEY_META[item.key] || OC_KEY_META.muscleStatus
-          const isResolved = Number(item.currentScore || 0) === 0
-          const sz = isResolved ? 10 : 8 + item.currentScore * 4
-          const chronic = item.chronicity === "chronic"
+          const isChronic = item.chronicity === "chronic" && Number(item.currentScore) === 0
+          const sz = isChronic ? 10 : 8 + item.currentScore * 4
           return (
             <div
               key={item.id}
@@ -1901,9 +1969,9 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
                 position: "absolute", left: `${coords[0]}%`, top: `${coords[1]}%`,
                 width: sz, height: sz, borderRadius: "50%",
                 transform: "translate(-50%, -50%)",
-                opacity: isResolved ? 0.25 : 1,
-                background: isResolved || chronic ? "transparent" : meta.color,
-                border: isResolved ? "1.5px solid #444" : `2px solid ${meta.color}`,
+                background: isChronic ? "transparent" : meta.color,
+                border: isChronic ? `2px dashed ${meta.color}` : "none",
+                opacity: isChronic ? 0.5 : 1,
                 boxShadow: selectedId === item.id ? `0 0 10px ${meta.color}` : "none",
                 cursor: "pointer", zIndex: 10, transition: "box-shadow 0.15s",
               }}
@@ -2170,7 +2238,48 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
                   onChange={e => setAddForm(f => ({ ...f, halfLifeHours: e.target.value ? Number(e.target.value) : null }))}
                   style={{ ...inputStyle(), padding: "6px 10px" }} />
               </div>
-              <button onClick={addItem} style={{ ...buttonStyle(true), fontSize: "12px" }}>+ Add Issue</button>
+              <div style={{ marginTop: "4px" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "11px", color: "#666", cursor: "pointer" }}>
+                  <input
+                    type="checkbox"
+                    checked={addForm.isHistorical}
+                    onChange={e => setAddForm(f => ({ ...f, isHistorical: e.target.checked }))}
+                  />
+                  Historical episode (past dates)
+                </label>
+              </div>
+              {addForm.isHistorical && (
+                <div style={{ display: "grid", gap: "6px", padding: "8px", background: "#0a0b14", borderRadius: "4px", border: "1px solid #1a1b2e" }}>
+                  <div style={{ fontSize: "10px", color: "#555", letterSpacing: "0.1em" }}>EPISODE DATES</div>
+                  <div>
+                    <div style={{ fontSize: "11px", color: "#666", marginBottom: "2px" }}>Started</div>
+                    <input
+                      type="date"
+                      value={addForm.historicalStartDate}
+                      max={addForm.historicalResolvedDate || new Date().toISOString().slice(0, 10)}
+                      onChange={e => setAddForm(f => ({ ...f, historicalStartDate: e.target.value }))}
+                      style={{ ...inputStyle(), padding: "6px 10px" }}
+                    />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: "11px", color: "#666", marginBottom: "2px" }}>Resolved</div>
+                    <input
+                      type="date"
+                      value={addForm.historicalResolvedDate}
+                      min={addForm.historicalStartDate || undefined}
+                      max={new Date().toISOString().slice(0, 10)}
+                      onChange={e => setAddForm(f => ({ ...f, historicalResolvedDate: e.target.value }))}
+                      style={{ ...inputStyle(), padding: "6px 10px" }}
+                    />
+                  </div>
+                  <div style={{ fontSize: "10px", color: "#444", lineHeight: "1.4" }}>
+                    Severity above = peak score at onset. Episode will be marked resolved automatically.
+                  </div>
+                </div>
+              )}
+              <button onClick={addItem} style={{ ...buttonStyle(true), fontSize: "12px" }}>
+                {addForm.isHistorical ? "+ Add Historical Episode" : "+ Add Issue"}
+              </button>
             </div>
           </div>
 
@@ -2204,9 +2313,42 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
                 </div>
               )
             })}
-            {ocItems.filter(i => i.currentScore === 0 && i.episodeCount > 0).length > 0 && (
-              <div style={{ fontSize: "10px", color: "#333", marginTop: "8px", textAlign: "center" }}>
-                {ocItems.filter(i => i.currentScore === 0 && i.episodeCount > 0).length} resolved
+            {ocItems.filter(i => Number(i.currentScore) === 0 && (i.episodeCount > 0 || Number(i.initialScore) > 0)).length > 0 && (
+              <div style={{ marginTop: "12px", borderTop: "1px solid #1a1b2e", paddingTop: "10px" }}>
+                <div style={{ fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase", color: "#444", marginBottom: "6px" }}>
+                  Episode History
+                </div>
+                {ocItems
+                  .filter(i => Number(i.currentScore) === 0 && (i.episodeCount > 0 || Number(i.initialScore) > 0))
+                  .sort((a, b) => String(b.startDate).localeCompare(String(a.startDate)))
+                  .map(item => {
+                    const meta = OC_KEY_META[item.key] || OC_KEY_META.muscleStatus
+                    const startStr = item.startDate ? String(item.startDate).slice(0, 10) : "—"
+                    const resolvedStr = item.lastResolvedDate ? String(item.lastResolvedDate).slice(0, 10) : "—"
+                    const durationDays = item.startDate && item.lastResolvedDate
+                      ? Math.round((new Date(item.lastResolvedDate) - new Date(item.startDate)) / 86400000)
+                      : null
+                    return (
+                      <div key={item.id} style={{
+                        padding: "6px 8px", marginBottom: "4px", borderRadius: "4px",
+                        border: `1px solid ${item.chronicity === "chronic" ? "rgba(239,68,68,0.2)" : "#1a1b2e"}`,
+                        background: item.chronicity === "chronic" ? "rgba(239,68,68,0.04)" : "transparent",
+                      }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <span style={{ fontSize: "11px", color: meta.color }}>{item.location}</span>
+                          <span style={{ fontSize: "10px", color: item.chronicity === "chronic" ? "#ef4444" : "#555" }}>
+                            {item.chronicity === "chronic" ? "chronic" : "resolved"}
+                          </span>
+                          <span style={{ fontSize: "11px", color: "#555" }}>peak {item.initialScore}/5</span>
+                        </div>
+                        <div style={{ fontSize: "10px", color: "#444", marginTop: "2px" }}>
+                          {startStr} → {resolvedStr}
+                          {durationDays != null ? ` (${durationDays}d)` : ""}
+                        </div>
+                      </div>
+                    )
+                  })
+                }
               </div>
             )}
           </div>
@@ -2292,45 +2434,58 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
 
       {/* ── Operational Capacity current projection chart ─────────── */}
       <div style={{ ...cardStyle(), minWidth: "0" }}>
-        <div style={{ fontSize: "12px", fontWeight: "700", marginBottom: "12px" }}>Operational Capacity Projection</div>
+        <div style={{ fontSize: "12px", fontWeight: "700", marginBottom: "12px" }}>Operational Capacity — History & Projection</div>
         <div style={{ fontSize: 11, color: "#555", marginBottom: 8 }}>
-          Acute = tendon, muscle, joint items. Disease = illness. Fatigue = sleep debt.
-          Each item decays at its own half-life. Hover for item breakdown.
+          History (left of today) + 60-day projection (right of today). Acute = tendon,
+          muscle, joint. Disease = illness. Fatigue = sleep debt. Each item decays at its
+          own half-life from its start date; resolved items stop contributing at resolution.
+          Hover for per-item breakdown.
         </div>
         {(!operationalCapacityData || operationalCapacityData.length === 0) ? (
           <div style={{ fontSize: "12px", color: "#444", textAlign: "center", padding: "40px 0" }}>
-            No current OC issues — true historical snapshots are not stored yet.
+            No OC issues recorded — add issues in the Operational Capacity tab to build history.
           </div>
         ) : (
           <ResponsiveContainer width="100%" height={280}>
-            <LineChart data={operationalCapacityData} margin={{ top: 20, right: 20, left: 55, bottom: 35 }}>
+            <LineChart
+              data={operationalCapacityData}
+              margin={{ top: 20, right: 20, left: 55, bottom: 35 }}
+            >
               <CartesianGrid stroke="#1a1b2e" />
-              <XAxis dataKey="label" label={{ value: "Date", position: "bottom", offset: 10, fill: "#ced2f0" }} />
-              <YAxis domain={[0, 100]} label={{ value: "Operational capacity (%)", angle: -90, position: "insideLeft", offset: 15, fill: "#ced2f0", style: { textAnchor: "middle" } }} />
-              <Tooltip
-                formatter={(v, n) => {
-                  const lbl = {
-                    operationalPct: "Operational",
-                    acuteLossPct: "Acute burden (tendon/muscle/joint)",
-                    diseaseLossPct: "Disease burden",
-                    fatigueLossPct: "Fatigue / sleep burden"
-                  }
-                  return [`${Number(v).toFixed(1)}%`, lbl[n] || n]
+              <XAxis
+                dataKey="label"
+                label={{ value: "Date", position: "bottom", offset: 10, fill: "#ced2f0" }}
+                tick={{ fontSize: 10 }}
+              />
+              <YAxis
+                domain={[0, 100]}
+                label={{
+                  value: "Operational capacity (%)",
+                  angle: -90,
+                  position: "insideLeft",
+                  offset: 15,
+                  fill: "#ced2f0",
+                  style: { textAnchor: "middle" },
                 }}
+              />
+              <Tooltip
                 content={({ active, payload, label }) => {
                   if (!active || !payload?.length) return null
                   const d = payload[0]?.payload
+                  const labelMap = {
+                    operationalPct:  "Operational",
+                    acuteLossPct:    "Acute burden (tendon/muscle/joint)",
+                    diseaseLossPct:  "Disease burden",
+                    fatigueLossPct:  "Fatigue / sleep burden",
+                  }
                   return (
                     <div style={{ background: "#0d0f1e", border: "1px solid #222", borderRadius: 6, padding: "8px 12px", fontSize: 12 }}>
-                      <div style={{ color: "#888", marginBottom: 4 }}>{label}</div>
+                      <div style={{ color: "#888", marginBottom: 4 }}>
+                        {label}{d?.isPast ? "" : " (projected)"}
+                      </div>
                       {payload.map(p => (
-                      <div key={p.dataKey} style={{ color: p.stroke || p.fill, marginBottom: 2 }}>
-                          {{
-                            operationalPct: "Operational",
-                            acuteLossPct: "Acute burden (tendon/muscle/joint)",
-                            diseaseLossPct: "Disease burden",
-                            fatigueLossPct: "Fatigue / sleep burden"
-                          }[p.dataKey] || p.name}: {Number(p.value).toFixed(1)}%
+                        <div key={p.dataKey} style={{ color: p.stroke || p.fill, marginBottom: 2 }}>
+                          {labelMap[p.dataKey] || p.name}: {Number(p.value).toFixed(1)}%
                         </div>
                       ))}
                       {d?.breakdown?.length > 0 && (
@@ -2345,7 +2500,21 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
                 }}
               />
               <Legend verticalAlign="top" height={36} />
-              <Line type="monotone" dataKey="operationalPct" stroke="#e5e7eb" strokeWidth={3} dot={false} name="Operational" />
+              <ReferenceLine
+                x={fmtShortDate(new Date().toISOString().slice(0, 10))}
+                stroke="#444"
+                strokeDasharray="4 3"
+                label={{ value: "Today", position: "insideTopRight", fill: "#666", fontSize: 10 }}
+              />
+              <Line
+                type="monotone"
+                dataKey="operationalPct"
+                stroke="#e5e7eb"
+                strokeWidth={3}
+                dot={false}
+                name="Operational"
+                strokeDasharray={undefined}
+              />
               <Line type="monotone" dataKey="acuteLossPct"   stroke="#ef4444" strokeWidth={2} dot={false} name="Acute" />
               <Line type="monotone" dataKey="diseaseLossPct" stroke="#f59e0b" strokeWidth={2} dot={false} name="Disease" />
               <Line type="monotone" dataKey="fatigueLossPct" stroke="#a78bfa" strokeWidth={2} dot={false} name="Fatigue" />
@@ -5955,20 +6124,49 @@ const last28 = workouts.filter(w => new Date(w.dateTime || w.date || w.start_dat
   }
 }
 function linearSlope(data, getValue) {
+  // Legacy: kept for any callers that don't need weighting.
+  // Prefer weightedLinearSlope for forecast use.
   if (!data || data.length < 2) return 0
-
   const first = data[0]
   const last = data[data.length - 1]
-
-  const days =
-    (new Date(last.date) - new Date(first.date)) /
-    (1000 * 60 * 60 * 24)
-
+  const days = (new Date(last.date) - new Date(first.date)) / 86400000
   if (days === 0) return 0
+  return (getValue(last) - getValue(first)) / days
+}
 
-  const change = getValue(last) - getValue(first)
+function weightedLinearSlope(data, getValue, halfLifeDays = 21) {
+  // Exponentially weighted least-squares regression.
+  // Recent observations receive higher weight; weight decays with half-life
+  // halfLifeDays as you go backward in time.
+  // Returns slope in units-per-day.
+  if (!data || data.length < 2) return 0
 
-  return change / days
+  const pts = data
+    .map(d => {
+      const x = new Date(d.date).getTime() / 86400000  // days since epoch
+      const y = getValue(d)
+      return { x, y }
+    })
+    .filter(p => Number.isFinite(p.x) && Number.isFinite(p.y))
+
+  if (pts.length < 2) return 0
+
+  const lambda = Math.log(2) / halfLifeDays
+  const lastX = pts[pts.length - 1].x
+
+  // Weight = exp(-lambda * (lastX - x))  =>  most recent point = 1.0
+  const ws = pts.map(p => Math.exp(-lambda * (lastX - p.x)))
+
+  const W   = ws.reduce((s, w) => s + w, 0)
+  const Wx  = ws.reduce((s, w, i) => s + w * pts[i].x, 0)
+  const Wy  = ws.reduce((s, w, i) => s + w * pts[i].y, 0)
+  const Wxx = ws.reduce((s, w, i) => s + w * pts[i].x ** 2, 0)
+  const Wxy = ws.reduce((s, w, i) => s + w * pts[i].x * pts[i].y, 0)
+
+  const denom = W * Wxx - Wx * Wx
+  if (Math.abs(denom) < 1e-10) return 0
+
+  return (W * Wxy - Wx * Wy) / denom  // lb per day
 }
 
 function projectValue(current, slopePerDay, days, floor = 0) {
@@ -6040,8 +6238,10 @@ function buildBodyForecast({
 
   const currentWeight = weightRows[weightRows.length - 1]._weight
 
-  const recentWeights = weightRows.slice(-28)
-  const observedSlope = linearSlope(recentWeights, d => d._weight)
+  // Weighted regression over last 90 days; half-life 21 days so recent
+  // weeks drive the trend while older data provides stabilizing context.
+  const longWeights = weightRows.slice(-90)
+  const observedSlope = weightedLinearSlope(longWeights, d => d._weight, 21)
 
   const estimatedMaintenance = estimateMaintenanceCalories({
     currentWeight,
@@ -6067,10 +6267,13 @@ function buildBodyForecast({
       ? (avgLoggedCalories - estimatedMaintenance) / 3500
       : observedSlope
 
+  // Give observed trend 60% weight when calorie logging coverage is high,
+  // since the weighted regression is already well-calibrated from actual data.
+  // Give it 85% weight when logging coverage is low (trust the scale more).
   let blendedSlope =
     loggingCoverage >= 0.5
-      ? observedSlope * 0.35 + energyBalanceSlope * 0.65
-      : observedSlope
+      ? observedSlope * 0.60 + energyBalanceSlope * 0.40
+      : observedSlope * 0.85 + energyBalanceSlope * 0.15
 
   if (!Number.isFinite(blendedSlope)) blendedSlope = observedSlope
   if (!Number.isFinite(blendedSlope)) blendedSlope = 0
@@ -10087,6 +10290,45 @@ Return ONLY a JSON object with this exact structure, no explanation:
         )}
       </div>
 
+      <div style={{
+        marginTop: 24,
+        padding: '18px 20px',
+        background: '#0b0d14',
+        border: '1px solid #1a1b2e',
+        borderRadius: 8,
+      }}>
+        <div style={{
+          fontSize: 11,
+          letterSpacing: '0.14em',
+          color: '#444',
+          textTransform: 'uppercase',
+          marginBottom: 8,
+        }}>
+          Trainer Report Export
+        </div>
+        <div style={{ fontSize: 12, color: '#555', marginBottom: 14, lineHeight: 1.6 }}>
+          Generates a self-contained HTML snapshot of your current data — training load,
+          body composition, running protocol, schedule, and operational capacity —
+          formatted for your trainer. Open in any browser, no login required.
+        </div>
+        <button
+          onClick={handleExportReport}
+          style={{
+            background: '#0d1a0d',
+            border: '1px solid #1a3a1a',
+            borderRadius: 6,
+            color: '#4a8a4a',
+            fontSize: 12,
+            letterSpacing: '0.08em',
+            padding: '9px 20px',
+            cursor: 'pointer',
+            fontWeight: 600,
+          }}
+        >
+          Generate Trainer Report ↓
+        </button>
+      </div>
+
       <div style={{ marginTop: 24, padding: "16px", background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: 12 }}>
         <div style={{ fontWeight: "bold", marginBottom: 8, fontSize: 13 }}>
           Import from KNR Sheet Photo
@@ -10781,9 +11023,19 @@ export default function App() {
     tsbModerateRiskThreshold: -7,
     tsbHighRiskThreshold: -9,
     ocHalfLifeOverrides: {
-      "MTP joint": 840,
-      toe: 840,
-      foot: 672,
+      // Empirical half-lives from actual resolution times (Andrés, 2025-2026)
+      // Shoulder: Nov 10 onset, lingered to ~Feb 2026 = ~90 days observed
+      "Shoulder R":   1440,   // 60 days — conservative empirical fit
+      "Shoulder L":   1440,
+      // Left MTP: three episodes, each 4-6 weeks to resolve
+      "Toe L":        1008,   // 42 days = 6 weeks — mid-range empirical
+      "Toe R":        1008,
+      "MTP L":        1008,
+      "MTP R":        1008,
+      "Foot L":        840,   // 35 days — less specific forefoot issues
+      "Foot R":        840,
+      foot:            672,
+      toe:            1008,
     },
 
     // Body composition — update after each DEXA scan
@@ -11780,6 +12032,16 @@ useEffect(() => {
             console.warn("[LIFT] body_weight.json fetch threw:", err?.message || err)
             return []
           })
+        fetch(`${base}data/weight_daily.json`)
+          .then(r => r.ok ? r.json() : [])
+          .then(weightSeed => {
+            if (!Array.isArray(weightSeed) || !weightSeed.length) return
+            setBiometricRecords(prev => {
+              if (Array.isArray(prev) && prev.length > 0) return prev
+              return weightSeed.filter(r => r.measured_date && r.weight_lb && Number(r.weight_lb) > 140)
+            })
+          })
+          .catch(() => {})
         const dx = await fetch(`${base}data/dexa_summary.json?v=20260427`).then(r => {
           if (!r.ok) throw new Error("dexa_summary.json failed")
           return r.json()
@@ -12512,11 +12774,50 @@ const overviewWeightDomain = useMemo(() => {
   }, [latestDexa])
 
   const estimatedCurrentBF = useMemo(() => {
+    // Primary method: fit weighted linear regression to DEXA pct_fat values
+    // and project forward to today. More accurate than lean-mass-constant
+    // assumption because it uses the actual fat loss trend across all scans.
+    if (dexaSeries.length >= 2) {
+      const dexaForRegression = dexaSeries
+        .filter(d => d.date && d.pct_fat != null)
+        .map(d => ({ date: d.date, val: Number(d.pct_fat) }))
+        .filter(d => Number.isFinite(d.val))
+
+      if (dexaForRegression.length >= 2) {
+        // Use long half-life (180 days) so all DEXA scans contribute equally —
+        // we have only 4 points and cannot afford to discount older ones heavily.
+        const slopePerDay = weightedLinearSlope(
+          dexaForRegression,
+          d => d.val,
+          180
+        )
+        const lastScan = dexaForRegression[dexaForRegression.length - 1]
+        const daysSinceLastScan =
+          (new Date().getTime() - new Date(lastScan.date).getTime()) / 86400000
+        const projected = lastScan.val + slopePerDay * daysSinceLastScan
+        if (Number.isFinite(projected) && projected > 5 && projected < 60) {
+          return projected
+        }
+      }
+    }
+
+    // Fallback: lean-mass-constant method (original logic)
     if (!latestWeight || latestLeanAnchor == null) return null
     const wt = Number(latestWeight.weight_lb)
     if (!wt || wt <= 0) return null
     return ((wt - latestLeanAnchor) / wt) * 100
-  }, [latestWeight, latestLeanAnchor])
+  }, [latestWeight, latestLeanAnchor, dexaSeries])
+
+  const vo2Series = useMemo(() => {
+    return (Array.isArray(healthFitDaily) ? healthFitDaily : [])
+      .filter(r => r.metric_date && r.vo2_max != null && Number(r.vo2_max) > 20)
+      .map(r => ({
+        date: r.metric_date,
+        label: fmtShortDate(r.metric_date),
+        vo2: Number(Number(r.vo2_max).toFixed(1))
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date))
+  }, [healthFitDaily])
 
   const mealDerivedDays = useMemo(() => deriveDailyNutrition(mealEntries), [mealEntries])
 
@@ -13765,29 +14066,34 @@ const adaptiveTrainingState = useMemo(() => {
 
 const operationalCapacityData = useMemo(() => {
   const items = Array.isArray(ocItems) ? ocItems : []
-  if (!items.length) return []
 
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-
-  const daysBetween = (a, b) =>
-    (a.getTime() - b.getTime()) / (1000 * 60 * 60 * 24)
+  // Include items with a valid startDate and a nonzero initialScore.
+  // Resolved items (currentScore 0) are included so their historical arc shows.
+  const PEAK_LOSS_BY_SCORE = [0, 0.15, 0.25, 0.40, 0.60, 0.80]
 
   const classifyItem = item => {
     if (item.key === "illnessLoad") return "disease"
     if (item.key === "sleepDebt")   return "fatigue"
-    return "acute" // tendonStatus, muscleStatus, jointStatus
+    return "acute"
   }
 
-  const PEAK_LOSS_BY_SCORE = [0, 0.15, 0.25, 0.40, 0.60, 0.80]
   const datedEntries = items
     .map(item => {
       const start = item.startDate ? new Date(item.startDate) : null
       if (!start || Number.isNaN(start.getTime())) return null
       const initScore = item.initialScore || item.currentScore || 0
       if (initScore <= 0) return null
-      const halfLifeHours = resolveOcHalfLifeHours(item, LIFT_CONFIG.ocHalfLifeOverrides, Number(OC_KEY_META[item.key]?.halfLifeHours || 72))
+      const halfLifeHours = resolveOcHalfLifeHours(
+        item,
+        LIFT_CONFIG.ocHalfLifeOverrides,
+        Number(OC_KEY_META[item.key]?.halfLifeHours || 72)
+      )
       const peakLoss = PEAK_LOSS_BY_SCORE[Math.min(5, Math.max(0, Math.round(initScore)))] ?? 0.40
+
+      // resolvedAt: the date this episode was closed (score dropped to 0).
+      // After this date the item contributes zero loss, regardless of the decay curve.
+      const resolvedAt = item.lastResolvedDate ? new Date(item.lastResolvedDate) : null
+
       return {
         _start: start,
         _category: classifyItem(item),
@@ -13795,6 +14101,9 @@ const operationalCapacityData = useMemo(() => {
         _halfLifeHours: halfLifeHours,
         _peakLoss: peakLoss,
         _episodeCount: item.episodeCount || 0,
+        _resolvedAt: resolvedAt,
+        _episodeCount: item.episodeCount || 0,
+        _resolvedAt: resolvedAt,
       }
     })
     .filter(Boolean)
@@ -13802,64 +14111,78 @@ const operationalCapacityData = useMemo(() => {
 
   if (!datedEntries.length) return []
 
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  // Lookback: start from the earliest item startDate, capped at 365 days ago.
+  const maxLookback = new Date(today)
+  maxLookback.setDate(maxLookback.getDate() - 365)
+  const earliest = datedEntries.reduce(
+    (min, e) => (e._start < min ? e._start : min),
+    today
+  )
+  const windowStart = earliest > maxLookback ? earliest : maxLookback
+
+  // Forward window: 60 days from today.
   const endDate = new Date(today)
   endDate.setDate(endDate.getDate() + 60)
 
+  const todayIso = today.toISOString().slice(0, 10)
   const series = []
 
-  for (let d = new Date(today); d <= endDate; d.setDate(d.getDate() + 1)) {
-    const acuteLoss = datedEntries
-      .filter(e => e._category === "acute")
-      .reduce((sum, e) => {
-        const ageDays = daysBetween(d, e._start)
-        if (ageDays < 0) return sum
-        const ageHours = ageDays * 24
-        const residualFloor = e._episodeCount >= 3 ? 0.10 : e._episodeCount >= 2 ? 0.05 : 0.0
-        const decayingPortion = (e._peakLoss - residualFloor) * Math.pow(0.5, ageHours / e._halfLifeHours)
-        return sum + residualFloor + decayingPortion
-      }, 0)
+  for (
+    let d = new Date(windowStart);
+    d <= endDate;
+    d.setDate(d.getDate() + 1)
+  ) {
+    const dIso = d.toISOString().slice(0, 10)
+    const isPast = dIso <= todayIso  // true for historical days including today
 
-    const diseaseLoss = datedEntries
-      .filter(e => e._category === "disease")
-      .reduce((sum, e) => {
-        const ageDays = daysBetween(d, e._start)
-        if (ageDays < 0) return sum
-        const ageHours = ageDays * 24
-        const residualFloor = e._episodeCount >= 3 ? 0.10 : e._episodeCount >= 2 ? 0.05 : 0.0
-        const decayingPortion = (e._peakLoss - residualFloor) * Math.pow(0.5, ageHours / e._halfLifeHours)
-        return sum + residualFloor + decayingPortion
-      }, 0)
+    const computeLoss = category =>
+      datedEntries
+        .filter(e => e._category === category)
+        .reduce((sum, e) => {
+          // Item hasn't started yet on this day.
+          if (d < e._start) return sum
 
-    const fatigueLoss = datedEntries
-      .filter(e => e._category === "fatigue")
-      .reduce((sum, e) => {
-        const ageDays = daysBetween(d, e._start)
-        if (ageDays < 0) return sum
-        const ageHours = ageDays * 24
-        const residualFloor = e._episodeCount >= 3 ? 0.10 : e._episodeCount >= 2 ? 0.05 : 0.0
-        const decayingPortion = (e._peakLoss - residualFloor) * Math.pow(0.5, ageHours / e._halfLifeHours)
-        return sum + residualFloor + decayingPortion
-      }, 0)
+          // Item was resolved before this day: contributes zero.
+          if (e._resolvedAt && d > e._resolvedAt) return sum
+
+          const ageHours = (d.getTime() - e._start.getTime()) / 3600000
+          const residualFloor = e._episodeCount >= 3 ? 0.10 : e._episodeCount >= 2 ? 0.05 : 0.0
+          const decayingPortion = (e._peakLoss - residualFloor) * Math.pow(0.5, ageHours / e._halfLifeHours)
+          return sum + residualFloor + decayingPortion
+        }, 0)
+
+    const acuteLoss   = computeLoss("acute")
+    const diseaseLoss = computeLoss("disease")
+    const fatigueLoss = computeLoss("fatigue")
 
     const totalMultiplier =
       Math.max(0, 1 - acuteLoss) *
       Math.max(0, 1 - diseaseLoss) *
       Math.max(0, 1 - fatigueLoss)
 
+    const breakdown = datedEntries
+      .map(e => {
+        if (d < e._start) return null
+        if (e._resolvedAt && d > e._resolvedAt) return null
+        const ageHours = (d.getTime() - e._start.getTime()) / 3600000
+        const loss = e._peakLoss * Math.pow(0.5, ageHours / e._halfLifeHours)
+        if (loss < 0.005) return null
+        return { label: e._label, lossPct: Number((loss * 100).toFixed(1)) }
+      })
+      .filter(Boolean)
+
     series.push({
-      date: d.toISOString().slice(0, 10),
-      label: fmtShortDate(d.toISOString().slice(0, 10)),
-      acuteLossPct: Number((acuteLoss * 100).toFixed(1)),
+      date: dIso,
+      label: fmtShortDate(dIso),
+      isPast,
+      acuteLossPct:   Number((acuteLoss   * 100).toFixed(1)),
       diseaseLossPct: Number((diseaseLoss * 100).toFixed(1)),
       fatigueLossPct: Number((fatigueLoss * 100).toFixed(1)),
       operationalPct: Number((totalMultiplier * 100).toFixed(1)),
-      breakdown: datedEntries.map(e => {
-        const ageDays = daysBetween(d, e._start)
-        if (ageDays < 0) return null
-        const loss = e._peakLoss * Math.pow(0.5, (ageDays * 24) / e._halfLifeHours)
-        if (loss < 0.005) return null
-        return { label: e._label, lossPct: Number((loss * 100).toFixed(1)) }
-      }).filter(Boolean)
+      breakdown,
     })
   }
 
@@ -13881,22 +14204,46 @@ const bodyCompositionOverviewData = useMemo(() => {
         }))
     : []
 
+  // Current estimated BF (today, from regression)
   const currentPt =
     estimatedCurrentBF != null
       ? [{
           date: new Date().toISOString().slice(0, 10),
-          label: dailyWithBiometrics?.length ? fmtShortDate(dailyWithBiometrics[dailyWithBiometrics.length - 1]?.date) : "Current",
+          label: "Now (est.)",
           dexaBF: null,
-          estimatedBF: Number(estimatedCurrentBF)
+          estimatedBF: Number(estimatedCurrentBF.toFixed(1))
         }]
       : []
 
-  const merged = [...dexaPts, ...currentPt]
+  // Projected DEXA point: project forward to next planned DEXA date using
+  // the same regression slope that drives estimatedCurrentBF.
+  const nextDexaDate = LIFT_CONFIG.next_dexa_date  // "2026-09-19"
+  const projectedDexaPt = (() => {
+    if (!estimatedCurrentBF || !nextDexaDate) return []
+    const dexaForRegression = dexaSeries
+      .filter(d => d.date && d.pct_fat != null)
+      .map(d => ({ date: d.date, val: Number(d.pct_fat) }))
+      .filter(d => Number.isFinite(d.val))
+    if (dexaForRegression.length < 2) return []
+    const slopePerDay = weightedLinearSlope(dexaForRegression, d => d.val, 180)
+    const lastScan = dexaForRegression[dexaForRegression.length - 1]
+    const daysToNext = (new Date(nextDexaDate).getTime() - new Date(lastScan.date).getTime()) / 86400000
+    const projected = lastScan.val + slopePerDay * daysToNext
+    if (!Number.isFinite(projected) || projected < 5 || projected > 60) return []
+    return [{
+      date: nextDexaDate,
+      label: fmtShortDate(nextDexaDate) + " (proj.)",
+      dexaBF: null,
+      estimatedBF: Number(projected.toFixed(1))
+    }]
+  })()
+
+  const merged = [...dexaPts, ...currentPt, ...projectedDexaPt]
     .filter(row => row.date)
     .sort((a, b) => String(a.date).localeCompare(String(b.date)))
 
   return merged
-}, [dexaSeries, estimatedCurrentBF, dailyWithBiometrics])
+}, [dexaSeries, estimatedCurrentBF])
 
 const bodyCompositionOverviewDomain = useMemo(() => {
   const vals = bodyCompositionOverviewData
@@ -15955,46 +16302,42 @@ return (
     </div>
     <div style={{ ...cardStyle(), minWidth: "0", marginBottom: "20px" }}>
       <div style={{ fontWeight: "bold", marginBottom: "12px", minHeight: "20px" }}>
-        Operational Capacity Projection
+        Operational Capacity — History & Projection
       </div>
       <div style={{ fontSize: 11, color: "#555", marginBottom: 8 }}>
-        Acute = tendon, muscle, joint items. Disease = illness. Fatigue = sleep debt.
-        Each item decays at its own half-life. Hover for item breakdown.
+        History + 60-day projection. Dashed line marks today.
       </div>
       {(!operationalCapacityData || operationalCapacityData.length === 0) ? (
         <div style={{ fontSize: "12px", color: "#444", textAlign: "center", padding: "40px 0" }}>
-          No current OC issues — true historical snapshots are not stored yet.
+          No OC issues recorded — add issues in the Operational Capacity tab to build history.
         </div>
       ) : (
         <ResponsiveContainer width="100%" height={240}>
-          <LineChart data={operationalCapacityData} margin={{ top: 8, right: 14, left: 10, bottom: 18 }}>
+          <LineChart
+            data={operationalCapacityData}
+            margin={{ top: 8, right: 14, left: 10, bottom: 18 }}
+          >
             <CartesianGrid stroke="#1a1b2e" />
             <XAxis dataKey="label" tick={{ fontSize: 10 }} />
             <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} width={34} />
             <Tooltip
-              formatter={(v, n) => {
-                const lbl = {
-                  operationalPct: "Operational",
-                  acuteLossPct: "Acute burden (tendon/muscle/joint)",
-                  diseaseLossPct: "Disease burden",
-                  fatigueLossPct: "Fatigue / sleep burden"
-                }
-                return [`${Number(v).toFixed(1)}%`, lbl[n] || n]
-              }}
               content={({ active, payload, label }) => {
                 if (!active || !payload?.length) return null
                 const d = payload[0]?.payload
+                const labelMap = {
+                  operationalPct:  "Operational",
+                  acuteLossPct:    "Acute",
+                  diseaseLossPct:  "Disease",
+                  fatigueLossPct:  "Fatigue",
+                }
                 return (
                   <div style={{ background: "#0d0f1e", border: "1px solid #222", borderRadius: 6, padding: "8px 12px", fontSize: 12 }}>
-                    <div style={{ color: "#888", marginBottom: 4 }}>{label}</div>
+                    <div style={{ color: "#888", marginBottom: 4 }}>
+                      {label}{d?.isPast ? "" : " (projected)"}
+                    </div>
                     {payload.map(p => (
                       <div key={p.dataKey} style={{ color: p.stroke || p.fill, marginBottom: 2 }}>
-                        {{
-                          operationalPct: "Operational",
-                          acuteLossPct: "Acute burden (tendon/muscle/joint)",
-                          diseaseLossPct: "Disease burden",
-                          fatigueLossPct: "Fatigue / sleep burden"
-                        }[p.dataKey] || p.name}: {Number(p.value).toFixed(1)}%
+                        {labelMap[p.dataKey] || p.name}: {Number(p.value).toFixed(1)}%
                       </div>
                     ))}
                     {d?.breakdown?.length > 0 && (
@@ -16008,11 +16351,16 @@ return (
                 )
               }}
             />
-            <Legend verticalAlign="top" height={28} />
-            <Line type="monotone" dataKey="operationalPct" stroke="#e5e7eb" strokeWidth={3} dot={false} name="Operational" />
-            <Line type="monotone" dataKey="acuteLossPct" stroke="#ef4444" strokeWidth={2} dot={false} name="Acute" />
-            <Line type="monotone" dataKey="diseaseLossPct" stroke="#f59e0b" strokeWidth={2} dot={false} name="Disease" />
-            <Line type="monotone" dataKey="fatigueLossPct" stroke="#a78bfa" strokeWidth={2} dot={false} name="Fatigue" />
+            <ReferenceLine
+              x={fmtShortDate(new Date().toISOString().slice(0, 10))}
+              stroke="#444"
+              strokeDasharray="4 3"
+              label={{ value: "Today", position: "insideTopRight", fill: "#666", fontSize: 10 }}
+            />
+            <Line type="monotone" dataKey="operationalPct" stroke="#e5e7eb" strokeWidth={2} dot={false} name="Operational" />
+            <Line type="monotone" dataKey="acuteLossPct"   stroke="#ef4444" strokeWidth={1.5} dot={false} name="Acute" />
+            <Line type="monotone" dataKey="diseaseLossPct" stroke="#f59e0b" strokeWidth={1.5} dot={false} name="Disease" />
+            <Line type="monotone" dataKey="fatigueLossPct" stroke="#a78bfa" strokeWidth={1.5} dot={false} name="Fatigue" />
           </LineChart>
         </ResponsiveContainer>
       )}
@@ -16178,6 +16526,50 @@ return (
               </ComposedChart>
             </ResponsiveContainer>
           </div>
+
+          {vo2Series.length >= 2 && (
+            <div style={{ marginTop: 24, background: '#0d0f1e', border: '1px solid #1a1b2e', borderRadius: 8, padding: '18px 20px' }}>
+              <div style={{ fontWeight: 'bold', marginBottom: 6, fontSize: 13 }}>
+                VO₂ Max Trend
+              </div>
+              <div style={{ fontSize: 11, color: '#555', marginBottom: 10 }}>
+                Apple Watch aerobic estimate. Useful for within-person trend tracking; modality bias may apply (swimming underestimates).
+                Current: <span style={{ color: '#4ade80', fontWeight: 600 }}>{vo2Series[vo2Series.length - 1]?.vo2}</span> ml/kg/min
+              </div>
+              <ResponsiveContainer width="100%" height={200}>
+                <LineChart data={vo2Series} margin={{ top: 8, right: 20, left: 0, bottom: 18 }}>
+                  <CartesianGrid stroke="#1a1b2e" />
+                  <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                  <YAxis
+                    domain={['auto', 'auto']}
+                    tick={{ fontSize: 10 }}
+                    width={34}
+                    label={{ value: 'ml/kg/min', angle: -90, position: 'insideLeft', fill: '#555', fontSize: 10 }}
+                  />
+                  <Tooltip
+                    content={({ active, payload, label }) => {
+                      if (!active || !payload?.length) return null
+                      return (
+                        <div style={{ background: '#0d0f1e', border: '1px solid #222', borderRadius: 6, padding: '8px 12px', fontSize: 12 }}>
+                          <div style={{ color: '#888', marginBottom: 4 }}>{label}</div>
+                          <div style={{ color: '#4ade80' }}>VO₂ max: {payload[0]?.value} ml/kg/min</div>
+                        </div>
+                      )
+                    }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="vo2"
+                    stroke="#4ade80"
+                    strokeWidth={2.5}
+                    dot={{ r: 5, fill: '#4ade80' }}
+                    activeDot={{ r: 7 }}
+                    name="VO₂ Max"
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
 
         </div>
       )}
@@ -17161,7 +17553,7 @@ return (
     setSchedLog={setSchedLog}
     healthFitDaily={healthFitDaily}
     biometricRecords={biometricRecords}
-    ocItems={items}
+    ocItems={ocItems}
   />
 )}
 
