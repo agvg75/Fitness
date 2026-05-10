@@ -746,6 +746,111 @@ export const EXERCISE_LIBRARY = [
   },
 ]
 
+// REFERENCE_LOADS: default working load per exercise id from SCH_PLAN schMk defaults.
+// Used as denominator in modifier calculation. Update when baseline loads change.
+const REFERENCE_LOADS = {
+  chest_press_machine: 110,
+  incline_chest_press: 90,
+  machine_flys: 30,
+  lateral_raise: 7,
+  rear_delt_fly: 7,
+  face_pull_er: 20,
+  triceps_pulldown: 35,
+  triceps_overhead: 30,
+  pallof_press: 40,
+  hip_thrust: 135,
+  leg_press_heel_drive: 160,
+  kb_rdl: 50,
+  leg_extension: 80,
+  lat_pulldown: 120,
+  cable_row_single_arm: 67,
+  straight_arm_pulldown: 40,
+  bicep_curl_heavy: 75,
+  bicep_curl_neutral: 60,
+  hammer_curl: 20,
+  cable_crossover: 30,
+  hip_abduction: 120,
+  hip_adduction: 80,
+  kb_swing: 25,
+  hip_thrust_volume: 100,
+  romanian_deadlift: 50,
+  hamstring_eccentric_curl: 80,
+  suitcase_carry: 60,
+}
+
+// REFERENCE_VOLUME: default sets × reps per exercise for a typical session.
+const REFERENCE_VOLUME = {
+  chest_press_machine: 18,
+  incline_chest_press: 18,
+  machine_flys: 18,
+  lateral_raise: 36,
+  rear_delt_fly: 36,
+  face_pull_er: 28,
+  triceps_pulldown: 30,
+  triceps_overhead: 16,
+  pallof_press: 20,
+  hip_thrust: 26,
+  leg_press_heel_drive: 45,
+  kb_rdl: 30,
+  leg_extension: 36,
+  lat_pulldown: 21,
+  cable_row_single_arm: 18,
+  straight_arm_pulldown: 24,
+  bicep_curl_heavy: 15,
+  bicep_curl_neutral: 18,
+  hammer_curl: 22,
+  cable_crossover: 42,
+  hip_abduction: 24,
+  hip_adduction: 24,
+  kb_swing: 30,
+  hip_thrust_volume: 33,
+  romanian_deadlift: 33,
+  hamstring_eccentric_curl: 27,
+  suitcase_carry: 4,
+}
+
+/**
+ * computeExecutionModifier
+ * Returns a multiplier (0.5 to 2.0) that scales the library base load score
+ * based on actual logged weight and volume versus reference values.
+ *
+ * @param {string} exerciseId  - matches EXERCISE_LIBRARY id
+ * @param {Array}  sets        - array of logged set objects: [{r, w}] where r=reps, w=weight
+ * @returns {number}           - modifier clamped to [0.5, 2.0]
+ */
+export function computeExecutionModifier(exerciseId, sets) {
+  if (!sets || sets.length === 0) return 1.0
+
+  const refLoad = REFERENCE_LOADS[exerciseId]
+  const refVolume = REFERENCE_VOLUME[exerciseId]
+
+  const parsedSets = sets
+    .map(s => ({
+      reps: Math.max(1, parseFloat(s.r) || 0),
+      weight: Math.max(0, parseFloat(s.w) || 0),
+    }))
+    .filter(s => s.reps > 0)
+
+  if (parsedSets.length === 0) return 1.0
+
+  const avgWeight = parsedSets.reduce((sum, s) => sum + s.weight, 0) / parsedSets.length
+  const totalReps = parsedSets.reduce((sum, s) => sum + s.reps, 0)
+
+  const weightMod = refLoad && avgWeight > 0
+    ? avgWeight / refLoad
+    : 1.0
+
+  // Treat volume as neutral when only a single set is logged; partial logging
+  // should not suppress otherwise valid heavy-load flags.
+  const volumeMod = refVolume && totalReps > 0 && parsedSets.length > 1
+    ? totalReps / refVolume
+    : 1.0
+
+  const combined = (weightMod * 0.65) + (volumeMod * 0.35)
+
+  return Math.min(2.0, Math.max(0.5, combined))
+}
+
 const EXERCISE_LIBRARY_BY_KEY = new Map()
 for (const entry of EXERCISE_LIBRARY) {
   EXERCISE_LIBRARY_BY_KEY.set(entry.id, entry)
@@ -758,7 +863,7 @@ function getExerciseEntry(exerciseId) {
   return EXERCISE_LIBRARY_BY_KEY.get(exerciseId) || null
 }
 
-export function flagExercisesForOcItems(dayExercises, activeOcItems) {
+export function flagExercisesForOcItems(dayExercises, activeOcItems, executionData = {}) {
   if (!activeOcItems?.length || !dayExercises?.length) return []
 
   const flags = []
@@ -768,29 +873,41 @@ export function flagExercisesForOcItems(dayExercises, activeOcItems) {
     if (!entry) continue
     if (!Array.isArray(entry.substitutes) || entry.substitutes.length === 0) continue
 
+    const loggedSets = executionData[ex.id] || executionData[entry.id] || []
+    const modifier = computeExecutionModifier(entry.id, loggedSets)
+
     for (const ocItem of activeOcItems) {
       if ((ocItem.currentScore || 0) < 1) continue
 
-      const matchedLoads = entry.loads.filter(
+      const matchedLoads = entry.loads
+        .map(load => ({
+          ...load,
+          effectiveLoadScore: load.score * modifier,
+        }))
+        .filter(
         load =>
           load.region === ocItem.location &&
           load.tissueType === ocItem.key &&
-          load.score >= 2
+          load.effectiveLoadScore >= 2
       )
 
       if (matchedLoads.length === 0) continue
 
-      const loadScore = Math.max(...matchedLoads.map(load => load.score))
+      const effectiveLoadScore = Math.max(...matchedLoads.map(load => load.effectiveLoadScore))
+      const loadScore = Math.round(effectiveLoadScore)
       const severity =
-        ocItem.currentScore >= 2 && loadScore >= 3 ? "high" : "moderate"
+        ocItem.currentScore >= 2 && effectiveLoadScore >= 3 ? "high" : "moderate"
 
       flags.push({
         exerciseId: ex.id,
         exerciseName: entry.name,
+        libraryExerciseId: entry.id,
         ocItemLabel: ocItem.label,
         ocLocation: ocItem.location,
+        ocKey: ocItem.key,
         ocScore: ocItem.currentScore,
         loadScore,
+        modifier: Number(modifier.toFixed(2)),
         severity,
         substitutes: entry.substitutes
           .map(substituteId => getExerciseEntry(substituteId)?.name)
@@ -807,4 +924,13 @@ export function isMtpSafe(exerciseId) {
   const entry = getExerciseEntry(exerciseId)
   if (!entry) return true
   return entry.mtp_safe
+}
+
+/**
+ * getExerciseProfile
+ * Returns the full library entry for a given exercise id, or null if not found.
+ * Used by the substitution UI to show load profile comparison.
+ */
+export function getExerciseProfile(exerciseId) {
+  return EXERCISE_LIBRARY.find(e => e.id === exerciseId) || null
 }

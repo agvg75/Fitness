@@ -22,7 +22,7 @@ import {
   upsertHealthfitDaily,
   upsertSleepRecords
 } from "./lib/persistence.js"
-import { flagExercisesForOcItems, isMtpSafe } from "./lib/exerciseLibrary.js"
+import { flagExercisesForOcItems, isMtpSafe, getExerciseProfile, EXERCISE_LIBRARY } from "./lib/exerciseLibrary.js"
 import {
   LineChart,
   Line,
@@ -2969,6 +2969,137 @@ function ExerciseGuidePanel({ exId, exName, exNote, dbId = null }) {
   )
 }
 
+function SubstituteDrawer({ flag, onSelectSubstitute, onClose }) {
+  const [selectedId, setSelectedId] = React.useState(null)
+
+  if (!flag || !flag.substituteIds?.length) return null
+
+  const selectedProfile = selectedId ? getExerciseProfile(selectedId) : null
+  const flaggedProfile = flag.libraryExerciseId
+    ? getExerciseProfile(flag.libraryExerciseId)
+    : flag.exerciseId
+      ? getExerciseProfile(EXERCISE_LIBRARY.find(e => e.scheduleIds?.includes(flag.exerciseId))?.id)
+      : null
+
+  return (
+    <div style={{
+      background: "#0f1020",
+      border: "1px solid #2a1a00",
+      borderRadius: 8,
+      padding: "12px 14px",
+      marginTop: 6
+    }}>
+      <div style={{ fontSize: 11, color: "#f59e0b", fontWeight: 700, marginBottom: 8 }}>
+        Suggested substitutes — avoids {flag.ocLocation}
+      </div>
+
+      {flaggedProfile && (
+        <div style={{ fontSize: 10, color: "#666", marginBottom: 8 }}>
+          Replacing <span style={{ color: "#d4d4d8" }}>{flaggedProfile.name}</span>
+        </div>
+      )}
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+        {flag.substituteIds.map(id => {
+          const profile = getExerciseProfile(id)
+          if (!profile) return null
+          const isSelected = selectedId === id
+          return (
+            <button
+              key={id}
+              onClick={() => setSelectedId(isSelected ? null : id)}
+              style={{
+                background: isSelected ? "#1a2a10" : "#161616",
+                border: `1px solid ${isSelected ? "#4ade80" : "#2a2a2a"}`,
+                borderRadius: 6,
+                padding: "5px 10px",
+                fontSize: 11,
+                color: isSelected ? "#4ade80" : "#aaa",
+                cursor: "pointer"
+              }}
+            >
+              {profile.name}
+            </button>
+          )
+        })}
+      </div>
+
+      {selectedProfile && (
+        <div style={{ background: "#0a0c18", borderRadius: 6, padding: "10px 12px", marginBottom: 10 }}>
+          <div style={{ fontSize: 11, color: "#888", marginBottom: 6 }}>
+            Load profile: <span style={{ color: "#e0e0e0" }}>{selectedProfile.name}</span>
+            {selectedProfile.mtp_safe && (
+              <span style={{ marginLeft: 8, color: "#4ade80", fontSize: 10 }}>✓ MTP safe</span>
+            )}
+          </div>
+          {selectedProfile.loads
+            .filter(l => l.score >= 2)
+            .map((l, i) => (
+              <div
+                key={i}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  fontSize: 10,
+                  color: "#666",
+                  padding: "2px 0",
+                  borderBottom: "1px solid #111"
+                }}
+              >
+                <span>{l.region} ({l.tissueType.replace("Status", "")})</span>
+                <span style={{ color: l.score === 3 ? "#ef4444" : l.score === 2 ? "#f59e0b" : "#666" }}>
+                  {"●".repeat(l.score)}{"○".repeat(3 - l.score)}
+                </span>
+              </div>
+            ))}
+          {(() => {
+            const conflict = selectedProfile.loads.find(
+              l => l.region === flag.ocLocation &&
+                l.tissueType === flag.ocKey &&
+                l.score >= 2
+            )
+            return conflict
+              ? (
+                <div style={{ fontSize: 10, color: "#ef4444", marginTop: 6 }}>
+                  Still loads {flag.ocLocation} at level {conflict.score} — confirm before using
+                </div>
+              ) : (
+                <div style={{ fontSize: 10, color: "#4ade80", marginTop: 6 }}>
+                  ✓ Does not load {flag.ocLocation} above threshold
+                </div>
+              )
+          })()}
+          <button
+            onClick={() => onSelectSubstitute(selectedProfile)}
+            style={{
+              marginTop: 10,
+              width: "100%",
+              padding: "8px 0",
+              background: "#1a2a10",
+              border: "1px solid #4ade80",
+              borderRadius: 6,
+              color: "#4ade80",
+              fontSize: 11,
+              fontWeight: 700,
+              cursor: "pointer",
+              letterSpacing: "0.05em"
+            }}
+          >
+            Log {selectedProfile.name} instead
+          </button>
+        </div>
+      )}
+
+      <button
+        onClick={onClose}
+        style={{ fontSize: 10, color: "#444", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+      >
+        Dismiss
+      </button>
+    </div>
+  )
+}
+
 function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, setSchedLog, readinessScore, latestHealthFit = null, ocItems = [], computedTSB = null, tsbV2Panel = null, progressionReadiness = "progress", progressionReasons = [], tendonStatus = { painScore: 0, stiffness: false, override: null }, scheduleFeedback = [], sleepRecords = [], setSleepRecords = () => {}, scheduleTarget = null, clearScheduleTarget = () => {} }) {
   const safeScheduleFeedback = Array.isArray(scheduleFeedback) ? scheduleFeedback : []
   const [activeDay, setActiveDay] = useState(todayDayKey())
@@ -3008,6 +3139,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const [quickLog, setQuickLog] = useState(false)
   const [expandedCards, setExpandedCards] = useState({})
   const [checkedExIds, setCheckedExIds] = useState(new Set())
+  const [substituteDrawerEx, setSubstituteDrawerEx] = useState(null)
   const [guideOpenIds, setGuideOpenIds] = React.useState(new Set())
   const toggleGuide = id => setGuideOpenIds(prev => {
     const next = new Set(prev)
@@ -3200,7 +3332,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   ) : null
   const getStructuredExerciseFlags = exerciseId => {
     if (!exerciseId || !Array.isArray(ocItems) || !ocItems.length) return []
-    return flagExercisesForOcItems([{ id: exerciseId }], ocItems)
+    return flagExercisesForOcItems([{ id: exerciseId }], ocItems, currentDayExecutionData)
   }
   const getCardioFlags = modality => {
     const libraryId = CARDIO_LIBRARY_IDS[modality]
@@ -3208,16 +3340,55 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     return flagExercisesForOcItems([{ id: libraryId }], ocItems)
   }
   const getMtpItem = () => ocItems.find(item => item.location === "Toe L" && Number(item.currentScore || 0) > 0) || null
-  const renderExerciseFlags = flags => {
+  const renderExerciseFlags = (flags, ex, day) => {
     if (!flags.length) return null
     return (
       <div style={{ marginTop: 4, display: "grid", gap: 4 }}>
         {flags.map((flag, idx) => (
-          <div key={`${flag.exerciseId}_${flag.ocLocation}_${idx}`} style={{ fontSize: 11, color: flag.severity === "high" ? "#f97316" : "#f59e0b", display: "flex", alignItems: "flex-start", gap: 4 }}>
-            <span style={{ flexShrink: 0 }}>●</span>
-            <span>
-              {flag.ocItemLabel || flag.ocLocation} load {flag.loadScore}/3. {flag.substitutes.length ? `Prefer ${flag.substitutes.join(" or ")}.` : "Modify if symptomatic."}
-            </span>
+          <div key={`${flag.exerciseId}_${flag.ocLocation}_${idx}`} style={{ fontSize: 11, color: flag.severity === "high" ? "#f97316" : "#f59e0b", display: "grid", gap: 4 }}>
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 4 }}>
+              <span style={{ flexShrink: 0 }}>●</span>
+              <span>
+                <span>
+                  {flag.ocItemLabel || flag.ocLocation} load {flag.loadScore}/3. {flag.substitutes.length ? `Prefer ${flag.substitutes.join(" or ")}.` : "Modify if symptomatic."}
+                </span>
+                {flag.modifier && Math.abs(flag.modifier - 1.0) >= 0.15 && (
+                  <span style={{ display: "block", fontSize: 10, color: "#888", marginLeft: 6 }}>
+                    {flag.modifier > 1.0
+                      ? `+${Math.round((flag.modifier - 1.0) * 100)}% load vs reference`
+                      : `${Math.round((1.0 - flag.modifier) * 100)}% below reference load`}
+                  </span>
+                )}
+                {flag?.substituteIds?.length > 0 && (
+                  <button
+                    onClick={() => setSubstituteDrawerEx(
+                      substituteDrawerEx?.exId === ex.id ? null : { exId: ex.id, flag }
+                    )}
+                    style={{
+                      fontSize: 10,
+                      color: "#f59e0b",
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      padding: "0 0 0 6px",
+                      textDecoration: "underline"
+                    }}
+                  >
+                    {substituteDrawerEx?.exId === ex.id ? "hide substitutes" : "see substitutes"}
+                  </button>
+                )}
+              </span>
+            </div>
+            {substituteDrawerEx?.exId === ex.id && substituteDrawerEx?.flag === flag && (
+              <SubstituteDrawer
+                flag={substituteDrawerEx.flag}
+                onSelectSubstitute={(profile) => {
+                  addSubstituteCustomExercise(day, profile, ex.n || ex.name || flag.exerciseName, substituteDrawerEx.flag)
+                  setSubstituteDrawerEx(null)
+                }}
+                onClose={() => setSubstituteDrawerEx(null)}
+              />
+            )}
           </div>
         ))}
       </div>
@@ -3371,6 +3542,29 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     return f.sets !== rx.sets || f.reps !== rx.reps || f.load !== rx.load
   }
 
+  const currentDayExecutionData = useMemo(() => {
+    const executionData = {}
+    const dayExercises = getProgDay(activeDay).exercises || []
+
+    dayExercises.forEach(ex => {
+      const variantKey = getVariant(ex.id)
+      const variant = ex.variants?.[variantKey] || ex.variants?.machine || {}
+      const f = getF(activeDay, ex.id)
+      const rawSets = resolveEditableField(f, "sets", variant.sets)
+      const rawReps = resolveEditableField(f, "reps", variant.reps)
+      const rawLoad = resolveEditableField(f, "load", variant.load)
+      const defaultSetCount = Array.isArray(ex._def) && ex._def.length ? ex._def.length : 1
+      const parsedSetCount = Math.max(1, parseInt(rawSets, 10) || defaultSetCount)
+
+      executionData[ex.id] = Array.from({ length: parsedSetCount }, () => ({
+        r: String(rawReps ?? ""),
+        w: String(rawLoad ?? ""),
+      }))
+    })
+
+    return executionData
+  }, [activeDay, fields, variants])
+
   // ── Checked items ──────────────────────────────────────────────────────
   const checkKey = (day, section, idx) => `${day}_${section}_${idx}`
   const getDefaultCheckedState = (section, day) => {
@@ -3481,6 +3675,22 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       saveScheduleKey("wt-custom-exercises", updated)
       return updated
     })
+  }
+
+  const addSubstituteCustomExercise = (day, profile, sourceExerciseName, flag) => {
+    if (!day || !profile?.name) return
+    const newEx = {
+      id: `sub_${Date.now()}`,
+      dbId: null,
+      n: profile.name,
+      sets: "3",
+      reps: "10",
+      load: "",
+      notes: `Substituted for ${sourceExerciseName} — OC flag: ${flag?.ocLocation || "unknown region"}`
+    }
+    const updated = { ...customExercises, [day]: [...getCustomExercises(day), newEx] }
+    setCustomExercises(updated)
+    saveScheduleKey("wt-custom-exercises", updated)
   }
 
   const getLastLoggedExerciseValues = (exerciseName, exerciseId = null) => {
@@ -4141,7 +4351,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
           {!isCustom && injuryTag(getInjuryNote(
             ex.fi === "shoulder" ? ["Shoulder"] : ex.fi === "toe" ? ["Toe", "Ankle"] : null
           ))}
-          {!isCustom && renderExerciseFlags(structuredFlags)}
+          {!isCustom && renderExerciseFlags(structuredFlags, ex, day)}
           <textarea value={(isCustom ? ex.notes : f.notes) || ""}
             onChange={e => isCustom ? setCustomExF(day, ex.id, "notes", e.target.value) : setF(day, ex.id, "notes", e.target.value)}
             placeholder="Session note (optional)" rows={1}
@@ -11284,7 +11494,7 @@ export default function App() {
 
   // ── LIFT Calibration Config ─────────────────────────────────────────────
   // Update these after each DEXA scan. All derived constants read from here.
-  // Last updated: January 2026 DEXA anchor. Next update: April 2026 scan.
+  // Last updated: April 2026 DEXA anchor. Next update: September 2026 scan.
   const LIFT_CONFIG = {
     // Banister model constants — fitted via grid search on 466 days, R²=0.887
     tau1: 27,          // fitness decay (days) — HealthFit default is 42
@@ -11321,6 +11531,7 @@ export default function App() {
     bmr: 1520,
     tdee: 2100,
     fat_loss_target: 1700,
+    fat_loss_rate_monthly: 1.7,  // lb/month — no-KNR period Apr-Sep 2026; revert to 1.9 when KNR resumes
 
     // Half marathon build
     hm_race_date:    "2026-09-19",
