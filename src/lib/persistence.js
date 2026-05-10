@@ -165,7 +165,6 @@ export async function loadCanonicalSessions(supabase, userId) {
   }
 
   const data = allSessions
-  console.log("[LIFT] canonical sessions loaded:", data.length)
   return data.map(rowToCanonicalSession)
 }
 

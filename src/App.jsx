@@ -11128,6 +11128,21 @@ const [biometricRecords, setBiometricRecords] = useState(() => { try { return JS
 const [sleepRecords, setSleepRecords] = useState(() => { try { return JSON.parse(localStorage.getItem("lift_sleep_records") || "[]") } catch { return [] } })
 const [schedLog, setSchedLog] = useState(() => { try { return JSON.parse(localStorage.getItem('wt-log') || '[]') } catch { return [] } })
 const [ocItems, setOcItems] = useState(() => { try { return JSON.parse(localStorage.getItem('oc-items') || '[]') } catch { return [] } })
+// One-time episodeCount correction for Toe L chronic MTP
+// Run once, then this block can be removed
+useEffect(() => {
+  setOcItems(prev => prev.map(item => {
+    if (
+      item.key === 'jointStatus' &&
+      item.location === 'Toe L' &&
+      (item.episodeCount || 0) < 3 &&
+      item.initialScore > 0
+    ) {
+      return { ...item, episodeCount: 3 }
+    }
+    return item
+  }))
+}, [])
 const [tendonStatus, setTendonStatus] = useState({ painScore: 0, stiffness: false, override: null })
 const [selectedTendonGroup, setSelectedTendonGroup] = useState("combined")
 const [overviewExplainOpen, setOverviewExplainOpen] = useState({})
@@ -14100,8 +14115,6 @@ const operationalCapacityData = useMemo(() => {
         _label: OC_KEY_META[item.key]?.label || item.key,
         _halfLifeHours: halfLifeHours,
         _peakLoss: peakLoss,
-        _episodeCount: item.episodeCount || 0,
-        _resolvedAt: resolvedAt,
         _episodeCount: item.episodeCount || 0,
         _resolvedAt: resolvedAt,
       }
