@@ -11128,21 +11128,37 @@ const [biometricRecords, setBiometricRecords] = useState(() => { try { return JS
 const [sleepRecords, setSleepRecords] = useState(() => { try { return JSON.parse(localStorage.getItem("lift_sleep_records") || "[]") } catch { return [] } })
 const [schedLog, setSchedLog] = useState(() => { try { return JSON.parse(localStorage.getItem('wt-log') || '[]') } catch { return [] } })
 const [ocItems, setOcItems] = useState(() => { try { return JSON.parse(localStorage.getItem('oc-items') || '[]') } catch { return [] } })
-// One-time episodeCount correction for Toe L chronic MTP
-// Run once, then this block can be removed
+const ocCleanupApplied = useRef(false)
 useEffect(() => {
-  setOcItems(prev => prev.map(item => {
-    if (
-      item.key === 'jointStatus' &&
-      item.location === 'Toe L' &&
-      (item.episodeCount || 0) < 3 &&
-      item.initialScore > 0
-    ) {
-      return { ...item, episodeCount: 3 }
-    }
-    return item
-  }))
-}, [])
+  if (ocCleanupApplied.current) return
+  if (!ocItems || ocItems.length === 0) return
+  const hasRealToeL = ocItems.some(i =>
+    i.key === 'jointStatus' &&
+    i.location === 'Toe L' &&
+    (i.initialScore || 0) > 0
+  )
+  if (!hasRealToeL) return
+  ocCleanupApplied.current = true
+  setOcItems(prev => {
+    const cleaned = prev.filter(i =>
+      !(i.key === 'jointStatus' &&
+        i.location === 'Toe L' &&
+        (i.initialScore || 0) === 0 &&
+        (i.currentScore || 0) === 0)
+    )
+    return cleaned.map(i => {
+      if (
+        i.key === 'jointStatus' &&
+        i.location === 'Toe L' &&
+        (i.initialScore || 0) > 0 &&
+        (i.episodeCount || 0) < 3
+      ) {
+        return { ...i, episodeCount: 3 }
+      }
+      return i
+    })
+  })
+}, [ocItems])
 const [tendonStatus, setTendonStatus] = useState({ painScore: 0, stiffness: false, override: null })
 const [selectedTendonGroup, setSelectedTendonGroup] = useState("combined")
 const [overviewExplainOpen, setOverviewExplainOpen] = useState({})
