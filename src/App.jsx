@@ -22,6 +22,7 @@ import {
   upsertHealthfitDaily,
   upsertSleepRecords
 } from "./lib/persistence.js"
+import { flagExercisesForOcItems, isMtpSafe } from "./lib/exerciseLibrary.js"
 import {
   LineChart,
   Line,
@@ -40,6 +41,7 @@ import {
   ReferenceLine
 } from "recharts"
 import { createClient } from "@supabase/supabase-js"
+import { generateTrainerReport } from "./exportReport"
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -216,38 +218,6 @@ const store = {
       return false
     }
   }
-}
-
-const EXERCISE_REGIONS = {
-  'leg press':      { regions: ['Knee L','Knee R','Quad L','Quad R','Toe L','Toe R'], note: 'heels planted, avoid toe-off at top' },
-  'hip thrust':     { regions: ['Hip L','Hip R','Glute L','Glute R','Toe L','Toe R'], note: 'heels elevated on plate if toe sensitive' },
-  'leg curl':       { regions: ['Hamstring L','Hamstring R'], note: 'full ROM unless hamstring tender' },
-  'leg extension':  { regions: ['Quad L','Quad R','Knee L','Knee R'], note: 'avoid if knee irritated' },
-  'lat pulldown':   { regions: ['Shoulder L','Shoulder R','Upper Back'], note: 'depress scapula before pulling' },
-  'cable row':      { regions: ['Upper Back','Lower Back'], note: 'brace core, avoid lumbar flexion' },
-  'seated row':     { regions: ['Upper Back','Lower Back'], note: 'brace core, avoid lumbar flexion' },
-  'chest press':    { regions: ['Shoulder L','Shoulder R','Chest'], note: 'reduce ROM if shoulder irritated' },
-  'chest-press':    { regions: ['Shoulder L','Shoulder R','Chest'], note: 'reduce ROM if shoulder irritated' },
-  'bicep curl':     { regions: ['Elbow L','Elbow R'], note: 'supinate fully, no wrist compensation' },
-  'calf raise':     { regions: ['Ankle L','Ankle R','Toe L','Toe R'], note: 'skip if MTP irritated' },
-  'rdl':            { regions: ['Hamstring L','Hamstring R','Lower Back'], note: 'hinge at hip, neutral spine' },
-  'romanian':       { regions: ['Hamstring L','Hamstring R','Lower Back'], note: 'hinge at hip, neutral spine' },
-  'shoulder press': { regions: ['Shoulder L','Shoulder R'], note: 'reduce range if shoulder irritated' },
-  'hip abduction':  { regions: ['Hip L','Hip R'], note: '' },
-  'hip adduction':  { regions: ['Hip L','Hip R'], note: '' },
-}
-
-function getExerciseFlag(exerciseName, ocItems) {
-  if (!exerciseName || !ocItems?.length) return { flagged: false }
-  const lower = exerciseName.toLowerCase()
-  const key = Object.keys(EXERCISE_REGIONS).find(k => lower.includes(k))
-  if (!key) return { flagged: false }
-  const { regions, note } = EXERCISE_REGIONS[key]
-  const hit = ocItems.some(item =>
-    item.currentScore >= 2 &&
-    regions.some(r => (item.location || "").toLowerCase() === r.toLowerCase())
-  )
-  return hit ? { flagged: true, note } : { flagged: false }
 }
 
 function getExerciseHistory(exerciseName, wtSessions) {
@@ -2773,6 +2743,11 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     bike: ["Knee", "Hip", "Glute"],
     swim: ["Shoulder"],
   }
+  const CARDIO_LIBRARY_IDS = {
+    run: "run",
+    bike: "cycling_stationary",
+    swim: "swim_freestyle",
+  }
   const getInjuryNote = (keywords) => {
     if (!keywords?.length) return null
     const hits = ocItems.filter(i => i.currentScore >= 3 && keywords.some(kw => (i.location || "").includes(kw)))
@@ -2785,6 +2760,31 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       <span>Active injury: {note} — monitor and modify if symptomatic</span>
     </div>
   ) : null
+  const getStructuredExerciseFlags = exerciseId => {
+    if (!exerciseId || !Array.isArray(ocItems) || !ocItems.length) return []
+    return flagExercisesForOcItems([{ id: exerciseId }], ocItems)
+  }
+  const getCardioFlags = modality => {
+    const libraryId = CARDIO_LIBRARY_IDS[modality]
+    if (!libraryId || !Array.isArray(ocItems) || !ocItems.length) return []
+    return flagExercisesForOcItems([{ id: libraryId }], ocItems)
+  }
+  const getMtpItem = () => ocItems.find(item => item.location === "Toe L" && Number(item.currentScore || 0) > 0) || null
+  const renderExerciseFlags = flags => {
+    if (!flags.length) return null
+    return (
+      <div style={{ marginTop: 4, display: "grid", gap: 4 }}>
+        {flags.map((flag, idx) => (
+          <div key={`${flag.exerciseId}_${flag.ocLocation}_${idx}`} style={{ fontSize: 11, color: flag.severity === "high" ? "#f97316" : "#f59e0b", display: "flex", alignItems: "flex-start", gap: 4 }}>
+            <span style={{ flexShrink: 0 }}>●</span>
+            <span>
+              {flag.ocItemLabel || flag.ocLocation} load {flag.loadScore}/3. {flag.substitutes.length ? `Prefer ${flag.substitutes.join(" or ")}.` : "Modify if symptomatic."}
+            </span>
+          </div>
+        ))}
+      </div>
+    )
+  }
 
   const chooseTodayWorkout = (plannedWorkout, currentProgressionReadiness, currentTendonStatus) => {
     const normalizedTendonStatus = {
@@ -3622,6 +3622,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       progressionReadiness,
       tendonStatus
     )
+    const structuredFlags = !isCustom ? getStructuredExerciseFlags(ex.id) : []
     const history = !isCustom ? getExerciseHistory(ex.n, schedLog) : []
     const historySparkline = !isCustom && history.length >= 3 ? (() => {
       const weights = history.map(h => h.weight)
@@ -3702,12 +3703,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
           {!isCustom && injuryTag(getInjuryNote(
             ex.fi === "shoulder" ? ["Shoulder"] : ex.fi === "toe" ? ["Toe", "Ankle"] : null
           ))}
-          {(() => { const flag = getExerciseFlag(ex.n, ocItems); return flag.flagged ? (
-            <div style={{ fontSize: 11, color: "#ff8c42", marginTop: 4, display: "flex", alignItems: "flex-start", gap: 4 }}>
-              <span style={{ flexShrink: 0 }}>●</span>
-              <span>{flag.note}</span>
-            </div>
-          ) : null })()}
+          {!isCustom && renderExerciseFlags(structuredFlags)}
           <textarea value={(isCustom ? ex.notes : f.notes) || ""}
             onChange={e => isCustom ? setCustomExF(day, ex.id, "notes", e.target.value) : setF(day, ex.id, "notes", e.target.value)}
             placeholder="Session note (optional)" rows={1}
@@ -3854,6 +3850,9 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
                 progressionReadiness,
                 tendonStatus
               )
+              const cardioFlags = getCardioFlags(ps.mod)
+              const mtpItem = getMtpItem()
+              const mtpUnsafe = mtpItem && !isMtpSafe(CARDIO_LIBRARY_IDS[ps.mod])
               return (
                 <>
                   <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 4 }}>
@@ -3862,6 +3861,13 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
                   <div style={{ fontSize: 10, color: "#666", marginBottom: 4 }}>
                     Reason: {workoutSuggestion.reason}
                   </div>
+                  {mtpUnsafe && (
+                    <div style={{ fontSize: 11, color: "#f97316", marginBottom: 4, display: "flex", alignItems: "flex-start", gap: 4 }}>
+                      <span style={{ flexShrink: 0 }}>●</span>
+                      <span>Toe L OC is active ({mtpItem.currentScore}/5). This modality is not MTP-safe; substitute cycling or swimming.</span>
+                    </div>
+                  )}
+                  {renderExerciseFlags(cardioFlags)}
                 </>
               )
             })()}
@@ -9324,7 +9330,7 @@ function makeImportFileReviewRow(fileInfo, reason) {
   }
 }
 
-function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily, setSleepRecords, setBiometricRecords, setSchedLog }) {
+function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily, setSleepRecords, setBiometricRecords, setSchedLog, healthFitDaily, biometricRecords, ocItems }) {
   const [queuedFiles, setQueuedFiles] = useState([])  // [{file, detected, firstChunk}]
   const [status, setStatus] = useState("Drop files to import")
   const [progress, setProgress] = useState(null)
@@ -9342,6 +9348,16 @@ function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily,
   const [photoExtracting, setPhotoExtracting] = useState(false)
   const [photoResult, setPhotoResult] = useState(null)
   const [photoError, setPhotoError] = useState(null)
+
+  const handleExportReport = () => {
+    generateTrainerReport({
+      healthFitDaily: healthFitDaily || [],
+      biometricRecords: biometricRecords || [],
+      dexaData: typeof DEXA_REGIONAL !== "undefined" ? DEXA_REGIONAL : [],
+      ocItems: ocItems || [],
+      snapshotDate: new Date().toISOString().slice(0, 10)
+    })
+  }
 
   const worker = useMemo(() => createInlineImportWorker(), [])
   const pendingFileReviewRowsRef = useRef([])
@@ -10263,6 +10279,45 @@ Return ONLY a JSON object with this exact structure, no explanation:
           )}
         </div>
       )}
+      {/* -- Trainer Report Export ----------------------------- */}
+      <div style={{
+        marginTop: 32,
+        padding: "20px 24px",
+        background: "#0b0d14",
+        border: "1px solid #1a1b2e",
+        borderRadius: 8
+      }}>
+        <div style={{
+          fontSize: 11,
+          letterSpacing: "0.14em",
+          color: "#444",
+          textTransform: "uppercase",
+          marginBottom: 8,
+          fontFamily: "'Barlow Condensed', sans-serif"
+        }}>
+          Trainer Report Export
+        </div>
+        <div style={{ fontSize: 12, color: "#666", marginBottom: 14, lineHeight: 1.6 }}>
+          Generates a self-contained HTML snapshot of your current data - training load, body composition, running protocol, schedule, and operational capacity - formatted for your trainer. Open in any browser. No login required.
+        </div>
+        <button
+          onClick={handleExportReport}
+          style={{
+            background: "#0d1a0d",
+            border: "1px solid #1a3a1a",
+            borderRadius: 6,
+            color: "#4a8a4a",
+            fontSize: 12,
+            fontFamily: "'Barlow Condensed', sans-serif",
+            letterSpacing: "0.08em",
+            padding: "9px 20px",
+            cursor: "pointer",
+            fontWeight: 600
+          }}
+        >
+          Generate Trainer Report ↓
+        </button>
+      </div>
     </div>
   )
 }
@@ -13617,7 +13672,23 @@ const tsbV2Panel = useMemo(() => {
     row.rollingLoad14 = Number(rollingLoad14.toFixed(2))
     row.load14Alert = row.rollingLoad14 > 700 && Number(row.overallTsb) < LIFT_CONFIG.tsbModerateRiskThreshold
   })
-  const rows = allRows.slice(-lookbackDays).map(r => ({ ...r, label: String(r.date).slice(5) }))
+  const canonicalSessions = dedupedForTsb
+  const acwrByDate = {}
+  canonicalSessions.forEach(session => {
+    const d = (session.start_date || "").slice(0, 10)
+    if (!d) return
+    const load = Number(session.trimp || session.duration_min || 0)
+    acwrByDate[d] = (acwrByDate[d] || 0) + load
+  })
+  let rows = allRows.slice(-lookbackDays).map(r => ({ ...r, label: String(r.date).slice(5) }))
+  rows = rows.map((pt, i) => {
+    const slice28 = rows.slice(Math.max(0, i - 27), i + 1)
+    const slice7  = rows.slice(Math.max(0, i - 6),  i + 1)
+    const chronic = slice28.reduce((s, p) => s + (acwrByDate[p.date] || 0), 0) / 28
+    const acute   = slice7.reduce((s,  p) => s + (acwrByDate[p.date] || 0), 0) / 7
+    const acwr    = chronic > 0 ? Number((acute / chronic).toFixed(2)) : null
+    return { ...pt, acwr }
+  })
   const sVals = rows.map(r => r.strengthLoad).filter(v => Number.isFinite(v))
   const sMin = sVals.length ? Math.min(...sVals) : 0
   const sMax = sVals.length ? Math.max(...sVals) : 1
@@ -13722,7 +13793,8 @@ const operationalCapacityData = useMemo(() => {
         _category: classifyItem(item),
         _label: OC_KEY_META[item.key]?.label || item.key,
         _halfLifeHours: halfLifeHours,
-        _peakLoss: peakLoss
+        _peakLoss: peakLoss,
+        _episodeCount: item.episodeCount || 0,
       }
     })
     .filter(Boolean)
@@ -13742,7 +13814,9 @@ const operationalCapacityData = useMemo(() => {
         const ageDays = daysBetween(d, e._start)
         if (ageDays < 0) return sum
         const ageHours = ageDays * 24
-        return sum + e._peakLoss * Math.pow(0.5, ageHours / e._halfLifeHours)
+        const residualFloor = e._episodeCount >= 3 ? 0.10 : e._episodeCount >= 2 ? 0.05 : 0.0
+        const decayingPortion = (e._peakLoss - residualFloor) * Math.pow(0.5, ageHours / e._halfLifeHours)
+        return sum + residualFloor + decayingPortion
       }, 0)
 
     const diseaseLoss = datedEntries
@@ -13751,7 +13825,9 @@ const operationalCapacityData = useMemo(() => {
         const ageDays = daysBetween(d, e._start)
         if (ageDays < 0) return sum
         const ageHours = ageDays * 24
-        return sum + e._peakLoss * Math.pow(0.5, ageHours / e._halfLifeHours)
+        const residualFloor = e._episodeCount >= 3 ? 0.10 : e._episodeCount >= 2 ? 0.05 : 0.0
+        const decayingPortion = (e._peakLoss - residualFloor) * Math.pow(0.5, ageHours / e._halfLifeHours)
+        return sum + residualFloor + decayingPortion
       }, 0)
 
     const fatigueLoss = datedEntries
@@ -13760,7 +13836,9 @@ const operationalCapacityData = useMemo(() => {
         const ageDays = daysBetween(d, e._start)
         if (ageDays < 0) return sum
         const ageHours = ageDays * 24
-        return sum + e._peakLoss * Math.pow(0.5, ageHours / e._halfLifeHours)
+        const residualFloor = e._episodeCount >= 3 ? 0.10 : e._episodeCount >= 2 ? 0.05 : 0.0
+        const decayingPortion = (e._peakLoss - residualFloor) * Math.pow(0.5, ageHours / e._halfLifeHours)
+        return sum + residualFloor + decayingPortion
       }, 0)
 
     const totalMultiplier =
@@ -15182,13 +15260,34 @@ return (
               <CartesianGrid stroke="#1a1b2e" />
               <XAxis dataKey="label" tick={{ fontSize:10 }} interval={Math.max(1, Math.floor((panel.rows.length || 1) / (isLongWindow ? 10 : 12)) - 1)} />
               <YAxis domain={[dataMin => Math.min(Math.floor(dataMin - 3), -5), dataMax => Math.max(Math.ceil(dataMax + 3), 5)]} tick={{ fontSize:10 }} width={30} tickFormatter={value => Number(value).toFixed(0)} />
+              <YAxis
+                yAxisId="acwr"
+                orientation="right"
+                domain={[0, 2.5]}
+                tick={{ fontSize: 10 }}
+                tickFormatter={v => v.toFixed(1)}
+                label={{ value: "ACWR", angle: 90, position: "insideRight", offset: 10, fontSize: 10 }}
+              />
               <ReferenceLine y={0} stroke="#444" strokeDasharray="3 3" />
+              <ReferenceLine yAxisId="acwr" y={1.5} stroke="#ef4444" strokeDasharray="3 2" strokeOpacity={0.5} />
+              <ReferenceLine yAxisId="acwr" y={0.8} stroke="#3b82f6" strokeDasharray="3 2" strokeOpacity={0.5} />
               <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: '#0f172a' }} formatter={(v, n) => [Number(v).toFixed(2), n]} />
               <Line type="monotone" dataKey="overallTsb" name="Overall TSB" stroke="#e5e7eb" strokeWidth={isLongWindow ? 2 : 2.2} dot={false} connectNulls isAnimationActive={false} />
               <Line type="monotone" dataKey="runningTsb" name="Running TSB" stroke="#ef4444" strokeWidth={modalityStrokeWidth} strokeOpacity={isLongWindow ? 0.78 : 1} dot={false} connectNulls isAnimationActive={false} />
               <Line type="monotone" dataKey="cyclingTsb" name="Cycling TSB" stroke="#22d3ee" strokeWidth={modalityStrokeWidth} strokeOpacity={isLongWindow ? 0.78 : 1} dot={false} connectNulls isAnimationActive={false} />
               <Line type="monotone" dataKey="swimmingTsb" name="Swimming TSB" stroke="#a78bfa" strokeWidth={modalityStrokeWidth} strokeOpacity={isLongWindow ? 0.78 : 1} dot={false} connectNulls isAnimationActive={false} />
               <Line type="monotone" dataKey="strengthTsb" name="Strength TSB" stroke="#ffd166" strokeWidth={modalityStrokeWidth} strokeOpacity={isLongWindow ? 0.78 : 1} dot={false} connectNulls strokeDasharray="4 2" isAnimationActive={false} />
+              <Line
+                yAxisId="acwr"
+                type="monotone"
+                dataKey="acwr"
+                stroke="#f59e0b"
+                strokeWidth={1.5}
+                strokeDasharray="6 3"
+                dot={false}
+                name="ACWR"
+                connectNulls
+              />
             </ComposedChart>
           </ResponsiveContainer>
           <div style={{ display:"flex", gap:10, flexWrap:"wrap", fontSize:11, color:"#94a3b8", marginTop:8 }}>
@@ -17060,6 +17159,9 @@ return (
     setSleepRecords={setSleepRecords}
     setBiometricRecords={setBiometricRecords}
     setSchedLog={setSchedLog}
+    healthFitDaily={healthFitDaily}
+    biometricRecords={biometricRecords}
+    ocItems={items}
   />
 )}
 

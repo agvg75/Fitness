@@ -144,9 +144,9 @@ function rowToCanonicalSession(row) {
 export async function loadCanonicalSessions(supabase, userId) {
   requireSupabase(supabase, userId, "loadCanonicalSessions")
 
-  const pageSize = 1000
+  let allSessions = []
   let from = 0
-  const allRows = []
+  const PAGE_SIZE = 1000
 
   while (true) {
     const { data, error } = await supabase
@@ -154,18 +154,19 @@ export async function loadCanonicalSessions(supabase, userId) {
       .select("*")
       .eq("user_id", userId)
       .order("start_date", { ascending: true })
-      .range(from, from + pageSize - 1)
+      .range(from, from + PAGE_SIZE - 1)
 
     throwIfError(error, "loadCanonicalSessions")
 
-    const rows = data || []
-    allRows.push(...rows)
-
-    if (rows.length < pageSize) break
-    from += pageSize
+    if (!data || data.length === 0) break
+    allSessions = allSessions.concat(data)
+    if (data.length < PAGE_SIZE) break
+    from += PAGE_SIZE
   }
 
-  return allRows.map(rowToCanonicalSession)
+  const data = allSessions
+  console.log("[LIFT] canonical sessions loaded:", data.length)
+  return data.map(rowToCanonicalSession)
 }
 
 /**
