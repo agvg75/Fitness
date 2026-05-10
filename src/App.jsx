@@ -14718,13 +14718,22 @@ const bodyCompositionOverviewData = useMemo(() => {
   const nextDexaDate = LIFT_CONFIG.next_dexa_date  // "2026-09-19"
   const projectedDexaPt = (() => {
     if (!estimatedCurrentBF || !nextDexaDate) return []
-    const dexaForRegression = dexaSeries
+    const lastScan = dexaSeries
       .filter(d => d.date && d.pct_fat != null)
       .map(d => ({ date: d.date, val: Number(d.pct_fat) }))
       .filter(d => Number.isFinite(d.val))
-    if (dexaForRegression.length < 2) return []
-    const slopePerDay = weightedLinearSlope(dexaForRegression, d => d.val, 180)
-    const lastScan = dexaForRegression[dexaForRegression.length - 1]
+      .at(-1)
+    if (!lastScan) return []
+
+    // Use LIFT_CONFIG.fat_loss_rate_monthly for forward projection rather than
+    // the historical regression slope. The regression slope includes the Jan-Apr
+    // KNR period where lean mass gained rapidly, making it too optimistic for the
+    // no-KNR Apr-Sep window. This rate should be updated in LIFT_CONFIG when KNR
+    // resumes in September.
+    const fatLossPerDay = LIFT_CONFIG.fat_loss_rate_monthly / 30.44
+    const slopePerDay = -(fatLossPerDay * LIFT_CONFIG.lean_bmc_lb) /
+      Math.pow(LIFT_CONFIG.fat_lb + LIFT_CONFIG.lean_bmc_lb, 2)
+
     const daysToNext = (new Date(nextDexaDate).getTime() - new Date(lastScan.date).getTime()) / 86400000
     const projected = lastScan.val + slopePerDay * daysToNext
     if (!Number.isFinite(projected) || projected < 5 || projected > 60) return []
