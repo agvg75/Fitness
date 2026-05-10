@@ -1246,6 +1246,14 @@ function ScheduleMismatchDiagnostics({ report, onOpenEntry, onEditEntry, onResol
 
 // ─── Operational Capacity constants ───────────────────────────────────────────
 const SCORE_LABELS = ["Resolved", "Mild", "Discomfort", "Pain", "Impairment", "Severe"]
+const OC_SEVERITY_LABELS = {
+  0: "None — no awareness, no restriction",
+  1: "Mild — noticeable under load, resolves immediately",
+  2: "Moderate — present during activity, gone within an hour",
+  3: "Significant — alters technique or pace, lingers post-session",
+  4: "Severe — prevents normal training, present at rest",
+  5: "Unable — cannot bear load or complete session",
+}
 const DEFAULT_TSB_THRESHOLDS = {
   moderate: -7,
   high: -9,
@@ -1663,19 +1671,33 @@ function computeOcRecoveryDate(item) {
 }
 
 // ─── TabOperationalCapacity ────────────────────────────────────────────────────
-function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapacityData, healthFitDaily, sleepRecords, tsbFallback = null, runSessions = [] }) {
+function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapacityData, healthFitDaily, sleepRecords, tsbFallback = null, runSessions = [], canonicalSessions = [] }) {
   const [selectedId, setSelectedId] = useState(null)
   const [addForm, setAddForm] = useState({
     key: "muscleStatus",
     location: "Quad L",
     currentScore: 1,
     halfLifeHours: null,
+    note: "",
     isHistorical: false,
     historicalStartDate: "",
     historicalResolvedDate: "",
   })
+  const [mtpCheckFormOpen, setMtpCheckFormOpen] = useState(false)
+  const [mtpCheckForm, setMtpCheckForm] = useState({
+    date: new Date().toISOString().slice(0, 10),
+    score: 0,
+    note: "",
+  })
+  const [editingHistoryId, setEditingHistoryId] = useState(null)
+  const [historyEditForm, setHistoryEditForm] = useState({
+    startDate: "",
+    endDate: "",
+    peakScore: 1,
+    note: "",
+  })
   const [capacityInfoOpen, setCapacityInfoOpen] = useState({ tendonPain: false })
-  const MTP_LOCATION = "Toe R"
+  const MTP_LOCATION = "Toe L"
   const MTP_KEY = "jointStatus"
 
   const selectedItem = ocItems.find(i => i.id === selectedId) || null
@@ -1703,6 +1725,16 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
   }, [ocItems])
   const maxReg = active.filter(i => OC_KEY_META[i.key]?.scope === "regional").reduce((m, i) => Math.max(m, i.currentScore), 0)
   const maxGlb = active.filter(i => OC_KEY_META[i.key]?.scope === "global").reduce((m, i) => Math.max(m, i.currentScore), 0)
+  const getCanonicalLoadForDate = dateValue => {
+    const targetDate = String(dateValue || "").slice(0, 10)
+    if (!targetDate) return null
+    const total = (Array.isArray(canonicalSessions) ? canonicalSessions : []).reduce((sum, session) => {
+      const sessionDate = String(session?.start_date || "").slice(0, 10)
+      if (sessionDate !== targetDate) return sum
+      return sum + Number(session?.trimp || session?.duration_min || 0)
+    }, 0)
+    return total > 0 ? Number(total.toFixed(2)) : null
+  }
 
   const saveOcItems = async items => {
     await store.set("oc-items", items)
@@ -1778,19 +1810,17 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
     if (!addForm.currentScore) return
     const meta = OC_KEY_META[addForm.key] || OC_KEY_META.muscleStatus
 
-    const isHistorical = addForm.isHistorical &&
-      addForm.historicalStartDate && addForm.historicalResolvedDate
+    const isHistorical = addForm.isHistorical && addForm.historicalStartDate
 
     const startDate = isHistorical
       ? new Date(addForm.historicalStartDate).toISOString()
       : new Date().toISOString()
 
-    const resolvedDate = isHistorical
+    const resolvedDate = addForm.isHistorical && addForm.historicalResolvedDate
       ? new Date(addForm.historicalResolvedDate).toISOString()
       : null
 
-    // For historical episodes: currentScore is 0 (already resolved)
-    const currentScore = isHistorical ? 0 : Number(addForm.currentScore)
+    const currentScore = isHistorical && resolvedDate ? 0 : Number(addForm.currentScore)
 
     // Compute chronicity: check existing items for same key+location to
     // determine prior episode count and last resolution interval.
@@ -1825,9 +1855,17 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
       initialScore: Number(addForm.currentScore),
       startDate,
       halfLifeHours: Number(addForm.halfLifeHours) || meta.halfLifeHours,
-      episodeCount: isHistorical ? 1 : 0,
+      episodeCount: isHistorical && resolvedDate ? 1 : 0,
       lastResolvedDate: resolvedDate,
       chronicity,
+      note: addForm.note || "",
+      history: isHistorical ? [{
+        date: addForm.historicalStartDate,
+        score: Number(addForm.currentScore),
+        context: "historical episode",
+        trimp: null,
+        note: addForm.note || ""
+      }] : [],
       ...(isHistorical ? { eventType: "historical_entry" } : {}),
     }
 
@@ -1846,6 +1884,7 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
       ...f,
       currentScore: 1,
       halfLifeHours: null,
+      note: "",
       isHistorical: false,
       historicalStartDate: "",
       historicalResolvedDate: "",
@@ -1877,25 +1916,99 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
     setSelectedId(null)
   }
 
-  const logMtpZeroCheck = () => {
-    const nowIso = new Date().toISOString()
+  const openMtpCheckForm = () => {
+    setMtpCheckForm({
+      date: new Date().toISOString().slice(0, 10),
+      score: 0,
+      note: "",
+    })
+    setMtpCheckFormOpen(true)
+  }
+
+  const submitMtpCheck = () => {
+    const selectedDate = String(mtpCheckForm.date || "").slice(0, 10)
+    if (!selectedDate) return
+
+    const historyEntry = {
+      date: selectedDate,
+      score: Number(mtpCheckForm.score || 0),
+      context: "zero-pain check",
+      trimp: getCanonicalLoadForDate(selectedDate),
+      note: mtpCheckForm.note || ""
+    }
+
+    const matchingItem = [...ocItems]
+      .filter(item => item.key === MTP_KEY && String(item.location || "").includes(MTP_LOCATION))
+      .sort((a, b) => String(b.startDate || "").localeCompare(String(a.startDate || "")))[0] || null
+
+    if (matchingItem) {
+      const updated = ocItems.map(item => {
+        if (item.id !== matchingItem.id) return item
+        return {
+          ...item,
+          currentScore: Number(mtpCheckForm.score || 0),
+          initialScore: Math.max(Number(item.initialScore || 0), Number(mtpCheckForm.score || 0)),
+          lastCheckedDate: selectedDate,
+          history: [...(Array.isArray(item.history) ? item.history : []), historyEntry]
+        }
+      })
+      setOcItems(updated)
+      saveOcItems(updated)
+      setMtpCheckFormOpen(false)
+      return
+    }
+
+    const score = Number(mtpCheckForm.score || 0)
     const item = {
       id: Date.now(),
       key: MTP_KEY,
       location: MTP_LOCATION,
       label: `${OC_KEY_META[MTP_KEY]?.label || "Joint"} — ${MTP_LOCATION}`,
-      currentScore: 0,
-      initialScore: 0,
-      startDate: nowIso,
+      currentScore: score,
+      initialScore: score,
+      startDate: new Date(`${selectedDate}T12:00:00`).toISOString(),
       halfLifeHours: OC_KEY_META[MTP_KEY]?.halfLifeHours || 120,
       episodeCount: 0,
-      lastResolvedDate: nowIso,
+      lastResolvedDate: score === 0 ? new Date(`${selectedDate}T12:00:00`).toISOString() : null,
+      lastCheckedDate: selectedDate,
       chronicity: "acute",
+      history: [historyEntry],
+      note: mtpCheckForm.note || "",
       eventType: "explicit_zero_check"
     }
     const updated = [item, ...ocItems]
     setOcItems(updated)
     saveOcItems(updated)
+    setMtpCheckFormOpen(false)
+  }
+
+  const startHistoryEdit = item => {
+    setEditingHistoryId(item.id)
+    setHistoryEditForm({
+      startDate: item.startDate ? String(item.startDate).slice(0, 10) : "",
+      endDate: item.lastResolvedDate ? String(item.lastResolvedDate).slice(0, 10) : "",
+      peakScore: Number(item.initialScore || 1),
+      note: item.note || ""
+    })
+  }
+
+  const saveHistoryEdit = itemId => {
+    const updated = ocItems.map(item => {
+      if (item.id !== itemId) return item
+      const startDate = historyEditForm.startDate ? new Date(`${historyEditForm.startDate}T12:00:00`).toISOString() : item.startDate
+      const lastResolvedDate = historyEditForm.endDate ? new Date(`${historyEditForm.endDate}T12:00:00`).toISOString() : null
+      return {
+        ...item,
+        startDate,
+        lastResolvedDate,
+        currentScore: lastResolvedDate ? 0 : item.currentScore,
+        initialScore: Number(historyEditForm.peakScore || item.initialScore || 1),
+        note: historyEditForm.note || ""
+      }
+    })
+    setOcItems(updated)
+    saveOcItems(updated)
+    setEditingHistoryId(null)
   }
 
   const infoButton = key => (
@@ -2083,6 +2196,12 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
             return bDate.localeCompare(aDate)
           })
         const mtpItem = mtpHistory[0] || null
+        const mtpObservations = mtpHistory
+          .flatMap(item => (Array.isArray(item.history) ? item.history : []).map(entry => ({
+            ...entry,
+            _itemId: item.id
+          })))
+          .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))
         const sortedRuns = [...runSessions]
           .filter(w => w.date)
           .sort((a, b) => String(b.date).localeCompare(String(a.date)))
@@ -2094,12 +2213,12 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
         const isActive = currentScore > 0
         const chronicity = mtpItem?.chronicity || "acute"
         const lastActiveDate =
+          mtpObservations.find(entry => Number(entry.score || 0) > 0)?.date ||
           mtpHistory.find(item => Number(item.currentScore || 0) > 0)?.startDate ||
-          mtpHistory.find(item => Number(item.currentScore || 0) === 0 && Number(item.episodeCount || 0) > 0)?.startDate ||
           null
-        const zeroChecks = mtpHistory.filter(item => {
-          if (Number(item.currentScore || 0) !== 0) return false
-          const eventDate = String(item.lastResolvedDate || item.startDate || "")
+        const zeroChecks = mtpObservations.filter(entry => {
+          if (Number(entry.score || 0) !== 0) return false
+          const eventDate = String(entry.date || "")
           return !lastActiveDate || eventDate > String(lastActiveDate)
         })
 
@@ -2118,7 +2237,7 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
         const nextDistanceMilestone = recentMax > 0 ? (recentMax * 1.1).toFixed(2) : null
         const nextDistanceText = nextDistanceMilestone ? `${nextDistanceMilestone} mi` : "the next distance step"
         const remainingScoreZeroSessions = Math.max(0, PROGRESSION_THRESHOLD - streak)
-        const latestZeroCheckDate = zeroChecks[0]?.lastResolvedDate || zeroChecks[0]?.startDate || null
+        const latestZeroCheckDate = zeroChecks[0]?.date || null
         const nextMilestoneDate = (() => {
           if (streak >= PROGRESSION_THRESHOLD) return "Cleared"
           const projected = new Date()
@@ -2137,7 +2256,7 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
                   {chronicity === "chronic" && <span style={{ marginLeft: "8px", color: "#f59e0b", fontSize: "9px" }}>CHRONIC</span>}
                 </div>
                 <div style={{ fontSize: "12px", color: "#667" }}>
-                  Right MTP · jointStatus · 120h half-life
+                  Left MTP · jointStatus · 120h half-life
                 </div>
               </div>
               <div style={{ textAlign: "right" }}>
@@ -2197,9 +2316,53 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
                     : "No explicit score-0 checks logged yet. Missing data does not advance progression."
               }
             </div>
-            {!isActive && (
-              <div style={{ marginTop: "10px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                <button onClick={logMtpZeroCheck} style={buttonStyle(true)}>Log zero-pain check</button>
+            <div style={{ marginTop: "10px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              <button onClick={openMtpCheckForm} style={buttonStyle(true)}>Log zero-pain check</button>
+            </div>
+            {mtpCheckFormOpen && (
+              <div style={{ marginTop: "10px", padding: "10px", background: "#0a0b14", borderRadius: "6px", border: "1px solid #1a1b2e", display: "grid", gap: "8px" }}>
+                <div style={{ fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase", color: "#555" }}>MTP check-in</div>
+                <div>
+                  <div style={{ fontSize: "11px", color: "#666", marginBottom: "4px" }}>Date</div>
+                  <input
+                    type="date"
+                    max={new Date().toISOString().slice(0, 10)}
+                    value={mtpCheckForm.date}
+                    onChange={e => setMtpCheckForm(prev => ({ ...prev, date: e.target.value }))}
+                    style={{ ...inputStyle(), padding: "6px 10px" }}
+                  />
+                </div>
+                <div>
+                  <div style={{ fontSize: "11px", color: "#666", marginBottom: "4px" }}>
+                    Score: {mtpCheckForm.score}/3
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={3}
+                    step={1}
+                    value={mtpCheckForm.score}
+                    onChange={e => setMtpCheckForm(prev => ({ ...prev, score: Number(e.target.value) }))}
+                    style={{ width: "100%" }}
+                  />
+                  <div style={{ fontSize: "10px", color: "#555", marginTop: "4px" }}>
+                    {OC_SEVERITY_LABELS[Number(mtpCheckForm.score)]}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: "11px", color: "#666", marginBottom: "4px" }}>Note</div>
+                  <input
+                    type="text"
+                    value={mtpCheckForm.note}
+                    onChange={e => setMtpCheckForm(prev => ({ ...prev, note: e.target.value }))}
+                    placeholder="e.g. 4 mile run, score rose to 1 then cleared"
+                    style={{ ...inputStyle(), padding: "6px 10px" }}
+                  />
+                </div>
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  <button onClick={submitMtpCheck} style={buttonStyle(true)}>Log check-in</button>
+                  <button onClick={() => setMtpCheckFormOpen(false)} style={buttonStyle(false)}>Cancel</button>
+                </div>
               </div>
             )}
           </div>
@@ -2227,6 +2390,9 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
                 <input type="range" min={0} max={5} step={1} value={addForm.currentScore}
                   onChange={e => setAddForm(f => ({ ...f, currentScore: Number(e.target.value) }))}
                   style={{ width: "100%" }} />
+                <div style={{ fontSize: "10px", color: "#555", marginTop: "4px" }}>
+                  {OC_SEVERITY_LABELS[Number(addForm.currentScore)]}
+                </div>
               </div>
               <div>
                 <div style={{ fontSize: "11px", color: "#666", marginBottom: "4px" }}>
@@ -2252,7 +2418,7 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
                 <div style={{ display: "grid", gap: "6px", padding: "8px", background: "#0a0b14", borderRadius: "4px", border: "1px solid #1a1b2e" }}>
                   <div style={{ fontSize: "10px", color: "#555", letterSpacing: "0.1em" }}>EPISODE DATES</div>
                   <div>
-                    <div style={{ fontSize: "11px", color: "#666", marginBottom: "2px" }}>Started</div>
+                    <div style={{ fontSize: "11px", color: "#666", marginBottom: "2px" }}>Start date</div>
                     <input
                       type="date"
                       value={addForm.historicalStartDate}
@@ -2262,7 +2428,7 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
                     />
                   </div>
                   <div>
-                    <div style={{ fontSize: "11px", color: "#666", marginBottom: "2px" }}>Resolved</div>
+                    <div style={{ fontSize: "11px", color: "#666", marginBottom: "2px" }}>End date (optional)</div>
                     <input
                       type="date"
                       value={addForm.historicalResolvedDate}
@@ -2272,9 +2438,46 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
                       style={{ ...inputStyle(), padding: "6px 10px" }}
                     />
                   </div>
-                  <div style={{ fontSize: "10px", color: "#444", lineHeight: "1.4" }}>
-                    Severity above = peak score at onset. Episode will be marked resolved automatically.
+                  <div>
+                    <div style={{ fontSize: "11px", color: "#666", marginBottom: "2px" }}>Peak score</div>
+                    <input
+                      type="range"
+                      min={0}
+                      max={5}
+                      step={1}
+                      value={addForm.currentScore}
+                      onChange={e => setAddForm(f => ({ ...f, currentScore: Number(e.target.value) }))}
+                      style={{ width: "100%" }}
+                    />
+                    <div style={{ fontSize: "10px", color: "#555", marginTop: "4px" }}>
+                      {OC_SEVERITY_LABELS[Number(addForm.currentScore)]}
+                    </div>
                   </div>
+                  <div>
+                    <div style={{ fontSize: "11px", color: "#666", marginBottom: "2px" }}>Note</div>
+                    <input
+                      type="text"
+                      value={addForm.note}
+                      onChange={e => setAddForm(f => ({ ...f, note: e.target.value }))}
+                      placeholder="Episode note"
+                      style={{ ...inputStyle(), padding: "6px 10px" }}
+                    />
+                  </div>
+                  <div style={{ fontSize: "10px", color: "#444", lineHeight: "1.4" }}>
+                    Severity above = peak score at onset. Add an end date to mark the episode resolved.
+                  </div>
+                </div>
+              )}
+              {!addForm.isHistorical && (
+                <div>
+                  <div style={{ fontSize: "11px", color: "#666", marginBottom: "2px" }}>Note</div>
+                  <input
+                    type="text"
+                    value={addForm.note}
+                    onChange={e => setAddForm(f => ({ ...f, note: e.target.value }))}
+                    placeholder="Optional note"
+                    style={{ ...inputStyle(), padding: "6px 10px" }}
+                  />
                 </div>
               )}
               <button onClick={addItem} style={{ ...buttonStyle(true), fontSize: "12px" }}>
@@ -2325,6 +2528,7 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
                     const meta = OC_KEY_META[item.key] || OC_KEY_META.muscleStatus
                     const startStr = item.startDate ? String(item.startDate).slice(0, 10) : "—"
                     const resolvedStr = item.lastResolvedDate ? String(item.lastResolvedDate).slice(0, 10) : "—"
+                    const isEditing = editingHistoryId === item.id
                     const durationDays = item.startDate && item.lastResolvedDate
                       ? Math.round((new Date(item.lastResolvedDate) - new Date(item.startDate)) / 86400000)
                       : null
@@ -2336,15 +2540,70 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
                       }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                           <span style={{ fontSize: "11px", color: meta.color }}>{item.location}</span>
-                          <span style={{ fontSize: "10px", color: item.chronicity === "chronic" ? "#ef4444" : "#555" }}>
-                            {item.chronicity === "chronic" ? "chronic" : "resolved"}
-                          </span>
-                          <span style={{ fontSize: "11px", color: "#555" }}>peak {item.initialScore}/5</span>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            <span style={{ fontSize: "10px", color: item.chronicity === "chronic" ? "#ef4444" : "#555" }}>
+                              {item.chronicity === "chronic" ? "chronic" : "resolved"}
+                            </span>
+                            <span style={{ fontSize: "11px", color: "#555" }}>peak {item.initialScore}/5</span>
+                            <button
+                              onClick={() => isEditing ? setEditingHistoryId(null) : startHistoryEdit(item)}
+                              style={{ background: "none", border: "none", color: "#777", cursor: "pointer", fontSize: "12px", padding: 0 }}
+                              title="Edit episode"
+                            >
+                              ✎
+                            </button>
+                          </div>
                         </div>
                         <div style={{ fontSize: "10px", color: "#444", marginTop: "2px" }}>
                           {startStr} → {resolvedStr}
                           {durationDays != null ? ` (${durationDays}d)` : ""}
                         </div>
+                        {item.note && !isEditing && (
+                          <div style={{ fontSize: "10px", color: "#555", marginTop: "4px" }}>{item.note}</div>
+                        )}
+                        {isEditing && (
+                          <div style={{ display: "grid", gap: "6px", marginTop: "8px", paddingTop: "8px", borderTop: "1px solid #1a1b2e" }}>
+                            <input
+                              type="date"
+                              value={historyEditForm.startDate}
+                              onChange={e => setHistoryEditForm(prev => ({ ...prev, startDate: e.target.value }))}
+                              style={{ ...inputStyle(), padding: "6px 10px" }}
+                            />
+                            <input
+                              type="date"
+                              value={historyEditForm.endDate}
+                              min={historyEditForm.startDate || undefined}
+                              onChange={e => setHistoryEditForm(prev => ({ ...prev, endDate: e.target.value }))}
+                              style={{ ...inputStyle(), padding: "6px 10px" }}
+                            />
+                            <div>
+                              <div style={{ fontSize: "11px", color: "#666", marginBottom: "2px" }}>Peak score: {historyEditForm.peakScore}/5</div>
+                              <input
+                                type="range"
+                                min={0}
+                                max={5}
+                                step={1}
+                                value={historyEditForm.peakScore}
+                                onChange={e => setHistoryEditForm(prev => ({ ...prev, peakScore: Number(e.target.value) }))}
+                                style={{ width: "100%" }}
+                              />
+                              <div style={{ fontSize: "10px", color: "#555", marginTop: "4px" }}>
+                                {OC_SEVERITY_LABELS[Number(historyEditForm.peakScore)]}
+                              </div>
+                            </div>
+                            <input
+                              type="text"
+                              value={historyEditForm.note}
+                              onChange={e => setHistoryEditForm(prev => ({ ...prev, note: e.target.value }))}
+                              placeholder="Episode note"
+                              style={{ ...inputStyle(), padding: "6px 10px" }}
+                            />
+                            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                              <button onClick={() => saveHistoryEdit(item.id)} style={buttonStyle(true)}>Save</button>
+                              <button onClick={() => setEditingHistoryId(null)} style={buttonStyle(false)}>Cancel</button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )
                   })
@@ -2402,6 +2661,9 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
               <input type="range" min={0} max={5} step={1} value={selectedItem.currentScore}
                 onChange={e => updateItem(selectedItem.id, { currentScore: Number(e.target.value) })}
                 style={{ width: "100%" }} />
+              <div style={{ fontSize: "10px", color: "#555", marginTop: "4px" }}>
+                {OC_SEVERITY_LABELS[Number(selectedItem.currentScore)]}
+              </div>
             </div>
             <div>
               <div style={{ fontSize: "11px", color: "#666", marginBottom: "4px" }}>Half-life (hrs)</div>
@@ -17016,6 +17278,7 @@ return (
     sleepRecords={sleepRecords}
     tsbFallback={tsbV2Panel?.currentOverallTsb ?? computedTSBFromSessions?.tsb ?? null}
     runSessions={operationalWorkouts.filter(w => w.category === "Running" && w.distance > 0)}
+    canonicalSessions={unifiedCanonicalSessions}
   />
 )}
 {tab === "_InjuryLegacy" && (
