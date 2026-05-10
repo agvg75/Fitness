@@ -11128,37 +11128,6 @@ const [biometricRecords, setBiometricRecords] = useState(() => { try { return JS
 const [sleepRecords, setSleepRecords] = useState(() => { try { return JSON.parse(localStorage.getItem("lift_sleep_records") || "[]") } catch { return [] } })
 const [schedLog, setSchedLog] = useState(() => { try { return JSON.parse(localStorage.getItem('wt-log') || '[]') } catch { return [] } })
 const [ocItems, setOcItems] = useState(() => { try { return JSON.parse(localStorage.getItem('oc-items') || '[]') } catch { return [] } })
-const ocCleanupApplied = useRef(false)
-useEffect(() => {
-  if (ocCleanupApplied.current) return
-  if (!ocItems || ocItems.length === 0) return
-  const hasRealToeL = ocItems.some(i =>
-    i.key === 'jointStatus' &&
-    i.location === 'Toe L' &&
-    (i.initialScore || 0) > 0
-  )
-  if (!hasRealToeL) return
-  ocCleanupApplied.current = true
-  setOcItems(prev => {
-    const cleaned = prev.filter(i =>
-      !(i.key === 'jointStatus' &&
-        i.location === 'Toe L' &&
-        (i.initialScore || 0) === 0 &&
-        (i.currentScore || 0) === 0)
-    )
-    return cleaned.map(i => {
-      if (
-        i.key === 'jointStatus' &&
-        i.location === 'Toe L' &&
-        (i.initialScore || 0) > 0 &&
-        (i.episodeCount || 0) < 3
-      ) {
-        return { ...i, episodeCount: 3 }
-      }
-      return i
-    })
-  })
-}, [ocItems])
 const [tendonStatus, setTendonStatus] = useState({ painScore: 0, stiffness: false, override: null })
 const [selectedTendonGroup, setSelectedTendonGroup] = useState("combined")
 const [overviewExplainOpen, setOverviewExplainOpen] = useState({})
@@ -12586,8 +12555,27 @@ useEffect(() => {
                 return Number.isFinite(startMs) && startMs >= ninetyDaysAgo
               })
               .sort((a, b) => b.id - a.id)
-            setOcItems(merged)
-            await store.set("oc-items", merged)
+            const cleanedOcItems = merged.filter(function(item) {
+              // Remove ghost OC entries: zero-severity Toe L joint items created by body map mis-taps
+              if (
+                item.key === 'jointStatus' &&
+                (item.location || '').includes('Toe') &&
+                (item.initialScore || 0) === 0 &&
+                (item.currentScore || 0) === 0
+              ) return false
+              return true
+            }).map(function(item) {
+              // Correct episodeCount for the chronic MTP item (3 known episodes: Dec 2025, Feb 2026, Mar 2026)
+              if (
+                item.key === 'jointStatus' &&
+                item.location === 'Toe L' &&
+                (item.initialScore || 0) > 0 &&
+                (item.episodeCount || 0) < 3
+              ) return Object.assign({}, item, { episodeCount: 3 })
+              return item
+            })
+            setOcItems(cleanedOcItems)
+            await store.set("oc-items", cleanedOcItems)
           } else if (Array.isArray(cleanedOcLocal)) {
             setOcItems(cleanedOcLocal)
           }
