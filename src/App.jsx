@@ -372,7 +372,13 @@ const PLAN = {
   // ─── MONDAY: Chest & Triceps + Long Bike ─────────────────────────────────
   Mon: {
     cardio: "Long bike · 45–50 min · Zone 2–3 · Stationary or spin · Do AFTER strength · This is the weekly long bike anchor session",
-    warmup: [],
+    warmup: [
+      "Arm circles · 30 sec forward then 30 sec backward · full ROM · shoulder joint prep before pressing",
+      "Band pull-aparts · 2×15 · light band · scapular retraction · posterior cuff activation",
+      "Standing thoracic rotation · 8e slow · hands behind head · open chest toward ceiling",
+      "Light push-up · 2×8 · bodyweight · controlled 3 sec down · pec and shoulder activation",
+      "Wrist circles · 10 each direction · elbow joint prep before heavy pressing and curls",
+    ],
     topNote: "YMCA only — KNR suspended until September. Full 5:00–7:00 window. Sequence: Chest → Pull/Chin-ups → Shoulders → Arms → Core → Tendon. Tendon section is 10 min at end — do not skip even if time is tight.",
     tendon: [
       { id: "eccentric_lateral_raise_mon", name: "Eccentric Lateral Raise", sub: "Light DB · 4 sec lowering", note: "Supraspinatus protocol · 2 sets only · lower is slower · therapeutic not hypertrophy", def: [mk(8,5), mk(8,5)] },
@@ -453,7 +459,14 @@ const PLAN = {
   Wed: {
     cardio: "Optional lunch run · 1.5–2 miles · Zone 2 · Conversational pace · Spring/Fall only (weather permitting) · Run at lunch not morning · Third weekly run — DROP FIRST if Tuesday legs felt heavy, MTP above 0 this week, or sleep below 5.5 hrs last night · Gap from Tuesday legs (5am) to Wed lunch run (~12pm) is ~31 hours — short of 48hr rule so easy pace is non-negotiable",
     warmup: [],
-    topNote: "Rest day — no gym, no strength, no high intensity cardio. Tendon protocol only: 20 min, at home or work, no equipment needed except one resistance band. Optional: easy 7-mile bike commute on trail counts as active recovery.",
+    cooldown: [
+      "POST-RUN STATIC ROUTINE (if lunch run done) · 5 min",
+      "Standing hamstring rotation stretch · L then R · 30 sec each",
+      "Standing hinge hamstring · hold 30 sec · lower back arch",
+      "High lunge with lateral lean · 30 sec each side · hip flexor release",
+      "Wide stance rotation · 4 each side",
+    ],
+    topNote: "Rest day — no gym, no strength, no high intensity cardio. Tendon protocol only: 20 min, at home or work, no equipment needed except one resistance band. Optional: easy 7-mile bike commute on trail counts as active recovery. · If doing the lunch run: 3-min abbreviated pre-run (ankle rotations, leg swings both sides, A-skips — skip knee hugs and side lunges, already covered by tendon protocol). Full 5-min post-run static routine after.",
     tendon: [
       { id:"tibialis_raise_wed", name:"Tibialis Raise", sub:"Wall shin raise · bodyweight", note:"Stand 18 in from wall · lift toes to shin · 3 sec hold · running prehab · no equipment", def:[mk(15,"BW"),mk(15,"BW"),mk(15,"BW")] },
       { id:"eccentric_calf_raise_wed", name:"Eccentric Calf Raise", sub:"Step or curb · bodyweight", note:"Rise on two feet · lower on one · 3 sec eccentric · Achilles and calf protocol", def:[mk(10,"BW"),mk(10,"BW"),mk(10,"BW")] },
@@ -472,7 +485,16 @@ const PLAN = {
       "Face pulls w/ band 2×10 · light band",
       "Pull aparts w/ band 2×10",
     ],
-    topNote: "YMCA Day — Back and Arms. Mix of heavy (4–8) and volume (8–15) sets. No swim today: arm day swim constraint. Run is buffered 49hr from Tuesday legs. Tendon Work before main program.",
+    cooldown: [
+      "POST-RUN STATIC ROUTINE · 5 min · do immediately after Thursday run",
+      "Standing hamstring rotation stretch · L then R · 30 sec each · hands to floor, straighten one leg, opposite arm to sky",
+      "Standing hinge hamstring · both legs · hands to shins, hips back, arch lower back · 30 sec",
+      "Lower back extension · standing · hands on hips, push hips forward, chin to chest · 20 sec",
+      "Upper back round · clasp hands, push away from chest, round spine, bend knees · 20 sec",
+      "High lunge with lateral lean · L foot forward, R hand up and over · 30 sec each side",
+      "Wide stance rotation · hips back, alternate reaching one hand to floor, other to sky · 4e",
+    ],
+    topNote: "YMCA Day — Back and Arms. Mix of heavy (4–8) and volume (8–15) sets. No swim today: arm day swim constraint. Run is buffered 49hr from Tuesday legs. Tendon Work before main program. · Before the run: do 3-min active pre-run routine (ankle rotations, leg swings, forward lunges) as transition from strength to run. After the run: full 5-min post-run static routine.",
     tendonWork: [
       "Eccentric Lateral Raise · L1: 2×8 each arm · 5 lb DB · Raise with BOTH arms together to shoulder height, lower with ONE arm only (4-sec lower) · Reset and repeat · The slow lowering is the entire stimulus — do not rush it · L3 target: 3×12 each arm at 8–10 lb · Advance: 3 sessions zero outer shoulder next-day soreness · Search: eccentric lateral raise supraspinatus rotator cuff rehab",
       "Eccentric Biceps Curl · L1: 2×5 each arm · 15 lb DB (lighter than working weight) · Curl up with BOTH arms, lower with ONE arm (4-sec lower) · Elbow stays at side · This is significantly harder than it looks at slow tempo · L3 target: 3×8 each arm at 25 lb 5-sec lower · Advance: 3 sessions zero elbow/biceps next-day soreness · Search: eccentric biceps curl tendon loading physical therapy",
@@ -542,7 +564,12 @@ const PLAN = {
   // ─── SATURDAY: Long Swim ──────────────────────────────────────────────────
   Sat: {
     cardio: "Race day or long run · If racing: treat as primary cardio session, no additional strength · If not racing: long swim 50–60 min · Race weeks shift long run to Saturday",
-    warmup: [],
+    warmup: [
+      "Arm circles · 30 sec forward then 30 sec backward · shoulder joint prep before pool entry",
+      "Cross-body shoulder stretch · 30 sec each side · pull arm across chest · posterior cuff",
+      "Band pull-aparts · 2×12 · light band · scapular activation before freestyle",
+      "Neck rolls · 5 slow each direction · cervical prep for bilateral breathing rotation",
+    ],
     topNote: "Race weeks: Saturday is primary run. Adjust Thursday to easy 2–3 miles only. Sunday becomes full rest. Non-race weeks: long swim as primary Saturday session.",
     tendonWork: [],
     sections: [],
@@ -551,7 +578,27 @@ const PLAN = {
   // ─── SUNDAY: Long Run ─────────────────────────────────────────────────────
   Sun: {
     cardio: "Long run · Zone 2 · Current ceiling 4.0 miles · Next milestone 4.4 · MTP protocol applies · Race weeks: full rest — do not run day after a Saturday race",
-    warmup: [],
+    warmup: [
+      "PRE-RUN ACTIVE ROUTINE · 5 min · mandatory before every Sunday long run",
+      "Ankle rotations · 10 each direction each foot · joint mobility",
+      "Ankle rocks · forward/back rocking · 20 reps each foot · Achilles and plantar prep",
+      "Leg swings forward/back · 10e · hold wall for balance · hip flexor and hamstring activation",
+      "Leg swings side to side · 10e · abductor and adductor activation",
+      "Side lunges · 8e · lateral hip mobility · adductor length",
+      "Knee hug walk · 8e alternating · hip flexor and glute stretch",
+      "Hip open and close · 8e each direction · hip rotator activation",
+      "Forward lunges alternating · 8e · quad and hip flexor activation · MTP note: push off gently",
+      "A-skips · 20 sec · cadence and dorsiflexion activation · key for 173 spm target",
+    ],
+    cooldown: [
+      "POST-RUN STATIC ROUTINE · 5 min · mandatory after every Sunday long run",
+      "Standing hamstring rotation stretch · L then R · 30 sec each · hands to floor, one leg straight, opposite arm to sky",
+      "Standing hinge hamstring · both legs · hands to shins, hips back, arch lower back, hold 30 sec",
+      "Lower back extension · standing · hands on hips, push hips forward, chin down · 20 sec",
+      "Upper back round · clasp hands, push away from chest, round spine, slight knee bend · 20 sec",
+      "High lunge with lateral lean · step L foot forward, R hand up and across · 30 sec each side",
+      "Wide stance rotation · hips back halfway, alternate reaching one hand to floor and one to sky · 4 each side",
+    ],
     topNote: "Non-race weeks: primary long run day. Race weeks: rest and recovery only. The following Tuesday resumes normal schedule.",
     tendonWork: [],
     sections: [],
@@ -3257,7 +3304,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const [toast, setToast] = useState(null)
   const [openSections, setOpenSections] = useState(() => {
     const mobile = typeof window !== "undefined" ? window.innerWidth < 768 : true
-    return { stretch: false, warmup: false, tendon: false, main: !mobile, core: false, cardio: false, diagnostics: false }
+    return { stretch: false, warmup: false, cooldown: false, tendon: false, main: !mobile, core: false, cardio: false, diagnostics: false }
   })
   const [variants, setVariants] = useState({})
   const [fields, setFields] = useState({})
@@ -3614,6 +3661,9 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       const warmup = (schDay.warmup || []).map(s =>
         typeof s === "string" ? { n: s, d: "" } : { n: s.n || "", d: s.d || "" }
       )
+      const cooldown = (schDay.cooldown || []).map(s =>
+        typeof s === "string" ? { n: s, d: "" } : { n: s.n || "", d: s.d || "" }
+      )
       const exercises = (schDay.sections || []).flatMap(sec =>
         (sec.ex || []).map(ex => {
           const def = ex.def || []
@@ -3635,10 +3685,10 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
           }
         })
       )
-      return { stretch: [], warmup, exercises, core: [], _topNote: schDay.topNote }
+      return { stretch: [], warmup, cooldown, exercises, core: [], _topNote: schDay.topNote }
     }
     // Fallback to PROG for any day not in PLAN
-    return PROG[day] || { stretch: [], warmup: [], exercises: [], core: [] }
+    return PROG[day] || { stretch: [], warmup: [], cooldown: [], exercises: [], core: [] }
   }
   const getVariant = (exId) => variants[exId] || "machine"
 
@@ -5267,6 +5317,13 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
             )}
           </div>
 
+          {/* topNote banner (PLAN) */}
+          {prog._topNote && (
+            <div style={{ marginBottom: 10, padding: "7px 12px", background: "rgba(59,130,246,0.07)", border: "0.5px solid rgba(59,130,246,0.2)", borderRadius: 6, fontSize: 11, color: "#6a9adf" }}>
+              {prog._topNote}
+            </div>
+          )}
+
           {/* Stretch */}
           {prog.stretch?.length > 0 && checklistSection(activeDay, "stretch", prog.stretch, "#7F77DD", "Stretch", "~5 min")}
 
@@ -5278,13 +5335,6 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
             {secHdr("tendon", "Tendon Work", "#f59e0b", getTendonEntries(activeDay).length ? `${getTendonEntries(activeDay).filter((_, idx) => isChecked(activeDay, "tendon", idx)).length}/${getTendonEntries(activeDay).length} selected` : "")}
             {openSections.tendon && tendonBlock(activeDay)}
           </div>
-
-          {/* topNote banner (PLAN) */}
-          {prog._topNote && (
-            <div style={{ marginBottom: 10, padding: "7px 12px", background: "rgba(59,130,246,0.07)", border: "0.5px solid rgba(59,130,246,0.2)", borderRadius: 6, fontSize: 11, color: "#6a9adf" }}>
-              {prog._topNote}
-            </div>
-          )}
 
           {/* Main program */}
           {hasMainProgram && (
@@ -5427,6 +5477,9 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
 
           {/* Core */}
           {prog.core?.length > 0 && checklistSection(activeDay, "core", prog.core, "#3B6D11", "Core", "~5 min")}
+
+          {/* Cooldown */}
+          {prog.cooldown?.length > 0 && checklistSection(activeDay, "cooldown", prog.cooldown, "#6366f1", "Cooldown / Post-Run Stretch", "")}
 
           {/* Cardio */}
           {!CARDIO[activeDay]?.noCardio && (
