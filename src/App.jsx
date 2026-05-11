@@ -6819,7 +6819,8 @@ function buildBodyForecast({
   daily,
   nutritionRows = [],
   recentCardioMinutes = 0,
-  bmr = null
+  bmr = null,
+  configFatLossMonthly = null
 }) {
   const phase1TargetWeight = 150
   const finalTargetWeight = 145
@@ -6913,7 +6914,20 @@ function buildBodyForecast({
 
   const projectedSlope = blendedSlope * taperMultiplier
 
-  const boundedSlope = Math.max(-0.2, Math.min(0.1, projectedSlope))
+  // Cap slope at calibrated DEXA-anchored rate. Observed regression provides
+  // direction confirmation only; if it agrees (both negative), use whichever
+  // is shallower (less aggressive). If regression is positive (noise), use config.
+  const configSlopePerDay = configFatLossMonthly != null
+    ? -(configFatLossMonthly / 30.44)
+    : null
+
+  const rawBounded = Math.max(-0.2, Math.min(0.1, projectedSlope))
+
+  const boundedSlope = configSlopePerDay != null
+    ? (rawBounded < 0
+        ? Math.max(configSlopePerDay, rawBounded)
+        : configSlopePerDay)
+    : rawBounded
 
   return {
     currentWeight,
@@ -14460,7 +14474,8 @@ const bodyForecast = useMemo(() => {
     daily: dailyWithBiometrics,
     nutritionRows: dailyNutritionSummary,
     recentCardioMinutes: trainingSummary?.cardioMinutesWeekly || 0,
-    bmr: null
+    bmr: null,
+    configFatLossMonthly: LIFT_CONFIG.fat_loss_rate_monthly ?? 1.7
   })
 }, [dailyWithBiometrics, dailyNutritionSummary, trainingSummary])
 
