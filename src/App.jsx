@@ -374,7 +374,10 @@ const PLAN = {
     cardio: "Long bike · 45–50 min · Zone 2–3 · Stationary or spin · Do AFTER strength · This is the weekly long bike anchor session",
     warmup: [],
     topNote: "YMCA only — KNR suspended until September. Full 5:00–7:00 window. Sequence: Chest → Pull/Chin-ups → Shoulders → Arms → Core → Tendon. Tendon section is 10 min at end — do not skip even if time is tight.",
-    tendonWork: [],
+    tendon: [
+      { id: "eccentric_lateral_raise_mon", name: "Eccentric Lateral Raise", sub: "Light DB · 4 sec lowering", note: "Supraspinatus protocol · 2 sets only · lower is slower · therapeutic not hypertrophy", def: [mk(8,5), mk(8,5)] },
+      { id: "eccentric_bicep_curl_mon", name: "Eccentric Biceps Curl", sub: "DB or cable · 4 sec lowering", note: "Elbow flexor tendon protocol · lighter than working weight · slow eccentric only", def: [mk(8,20), mk(8,20)] },
+    ],
     sections: [
       { h: "A — CHEST (HEAVY)", ex: [
         { id:"chest_press_machine", name:"Chest Press", sub:"Technogym / machine", def:[mk(6,110),mk(6,110),mk(6,110)], note:"2-0-2 tempo · full ROM · 4–8 rep range" },
@@ -401,10 +404,6 @@ const PLAN = {
       { h: "E — CORE + STABILITY", ex: [
         { id:"pushup_plank_shoulder_touch", name:"Pushup Plank w/ Shoulder Touch", sub:"Bodyweight · anti-rotation", def:[mk("10e","BW"),mk("10e","BW")], note:"Hips level · touch opposite shoulder" },
         { id:"pallof_press", name:"Pallof Press", sub:"Cable · split stance", def:[mk("10e",40),mk("10e",48)], note:"Anti-rotation isometric · exhale on press" },
-      ]},
-      { h: "F — TENDON PROTOCOL (end of session · 10 min)", ex: [
-        { id:"eccentric_lateral_raise_mon", name:"Eccentric Lateral Raise", sub:"Light DB · 4 sec lowering", def:[mk(8,5),mk(8,5)], note:"Supraspinatus protocol · 2 sets only · lower is slower · therapeutic not hypertrophy" },
-        { id:"eccentric_bicep_curl_mon", name:"Eccentric Biceps Curl", sub:"DB or cable · 4 sec lowering", def:[mk(8,20),mk(8,20)], note:"Elbow flexor tendon protocol · lighter than working weight · slow eccentric only" },
       ]},
     ],
   },
@@ -455,15 +454,12 @@ const PLAN = {
     cardio: "Optional lunch run · 1.5–2 miles · Zone 2 · Conversational pace · Spring/Fall only (weather permitting) · Run at lunch not morning · Third weekly run — DROP FIRST if Tuesday legs felt heavy, MTP above 0 this week, or sleep below 5.5 hrs last night · Gap from Tuesday legs (5am) to Wed lunch run (~12pm) is ~31 hours — short of 48hr rule so easy pace is non-negotiable",
     warmup: [],
     topNote: "Rest day — no gym, no strength, no high intensity cardio. Tendon protocol only: 20 min, at home or work, no equipment needed except one resistance band. Optional: easy 7-mile bike commute on trail counts as active recovery.",
-    tendonWork: [],
-    sections: [
-      { h: "TENDON PROTOCOL — Home or Work · No Gym Required · ~20 min", ex: [
-        { id:"tibialis_raise_wed", name:"Tibialis Raise", sub:"Wall shin raise · bodyweight", def:[mk(15,"BW"),mk(15,"BW"),mk(15,"BW")], note:"Stand 18 in from wall · lift toes to shin · 3 sec hold · running prehab · no equipment" },
-        { id:"eccentric_calf_raise_wed", name:"Eccentric Calf Raise", sub:"Step or curb · bodyweight", def:[mk(10,"BW"),mk(10,"BW"),mk(10,"BW")], note:"Rise on two feet · lower on one · 3 sec eccentric · Achilles and calf protocol" },
-        { id:"hip_flexor_iso_wed", name:"Hip Flexor Isometric Hold", sub:"Floor or chair · seated knee raise hold", def:[mk("30s","BW"),mk("30s","BW")], note:"90° hip flexion · hold 30–45 sec · running prehab · no equipment" },
-        { id:"face_pull_band_wed", name:"Face Pull / Band Pull-Apart", sub:"Resistance band", def:[mk(15,"band"),mk(15,"band"),mk(15,"band")], note:"Rotator cuff health · ER emphasis · loop band at face height or pull-apart" },
-        { id:"tke_band_wed", name:"Terminal Knee Extension", sub:"Resistance band · loop at knee height", def:[mk(15,"band"),mk(15,"band")], note:"Patellar tendon isometric loading · small ROM · 2 sec hold at extension" },
-      ]},
+    tendon: [
+      { id:"tibialis_raise_wed", name:"Tibialis Raise", sub:"Wall shin raise · bodyweight", note:"Stand 18 in from wall · lift toes to shin · 3 sec hold · running prehab · no equipment", def:[mk(15,"BW"),mk(15,"BW"),mk(15,"BW")] },
+      { id:"eccentric_calf_raise_wed", name:"Eccentric Calf Raise", sub:"Step or curb · bodyweight", note:"Rise on two feet · lower on one · 3 sec eccentric · Achilles and calf protocol", def:[mk(10,"BW"),mk(10,"BW"),mk(10,"BW")] },
+      { id:"hip_flexor_iso_wed", name:"Hip Flexor Isometric Hold", sub:"Floor or chair · seated knee raise hold", note:"90° hip flexion · hold 30–45 sec · running prehab · no equipment", def:[mk("30s","BW"),mk("30s","BW")] },
+      { id:"face_pull_band_wed", name:"Face Pull / Band Pull-Apart", sub:"Resistance band", note:"Rotator cuff health · ER emphasis · loop band at face height or pull-apart", def:[mk(15,"band"),mk(15,"band"),mk(15,"band")] },
+      { id:"tke_band_wed", name:"Terminal Knee Extension", sub:"Resistance band · loop at knee height", note:"Patellar tendon isometric loading · small ROM · 2 sec hold at extension", def:[mk(15,"band"),mk(15,"band")] },
     ],
   },
 
@@ -737,8 +733,29 @@ const TENDON_GROUP_META = {
 }
 
 function getDefaultTendonWork(day) {
+  const buildPlanTendonEntry = item => {
+    const def = Array.isArray(item?.def) && item.def.length
+      ? item.def.map(set => ({ ...set }))
+      : [{ r: item?.reps || "", w: item?.load || "" }]
+    return {
+      ...item,
+      sub: item?.sub || "",
+      note: item?.note || item?.notes || "",
+      def,
+      sets: String(def.length || 0),
+      reps: def[0]?.r ?? "",
+      load: def[0]?.w ?? "",
+      notes: item?.notes || item?.note || ""
+    }
+  }
+
+  const planSource = Array.isArray(PLAN?.[day]?.tendon) ? PLAN[day].tendon : []
+  if (planSource.length) {
+    return planSource.map(buildPlanTendonEntry)
+  }
+
   const source = DEFAULT_TENDON_WORK_BY_DAY[day] || []
-  return source.map(item => ({ ...item }))
+  return source.map(item => buildPlanTendonEntry(item))
 }
 
 function normalizeExerciseText(value) {
@@ -3728,6 +3745,28 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     ? tendonEntries[day]
     : getDefaultTendonWork(day)
 
+  const syncTendonEntryFromDef = (entry, def) => ({
+    ...entry,
+    def,
+    sets: String(def.length || 0),
+    reps: def[0]?.r ?? "",
+    load: def[0]?.w ?? "",
+  })
+
+  const updateTendonEntryDef = (day, idx, transform) => {
+    const entries = getTendonEntries(day).map((entry, entryIdx) => {
+      if (entryIdx !== idx) return { ...entry, def: (entry.def || []).map(set => ({ ...set })) }
+      const currentDef = Array.isArray(entry.def) && entry.def.length
+        ? entry.def.map(set => ({ ...set }))
+        : [{ r: entry.reps || "", w: entry.load || "" }]
+      const nextDef = transform(currentDef)
+      return syncTendonEntryFromDef({ ...entry }, nextDef)
+    })
+    const next = { ...tendonEntries, [day]: entries }
+    setTendonEntries(next)
+    saveScheduleKey("wt-tendon-work", next)
+  }
+
   const setTendonEntryField = (day, idx, field, value) => {
     const entries = getTendonEntries(day).map((entry, entryIdx) =>
       entryIdx === idx ? { ...entry, [field]: value } : { ...entry }
@@ -3735,6 +3774,26 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     const next = { ...tendonEntries, [day]: entries }
     setTendonEntries(next)
     saveScheduleKey("wt-tendon-work", next)
+  }
+
+  const setTendonSetField = (day, entryIdx, setIdx, field, value) => {
+    updateTendonEntryDef(day, entryIdx, currentDef =>
+      currentDef.map((set, idx) => idx === setIdx ? { ...set, [field]: value } : { ...set })
+    )
+  }
+
+  const addTendonSet = (day, entryIdx) => {
+    updateTendonEntryDef(day, entryIdx, currentDef => [
+      ...currentDef,
+      { ...(currentDef[currentDef.length - 1] || { r: "", w: "" }) }
+    ])
+  }
+
+  const removeTendonSet = (day, entryIdx, setIdx) => {
+    updateTendonEntryDef(day, entryIdx, currentDef => {
+      const nextDef = currentDef.filter((_, idx) => idx !== setIdx)
+      return nextDef.length ? nextDef : [{ r: "", w: "" }]
+    })
   }
 
   // ── Custom items (stretch, warmup, core) ───────────────────────────────
@@ -4830,34 +4889,14 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
                   </div>
                 </div>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-                {[
-                  ["Sets", "sets", "3"],
-                  ["Reps", "reps", "8-12"],
-                  ["Load", "load", "optional"],
-                ].map(([label, field, placeholder]) => (
-                  <div key={field}>
-                    <div style={{ fontSize: 9, color: "#8b6d2d", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>{label}</div>
-                    <input
-                      type="text"
-                      value={entry[field] || ""}
-                      onChange={e => setTendonEntryField(day, idx, field, e.target.value)}
-                      placeholder={placeholder}
-                      style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #5a4516", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#f8fafc", background: "#111", fontFamily: "inherit", outline: "none" }}
-                    />
-                  </div>
-                ))}
-                <div style={{ gridColumn: "1 / -1" }}>
-                  <div style={{ fontSize: 9, color: "#8b6d2d", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Notes</div>
-                  <input
-                    type="text"
-                    value={entry.notes || ""}
-                    onChange={e => setTendonEntryField(day, idx, "notes", e.target.value)}
-                    placeholder="tempo, side-to-side differences, symptoms, band used"
-                    style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #5a4516", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#f8fafc", background: "#111", fontFamily: "inherit", outline: "none" }}
-                  />
-                </div>
-              </div>
+              <SchExCard
+                ex={entry}
+                setData={entry.def || []}
+                accent="#f59e0b"
+                onUpdate={(setIdx, field, value) => setTendonSetField(day, idx, setIdx, field, value)}
+                onAdd={() => addTendonSet(day, idx)}
+                onRemove={setIdx => removeTendonSet(day, idx, setIdx)}
+              />
             </div>
           )
         })}
@@ -5132,6 +5171,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
 
   const prog = getProgDay(activeDay)
   const meta = SCH_META[activeDay] || SMETA[activeDay] || {}
+  const hasMainProgram = (prog.exercises?.length || 0) > 0 || getCustomExercises(activeDay).length > 0 || inlineExForm === activeDay
   const scheduleMismatchReport = useMemo(
     () => buildScheduleDayDateMismatchReport(schedLog),
     [schedLog]
@@ -5247,27 +5287,28 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
           )}
 
           {/* Main program */}
-          <div style={{ border: "0.5px solid #1a1a1a", borderRadius: 8, marginBottom: 10, overflow: "visible" }}>
-            {secHdr("main", "Main Program", "#185FA5", `${prog.exercises?.filter(ex => isChecked(activeDay, "exercise", ex.id)).length || 0}/${prog.exercises?.length || 0} selected`)}
-            {openSections.main && (
-              <div style={{ padding: "4px 14px 12px" }}>
-                {prog.exercises?.length > 0
-                  ? (() => {
-                    let lastSH = null
-                    return prog.exercises.map(ex => {
-                      const showSH = ex._sectionH && ex._sectionH !== lastSH
-                      lastSH = ex._sectionH || lastSH
-                      return (
-                        <React.Fragment key={ex.id}>
-                          {showSH && <div style={{ fontSize: 9, color: "#444", textTransform: "uppercase", letterSpacing: "0.12em", margin: "10px 0 3px", fontFamily: "'Barlow Condensed',sans-serif" }}>{ex._sectionH}</div>}
-                          {exCard(ex, activeDay)}
-                        </React.Fragment>
-                      )
-                    })
-                  })()
-                  : <div style={{ textAlign: "center", padding: 16, color: "#444", fontSize: 13 }}>Active recovery — no resistance training today.</div>}
-                {getCustomExercises(activeDay).map(ex => exCard(ex, activeDay, true))}
-                {inlineExForm === activeDay ? (
+          {hasMainProgram && (
+            <div style={{ border: "0.5px solid #1a1a1a", borderRadius: 8, marginBottom: 10, overflow: "visible" }}>
+              {secHdr("main", "Main Program", "#185FA5", `${prog.exercises?.filter(ex => isChecked(activeDay, "exercise", ex.id)).length || 0}/${prog.exercises?.length || 0} selected`)}
+              {openSections.main && (
+                <div style={{ padding: "4px 14px 12px" }}>
+                  {prog.exercises?.length > 0
+                    ? (() => {
+                      let lastSH = null
+                      return prog.exercises.map(ex => {
+                        const showSH = ex._sectionH && ex._sectionH !== lastSH
+                        lastSH = ex._sectionH || lastSH
+                        return (
+                          <React.Fragment key={ex.id}>
+                            {showSH && <div style={{ fontSize: 9, color: "#444", textTransform: "uppercase", letterSpacing: "0.12em", margin: "10px 0 3px", fontFamily: "'Barlow Condensed',sans-serif" }}>{ex._sectionH}</div>}
+                            {exCard(ex, activeDay)}
+                          </React.Fragment>
+                        )
+                      })
+                    })()
+                    : <div style={{ textAlign: "center", padding: 16, color: "#444", fontSize: 13 }}>Active recovery — no resistance training today.</div>}
+                  {getCustomExercises(activeDay).map(ex => exCard(ex, activeDay, true))}
+                  {inlineExForm === activeDay ? (
                   <div style={{ marginTop: 8, padding: "8px", background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: 6, position: "static" }}>
                     <input
                       autoFocus
@@ -5373,15 +5414,16 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
                       </button>
                     </div>
                   </div>
-                ) : (
-                  <button onClick={() => addCustomExercise(activeDay)}
-                    style={{ width: "100%", marginTop: 8, padding: "6px", border: "0.5px dashed #333", borderRadius: 5, background: "transparent", color: "#555", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>
-                    + Add exercise
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+                  ) : (
+                    <button onClick={() => addCustomExercise(activeDay)}
+                      style={{ width: "100%", marginTop: 8, padding: "6px", border: "0.5px dashed #333", borderRadius: 5, background: "transparent", color: "#555", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>
+                      + Add exercise
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Core */}
           {prog.core?.length > 0 && checklistSection(activeDay, "core", prog.core, "#3B6D11", "Core", "~5 min")}
