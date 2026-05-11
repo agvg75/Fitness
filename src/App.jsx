@@ -373,27 +373,38 @@ const PLAN = {
   Mon: {
     cardio: "Long bike · 45–50 min · Zone 2–3 · Stationary or spin · Do AFTER strength · This is the weekly long bike anchor session",
     warmup: [],
-    topNote: "YMCA only — KNR suspended until September. Arrive by 5:00 am. Full 5:00–7:00 window. Chest heavy day (4–8 reps). Shoulder hypertrophy added to replace lost Wednesday volume.",
+    topNote: "YMCA only — KNR suspended until September. Full 5:00–7:00 window. Sequence: Chest → Pull/Chin-ups → Shoulders → Arms → Core → Tendon. Tendon section is 10 min at end — do not skip even if time is tight.",
     tendonWork: [],
     sections: [
-      { h: "A — Chest (Heavy)", ex: [
-        { id:"m1", name:"Chest Press",        sub:"Technogym / machine",           def:[mk(6,110),mk(6,110),mk(6,110)],               note:"2-0-2 tempo · full ROM · 4–8 rep range" },
-        { id:"m2", name:"Incline Chest Press",sub:"Smith machine · low angle",     def:[mk(6,90),mk(6,90),mk(6,90)],                 note:"Low incline · shoulder-safe · heavy day" },
-        { id:"m3", name:"Machine Flys",       sub:"Cable or pec deck",             def:[mk(6,30),mk(6,30),mk(6,30)],                 note:"Full stretch · controlled return · chest isolation" },
+      { h: "A — CHEST (HEAVY)", ex: [
+        { id:"chest_press_machine", name:"Chest Press", sub:"Technogym / machine", def:[mk(6,110),mk(6,110),mk(6,110)], note:"2-0-2 tempo · full ROM · 4–8 rep range" },
+        { id:"incline_chest_press", name:"Incline Chest Press", sub:"Smith machine · low angle", def:[mk(6,90),mk(6,90),mk(6,90)], note:"Low incline · shoulder-safe · heavy day" },
+        { id:"machine_flys", name:"Machine Flys", sub:"Cable or pec deck", def:[mk(8,30),mk(8,30),mk(8,30)], note:"Full stretch · controlled return · chest isolation" },
       ]},
-      { h: "B — Shoulder (Hypertrophy · replaces Wed volume)", ex: [
-        { id:"m4", name:"Lateral Raise",      sub:"Cable or DB · 3×12–15",         def:[mk("12-15","—"),mk("12-15","—"),mk("12-15","—")], note:"3-sec lower · no swing · medial delt" },
-        { id:"m5", name:"Rear Delt Fly",      sub:"Reverse pec deck or incline DB",def:[mk("12-15","—"),mk("12-15","—"),mk("12-15","—")], note:"Light · 2-1-2 tempo · rear delt + cuff" },
-        { id:"m6", name:"Face Pull / ER",     sub:"Cable or resistance band",      def:[mk("12-15","—"),mk("12-15","—"),mk("12-15","—")], note:"Elbows high · rear delt + rotator cuff" },
+      { h: "B — PULL (LAT + BICEP BASE)", ex: [
+        { id:"pull_down_cable", name:"Pull Down", sub:"Cable straight-arm or heavy lat pulldown", def:[mk(8,160),mk(8,160),mk(8,160)], note:"Lat primary · Monday back volume · arms straight for straight-arm variant" },
+        { id:"chinups", name:"Chin-ups", sub:"Bodyweight · full ROM", def:[mk(5,"BW"),mk(5,"BW"),mk(5,"BW")], note:"Controlled descent · 3 sec lowering" },
       ]},
-      { h: "C — Triceps (Heavy)", ex: [
-        { id:"m7", name:"Triceps Pulldown",   sub:"Cable pressdown",               def:[mk(6,25),mk(6,25),mk(6,25)],                 note:"Elbows fixed · full extension · heavy day" },
-        { id:"m8", name:"Triceps Overhead",   sub:"Cable / 30 lb DB",              def:[mk("6-8",30),mk("6-8",30)],                  note:"Full stretch at top · smooth lockout" },
+      { h: "C — SHOULDER (HYPERTROPHY · replaces Wed volume)", ex: [
+        { id:"lateral_raise", name:"Lateral Raise", sub:"Cable or DB · 3×12–15", def:[mk(12,15),mk(12,15),mk(12,15)], note:"Controlled arc · no shrug" },
+        { id:"rear_delt_fly", name:"Rear Delt Fly", sub:"Reverse pec deck or incline DB", def:[mk(12,25),mk(12,25),mk(12,25)], note:"Squeeze at top" },
+        { id:"face_pull_er", name:"Face Pull / ER", sub:"Cable rope · neutral grip", def:[mk(15,45),mk(15,45)], note:"External rotation emphasis · shoulder health" },
       ]},
-      { h: "D — Core", ex: [
-        { id:"m9",  name:"Pushup Plank w/ Shoulder Touch", sub:"Bodyweight · 2×10e", def:[mk("10e","BW"),mk("10e","BW")],           note:"Pelvic neutral · don't let hip drop" },
-        { id:"m10", name:"Pallof Press",      sub:"Cable · split stance · 40 lb",  def:[mk("10e",40),mk("10e",40)],                  note:"Brace · press slowly · zero rotation" },
-        { id:"m11", name:"Chin-ups",          sub:"bodyweight · full ROM",          def:[mk(5,"BW"),mk(5,"BW"),mk(5,"BW")],           note:"Dead hang start. Add weight via belt once 3×8 BW is consistent." },
+      { h: "D — ARMS", ex: [
+        { id:"triceps_pulldown", name:"Triceps Pulldown", sub:"Cable rope or bar", def:[mk(6,45),mk(6,25),mk(6,25)], note:"Elbows fixed · full extension" },
+        { id:"triceps_overhead", name:"Triceps Overhead", sub:"Cable or DB · long head stretch", def:[mk(8,30),mk(6,30)], note:"Full overhead extension · 4 sec eccentric" },
+        { id:"hammer_curl", name:"Hammer Curls", sub:"DB alternating · brachialis emphasis", def:[mk(5,55),mk(5,55),mk(5,55)], note:"Neutral grip · controlled" },
+        { id:"bicep_curl_heavy", name:"Biceps Curl", sub:"DB or BB · supinated", def:[mk(5,40),mk(5,40),mk(5,40)], note:"Full supination at top" },
+        { id:"bicep_curl_reverse", name:"Biceps Curl — Reverse", sub:"DB or cable · pronated grip", def:[mk(6,35),mk(6,35),mk(6,35)], note:"Brachioradialis and forearm extensor emphasis" },
+        { id:"cable_incline_pushdown", name:"Cable Incline Pushdown", sub:"Standing at angle · high-to-low cable", def:[mk(6,40),mk(6,40),mk(6,40)], note:"Hits sternal head · different angle from machine flys" },
+      ]},
+      { h: "E — CORE + STABILITY", ex: [
+        { id:"pushup_plank_shoulder_touch", name:"Pushup Plank w/ Shoulder Touch", sub:"Bodyweight · anti-rotation", def:[mk("10e","BW"),mk("10e","BW")], note:"Hips level · touch opposite shoulder" },
+        { id:"pallof_press", name:"Pallof Press", sub:"Cable · split stance", def:[mk("10e",40),mk("10e",48)], note:"Anti-rotation isometric · exhale on press" },
+      ]},
+      { h: "F — TENDON PROTOCOL (end of session · 10 min)", ex: [
+        { id:"eccentric_lateral_raise_mon", name:"Eccentric Lateral Raise", sub:"Light DB · 4 sec lowering", def:[mk(8,5),mk(8,5)], note:"Supraspinatus protocol · 2 sets only · lower is slower · therapeutic not hypertrophy" },
+        { id:"eccentric_bicep_curl_mon", name:"Eccentric Biceps Curl", sub:"DB or cable · 4 sec lowering", def:[mk(8,20),mk(8,20)], note:"Elbow flexor tendon protocol · lighter than working weight · slow eccentric only" },
       ]},
     ],
   },
@@ -443,9 +454,17 @@ const PLAN = {
   Wed: {
     cardio: "Optional lunch run · 1.5–2 miles · Zone 2 · Conversational pace · Spring/Fall only (weather permitting) · Run at lunch not morning · Third weekly run — DROP FIRST if Tuesday legs felt heavy, MTP above 0 this week, or sleep below 5.5 hrs last night · Gap from Tuesday legs (5am) to Wed lunch run (~12pm) is ~31 hours — short of 48hr rule so easy pace is non-negotiable",
     warmup: [],
-    topNote: "Rest/recovery day — no YMCA, no morning strength or cardio. Sleep extension priority: return to sleep after 4:30 wake if possible. Optional easy bike commute (~7 miles, Zone 1, no performance target). Wednesday lunch run is the most expendable session of the week.",
+    topNote: "Rest day — no gym, no strength, no high intensity cardio. Tendon protocol only: 20 min, at home or work, no equipment needed except one resistance band. Optional: easy 7-mile bike commute on trail counts as active recovery.",
     tendonWork: [],
-    sections: [],
+    sections: [
+      { h: "TENDON PROTOCOL — Home or Work · No Gym Required · ~20 min", ex: [
+        { id:"tibialis_raise_wed", name:"Tibialis Raise", sub:"Wall shin raise · bodyweight", def:[mk(15,"BW"),mk(15,"BW"),mk(15,"BW")], note:"Stand 18 in from wall · lift toes to shin · 3 sec hold · running prehab · no equipment" },
+        { id:"eccentric_calf_raise_wed", name:"Eccentric Calf Raise", sub:"Step or curb · bodyweight", def:[mk(10,"BW"),mk(10,"BW"),mk(10,"BW")], note:"Rise on two feet · lower on one · 3 sec eccentric · Achilles and calf protocol" },
+        { id:"hip_flexor_iso_wed", name:"Hip Flexor Isometric Hold", sub:"Floor or chair · seated knee raise hold", def:[mk("30s","BW"),mk("30s","BW")], note:"90° hip flexion · hold 30–45 sec · running prehab · no equipment" },
+        { id:"face_pull_band_wed", name:"Face Pull / Band Pull-Apart", sub:"Resistance band", def:[mk(15,"band"),mk(15,"band"),mk(15,"band")], note:"Rotator cuff health · ER emphasis · loop band at face height or pull-apart" },
+        { id:"tke_band_wed", name:"Terminal Knee Extension", sub:"Resistance band · loop at knee height", def:[mk(15,"band"),mk(15,"band")], note:"Patellar tendon isometric loading · small ROM · 2 sec hold at extension" },
+      ]},
+    ],
   },
 
   // ─── THURSDAY: Back & Arms + Run ─────────────────────────────────────────
@@ -2836,6 +2855,119 @@ function DailyReadinessPanel({ readinessScore, latestHealthFit, ocItems, compute
   )
 }
 
+function RaceHistoryPanel({ results, raceCalendar }) {
+  const [selected, setSelected] = React.useState(results[0]?.id || null)
+  const race = results.find(r => r.id === selected)
+
+  if (!results.length) return null
+
+  const overallPct = race ? Math.round((1 - race.overall_place / race.overall_total) * 100) : null
+  const agPct = race ? Math.round((1 - race.ag_place / race.ag_total) * 100) : null
+  const genderPct = race ? Math.round((1 - race.gender_place / race.gender_total) * 100) : null
+
+  const upcoming = (raceCalendar || [])
+    .filter(r => r.date > new Date().toISOString().slice(0, 10))
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(0, 3)
+
+  return (
+    <div style={{ margin: "16px 0", background: "#0a0c10", border: "1px solid #1a2a1a", borderRadius: 10, padding: "16px 18px" }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: "#4ade80", letterSpacing: "0.08em", marginBottom: 12 }}>
+        RACE HISTORY — {results.length} COMPLETED
+      </div>
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+        {results.map(r => (
+          <button key={r.id} onClick={() => setSelected(r.id)}
+            style={{
+              background: selected === r.id ? "#1a3a1a" : "#111",
+              border: `1px solid ${selected === r.id ? "#4ade80" : "#222"}`,
+              borderRadius: 6, padding: "5px 12px",
+              color: selected === r.id ? "#4ade80" : "#666",
+              fontSize: 11, cursor: "pointer", fontWeight: selected === r.id ? 700 : 400,
+            }}>
+            {r.distance_label} · {r.date.slice(0, 7)}
+          </button>
+        ))}
+      </div>
+
+      {race && (
+        <>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: "#e0e0e0" }}>{race.name}</div>
+              <div style={{ fontSize: 11, color: "#555" }}>{race.date} · {race.location}</div>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 22, fontWeight: 800, color: "#4ade80", fontFamily: "'IBM Plex Mono', monospace" }}>
+                {race.official_time}
+              </div>
+              <div style={{ fontSize: 10, color: "#444" }}>official chip time</div>
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 12 }}>
+            {[
+              { label: "Overall", place: race.overall_place, total: race.overall_total, pct: overallPct },
+              { label: "Male", place: race.gender_place, total: race.gender_total, pct: genderPct },
+              { label: race.ag_label, place: race.ag_place, total: race.ag_total, pct: agPct },
+            ].map(({ label, place, total, pct }) => (
+              <div key={label} style={{ background: "#0f1a0f", borderRadius: 6, padding: "8px 10px" }}>
+                <div style={{ fontSize: 10, color: "#555", marginBottom: 4 }}>{label}</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#e0e0e0" }}>
+                  {place}<span style={{ fontSize: 10, color: "#444" }}>/{total}</span>
+                </div>
+                <div style={{ height: 4, background: "#1a1a1a", borderRadius: 2, margin: "6px 0 4px" }}>
+                  <div style={{ height: "100%", width: `${pct}%`, background: "#4ade80", borderRadius: 2 }} />
+                </div>
+                <div style={{ fontSize: 10, color: "#4ade80" }}>top {100 - pct}%</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6, marginBottom: 10 }}>
+            {[
+              { label: "Avg Pace", value: race.official_pace + "/mi" },
+              { label: "Best Pace", value: race.best_pace + "/mi" },
+              { label: "Avg HR", value: race.avg_hr + " bpm" },
+              { label: "Max HR", value: race.max_hr + " bpm" },
+              { label: "Avg Power", value: race.avg_power_w + " W" },
+              { label: "Cadence", value: race.avg_cadence_spm + " spm" },
+              { label: "GCT", value: race.avg_gct_ms + " ms" },
+              { label: "VO₂ Est.", value: race.vo2_estimate },
+            ].map(({ label, value }) => (
+              <div key={label} style={{ background: "#0f0f14", borderRadius: 5, padding: "6px 8px" }}>
+                <div style={{ fontSize: 9, color: "#444", marginBottom: 2 }}>{label}</div>
+                <div style={{ fontSize: 11, color: "#a0a0a0", fontFamily: "'IBM Plex Mono', monospace" }}>{value}</div>
+              </div>
+            ))}
+          </div>
+
+          {race.notes && (
+            <div style={{ fontSize: 10, color: "#3a4a3a", fontStyle: "italic", borderTop: "1px solid #111", paddingTop: 8 }}>
+              {race.notes}
+            </div>
+          )}
+        </>
+      )}
+
+      {upcoming.length > 0 && (
+        <div style={{ marginTop: 14, borderTop: "1px solid #1a1a1a", paddingTop: 12 }}>
+          <div style={{ fontSize: 10, color: "#555", letterSpacing: "0.08em", marginBottom: 8 }}>UPCOMING</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {upcoming.map(r => (
+              <div key={r.date + r.name} style={{ background: "#0f0f14", border: "1px solid #1a1a2a", borderRadius: 6, padding: "6px 10px" }}>
+                <div style={{ fontSize: 11, color: "#6666aa" }}>{r.name || r.distance}</div>
+                <div style={{ fontSize: 10, color: "#333" }}>{r.date}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── TabSchedule ──────────────────────────────────────────────────────────────
 
 // ── Exercise Guide: Free Exercise DB (Unlicense / public domain) ─────────────
@@ -3932,9 +4064,16 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
         // If the program exercise has a full def array (_def), use it as the per-set record
         // so SchLogView can display each set. Fall back to a single {r,w} pair.
         const progEx = prog.exercises?.find(e => e.id === ex.exercise_id)
+        const userReps = ex.actual.reps
+        const userLoad = ex.actual.load
+        const hasUserEntry = (userReps != null && userReps !== "" && userReps !== "—") ||
+          (userLoad != null && userLoad !== "" && userLoad !== "—")
         const sets = progEx?._def?.length
-          ? progEx._def.map((s, i) => ({ r: i === 0 ? (ex.actual.reps ?? s.r) : s.r, w: i === 0 ? (ex.actual.load ?? s.w) : s.w }))
-          : [{ r: ex.actual.reps, w: ex.actual.load }]
+          ? progEx._def.map(s => ({
+              r: hasUserEntry ? (userReps ?? s.r) : s.r,
+              w: hasUserEntry ? (userLoad ?? s.w) : s.w,
+            }))
+          : [{ r: userReps, w: userLoad }]
         return [ex.exercise_id, sets]
       })),
     }
@@ -7309,15 +7448,29 @@ function buildRunningReadinessController({
         [3, 50]
       ]
     }),
-    tenK: buildCompletionScore({
-      distanceMiles: 6.2137,
-      volumeThresholds: [
-        [18, 95],
-        [14, 82],
-        [10, 65],
-        [7, 48]
-      ]
-    }),
+    tenK: (() => {
+      // Respect the active MTP protection ceiling instead of treating it as a fitness limit.
+      const mtpCeiling = Number(LIFT_CONFIG.mtp_ceiling_miles ?? 4.0)
+      const mtpNextMilestone = Number(LIFT_CONFIG.mtp_next_milestone_miles ?? (mtpCeiling * 1.1))
+      const mtpConstrained = mtpCeiling >= 3.5 && mtpCeiling < 6.2
+      const projected10KCompletedMiles = mtpConstrained
+        ? Math.min(mtpNextMilestone, 6.2137)
+        : undefined
+      const projected10KLongestMiles = mtpConstrained
+        ? mtpCeiling
+        : undefined
+      return buildCompletionScore({
+        distanceMiles: 6.2137,
+        volumeThresholds: [
+          [18, 95],
+          [14, 82],
+          [10, 65],
+          [7, 48]
+        ],
+        projectedCompletedRunMiles: projected10KCompletedMiles,
+        projectedLongestRunMiles: projected10KLongestMiles,
+      })
+    })(),
     half: buildCompletionScore({
       distanceMiles: 13.1094,
       volumeThresholds: [
@@ -11532,6 +11685,8 @@ export default function App() {
     tdee: 2100,
     fat_loss_target: 1700,
     fat_loss_rate_monthly: 1.7,  // lb/month — no-KNR period Apr-Sep 2026; revert to 1.9 when KNR resumes
+    mtp_ceiling_miles: 4.0,  // current MTP protocol ceiling — update when ceiling advances
+    mtp_next_milestone_miles: 4.4,  // next planned distance advance
 
     // Half marathon build
     hm_race_date:    "2026-09-19",
@@ -11560,6 +11715,45 @@ export default function App() {
     { date: "2026-09-07", name: "Bridge to Bridge Run",        city: "Peoria",       dist_mi: 4.0,  recommended: true,  note: "Taper window. Easy effort only." },
     { date: "2026-09-19", name: "St. Jude 10K",                city: "Bloomington IL", dist_mi: 6.2, recommended: true,  note: "Primary fall 10K target. Controlled effort, no late-race spike." },
     { date: "2026-10-18", name: "Naperville Half Marathon",    city: "Naperville IL", dist_mi: 13.1, recommended: true,  note: "Half marathon goal race. Finish comfortable and injury-free." },
+  ]
+
+  // RACE_RESULTS: completed races with official and Garmin data
+  // Add each race after it is run. Official time takes precedence over Garmin time.
+  const RACE_RESULTS = [
+    {
+      id: "rivian_5k_2026",
+      name: "Rivian 5K",
+      date: "2026-05-10",
+      distance_km: 5,
+      distance_label: "5K",
+      location: "Bloomington, IL",
+      official_time: "32:07",
+      official_pace: "10:21",
+      garmin_time: "34:02",
+      avg_speed_mph: 5.58,
+      max_speed_mph: 6.69,
+      avg_pace: "10:45",
+      best_pace: "8:58",
+      avg_power_w: 195,
+      avg_cadence_spm: 173,
+      max_cadence_spm: 193,
+      avg_gct_ms: 264,
+      flight_time_ms: 83,
+      vert_ratio_pct: 9.4,
+      avg_hr: 138,
+      max_hr: 164,
+      vo2_estimate: 42.8,
+      calories: 325,
+      overall_place: 185,
+      overall_total: 505,
+      gender_place: 158,
+      gender_total: 304,
+      ag_place: 6,
+      ag_total: 10,
+      ag_label: "50-54 Male",
+      notes: "Easy effort — MTP protocol, protected toe. Chip time 1:55 faster than Garmin elapsed. Conservative race.",
+      mtp_score: 0,
+    },
   ]
 
   // ── ChatGPT Plan: weekly long run targets (week-start Monday → miles) ───
@@ -14835,6 +15029,49 @@ const readinessProjectionData = useMemo(() => {
 
   const latestWeek = adaptiveTrainingState.latestWeek
   const clamp = (v, lo = 0, hi = 100) => Math.min(hi, Math.max(lo, v))
+  const mtpCeiling = Number(LIFT_CONFIG.mtp_ceiling_miles ?? 4.0)
+  const mtpNextMilestone = Number(LIFT_CONFIG.mtp_next_milestone_miles ?? (mtpCeiling * 1.1))
+  const mtpConstrained = mtpCeiling >= 3.5 && mtpCeiling < 6.2
+  const buildProjectedCompletionScore = ({ distanceMiles, volumeThresholds, projectedCompletedRunMiles, projectedLongestRunMiles }) => {
+    const completedRunMiles = Number.isFinite(Number(projectedCompletedRunMiles))
+      ? Number(projectedCompletedRunMiles)
+      : Number(runningReadiness.signals?.recentCompletedRunMiles || 0)
+    const longestRunMiles = Number.isFinite(Number(projectedLongestRunMiles))
+      ? Number(projectedLongestRunMiles)
+      : Number(runningReadiness.signals?.recentLongestRunMiles || 0)
+
+    if (completedRunMiles >= distanceMiles) return 100
+
+    const longestRatio = distanceMiles > 0 ? longestRunMiles / distanceMiles : 0
+    const longestScore =
+      longestRatio >= 0.9 ? 90 :
+      longestRatio >= 0.75 ? 75 :
+      longestRatio >= 0.6 ? 55 :
+      longestRatio >= 0.45 ? 35 :
+      15
+    const recentRunVolume = Number(runningReadiness.signals?.recentRunVolume || runningReadiness.signals?.weeklyRunMiles28 || 0)
+    const volumeScore =
+      recentRunVolume >= 18 ? 95 :
+      recentRunVolume >= 14 ? 82 :
+      recentRunVolume >= 10 ? 65 :
+      recentRunVolume >= 7 ? 48 :
+      15
+    const recentRunFrequency = Number(runningReadiness.signals?.recentRunFrequency || 0)
+    const activeWeeks28 = Number(runningReadiness.signals?.activeWeeks28 || 0)
+    const consistencyScore =
+      activeWeeks28 >= 4 && recentRunFrequency >= 3 ? 95 :
+      activeWeeks28 >= 3 && recentRunFrequency >= 2.5 ? 80 :
+      activeWeeks28 >= 3 && recentRunFrequency >= 2 ? 65 :
+      activeWeeks28 >= 2 && recentRunFrequency >= 1.5 ? 45 :
+      activeWeeks28 >= 1 ? 25 :
+      10
+
+    return clamp(Math.round(
+      longestScore * 0.65 +
+      volumeScore * 0.20 +
+      consistencyScore * 0.15
+    ))
+  }
   const acwrPenalty = latestWeek.modifiers?.acwr > 1.5 ? 16 : latestWeek.modifiers?.acwr > 1.3 ? 9 : 0
   const tsbPenalty = latestWeek.modifiers?.tsb < LIFT_CONFIG.tsbHighRiskThreshold ? 14 : latestWeek.modifiers?.tsb < LIFT_CONFIG.tsbModerateRiskThreshold ? 7 : 0
   const ocPenalty = clampNumber((latestWeek.modifiers?.oc || 0) * 2.2, 0, 18)
@@ -14873,13 +15110,38 @@ const readinessProjectionData = useMemo(() => {
   const series = []
   for (let month = 0; month <= 12; month += 1) {
     const plannedLR = month === 0 ? runningReadiness.signals?.recentLongestRunMiles : getPlannedLongRunAtMonth(HM_PLAN_LONG_RUN, month)
+    const projectedTenKCompletedMiles = month === 0 && mtpConstrained
+      ? Math.min(mtpNextMilestone, 6.2137)
+      : undefined
+    const projectedTenKLongestMiles = month === 0 && mtpConstrained
+      ? mtpCeiling
+      : undefined
+    const projectedTenKCompletion = month === 0
+      ? buildProjectedCompletionScore({
+        distanceMiles: 6.2137,
+        volumeThresholds: [
+          [18, 95],
+          [14, 82],
+          [10, 65],
+          [7, 48]
+        ],
+        projectedCompletedRunMiles: projectedTenKCompletedMiles,
+        projectedLongestRunMiles: projectedTenKLongestMiles,
+      })
+      : null
     const monthGain = monthlyGainBase * (1 - Math.exp(-month / 3.5)) * 4
     const baseReadiness = clampNumber(runSpecificNow + monthGain, 0, 100)
     const lrBonus = plannedLR != null ? Math.min(18, plannedLR * 1.5) : 0
     const tendonCap = adaptiveTrainingState.capitals?.tendon || 0
     const eventBase = clampNumber(baseReadiness + (tendonCap * 0.08) + lrBonus * 0.25, 0, 100)
     const fiveK = clampNumber(eventBase + 10, 0, 100)
-    const tenK = clampNumber(eventBase + (plannedLR >= 5 ? 6 : 0), 0, 100)
+    const tenK = clampNumber(
+      month === 0 && Number.isFinite(projectedTenKCompletion)
+        ? Math.max(eventBase + (plannedLR >= 5 ? 6 : 0), projectedTenKCompletion)
+        : eventBase + (plannedLR >= 5 ? 6 : 0),
+      0,
+      100
+    )
     const half = clampNumber(eventBase - 10 + (plannedLR >= 8 ? 12 : plannedLR >= 6 ? 6 : 0), 0, 100)
     const swimReadiness = clampNumber((adaptiveTrainingState.capitals?.cardio || 0) * 0.75, 0, 100)
     const bikeReadiness = clampNumber(((adaptiveTrainingState.capitals?.cardio || 0) * 0.85) + ((adaptiveTrainingState.complianceScores?.cardio || 0) * 20), 0, 100)
@@ -17832,6 +18094,11 @@ return (
       <div style={{ fontSize: "12px", opacity: 0.75, marginTop: "8px" }}>
         Running: {enduranceForecast.weeklyRunMiles28} mi/week · longest {runningReadiness?.signals?.recentLongestRunMiles ?? "NA"} mi · frequency {runningReadiness?.signals?.recentRunFrequency ?? "NA"}/week · progression {runningReadiness?.progressionReadiness ?? "hold"} · pace {enduranceForecast.avgPace28 || "NA"} min/mi · cardio {Math.round(enduranceForecast.cardioMinutesWeekly)} min/week · run modifier {((enduranceForecast.runPenalty ?? 1) * 100).toFixed(0)}%
       </div>
+      {LIFT_CONFIG.mtp_ceiling_miles < 6.2 && (
+        <div style={{ fontSize: 10, color: "#555", marginTop: 4 }}>
+          Score adjusted for active MTP ceiling ({LIFT_CONFIG.mtp_ceiling_miles} mi). Fitness capability exceeds current run ceiling.
+        </div>
+      )}
     </div>
 
     {/* ── Cardio Minutes ──────────────────────────────────────── */}
@@ -17940,6 +18207,8 @@ return (
         ))}
       </div>
     )}
+
+    <RaceHistoryPanel results={RACE_RESULTS} raceCalendar={RACE_CALENDAR} />
 
     {/* ── Race Calendar ─────────────────────────────────────────── */}
     {(() => {
