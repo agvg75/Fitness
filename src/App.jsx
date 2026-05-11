@@ -7388,9 +7388,13 @@ function buildOcConstraintState({ ocItems, sleepRecords, healthFitDaily, compute
 
 function buildRunningReadinessController({
   workouts,
-  ocConstraintState = null
+  ocConstraintState = null,
+  mtpCeilingMiles = 4.0
 }) {
-  const inputs = computeEnduranceInputs(workouts)
+  const inputs = {
+    ...computeEnduranceInputs(workouts),
+    mtpCeilingMiles
+  }
 
   const clamp = (value, lo = 0, hi = 100) => Math.min(hi, Math.max(lo, value))
   const recentCompletedRunMiles = Math.max(
@@ -7402,6 +7406,8 @@ function buildRunningReadinessController({
   const recentRunVolume = Number(inputs.weeklyRunMiles28 || 0)
   const recentRunFrequency = Number(inputs.runsPerWeek28 || 0)
   const activeWeeks28 = Number(inputs.activeWeeks28 || 0)
+  const mtpCeiling = Number(inputs.mtpCeilingMiles ?? 4.0)
+  const mtpConstrained = mtpCeiling >= 3.5 && mtpCeiling < 6.2
 
   const buildCompletionScore = ({ distanceMiles, volumeThresholds, projectedCompletedRunMiles, projectedLongestRunMiles }) => {
     const completedRunMiles = Number.isFinite(Number(projectedCompletedRunMiles))
@@ -7448,29 +7454,21 @@ function buildRunningReadinessController({
         [3, 50]
       ]
     }),
-    tenK: (() => {
-      // Respect the active MTP protection ceiling instead of treating it as a fitness limit.
-      const mtpCeiling = Number(LIFT_CONFIG.mtp_ceiling_miles ?? 4.0)
-      const mtpNextMilestone = Number(LIFT_CONFIG.mtp_next_milestone_miles ?? (mtpCeiling * 1.1))
-      const mtpConstrained = mtpCeiling >= 3.5 && mtpCeiling < 6.2
-      const projected10KCompletedMiles = mtpConstrained
-        ? Math.min(mtpNextMilestone, 6.2137)
-        : undefined
-      const projected10KLongestMiles = mtpConstrained
+    tenK: buildCompletionScore({
+      distanceMiles: 6.2137,
+      volumeThresholds: [
+        [18, 95],
+        [14, 82],
+        [10, 65],
+        [7, 48]
+      ],
+      projectedCompletedRunMiles: mtpConstrained
+        ? Math.min(mtpCeiling * 1.1, 6.2137)
+        : undefined,
+      projectedLongestRunMiles: mtpConstrained
         ? mtpCeiling
-        : undefined
-      return buildCompletionScore({
-        distanceMiles: 6.2137,
-        volumeThresholds: [
-          [18, 95],
-          [14, 82],
-          [10, 65],
-          [7, 48]
-        ],
-        projectedCompletedRunMiles: projected10KCompletedMiles,
-        projectedLongestRunMiles: projected10KLongestMiles,
-      })
-    })(),
+        : undefined,
+    }),
     half: buildCompletionScore({
       distanceMiles: 13.1094,
       volumeThresholds: [
@@ -14976,7 +14974,8 @@ const racePrediction = useMemo(() => {
 const runningReadiness = useMemo(() => {
   return buildRunningReadinessController({
     workouts: operationalWorkouts,
-    ocConstraintState
+    ocConstraintState,
+    mtpCeilingMiles: LIFT_CONFIG.mtp_ceiling_miles ?? 4.0
   })
 }, [operationalWorkouts, ocConstraintState])
 const displayedTendonStatus = ocConstraintState?.tendon ?? tendonStatus
