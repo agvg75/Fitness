@@ -15028,8 +15028,8 @@ const readinessProjectionData = useMemo(() => {
 
   const latestWeek = adaptiveTrainingState.latestWeek
   const clamp = (v, lo = 0, hi = 100) => Math.min(hi, Math.max(lo, v))
-  const mtpCeiling = Number(LIFT_CONFIG.mtp_ceiling_miles ?? 4.0)
-  const mtpNextMilestone = Number(LIFT_CONFIG.mtp_next_milestone_miles ?? (mtpCeiling * 1.1))
+  const mtpCeiling = 4.0
+  const mtpNextMilestone = mtpCeiling * 1.1
   const mtpConstrained = mtpCeiling >= 3.5 && mtpCeiling < 6.2
   const buildProjectedCompletionScore = ({ distanceMiles, volumeThresholds, projectedCompletedRunMiles, projectedLongestRunMiles }) => {
     const completedRunMiles = Number.isFinite(Number(projectedCompletedRunMiles))
@@ -18093,11 +18093,6 @@ return (
       <div style={{ fontSize: "12px", opacity: 0.75, marginTop: "8px" }}>
         Running: {enduranceForecast.weeklyRunMiles28} mi/week · longest {runningReadiness?.signals?.recentLongestRunMiles ?? "NA"} mi · frequency {runningReadiness?.signals?.recentRunFrequency ?? "NA"}/week · progression {runningReadiness?.progressionReadiness ?? "hold"} · pace {enduranceForecast.avgPace28 || "NA"} min/mi · cardio {Math.round(enduranceForecast.cardioMinutesWeekly)} min/week · run modifier {((enduranceForecast.runPenalty ?? 1) * 100).toFixed(0)}%
       </div>
-      {LIFT_CONFIG.mtp_ceiling_miles < 6.2 && (
-        <div style={{ fontSize: 10, color: "#555", marginTop: 4 }}>
-          Score adjusted for active MTP ceiling ({LIFT_CONFIG.mtp_ceiling_miles} mi). Fitness capability exceeds current run ceiling.
-        </div>
-      )}
     </div>
 
     {/* ── Cardio Minutes ──────────────────────────────────────── */}
