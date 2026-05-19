@@ -6171,7 +6171,7 @@ if (w.category === "Strength") {
   }, [chartData])
 
   useEffect(() => {
-    if (!import.meta.env.DEV) return
+    if (true) return
     console.log("[LIFT DEBUG] TrainingDashboard counts", {
       workouts: summarizeWorkoutSet(workouts),
       filteredCount: Array.isArray(filteredWorkouts) ? filteredWorkouts.length : 0,
@@ -6229,7 +6229,6 @@ if (w.category === "Strength") {
   }, [healthFitDaily])
 
   const showLiveStateDebug = useMemo(() => {
-    if (import.meta.env.DEV) return true
     try {
       return new URLSearchParams(window.location.search).get("debugLiveState") === "1"
     } catch {
@@ -11355,45 +11354,6 @@ Return ONLY a JSON object with this exact structure, no explanation:
           )}
         </div>
       )}
-      {/* -- Trainer Report Export ----------------------------- */}
-      <div style={{
-        marginTop: 32,
-        padding: "20px 24px",
-        background: "#0b0d14",
-        border: "1px solid #1a1b2e",
-        borderRadius: 8
-      }}>
-        <div style={{
-          fontSize: 11,
-          letterSpacing: "0.14em",
-          color: "#444",
-          textTransform: "uppercase",
-          marginBottom: 8,
-          fontFamily: "'Barlow Condensed', sans-serif"
-        }}>
-          Trainer Report Export
-        </div>
-        <div style={{ fontSize: 12, color: "#666", marginBottom: 14, lineHeight: 1.6 }}>
-          Generates a self-contained HTML snapshot of your current data - training load, body composition, running protocol, schedule, and operational capacity - formatted for your trainer. Open in any browser. No login required.
-        </div>
-        <button
-          onClick={handleExportReport}
-          style={{
-            background: "#0d1a0d",
-            border: "1px solid #1a3a1a",
-            borderRadius: 6,
-            color: "#4a8a4a",
-            fontSize: 12,
-            fontFamily: "'Barlow Condensed', sans-serif",
-            letterSpacing: "0.08em",
-            padding: "9px 20px",
-            cursor: "pointer",
-            fontWeight: 600
-          }}
-        >
-          Generate Trainer Report ↓
-        </button>
-      </div>
     </div>
   )
 }
@@ -15993,9 +15953,8 @@ const readinessChartsReady =
   baseDataLoaded &&
   readinessInputsHydrated &&
   readinessRemoteInputsHydrated
-const showDeveloperPanels = import.meta.env.DEV
+const showDeveloperPanels = false
 const showAuthDebug = useMemo(() => {
-  if (import.meta.env.DEV) return true
   try {
     return new URLSearchParams(window.location.search).get("debugAuth") === "1"
   } catch {
@@ -16003,7 +15962,6 @@ const showAuthDebug = useMemo(() => {
   }
 }, [])
 const showLiveStateDebug = useMemo(() => {
-  if (import.meta.env.DEV) return true
   try {
     return new URLSearchParams(window.location.search).get("debugLiveState") === "1"
   } catch {
