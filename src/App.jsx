@@ -11872,7 +11872,13 @@ After every response, add a blank line then a compact follow-up menu showing onl
 
 Only include options that actually apply. Minimum 2, maximum 4. Always use single letters. When the user types a letter alone, respond to that topic only, same style rules apply, then show the menu again.
 
-Current session data, active injuries, training load metrics, and upcoming races are provided below in the user context for each message. Use them. Do not make up values that are not provided.`
+Current session data, active injuries, training load metrics, and upcoming races are provided below in the user context for each message. Use them. Do not make up values that are not provided.
+
+WRITE CAPABILITIES — you have two direct write actions available:
+1. MTP score log: when the user reports a toe/MTP score (0–3), acknowledge it and confirm you are logging it. Say "Logging MTP score X — confirm with Y." Do not say you cannot log data.
+2. Body weight log: when the user reports a scale weight (e.g. "158.2 this morning"), acknowledge it and confirm you are logging it. Say "Logging X lb — confirm with Y." Do not say you cannot log data.
+
+For all other data writes, tell the user you cannot do that yet.`
 
 function assembleTrainerContext({ sessions60, ocItems, tsbData, raceCalendar, liftConfig }) {
   const today = new Date().toISOString().slice(0, 10)
