@@ -11906,12 +11906,16 @@ After every response, add a blank line then a compact follow-up menu showing onl
 
 Only include options that actually apply. Minimum 2, maximum 4. Always use single letters. When the user types a letter alone, respond to that topic only, same style rules apply, then show the menu again.
 
+PRE-SESSION BRIEFING — triggered by "brief me", "go", "what's today", "today's session", or any equivalent short prompt:
+Respond with exactly one paragraph (4 to 6 sentences) covering: (1) what today's schedule prescribes by modality, (2) current TSB and what it means for effort, (3) any active OC flags and their constraint on today, (4) MTP protocol status and current distance ceiling if a run is planned, (5) one concrete recommendation for how to approach the session. No headers. No bullets. Write it as a coach would say it before you walk out the door. End with the menu showing only relevant options for today's session type.
+
 Current session data, active injuries, training load metrics, and upcoming races are provided below in the user context for each message. Use them. Do not make up values that are not provided.
 
-WRITE CAPABILITIES — you have three direct write actions available:
-1. MTP score log: when the user reports a toe/MTP score (0–3), acknowledge it and say "Logging MTP score X — confirm with Y." Do not say you cannot log data.
+WRITE CAPABILITIES — you have four direct write actions available:
+1. MTP score log: when the user reports a toe/MTP score (0–3), say "Logging MTP score X — confirm with Y." Do not say you cannot log data.
 2. Body weight log: when the user reports a scale weight (e.g. "158.2 this morning"), say "Logging X lb — confirm with Y." Do not say you cannot log data.
 3. Exercise log: when the user says "add X to today" or asks to log an exercise, say "Adding X to today's schedule — confirm with Y." Do not say you cannot log data.
+4. Run log: when the user reports completing a run (distance, duration, MTP score, notes), acknowledge all the details and say "Logging your run — confirm with Y." If an MTP score is included, it will also be logged as a check-in. Do not say you cannot log data.
 
 SUBSTITUTION PROTOCOL — when the user reports MTP score 2+ or describes a physical limitation during a session:
 - Immediately propose a specific substitute exercise or modality that avoids the affected region.
@@ -11990,7 +11994,7 @@ const FingerprintIcon = ({ size = 38 }) => {
   )
 }
 
-function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, onLogMtp, onLogWeight, onLogExercise }) {
+function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, onLogMtp, onLogWeight, onLogExercise, onLogRun }) {
   const [isOpen, setIsOpen] = React.useState(false)
   const [messages, setMessages] = React.useState(() => {
     try { return JSON.parse(localStorage.getItem(TRAINER_STORAGE_KEY) || "[]") } catch { return [] }
@@ -12000,7 +12004,7 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
   const messagesEndRef = React.useRef(null)
   const inputRef = React.useRef(null)
   const [pendingAction, setPendingAction] = React.useState(null)
-  // pendingAction shape: { type: "mtp"|"weight"|"exercise", payload: object, preview: string } | null
+  // pendingAction shape: { type: "mtp"|"weight"|"exercise"|"run", payload: object, preview: string } | null
   const apiKey = typeof ANTHROPIC_API_KEY !== "undefined"
     ? ANTHROPIC_API_KEY
     : (import.meta.env?.VITE_ANTHROPIC_API_KEY || import.meta.env?.ANTHROPIC_API_KEY || null)
@@ -12022,6 +12026,39 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
 
   const detectWriteIntent = (userText, assistantText) => {
     const combined = (userText + " " + assistantText).toLowerCase()
+    // Combined run log detection — "ran X miles, Y minutes, MTP score Z, [notes]"
+    // Handles variations: "ran", "just ran", "finished a run", "completed", "did"
+    const runMatch = userText.match(
+      /\b(?:ran|run|just\s+ran|finished\s+(?:a\s+)?run|completed\s+(?:a\s+)?run|did\s+(?:a\s+)?run)\b/i
+    )
+    if (runMatch) {
+      const distMatch = userText.match(/(\d+(?:\.\d+)?)\s*(?:mile|miles|mi)\b/i)
+      const durMatch  = userText.match(/(\d+)\s*(?:min(?:utes?)?|mins?)\b/i)
+      const scoreMatch = userText.match(/\b(?:mtp|toe|joint)\s*(?:score)?[:\s]*([0-3])\b/i)
+        || userText.match(/\bscore[:\s]*([0-3])\b/i)
+      const notesMatch = userText.match(/,?\s*(felt\s+.+|easy|hard|tough|good|great|solid|slow|fast|painful|ok|okay)[\.,]?/i)
+
+      const dist = distMatch ? parseFloat(distMatch[1]) : null
+      const dur  = durMatch  ? parseInt(durMatch[1])    : null
+      const score = scoreMatch ? parseInt(scoreMatch[1]) : null
+      const notes = notesMatch ? notesMatch[1].trim() : ""
+
+      // Need at least distance or duration to constitute a run log
+      if (dist != null || dur != null) {
+        const scoreLabels = ["zero pain", "mild discomfort", "moderate pain", "severe pain"]
+        const parts = []
+        if (dist != null) parts.push(`${dist} mi`)
+        if (dur  != null) parts.push(`${dur} min`)
+        if (score != null) parts.push(`MTP score ${score}/3 (${scoreLabels[score]})`)
+        if (notes) parts.push(`notes: "${notes}"`)
+
+        return {
+          type: "run",
+          payload: { dist, dur, score, notes },
+          preview: `Log run: ${parts.join(", ")}. Type Y to confirm or anything else to cancel.`
+        }
+      }
+    }
     // MTP score detection — user says something like "mtp score 1" or "toe score 2 today"
     const mtpForwardMatch = userText.match(/\b(mtp|toe|joint)\b.*\bscore[:\s]*([0-3])\b/i)
     const mtpReverseMatch = userText.match(/\bscore[:\s]*([0-3])\b.*\b(mtp|toe|joint)\b/i)
@@ -12179,6 +12216,19 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
       } else if (pendingAction.type === "weight" && onLogWeight) {
         await onLogWeight(pendingAction.payload.weight_lb)
         const confirmMsg = { role: "assistant", content: `Body weight ${pendingAction.payload.weight_lb} lb logged.`, ts: Date.now() }
+        saveMessages([...messages, confirmMsg])
+      } else if (pendingAction.type === "run" && onLogRun) {
+        await onLogRun(pendingAction.payload)
+        const { dist, dur, score } = pendingAction.payload
+        const parts = []
+        if (dist != null) parts.push(`${dist} mi`)
+        if (dur  != null) parts.push(`${dur} min`)
+        const mtpLine = score != null ? ` MTP score ${score} logged.` : ""
+        const confirmMsg = {
+          role: "assistant",
+          content: `Run logged: ${parts.join(", ")}.${mtpLine}\n\n── L) load impact  A) MTP progression update ──`,
+          ts: Date.now()
+        }
         saveMessages([...messages, confirmMsg])
       } else if (pendingAction.type === "exercise" && onLogExercise) {
         await onLogExercise(pendingAction.payload.name, pendingAction.payload.day)
@@ -16556,6 +16606,62 @@ const overviewExplainButton = (key) => (
     }
   }, [session, supabase])
 
+  const trainerLogRun = React.useCallback(async ({ dist, dur, score, notes }) => {
+    const today = new Date()
+    const dateStr = today.toISOString().slice(0, 10)
+    const day = DAY_KEYS_BY_JS_DAY[today.getDay()]
+
+    // Build a minimal cardio-only schedule log entry for today
+    const cardioEntry = {
+      modality: "run",
+      duration: dur != null ? String(dur) : "",
+      distance: dist != null ? String(dist) : "",
+      calories: "",
+      hr: "",
+      notes: notes || ""
+    }
+
+    const logEntry = {
+      id: `trainer_run_${Date.now()}`,
+      session_id: `trainer_${Date.now()}`,
+      logged_at: today.toISOString(),
+      date: dateStr,
+      day,
+      dayLabel: day,
+      venue: "trainer",
+      venue_label: "Logged via Trainer",
+      program: "Trainer",
+      rpe: null,
+      exercises: [],
+      tendon_work: [],
+      cardio: [cardioEntry],
+      stretch_completed: false,
+      warmup_completed: false,
+      source: "LIFT Trainer"
+    }
+
+    try {
+      // Append to wt-log without displacing any existing manual entry for today
+      const existing = await store.get("wt-log") || []
+      const safeExisting = Array.isArray(existing) ? existing : []
+      const updated = [logEntry, ...safeExisting.filter(e => e.id !== logEntry.id)]
+      await store.set("wt-log", updated)
+      if (supabase && session?.user?.id) {
+        await supabase.from("user_kv").upsert(
+          { user_id: session.user.id, key: "wt-log", value: updated, updated_at: today.toISOString() },
+          { onConflict: "user_id,key" }
+        )
+      }
+    } catch (e) {
+      console.warn("[Trainer] Run log error", e)
+    }
+
+    // If MTP score was included, also write OC check-in
+    if (score != null && Number.isFinite(score) && score >= 0 && score <= 3) {
+      await trainerLogMtp(score)
+    }
+  }, [trainerLogMtp, session, supabase])
+
 const trainerSessions60 = React.useMemo(() => {
   const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 60); cutoff.setHours(0,0,0,0)
   return (canonicalSessions || [])
@@ -19200,6 +19306,7 @@ return (
     onLogMtp={trainerLogMtp}
     onLogWeight={trainerLogWeight}
     onLogExercise={trainerLogExercise}
+    onLogRun={trainerLogRun}
   />
   </>
   )
