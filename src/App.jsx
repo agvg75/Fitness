@@ -12074,6 +12074,7 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig }
     maxWidth: 400,
     margin: "0",
     maxHeight: "calc(100dvh - 80px)",
+    height: "min(520px, calc(100dvh - 80px))",
     display: "flex", flexDirection: "column",
     background: "rgba(5, 8, 22, 0.88)",
     border: "1px solid rgba(56, 189, 248, 0.22)",
@@ -12110,7 +12111,7 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig }
             </div>
           </div>
 
-          <div style={{ flex: 1, overflowY: "auto", padding: "12px 12px 8px", display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ flex: 1, overflowY: "auto", minHeight: 0, padding: "12px 12px 8px", display: "flex", flexDirection: "column", gap: 8 }}>
             {messages.length === 0 && (
               <div style={{ textAlign: "center", padding: "24px 16px", color: "#334", fontSize: 12, lineHeight: 1.6 }}>
                 Ask me anything about your training, recovery, load, nutrition, or race build.
@@ -12153,7 +12154,7 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig }
               rows={1}
               style={{
                 flex: 1, resize: "none", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(56,189,248,0.2)",
-                borderRadius: 10, color: "#d0e4f4", fontSize: 12.5, padding: "7px 10px", fontFamily: "inherit",
+                borderRadius: 10, color: "#d0e4f4", fontSize: 16, padding: "7px 10px", fontFamily: "inherit",
                 outline: "none", maxHeight: 90, overflowY: "auto", lineHeight: 1.45
               }}
             />
