@@ -15217,14 +15217,56 @@ const trainingLoadDistanceMax = useMemo(() => {
   return Math.max(6, Math.ceil(maxVal * 1.1))
 }, [trainingLoadChartData])
 const bodyForecast = useMemo(() => {
-  return buildBodyForecast({
-    daily: dailyWithBiometrics,
-    nutritionRows: dailyNutritionSummary,
-    recentCardioMinutes: trainingSummary?.cardioMinutesWeekly || 0,
-    bmr: null,
-    configFatLossMonthly: LIFT_CONFIG.fat_loss_rate_monthly ?? 1.7
-  })
-}, [dailyWithBiometrics, dailyNutritionSummary, trainingSummary])
+  // Anchor to the most recent known weight in priority order:
+  // 1. Latest biometric record (trainer entry or import)
+  // 2. Latest weight from dailyWithBiometrics
+  // 3. LIFT_CONFIG DEXA anchor (April 2026)
+  const sortedBio = [...(biometricRecords || [])].sort((a, b) =>
+    String(b.timestamp || b.date || "").localeCompare(String(a.timestamp || a.date || ""))
+  )
+  const latestBioWeight = sortedBio.find(r => Number(r.weight_lb) > 100)?.weight_lb
+  const latestDailyWeight = [...(dailyWithBiometrics || [])]
+    .reverse()
+    .find(r => Number(r.weight_lb || r.weight) > 100)
+  const dailyWeight = latestDailyWeight
+    ? Number(latestDailyWeight.weight_lb || latestDailyWeight.weight)
+    : null
+
+  const anchorWeight = Number(latestBioWeight) > 100
+    ? Number(latestBioWeight)
+    : dailyWeight ?? LIFT_CONFIG.total_mass_lb ?? 162.3
+
+  const lossRateMonthly = LIFT_CONFIG.fat_loss_rate_monthly ?? 1.7
+  const slopePerDay = -(lossRateMonthly / 30.44)
+  const phase1Target = 150
+  const finalTarget = 145
+
+  const projectW = days => Math.max(finalTarget, anchorWeight + slopePerDay * days)
+  const etaDays = (target) => {
+    if (anchorWeight <= target) return null
+    const d = new Date()
+    d.setDate(d.getDate() + Math.ceil((anchorWeight - target) / lossRateMonthly * 30.44))
+    return d.toISOString().slice(0, 10)
+  }
+
+  return {
+    currentWeight: anchorWeight,
+    phase1TargetWeight: phase1Target,
+    finalTargetWeight: finalTarget,
+    estimatedMaintenance: null,
+    avgLoggedCalories: 0,
+    loggingCoverage: 0,
+    observedSlope: slopePerDay,
+    energyBalanceSlope: slopePerDay,
+    blendedSlope: slopePerDay,
+    weight1m:  projectW(30),
+    weight3m:  projectW(90),
+    weight6m:  projectW(180),
+    weight12m: projectW(365),
+    eta150: etaDays(phase1Target),
+    eta145: etaDays(finalTarget)
+  }
+}, [biometricRecords, dailyWithBiometrics, LIFT_CONFIG])
 
 const injuryPenalties = useMemo(() => {
   return getInjuryPenalties(ocItems)
