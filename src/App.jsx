@@ -12069,10 +12069,10 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig }
   }
 
   const panelStyle = {
-    position: "fixed", top: 66, right: 0, left: 0, zIndex: 9998,
-    width: "auto",
+    position: "fixed", top: 66, right: 8, left: 8, zIndex: 9998,
+    width: "calc(100vw - 16px)",
     maxWidth: 400,
-    margin: "0 auto",
+    margin: "0",
     maxHeight: "calc(100dvh - 80px)",
     display: "flex", flexDirection: "column",
     background: "rgba(5, 8, 22, 0.88)",
