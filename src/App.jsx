@@ -11864,6 +11864,14 @@ Run advances for 3 weeks, then 1 week hold run to advance swim or bike. Prevents
 CORE DESIGN RULE
 Always suggest a modified alternative rather than rest. Discontinuation is the primary risk to long-term outcomes.
 
+RESPONSE STYLE — MANDATORY
+Default response: 2 to 3 sentences maximum. One clear recommendation. No headers. No bullet points. Conversational, like a text from a coach.
+After every response, add a blank line then a compact follow-up menu showing only the options relevant to the question. Format exactly like this example:
+
+── A) analysis  R) rationale  E) execution  L) load context ──
+
+Only include options that actually apply. Minimum 2, maximum 4. Always use single letters. When the user types a letter alone, respond to that topic only, same style rules apply, then show the menu again.
+
 Current session data, active injuries, training load metrics, and upcoming races are provided below in the user context for each message. Use them. Do not make up values that are not provided.`
 
 function assembleTrainerContext({ sessions60, ocItems, tsbData, raceCalendar, liftConfig }) {
@@ -12048,7 +12056,7 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig }
   }
 
   const iconBtn = {
-    position: "fixed", top: 14, right: 16, zIndex: 9999,
+    position: "fixed", top: 20, right: 16, zIndex: 9999,
     width: 44, height: 44, borderRadius: "50%",
     background: "rgba(5, 10, 30, 0.35)",
     border: "1px solid rgba(56, 189, 248, 0.35)",
@@ -12061,8 +12069,11 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig }
   }
 
   const panelStyle = {
-    position: "fixed", top: 66, right: 16, zIndex: 9998,
-    width: 360, maxWidth: "calc(100vw - 32px)", maxHeight: "calc(100vh - 90px)",
+    position: "fixed", top: 66, right: 0, left: 0, zIndex: 9998,
+    width: "auto",
+    maxWidth: 400,
+    margin: "0 auto",
+    maxHeight: "calc(100dvh - 80px)",
     display: "flex", flexDirection: "column",
     background: "rgba(5, 8, 22, 0.88)",
     border: "1px solid rgba(56, 189, 248, 0.22)",
@@ -12070,7 +12081,8 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig }
     backdropFilter: "blur(22px)",
     WebkitBackdropFilter: "blur(22px)",
     boxShadow: "0 8px 40px rgba(0,0,0,0.55), 0 0 0 0.5px rgba(56,189,248,0.1)",
-    overflow: "hidden"
+    overflow: "hidden",
+    boxSizing: "border-box"
   }
 
   return (
