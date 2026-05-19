@@ -3328,6 +3328,10 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const SESSION_DRAFT_KEY = "lift-session-draft-v1"
   const [inlineExForm, setInlineExForm] = useState(null)   // day | null
   const [inlineExName, setInlineExName] = useState("")
+  const [exSuggestions, setExSuggestions] = useState([])
+  const [showExSuggestions, setShowExSuggestions] = useState(false)
+  const [exInputRect, setExInputRect] = useState(null)
+  const exInputRef = React.useRef(null)
   const [inlineExDbId, setInlineExDbId] = useState(null)   // DB id when user picks from library
   const [inlineExResults, setInlineExResults] = useState([]) // [{name, dbId, source}]
   const [highlightedLogEntryId, setHighlightedLogEntryId] = useState(null)
@@ -3885,9 +3889,17 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const addCustomExercise = (day) => {
     setInlineExForm(day)
     setInlineExName("")
+    setExSuggestions([])
+    setShowExSuggestions(false)
     setInlineExDbId(null)
     setInlineExResults([])
     loadExDb()  // pre-warm cache so results are instant when user types
+    setTimeout(() => {
+      if (exInputRef.current) {
+        exInputRef.current.scrollIntoView({ behavior: "smooth", block: "center" })
+        exInputRef.current.focus()
+      }
+    }, 60)
   }
 
   const commitCustomExercise = () => {
@@ -3904,6 +3916,8 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     saveScheduleKey("wt-custom-exercises", updated)
     setInlineExForm(null)
     setInlineExName("")
+    setExSuggestions([])
+    setShowExSuggestions(false)
     setInlineExDbId(null)
     setInlineExResults([])
   }
@@ -5382,13 +5396,20 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
                   {inlineExForm === activeDay ? (
                   <div style={{ marginTop: 8, padding: "8px", background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: 6, position: "static" }}>
                     <input
+                      ref={exInputRef}
                       autoFocus
                       value={inlineExName}
                       onChange={e => {
                         const val = e.target.value
                         setInlineExName(val)
                         setInlineExDbId(null)
-                        if (!val || val.length < 2) { setInlineExResults([]); return }
+                        if (exInputRef.current) setExInputRect(exInputRef.current.getBoundingClientRect())
+                        if (!val || val.length < 2) {
+                          setInlineExResults([])
+                          setExSuggestions([])
+                          setShowExSuggestions(false)
+                          return
+                        }
                         const q = val.toLowerCase()
                         const qNorm = normExName(val)
                         // DB matches (from cache — pre-warmed when form opened)
@@ -5428,29 +5449,48 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
                             .filter(n => n.toLowerCase().includes(q))
                             .map(n => [canonicalize(n).toLowerCase(), { name: canonicalize(n), dbId: null, source: "history" }])
                         ).values()].slice(0, 3)
-                        setInlineExResults([...dbMatches, ...histMatches])
+                        const matches = [...dbMatches, ...histMatches].slice(0, 8)
+                        setInlineExResults(matches)
+                        setExSuggestions(matches)
+                        setShowExSuggestions(matches.length > 0)
                       }}
                       onKeyDown={e => {
-                        if (e.key === "Enter") { setInlineExResults([]); commitCustomExercise() }
-                        if (e.key === "Escape") { setInlineExForm(null); setInlineExResults([]) }
+                        if (e.key === "Enter") {
+                          setShowExSuggestions(false)
+                          setInlineExResults([])
+                          setExSuggestions([])
+                          commitCustomExercise()
+                        }
+                        if (e.key === "Escape") {
+                          setShowExSuggestions(false)
+                          setInlineExForm(null)
+                          setInlineExResults([])
+                          setExSuggestions([])
+                        }
                       }}
+                      onBlur={() => setTimeout(() => setShowExSuggestions(false), 150)}
                       placeholder="Search exercises (e.g. hip thrust, lat pulldown)"
-                      style={{ ...inputStyle(), marginBottom: 4, fontSize: 12, padding: "6px 8px" }}
+                      style={{ ...inputStyle(), marginBottom: 4, fontSize: 12, padding: "6px 8px", width: "100%", boxSizing: "border-box" }}
                     />
-                    {inlineExResults.length > 0 && !inlineExDbId && (
+                    {showExSuggestions && exInputRect && exSuggestions.length > 0 && !inlineExDbId && (
                       <div style={{
-                        position: "absolute", left: 8, right: 8, top: 46,
+                        position: "fixed",
+                        top: exInputRect.bottom + 2,
+                        left: exInputRect.left,
+                        width: exInputRect.width,
                         background: "#0d0e1c", border: "1px solid #1e2a3a",
-                        borderRadius: 5, zIndex: 200, maxHeight: 300, overflowY: "auto",
+                        borderRadius: 5, zIndex: 99999, maxHeight: 300, overflowY: "auto",
                         boxShadow: "0 4px 12px rgba(0,0,0,0.5)"
                       }}>
-                        {inlineExResults.map((r, i) => (
+                        {exSuggestions.map((r, i) => (
                           <div key={i}
                             onMouseDown={e => {
                               e.preventDefault()  // keep input focused
                               setInlineExName(r.name)
                               setInlineExDbId(r.dbId)
                               setInlineExResults([])
+                              setExSuggestions([])
+                              setShowExSuggestions(false)
                             }}
                             style={{
                               padding: "7px 10px", cursor: "pointer", fontSize: 12,
@@ -5475,11 +5515,11 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
                       </div>
                     )}
                     <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-                      <button onClick={() => { setInlineExResults([]); commitCustomExercise() }}
+                      <button onClick={() => { setShowExSuggestions(false); setExSuggestions([]); setInlineExResults([]); commitCustomExercise() }}
                         style={{ flex: 1, padding: "5px 0", background: "#185FA5", border: "none", borderRadius: 5, color: "#fff", fontSize: 12, cursor: "pointer" }}>
                         Add exercise
                       </button>
-                      <button onClick={() => { setInlineExForm(null); setInlineExResults([]) }}
+                      <button onClick={() => { setInlineExForm(null); setShowExSuggestions(false); setExSuggestions([]); setInlineExResults([]) }}
                         style={{ padding: "5px 10px", background: "transparent", border: "0.5px solid #333", borderRadius: 5, color: "#555", fontSize: 12, cursor: "pointer" }}>
                         Cancel
                       </button>
@@ -11774,6 +11814,361 @@ const dexaRegionalPct = DEXA_REGIONAL.map(s => ({
 }))
 // ───────────────────────────────────────────────────────────────────────────
 
+// ── LIFT Trainer Panel ─────────────────────────────────────────────────────
+const TRAINER_STORAGE_KEY = "lift-trainer-chat"
+const TRAINER_SYSTEM_PROMPT = `You are LIFT Trainer, an AI training assistant with full access to Andrés Vidal-Gadea's longitudinal fitness data. Respond with the directness and precision of a sports scientist, not a generic coach. No decorative praise. No hedging. Separate observed data from inference. Quantify uncertainty where relevant.
+
+ABOUT ANDRÉS
+Age 50, scientist at an R2 institution in Normal IL. On tirzepatide (GLP-1/GIP, currently 10 mg) since November 2024 for weight loss. Governing training principle: leave every session better than you entered it.
+
+CURRENT BODY COMPOSITION (April 27 2026 DEXA — authoritative ground truth)
+Total mass: 162.3 lb (clothed, post-meal). Implied fasted weight: ~158–160 lb.
+Body fat: 25.4% | Fat mass: 41.3 lb | Lean mass: 115.8 lb | Lean+BMC: 121.0 lb
+Phase 1 cut target: 21% BF (~9.1 lb fat loss remaining at ~1.7 lb/month). Projected completion: mid-September 2026.
+Next DEXA: September 2026 (St. Jude 10K context).
+
+PERSONALIZED BANISTER MODEL (fitted, R²=0.887)
+tau1 (fitness decay): 27 days — builds and erodes faster than HealthFit default of 42 days.
+tau2 (fatigue decay): 18 days — fatigue persists ~2.5x longer than HealthFit default of 7 days.
+Dangerous zone: TSB below -7 AND 14-day rolling load above 700 units simultaneously. TSB slope alone is not a risk signal.
+TSB thresholds: moderate risk below -7, high risk below -9.
+Taper requirement: 3 weeks before any goal half marathon (not 2 weeks).
+
+ACTIVE INJURY PROTOCOL — LEFT MTP JOINT (Morton's Toe)
+Current run ceiling: 4.0 miles. Advance by 10% only after 3 consecutive score-0 sessions.
+MTP scoring: 0=fine (continue), 1=note and continue, 2=modify session, 3=terminate session immediately.
+Pre-run ibuprofen is part of an explicitly recommended twice-daily anti-inflammatory protocol — not a red flag.
+The rowing machine causes passive MTP dorsiflexion at the catch regardless of technique and is incompatible with the current protocol until 3 consecutive score-0 sessions are achieved.
+Left leg lean mass was flat Aug–Apr while right leg gained 9.0%, confirming chronic unilateral unloading. DEXA in September will test whether left leg closes the gap after MTP resolves.
+
+WEEKLY TRAINING STRUCTURE
+Monday: Chest and Arms (YMCA, strength + cardio)
+Tuesday: Legs (KNR — kinesiologist-led, not high intensity, cardio can be added)
+Wednesday: Rest or easy recovery only (no strength, no structured cardio)
+Thursday: Back and Arms (KNR)
+Friday: Legs and some chest (KNR)
+Saturday: Hip Legs + long run (YMCA, strength + cardio)
+Sunday: Long run only, no strength
+
+KNR STRENGTH BASELINES (February 2026 e1RM)
+Chest press: 130 lb | Seated cable row: 80 lb | Bicep curl: 30 lb
+Leg press: 320 lb | Leg curl: 100 lb | Leg extension: 100 lb
+
+NUTRITION
+Protein target: 120–140 g/day in 3–4 doses of 30–40 g. Current intake: ~100 g/day (gap to close).
+Calorie targets: BMR 1520, TDEE 2100, fat loss target 1700.
+
+MODALITY ROTATION RULE
+Run advances for 3 weeks, then 1 week hold run to advance swim or bike. Prevents additive load creep.
+
+CORE DESIGN RULE
+Always suggest a modified alternative rather than rest. Discontinuation is the primary risk to long-term outcomes.
+
+Current session data, active injuries, training load metrics, and upcoming races are provided below in the user context for each message. Use them. Do not make up values that are not provided.`
+
+function assembleTrainerContext({ sessions60, ocItems, tsbData, raceCalendar, liftConfig }) {
+  const today = new Date().toISOString().slice(0, 10)
+  const tsbLine = tsbData
+    ? `TSB: ${tsbData.currentOverallTsb != null ? Number(tsbData.currentOverallTsb).toFixed(1) : "?"}, 14-day load: ${tsbData.currentLoad14 != null ? Number(tsbData.currentLoad14).toFixed(0) : "?"}`
+    : "TSB: unavailable"
+  const ocLines = (ocItems || []).filter(i => i.currentScore > 0)
+    .map(i => `  ${i.location || i.label || "Unknown"}: score ${i.currentScore}/5, ${i.episodeCount || 0} episode(s)`)
+    .join("\n") || "  None active"
+  const sessionLines = (sessions60 || []).slice(0, 80).map(s => {
+    const d = s.start_date?.slice(0, 10) || s.date || "?"
+    const type = s.canonical_type || s.type || "?"
+    const dur = s.duration_min != null ? `${Math.round(s.duration_min)} min` : "? min"
+    const dist = s.distance_mi != null ? ` ${Number(s.distance_mi).toFixed(2)} mi` : ""
+    const load = s.load != null ? ` load:${Number(s.load).toFixed(0)}` : ""
+    return `  ${d} | ${type} |${dur}${dist}${load}`
+  }).join("\n") || "  No sessions loaded"
+  const upcomingRaces = (raceCalendar || [])
+    .filter(r => r.date >= today)
+    .slice(0, 6)
+    .map(r => `  ${r.date}: ${r.name} (${r.dist_mi} mi, ${r.city}) — ${r.note}`)
+    .join("\n") || "  None"
+  return `=== CURRENT STATE (${today}) ===
+${tsbLine}
+Risk zone: TSB < -7 AND 14d load > 700
+
+=== ACTIVE OC ISSUES ===
+${ocLines}
+
+=== RECENT SESSIONS (last 60 days, newest first) ===
+${sessionLines}
+
+=== UPCOMING RACES ===
+${upcomingRaces}
+
+=== LIFT CONFIG ===
+tau1: ${liftConfig?.tau1 ?? 27}d  tau2: ${liftConfig?.tau2 ?? 18}d
+BF%: ${liftConfig?.pct_fat ?? 25.4}% (DEXA ${liftConfig?.dexa_anchor_date ?? "2026-04-27"})
+Phase 1 target: 21% BF
+Protein target: ${liftConfig?.protein_target_g ?? 140} g/day`
+}
+
+const FingerprintIcon = ({ size = 38 }) => {
+  const cx = size / 2, cy = size / 2
+  const rings = [
+    { r: 2.2, dash: "none", opacity: 0.97, color: "#38bdf8" },
+    { r: 5.5, dash: `${5.5 * 1.4} ${5.5 * 0.35}`, opacity: 0.88, color: "#38bdf8" },
+    { r: 8.5, dash: `${8.5 * 1.35} ${8.5 * 0.32}`, opacity: 0.78, color: "#38bdf8" },
+    { r: 11.5, dash: `${11.5 * 1.3} ${11.5 * 0.3}`, opacity: 0.65, color: "#22d3ee" },
+    { r: 14.5, dash: `${14.5 * 1.25} ${14.5 * 0.28}`, opacity: 0.50, color: "#22d3ee" },
+    { r: 17.0, dash: `${17 * 1.2} ${17 * 0.26}`, opacity: 0.35, color: "#0ea5e9" },
+  ]
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} fill="none" style={{ display: "block" }}>
+      {rings.map(({ r, dash, opacity, color }, i) =>
+        r < 3 ? (
+          <circle key={i} cx={cx} cy={cy} r={r} fill={color} opacity={opacity} />
+        ) : (
+          <circle key={i} cx={cx} cy={cy} r={r}
+            stroke={color} strokeWidth={1.25} fill="none"
+            opacity={opacity}
+            strokeDasharray={dash === "none" ? undefined : dash}
+            strokeLinecap="round"
+          />
+        )
+      )}
+    </svg>
+  )
+}
+
+function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig }) {
+  const [isOpen, setIsOpen] = React.useState(false)
+  const [messages, setMessages] = React.useState(() => {
+    try { return JSON.parse(localStorage.getItem(TRAINER_STORAGE_KEY) || "[]") } catch { return [] }
+  })
+  const [inputValue, setInputValue] = React.useState("")
+  const [isLoading, setIsLoading] = React.useState(false)
+  const messagesEndRef = React.useRef(null)
+  const inputRef = React.useRef(null)
+  const apiKey = typeof ANTHROPIC_API_KEY !== "undefined"
+    ? ANTHROPIC_API_KEY
+    : (import.meta.env?.VITE_ANTHROPIC_API_KEY || import.meta.env?.ANTHROPIC_API_KEY || null)
+
+  React.useEffect(() => {
+    if (isOpen && messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" })
+    }
+  }, [messages, isOpen])
+
+  React.useEffect(() => {
+    if (isOpen && inputRef.current) inputRef.current.focus()
+  }, [isOpen])
+
+  const saveMessages = (msgs) => {
+    setMessages(msgs)
+    try { localStorage.setItem(TRAINER_STORAGE_KEY, JSON.stringify(msgs.slice(-60))) } catch {}
+  }
+
+  const sendMessage = async () => {
+    const text = inputValue.trim()
+    if (!text || isLoading) return
+    if (!apiKey) {
+      saveMessages([...messages, { role: "user", content: text, ts: Date.now() },
+        { role: "assistant", content: "VITE_ANTHROPIC_API_KEY is not set. Add it to your .env file and restart the dev server.", ts: Date.now() }])
+      setInputValue("")
+      return
+    }
+    const context = assembleTrainerContext({ sessions60, ocItems, tsbData, raceCalendar, liftConfig })
+    const userMsg = { role: "user", content: text, ts: Date.now() }
+    const updatedMsgs = [...messages, userMsg]
+    saveMessages(updatedMsgs)
+    setInputValue("")
+    setIsLoading(true)
+    const apiMessages = updatedMsgs.map(m => ({
+      role: m.role === "user" ? "user" : "assistant",
+      content: m.role === "user" && m === userMsg
+        ? `${context}\n\n---\n\nUSER QUESTION: ${text}`
+        : m.content
+    }))
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+          "anthropic-dangerous-direct-browser-access": "true"
+        },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 1024,
+          system: TRAINER_SYSTEM_PROMPT,
+          messages: apiMessages,
+          stream: true
+        })
+      })
+      if (!res.ok) {
+        const err = await res.text()
+        saveMessages([...updatedMsgs, { role: "assistant", content: `API error ${res.status}: ${err.slice(0, 200)}`, ts: Date.now() }])
+        setIsLoading(false)
+        return
+      }
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let assistantText = ""
+      const streamingMsg = { role: "assistant", content: "", ts: Date.now() }
+      const withStreaming = [...updatedMsgs, streamingMsg]
+      setMessages(withStreaming)
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        const chunk = decoder.decode(value)
+        const lines = chunk.split("\n").filter(l => l.startsWith("data: "))
+        for (const line of lines) {
+          const data = line.slice(6)
+          if (data === "[DONE]") continue
+          try {
+            const parsed = JSON.parse(data)
+            const delta = parsed?.delta?.text || ""
+            assistantText += delta
+            const updated = withStreaming.map(m => m === streamingMsg ? { ...m, content: assistantText } : m)
+            setMessages(updated)
+          } catch {}
+        }
+      }
+      const finalMsgs = updatedMsgs.concat({ role: "assistant", content: assistantText, ts: Date.now() })
+      saveMessages(finalMsgs)
+    } catch (err) {
+      saveMessages([...updatedMsgs, { role: "assistant", content: `Network error: ${err.message}`, ts: Date.now() }])
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleKey = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage() }
+  }
+
+  const clearChat = () => {
+    saveMessages([])
+  }
+
+  const iconBtn = {
+    position: "fixed", top: 14, right: 16, zIndex: 9999,
+    width: 44, height: 44, borderRadius: "50%",
+    background: "rgba(5, 10, 30, 0.35)",
+    border: "1px solid rgba(56, 189, 248, 0.35)",
+    backdropFilter: "blur(10px)",
+    WebkitBackdropFilter: "blur(10px)",
+    cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+    opacity: 0.65,
+    transition: "opacity 0.2s, box-shadow 0.2s",
+    boxShadow: "0 0 10px rgba(56,189,248,0.12)"
+  }
+
+  const panelStyle = {
+    position: "fixed", top: 66, right: 16, zIndex: 9998,
+    width: 360, maxWidth: "calc(100vw - 32px)", maxHeight: "calc(100vh - 90px)",
+    display: "flex", flexDirection: "column",
+    background: "rgba(5, 8, 22, 0.88)",
+    border: "1px solid rgba(56, 189, 248, 0.22)",
+    borderRadius: 16,
+    backdropFilter: "blur(22px)",
+    WebkitBackdropFilter: "blur(22px)",
+    boxShadow: "0 8px 40px rgba(0,0,0,0.55), 0 0 0 0.5px rgba(56,189,248,0.1)",
+    overflow: "hidden"
+  }
+
+  return (
+    <>
+      <button
+        onClick={() => setIsOpen(o => !o)}
+        style={iconBtn}
+        title="LIFT Trainer"
+        onMouseEnter={e => { e.currentTarget.style.opacity = "1"; e.currentTarget.style.boxShadow = "0 0 16px rgba(56,189,248,0.35)" }}
+        onMouseLeave={e => { e.currentTarget.style.opacity = "0.65"; e.currentTarget.style.boxShadow = "0 0 10px rgba(56,189,248,0.12)" }}
+      >
+        <FingerprintIcon size={28} />
+      </button>
+
+      {isOpen && (
+        <div style={panelStyle}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px 8px", borderBottom: "1px solid rgba(56,189,248,0.12)", flexShrink: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <FingerprintIcon size={18} />
+              <span style={{ fontSize: 12, fontWeight: 700, color: "#38bdf8", letterSpacing: "0.08em", textTransform: "uppercase" }}>LIFT Trainer</span>
+            </div>
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <button onClick={clearChat} title="Clear conversation" style={{ background: "none", border: "none", color: "#334", fontSize: 11, cursor: "pointer", padding: "2px 6px", borderRadius: 4 }}>clear</button>
+              <button onClick={() => setIsOpen(false)} style={{ background: "none", border: "none", color: "#445", fontSize: 18, cursor: "pointer", lineHeight: 1, padding: "0 2px" }}>×</button>
+            </div>
+          </div>
+
+          <div style={{ flex: 1, overflowY: "auto", padding: "12px 12px 8px", display: "flex", flexDirection: "column", gap: 8 }}>
+            {messages.length === 0 && (
+              <div style={{ textAlign: "center", padding: "24px 16px", color: "#334", fontSize: 12, lineHeight: 1.6 }}>
+                Ask me anything about your training, recovery, load, nutrition, or race build.
+              </div>
+            )}
+            {messages.map((m, i) => (
+              <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}>
+                <div style={{
+                  maxWidth: "82%", padding: "8px 11px",
+                  borderRadius: m.role === "user" ? "14px 14px 3px 14px" : "14px 14px 14px 3px",
+                  background: m.role === "user" ? "#185FA5" : "#111827",
+                  color: m.role === "user" ? "#e8f4ff" : "#c8d8e8",
+                  fontSize: 12.5, lineHeight: 1.55,
+                  border: m.role === "user" ? "none" : "1px solid rgba(56,189,248,0.1)",
+                  whiteSpace: "pre-wrap", wordBreak: "break-word"
+                }}>
+                  {m.content}
+                </div>
+              </div>
+            ))}
+            {isLoading && (
+              <div style={{ display: "flex", justifyContent: "flex-start" }}>
+                <div style={{ padding: "8px 14px", borderRadius: "14px 14px 14px 3px", background: "#111827", border: "1px solid rgba(56,189,248,0.1)", display: "flex", gap: 5, alignItems: "center" }}>
+                  {[0, 1, 2].map(d => (
+                    <div key={d} style={{ width: 5, height: 5, borderRadius: "50%", background: "#38bdf8", opacity: 0.7, animation: `trainerDot 1.2s ease-in-out ${d * 0.2}s infinite` }} />
+                  ))}
+                </div>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+
+          <div style={{ padding: "8px 10px 10px", borderTop: "1px solid rgba(56,189,248,0.1)", flexShrink: 0, display: "flex", gap: 7, alignItems: "flex-end" }}>
+            <textarea
+              ref={inputRef}
+              value={inputValue}
+              onChange={e => setInputValue(e.target.value)}
+              onKeyDown={handleKey}
+              placeholder="Ask your trainer..."
+              rows={1}
+              style={{
+                flex: 1, resize: "none", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(56,189,248,0.2)",
+                borderRadius: 10, color: "#d0e4f4", fontSize: 12.5, padding: "7px 10px", fontFamily: "inherit",
+                outline: "none", maxHeight: 90, overflowY: "auto", lineHeight: 1.45
+              }}
+            />
+            <button
+              onClick={sendMessage}
+              disabled={isLoading || !inputValue.trim()}
+              style={{
+                width: 34, height: 34, borderRadius: "50%", border: "none", cursor: isLoading || !inputValue.trim() ? "default" : "pointer",
+                background: isLoading || !inputValue.trim() ? "rgba(56,189,248,0.15)" : "#185FA5",
+                color: "#fff", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0
+              }}
+            >↑</button>
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes trainerDot {
+          0%, 80%, 100% { transform: scale(0.7); opacity: 0.4; }
+          40% { transform: scale(1.1); opacity: 1; }
+        }
+      `}</style>
+    </>
+  )
+}
+// ── end TrainerPanel ────────────────────────────────────────────────────────
+
 export default function App() {
 
   // ── LIFT Calibration Config ─────────────────────────────────────────────
@@ -15844,7 +16239,15 @@ const overviewExplainButton = (key) => (
     {isOverviewExplainOpen(key) ? "×" : "i"}
   </button>
 )
+const trainerSessions60 = React.useMemo(() => {
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 60); cutoff.setHours(0,0,0,0)
+  return (canonicalSessions || [])
+    .filter(s => { const d = new Date(s.start_date || s.date || ""); return !isNaN(d) && d >= cutoff })
+    .sort((a, b) => (b.start_date || b.date || "").localeCompare(a.start_date || a.date || ""))
+}, [canonicalSessions])
+
 return (
+  <>
   <ErrorBoundary>
   <div
     style={{
@@ -18471,5 +18874,13 @@ return (
 )}
     </div>
   </ErrorBoundary>
+  <TrainerPanel
+    sessions60={trainerSessions60}
+    ocItems={ocItems}
+    tsbData={tsbV2Panel}
+    raceCalendar={RACE_CALENDAR}
+    liftConfig={LIFT_CONFIG}
+  />
+  </>
   )
 }
