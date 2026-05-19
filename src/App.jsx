@@ -12008,6 +12008,30 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
   const sendMessage = async () => {
     const text = inputValue.trim()
     if (!text || isLoading) return
+
+    // Undo last trainer write without API call
+    if (/^(undo|delete|remove)\s*(last)?\s*(entry|log|weight|mtp)?$/i.test(text)) {
+      const lastWrite = [...messages].reverse().find(m => m.role === "assistant" && (m.content.includes("logged.") || m.content.includes("Logged")))
+      if (lastWrite && lastWrite.content.includes("weight")) {
+        const existing = JSON.parse(localStorage.getItem("lift_biometric_records") || "[]")
+        const cleaned = existing.filter(r => r.source !== "trainer")
+        localStorage.setItem("lift_biometric_records", JSON.stringify(cleaned))
+        const msg = { role: "assistant", content: "Last trainer weight entry removed from local records.", ts: Date.now() }
+        saveMessages([...messages, { role: "user", content: text, ts: Date.now() }, msg])
+        setInputValue("")
+        return
+      }
+      if (lastWrite && lastWrite.content.includes("MTP")) {
+        const msg = { role: "assistant", content: "To remove an MTP entry, go to the OC tab and delete it there. Trainer cannot remove OC items automatically.", ts: Date.date() }
+        saveMessages([...messages, { role: "user", content: text, ts: Date.now() }, msg])
+        setInputValue("")
+        return
+      }
+      const msg = { role: "assistant", content: "No recent trainer entry found to undo.", ts: Date.now() }
+      saveMessages([...messages, { role: "user", content: text, ts: Date.now() }, msg])
+      setInputValue("")
+      return
+    }
     if (!apiKey) {
       saveMessages([...messages, { role: "user", content: text, ts: Date.now() },
         { role: "assistant", content: "VITE_ANTHROPIC_API_KEY is not set. Add it to your .env file and restart the dev server.", ts: Date.now() }])
