@@ -3415,21 +3415,26 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
 
   const saveScheduleKey = async (key, value) => {
     writeLocalScheduleKey(key, value)
-    if (!supabase || !session?.user?.id) return value
+    if (!supabase || !session?.user?.id) return { value, synced: false, reason: "no-auth" }
 
-    const { data, error } = await supabase.from("user_kv").upsert(
-      { user_id: session.user.id, key, value, updated_at: new Date().toISOString() },
-      { onConflict: "user_id,key" }
-    ).select("value").maybeSingle()
+    try {
+      const { data, error } = await supabase.from("user_kv").upsert(
+        { user_id: session.user.id, key, value, updated_at: new Date().toISOString() },
+        { onConflict: "user_id,key" }
+      ).select("value").maybeSingle()
 
-    if (error) {
-      if (process.env.NODE_ENV === "development") console.error(`Failed to sync ${key}:`, error)
-      return value
+      if (error) {
+        console.warn(`[LIFT] Supabase sync failed for ${key}:`, error.message)
+        return { value, synced: false, reason: error.message }
+      }
+
+      const savedValue = data?.value ?? value
+      writeLocalScheduleKey(key, savedValue)
+      return { value: savedValue, synced: true }
+    } catch (networkErr) {
+      console.warn(`[LIFT] Network error syncing ${key}:`, networkErr.message)
+      return { value, synced: false, reason: networkErr.message }
     }
-
-    const savedValue = data?.value ?? value
-    writeLocalScheduleKey(key, savedValue)
-    return savedValue
   }
 
   const loadScheduleLogForMutation = async fallbackLog => {
@@ -3480,9 +3485,9 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     })()
   }, [session?.user?.id, hydrateSessionStore])
 
-  const showToast = useCallback((msg) => {
+  const showToast = useCallback((msg, duration = 2500) => {
     setToast(msg)
-    setTimeout(() => setToast(null), 2500)
+    setTimeout(() => setToast(null), duration)
   }, [])
 
   const setLogEntryRef = useCallback((id, node) => {
@@ -4192,9 +4197,15 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     setSchedLog(newLog)
     setSavedEntries(prev => ({ ...prev, [day]: { ...(prev[day] || {}), [venue]: entry } }))
 
-    const savedLog = await saveScheduleKey("wt-log", newLog)
-    if (Array.isArray(savedLog)) setSchedLog(savedLog)
+    const logResult = await saveScheduleKey("wt-log", newLog)
+    if (Array.isArray(logResult?.value)) setSchedLog(logResult.value)
     await saveScheduleKey("wt-sessions", buildSessionsStore())
+
+    if (logResult?.synced) {
+      showToast("Session saved and synced ✓")
+    } else {
+      showToast("Saved on this device — sync pending. Tap Sync when on wifi.", 5000)
+    }
 
     const allCardio = completedCardio
     if (allCardio.some(c => c.duration)) {
@@ -4215,11 +4226,10 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       ])
       setStoredWorkouts(merged)
       const savedWorkouts = await saveScheduleKey("ufd-workouts", merged)
-      if (Array.isArray(savedWorkouts)) setStoredWorkouts(savedWorkouts)
+      if (Array.isArray(savedWorkouts?.value ?? savedWorkouts)) setStoredWorkouts(savedWorkouts?.value ?? savedWorkouts)
     }
 
     try { localStorage.removeItem(SESSION_DRAFT_KEY) } catch {}
-    showToast(`${VENUE_LABELS[venue] || "Session"} logged`)
   }
 
   const undoSession = async (venue) => {
@@ -4235,9 +4245,9 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     setSavedEntries(prev => ({ ...prev, [day]: { ...(prev[day] || {}), [venue]: null } }))
     setJustUndone(venue)
     const savedLog = await saveScheduleKey("wt-log", newLog)
-    if (Array.isArray(savedLog)) setSchedLog(savedLog)
+    if (Array.isArray(savedLog?.value ?? savedLog)) setSchedLog(savedLog?.value ?? savedLog)
     const savedWorkouts = await saveScheduleKey("ufd-workouts", newWorkouts)
-    if (Array.isArray(savedWorkouts)) setStoredWorkouts(savedWorkouts)
+    if (Array.isArray(savedWorkouts?.value ?? savedWorkouts)) setStoredWorkouts(savedWorkouts?.value ?? savedWorkouts)
     setTimeout(() => setJustUndone(null), 4000)
     showToast("Session removed")
   }
@@ -4249,10 +4259,10 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     const existingWorkouts = await store.get("ufd-workouts") || storedWorkouts
     const newWorkouts = (Array.isArray(existingWorkouts) ? existingWorkouts : []).filter(w => w._scheduleId !== id)
     const savedLog = await saveScheduleKey("wt-log", newLog)
-    if (Array.isArray(savedLog)) setSchedLog(savedLog)
+    if (Array.isArray(savedLog?.value ?? savedLog)) setSchedLog(savedLog?.value ?? savedLog)
     setStoredWorkouts(newWorkouts)
     const savedWorkouts = await saveScheduleKey("ufd-workouts", newWorkouts)
-    if (Array.isArray(savedWorkouts)) setStoredWorkouts(savedWorkouts)
+    if (Array.isArray(savedWorkouts?.value ?? savedWorkouts)) setStoredWorkouts(savedWorkouts?.value ?? savedWorkouts)
     showToast("Entry deleted")
   }
 
@@ -4316,14 +4326,14 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
 
     setSchedLog(nextLog)
     const savedLog = await saveScheduleKey("wt-log", nextLog)
-    if (Array.isArray(savedLog)) setSchedLog(savedLog)
+    if (Array.isArray(savedLog?.value ?? savedLog)) setSchedLog(savedLog?.value ?? savedLog)
 
     if (removedIds.size > 0) {
       const existingWorkouts = await store.get("ufd-workouts") || storedWorkouts
       const nextWorkouts = (Array.isArray(existingWorkouts) ? existingWorkouts : []).filter(w => !removedIds.has(w._scheduleId))
       setStoredWorkouts(nextWorkouts)
       const savedWorkouts = await saveScheduleKey("ufd-workouts", nextWorkouts)
-      if (Array.isArray(savedWorkouts)) setStoredWorkouts(savedWorkouts)
+      if (Array.isArray(savedWorkouts?.value ?? savedWorkouts)) setStoredWorkouts(savedWorkouts?.value ?? savedWorkouts)
     }
 
     showToast(deleteOthers ? "Conflict resolved; extra records deleted" : "Conflict resolved; extra records ignored")
@@ -4401,7 +4411,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
         const merged = mergeScheduleLogEntries(newEntries, currentLog)
         setSchedLog(merged)
         const savedLog = await saveScheduleKey("wt-log", merged)
-        if (Array.isArray(savedLog)) setSchedLog(savedLog)
+        if (Array.isArray(savedLog?.value ?? savedLog)) setSchedLog(savedLog?.value ?? savedLog)
         showToast(`Imported ${newEntries.length} new entries`)
         setSchedView("log")
       } catch (_) {
@@ -5265,7 +5275,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
             )
           })}
         </div>
-	<div style={{ display: "flex", gap: 6 }}>
+	<div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
 	          <button onClick={() => setShowSetTimer(true)} style={buttonStyle(true)}>
 	            Set Timer
 	          </button>
@@ -5282,9 +5292,20 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
           </button>
 	          <button onClick={() => setSchedView(v => v === "log" ? "schedule" : "log")} style={buttonStyle(false)}>
 	            {schedView === "log" ? "◀ Schedule" : `Log (${schedLog.length})`}
-	          </button>
+          </button>
           <button onClick={exportLog} style={buttonStyle(false)}>Export ↓</button>
           <button onClick={() => importRef.current?.click()} style={buttonStyle(false)}>Import ↑</button>
+          {schedView === "log" && (
+            <button
+              onClick={async () => {
+                const result = await saveScheduleKey("wt-log", schedLog)
+                showToast(result?.synced ? "Synced ✓" : "Sync failed — check connection")
+              }}
+              style={buttonStyle(false)}
+            >
+              Sync to Cloud ↑
+            </button>
+          )}
         </div>
       </div>
 
@@ -11559,12 +11580,15 @@ function SchExCard({ ex, setData, accent, onUpdate, onAdd, onRemove }) {
   );
 }
 
-function SchLogView({ log, expanded, setExpanded, onDelete, onExport, onImport }) {
+function SchLogView({ log, expanded, setExpanded, onDelete, onExport, onImport, onSync }) {
   const toggle = id => setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
   const BtnBar = () => (
-    <div style={{ display:"flex", gap:8, marginBottom:16, alignItems:"center" }}>
+    <div style={{ display:"flex", gap:8, marginBottom:16, alignItems:"center", flexWrap:"wrap" }}>
       <button onClick={onExport} style={{ background:"#0d1a0d", border:"1px solid #1a3a1a", borderRadius:6, color:"#4a8a4a", fontSize:11, fontFamily:"'Barlow Condensed',sans-serif", letterSpacing:"0.08em", padding:"7px 14px", cursor:"pointer" }}>Export JSON ↓</button>
       <button onClick={onImport} style={{ background:"#0d0d1a", border:"1px solid #1a1a3a", borderRadius:6, color:"#4a4a8a", fontSize:11, fontFamily:"'Barlow Condensed',sans-serif", letterSpacing:"0.08em", padding:"7px 14px", cursor:"pointer" }}>Import JSON ↑</button>
+      {onSync && (
+        <button onClick={onSync} style={{ background:"#1a0d0d", border:"1px solid #3a1a1a", borderRadius:6, color:"#8a4a4a", fontSize:11, fontFamily:"'Barlow Condensed',sans-serif", letterSpacing:"0.08em", padding:"7px 14px", cursor:"pointer" }}>Sync to Cloud ↑</button>
+      )}
     </div>
   );
   if (log.length === 0) return (
