@@ -11943,7 +11943,7 @@ const FingerprintIcon = ({ size = 38 }) => {
   )
 }
 
-function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig }) {
+function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, onLogMtp, onLogWeight }) {
   const [isOpen, setIsOpen] = React.useState(false)
   const [messages, setMessages] = React.useState(() => {
     try { return JSON.parse(localStorage.getItem(TRAINER_STORAGE_KEY) || "[]") } catch { return [] }
@@ -11952,6 +11952,8 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig }
   const [isLoading, setIsLoading] = React.useState(false)
   const messagesEndRef = React.useRef(null)
   const inputRef = React.useRef(null)
+  const [pendingAction, setPendingAction] = React.useState(null)
+  // pendingAction shape: { type: "mtp"|"weight", payload: object, preview: string } | null
   const apiKey = typeof ANTHROPIC_API_KEY !== "undefined"
     ? ANTHROPIC_API_KEY
     : (import.meta.env?.VITE_ANTHROPIC_API_KEY || import.meta.env?.ANTHROPIC_API_KEY || null)
@@ -11969,6 +11971,38 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig }
   const saveMessages = (msgs) => {
     setMessages(msgs)
     try { localStorage.setItem(TRAINER_STORAGE_KEY, JSON.stringify(msgs.slice(-60))) } catch {}
+  }
+
+  const detectWriteIntent = (userText, assistantText) => {
+    const combined = (userText + " " + assistantText).toLowerCase()
+    // MTP score detection — user says something like "mtp score 1" or "toe score 2 today"
+    const mtpForwardMatch = userText.match(/\b(mtp|toe|joint)\b.*\bscore[:\s]*([0-3])\b/i)
+    const mtpReverseMatch = userText.match(/\bscore[:\s]*([0-3])\b.*\b(mtp|toe|joint)\b/i)
+    const mtpScoreText = mtpForwardMatch?.[2] || mtpReverseMatch?.[1]
+    if (mtpScoreText) {
+      const score = parseInt(mtpScoreText)
+      if (Number.isFinite(score) && score >= 0 && score <= 3) {
+        const labels = ["zero pain", "mild discomfort", "moderate pain", "severe pain"]
+        return {
+          type: "mtp",
+          payload: { score },
+          preview: `Log MTP check-in: score ${score}/3 (${labels[score]}) for today. Type Y to confirm or anything else to cancel.`
+        }
+      }
+    }
+    // Weight detection — user says something like "158.2 this morning" or "weight 159"
+    const weightMatch = userText.match(/\b(\d{2,3}(?:\.\d{1,2})?)\s*(?:lb|lbs|pounds?)?\b/i)
+    if (weightMatch && (combined.includes("weight") || combined.includes("weigh") || combined.includes("scale") || combined.includes("morning") || combined.includes("fasted"))) {
+      const weight = parseFloat(weightMatch[1])
+      if (weight >= 100 && weight <= 400) {
+        return {
+          type: "weight",
+          payload: { weight_lb: weight },
+          preview: `Log body weight: ${weight} lb for today. Type Y to confirm or anything else to cancel.`
+        }
+      }
+    }
+    return null
   }
 
   const sendMessage = async () => {
@@ -12040,6 +12074,9 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig }
       }
       const finalMsgs = updatedMsgs.concat({ role: "assistant", content: assistantText, ts: Date.now() })
       saveMessages(finalMsgs)
+      // Detect write intent from user message + assistant response
+      const intent = detectWriteIntent(text, assistantText)
+      if (intent) setPendingAction(intent)
     } catch (err) {
       saveMessages([...updatedMsgs, { role: "assistant", content: `Network error: ${err.message}`, ts: Date.now() }])
     } finally {
@@ -12047,8 +12084,36 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig }
     }
   }
 
+  const handleConfirmAction = async (userInput) => {
+    if (!pendingAction) return
+    const confirmed = userInput.trim().toUpperCase() === "Y"
+    if (confirmed) {
+      if (pendingAction.type === "mtp" && onLogMtp) {
+        await onLogMtp(pendingAction.payload.score)
+        const confirmMsg = { role: "assistant", content: `MTP score ${pendingAction.payload.score} logged.`, ts: Date.now() }
+        saveMessages([...messages, confirmMsg])
+      } else if (pendingAction.type === "weight" && onLogWeight) {
+        await onLogWeight(pendingAction.payload.weight_lb)
+        const confirmMsg = { role: "assistant", content: `Body weight ${pendingAction.payload.weight_lb} lb logged.`, ts: Date.now() }
+        saveMessages([...messages, confirmMsg])
+      }
+    } else {
+      const cancelMsg = { role: "assistant", content: "Cancelled. Nothing was written.", ts: Date.now() }
+      saveMessages([...messages, cancelMsg])
+    }
+    setPendingAction(null)
+  }
+
   const handleKey = (e) => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage() }
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault()
+      if (pendingAction) {
+        handleConfirmAction(inputValue)
+        setInputValue("")
+      } else {
+        sendMessage()
+      }
+    }
   }
 
   const clearChat = () => {
@@ -12144,6 +12209,21 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig }
             <div ref={messagesEndRef} />
           </div>
 
+          {pendingAction && (
+            <div style={{
+              margin: "0 10px 6px",
+              padding: "8px 12px",
+              background: "rgba(245,158,11,0.12)",
+              border: "1px solid rgba(245,158,11,0.35)",
+              borderRadius: 8,
+              fontSize: 12,
+              color: "#fcd34d",
+              lineHeight: 1.5
+            }}>
+              {pendingAction.preview}
+            </div>
+          )}
+
           <div style={{ padding: "8px 10px 10px", borderTop: "1px solid rgba(56,189,248,0.1)", flexShrink: 0, display: "flex", gap: 7, alignItems: "flex-end" }}>
             <textarea
               ref={inputRef}
@@ -12159,7 +12239,7 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig }
               }}
             />
             <button
-              onClick={sendMessage}
+              onClick={() => { if (pendingAction) { handleConfirmAction(inputValue); setInputValue("") } else { sendMessage() } }}
               disabled={isLoading || !inputValue.trim()}
               style={{
                 width: 34, height: 34, borderRadius: "50%", border: "none", cursor: isLoading || !inputValue.trim() ? "default" : "pointer",
@@ -16260,6 +16340,94 @@ const overviewExplainButton = (key) => (
     {isOverviewExplainOpen(key) ? "×" : "i"}
   </button>
 )
+  const trainerLogMtp = React.useCallback(async (score) => {
+    const nowIso = new Date().toISOString()
+    const MTP_KEY = "jointStatus"
+    const MTP_LOCATION = "Toe L"
+    const existingMtp = ocItems.find(i => i.key === MTP_KEY && (i.location || "").toLowerCase().includes("toe"))
+    let updated
+    if (score === 0) {
+      // Explicit zero check — same shape as logMtpZeroCheck in TabOperationalCapacity
+      const item = {
+        id: Date.now(),
+        key: MTP_KEY,
+        location: MTP_LOCATION,
+        label: `Joint — ${MTP_LOCATION}`,
+        currentScore: 0,
+        initialScore: 0,
+        startDate: nowIso,
+        halfLifeHours: LIFT_CONFIG.ocHalfLifeOverrides?.["MTP joint"] || 840,
+        episodeCount: existingMtp ? (existingMtp.episodeCount || 0) : 0,
+        lastResolvedDate: nowIso,
+        chronicity: existingMtp?.chronicity || "acute",
+        eventType: "explicit_zero_check"
+      }
+      updated = [item, ...ocItems.filter(i => !(i.key === MTP_KEY && (i.location || "").toLowerCase().includes("toe")))]
+    } else {
+      // Non-zero score — add or update existing MTP item
+      if (existingMtp) {
+        updated = ocItems.map(i =>
+          i.key === MTP_KEY && (i.location || "").toLowerCase().includes("toe")
+            ? { ...i, currentScore: score, startDate: nowIso }
+            : i
+        )
+      } else {
+        const item = {
+          id: Date.now(),
+          key: MTP_KEY,
+          location: MTP_LOCATION,
+          label: `Joint — ${MTP_LOCATION}`,
+          currentScore: score,
+          initialScore: score,
+          startDate: nowIso,
+          halfLifeHours: LIFT_CONFIG.ocHalfLifeOverrides?.["MTP joint"] || 840,
+          episodeCount: 0,
+          lastResolvedDate: null,
+          chronicity: "acute"
+        }
+        updated = [item, ...ocItems]
+      }
+    }
+    setOcItems(updated)
+    try {
+      await store.set("oc-items", updated)
+      if (supabase && session?.user?.id) {
+        await supabase.from("user_kv").upsert(
+          { user_id: session.user.id, key: "oc-items", value: updated, updated_at: nowIso },
+          { onConflict: "user_id,key" }
+        )
+      }
+    } catch (e) {
+      console.warn("[Trainer] MTP save error", e)
+    }
+  }, [ocItems, setOcItems, session, supabase, LIFT_CONFIG])
+
+  const trainerLogWeight = React.useCallback(async (weight_lb) => {
+    const nowIso = new Date().toISOString()
+    const today = nowIso.slice(0, 10)
+    const entry = {
+      biometric_id: `trainer_weight_${Date.now()}`,
+      source: "trainer",
+      timestamp: nowIso,
+      date: today,
+      weight_lb,
+      body_fat_pct: null,
+      bmi: null
+    }
+    const existing = JSON.parse(localStorage.getItem("lift_biometric_records") || "[]")
+    const merged = [...existing.filter(r => r.date !== today || r.source !== "trainer"), entry]
+      .sort((a, b) => String(a.timestamp || "").localeCompare(String(b.timestamp || "")))
+    localStorage.setItem("lift_biometric_records", JSON.stringify(merged))
+    setBiometricRecords(merged)
+    try {
+      if (supabase && session?.user?.id) {
+        await upsertBiometricRecords(supabase, session.user.id, merged)
+      }
+    } catch (e) {
+      console.warn("[Trainer] Weight save error", e)
+    }
+  }, [setBiometricRecords, session, supabase])
+
 const trainerSessions60 = React.useMemo(() => {
   const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 60); cutoff.setHours(0,0,0,0)
   return (canonicalSessions || [])
@@ -18901,6 +19069,8 @@ return (
     tsbData={tsbV2Panel}
     raceCalendar={RACE_CALENDAR}
     liftConfig={LIFT_CONFIG}
+    onLogMtp={trainerLogMtp}
+    onLogWeight={trainerLogWeight}
   />
   </>
   )
