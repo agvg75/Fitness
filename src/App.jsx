@@ -16575,6 +16575,11 @@ const overviewExplainButton = (key) => (
     try {
       if (supabase && session?.user?.id) {
         await upsertBiometricRecords(supabase, session.user.id, merged)
+        // Also write to user_kv so cross-device hydration picks it up
+        await supabase.from("user_kv").upsert(
+          { user_id: session.user.id, key: "lift_biometric_records", value: merged, updated_at: new Date().toISOString() },
+          { onConflict: "user_id,key" }
+        )
       }
     } catch (e) {
       console.warn("[Trainer] Weight save error", e)
