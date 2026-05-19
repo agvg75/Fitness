@@ -6897,15 +6897,43 @@ const last28 = workouts.filter(w => new Date(w.dateTime || w.date || w.start_dat
     strengthSessionsWeekly: summary.strengthSessions28 / 4
   }
 }
-function linearSlope(data, getValue) {
-  // Legacy: kept for any callers that don't need weighting.
-  // Prefer weightedLinearSlope for forecast use.
+function linearSlope(data, getValue, halfLifeDays = 14) {
+  // Weighted least-squares regression with exponential recency weighting.
+  // Recent data points are weighted more heavily (half-life = 14 days by default).
+  // Falls back gracefully when data is sparse.
   if (!data || data.length < 2) return 0
-  const first = data[0]
-  const last = data[data.length - 1]
-  const days = (new Date(last.date) - new Date(first.date)) / 86400000
-  if (days === 0) return 0
-  return (getValue(last) - getValue(first)) / days
+
+  const lastDate = new Date(data[data.length - 1].date)
+
+  let sumW = 0, sumWx = 0, sumWy = 0, sumWxx = 0, sumWxy = 0
+
+  data.forEach((d, i) => {
+    const y = getValue(d)
+    if (!Number.isFinite(y)) return
+    const daysAgo = (lastDate - new Date(d.date)) / 86400000
+    const w = Math.exp(-daysAgo / halfLifeDays)
+    const x = i  // ordinal index — consistent spacing assumption
+    sumW   += w
+    sumWx  += w * x
+    sumWy  += w * y
+    sumWxx += w * x * x
+    sumWxy += w * x * y
+  })
+
+  if (sumW === 0) return 0
+
+  const denom = sumW * sumWxx - sumWx * sumWx
+  if (Math.abs(denom) < 1e-10) return 0
+
+  const slopePerIndex = (sumW * sumWxy - sumWx * sumWy) / denom
+
+  // Convert slope-per-index to slope-per-day.
+  // Estimate days-per-index from the actual date span.
+  const firstDate = new Date(data[0].date)
+  const totalDays = (lastDate - firstDate) / 86400000
+  const daysPerIndex = data.length > 1 ? totalDays / (data.length - 1) : 1
+
+  return daysPerIndex > 0 ? slopePerIndex / daysPerIndex : 0
 }
 
 function weightedLinearSlope(data, getValue, halfLifeDays = 21) {
@@ -7013,10 +7041,10 @@ function buildBodyForecast({
 
   const currentWeight = weightRows[weightRows.length - 1]._weight
 
-  // Weighted regression over last 90 days; half-life 21 days so recent
-  // weeks drive the trend while older data provides stabilizing context.
+  // Weighted regression over last 90 days; recent weeks drive the trend while
+  // older data provides stabilizing context.
   const longWeights = weightRows.slice(-90)
-  const observedSlope = weightedLinearSlope(longWeights, d => d._weight, 21)
+  const observedSlope = linearSlope(longWeights, d => d._weight)
 
   const estimatedMaintenance = estimateMaintenanceCalories({
     currentWeight,
@@ -7042,16 +7070,22 @@ function buildBodyForecast({
       ? (avgLoggedCalories - estimatedMaintenance) / 3500
       : observedSlope
 
-  // Give observed trend 60% weight when calorie logging coverage is high,
-  // since the weighted regression is already well-calibrated from actual data.
-  // Give it 85% weight when logging coverage is low (trust the scale more).
   let blendedSlope =
     loggingCoverage >= 0.5
-      ? observedSlope * 0.60 + energyBalanceSlope * 0.40
-      : observedSlope * 0.85 + energyBalanceSlope * 0.15
+      ? observedSlope * 0.35 + energyBalanceSlope * 0.65
+      : observedSlope
 
   if (!Number.isFinite(blendedSlope)) blendedSlope = observedSlope
   if (!Number.isFinite(blendedSlope)) blendedSlope = 0
+
+  // Anchor to configured fat loss rate when observed slope is near zero or positive.
+  // GLP-1 water retention can mask real fat loss — the configured rate is more reliable.
+  // configured rate is in lb/month; convert to lb/day (negative = loss).
+  const configuredDailyLoss = -((1.7) / 30.44)
+  // Blend: 55% observed, 45% configured. If observed is positive (gaining), weight configured more.
+  const observedWeight = Number.isFinite(blendedSlope) && blendedSlope < 0 ? 0.55 : 0.25
+  const configuredWeight = 1 - observedWeight
+  blendedSlope = blendedSlope * observedWeight + configuredDailyLoss * configuredWeight
 
   const distanceTo150 = currentWeight - phase1TargetWeight
   const distanceTo145 = currentWeight - finalTargetWeight
@@ -11874,9 +11908,16 @@ Only include options that actually apply. Minimum 2, maximum 4. Always use singl
 
 Current session data, active injuries, training load metrics, and upcoming races are provided below in the user context for each message. Use them. Do not make up values that are not provided.
 
-WRITE CAPABILITIES — you have two direct write actions available:
-1. MTP score log: when the user reports a toe/MTP score (0–3), acknowledge it and confirm you are logging it. Say "Logging MTP score X — confirm with Y." Do not say you cannot log data.
-2. Body weight log: when the user reports a scale weight (e.g. "158.2 this morning"), acknowledge it and confirm you are logging it. Say "Logging X lb — confirm with Y." Do not say you cannot log data.
+WRITE CAPABILITIES — you have three direct write actions available:
+1. MTP score log: when the user reports a toe/MTP score (0–3), acknowledge it and say "Logging MTP score X — confirm with Y." Do not say you cannot log data.
+2. Body weight log: when the user reports a scale weight (e.g. "158.2 this morning"), say "Logging X lb — confirm with Y." Do not say you cannot log data.
+3. Exercise log: when the user says "add X to today" or asks to log an exercise, say "Adding X to today's schedule — confirm with Y." Do not say you cannot log data.
+
+SUBSTITUTION PROTOCOL — when the user reports MTP score 2+ or describes a physical limitation during a session:
+- Immediately propose a specific substitute exercise or modality that avoids the affected region.
+- Apply these rules: rowing machine is incompatible with active MTP protocol; score 2 = modify but continue; score 3 = terminate session.
+- Offer to add the substitute to today's schedule. Say "I can add [substitute] to today — confirm with Y."
+- Keep the response under 4 sentences before the menu.
 
 For all other data writes, tell the user you cannot do that yet.`
 
@@ -11949,7 +11990,7 @@ const FingerprintIcon = ({ size = 38 }) => {
   )
 }
 
-function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, onLogMtp, onLogWeight }) {
+function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, onLogMtp, onLogWeight, onLogExercise }) {
   const [isOpen, setIsOpen] = React.useState(false)
   const [messages, setMessages] = React.useState(() => {
     try { return JSON.parse(localStorage.getItem(TRAINER_STORAGE_KEY) || "[]") } catch { return [] }
@@ -11959,7 +12000,7 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
   const messagesEndRef = React.useRef(null)
   const inputRef = React.useRef(null)
   const [pendingAction, setPendingAction] = React.useState(null)
-  // pendingAction shape: { type: "mtp"|"weight", payload: object, preview: string } | null
+  // pendingAction shape: { type: "mtp"|"weight"|"exercise", payload: object, preview: string } | null
   const apiKey = typeof ANTHROPIC_API_KEY !== "undefined"
     ? ANTHROPIC_API_KEY
     : (import.meta.env?.VITE_ANTHROPIC_API_KEY || import.meta.env?.ANTHROPIC_API_KEY || null)
@@ -12005,6 +12046,19 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
           type: "weight",
           payload: { weight_lb: weight },
           preview: `Log body weight: ${weight} lb for today. Type Y to confirm or anything else to cancel.`
+        }
+      }
+    }
+    // Exercise add detection — "add X to today" or "log X as an exercise"
+    const exerciseMatch = userText.match(/\b(?:add|log|include|put)\s+(.+?)\s+(?:to\s+(?:today|my\s+schedule)|as\s+an?\s+exercise)/i)
+    if (exerciseMatch) {
+      const exerciseName = exerciseMatch[1].trim()
+      if (exerciseName.length >= 3 && exerciseName.length <= 60) {
+        const day = DAY_KEYS_BY_JS_DAY[new Date().getDay()]
+        return {
+          type: "exercise",
+          payload: { name: exerciseName, day },
+          preview: `Add "${exerciseName}" to today's (${day}) custom exercises. Type Y to confirm or anything else to cancel.`
         }
       }
     }
@@ -12125,6 +12179,12 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
       } else if (pendingAction.type === "weight" && onLogWeight) {
         await onLogWeight(pendingAction.payload.weight_lb)
         const confirmMsg = { role: "assistant", content: `Body weight ${pendingAction.payload.weight_lb} lb logged.`, ts: Date.now() }
+        saveMessages([...messages, confirmMsg])
+      } else if (pendingAction.type === "exercise" && onLogExercise) {
+        await onLogExercise(pendingAction.payload.name, pendingAction.payload.day)
+        const confirmMsg = { role: "assistant", content: `"${pendingAction.payload.name}" added to today's (${pendingAction.payload.day}) schedule.
+
+── A) add sets/reps detail  R) suggest a similar exercise ──`, ts: Date.now() }
         saveMessages([...messages, confirmMsg])
       }
     } else {
@@ -16155,7 +16215,20 @@ const bodyWeightForecastChart = useMemo(() => {
     }
   }
 
+  // Bridge point: last known smoothed weight plotted at today so the
+  // projected line starts exactly where the actual line ends.
+  const lastActual = actuals.length ? actuals[actuals.length - 1] : null
+  const bridgeWeight = lastActual?.actual ?? bodyForecast.currentWeight
+  const bridge = {
+    label: fmtShortDate(today.toISOString().slice(0, 10)),
+    actual: null,
+    forecast: Number(bridgeWeight.toFixed(1)),
+    phase1: bodyForecast.phase1TargetWeight,
+    target: bodyForecast.finalTargetWeight
+  }
+
   const projected = [
+    bridge,
     addFuture(30,  bodyForecast.weight1m),
     addFuture(90,  bodyForecast.weight3m),
     addFuture(180, bodyForecast.weight6m),
@@ -16457,6 +16530,31 @@ const overviewExplainButton = (key) => (
       console.warn("[Trainer] Weight save error", e)
     }
   }, [setBiometricRecords, session, supabase])
+
+  const trainerLogExercise = React.useCallback(async (exerciseName, day) => {
+    const newEx = {
+      id: `custom_${Date.now()}`,
+      n: exerciseName.trim(),
+      sets: "3",
+      reps: "10",
+      load: "",
+      notes: "Added by LIFT Trainer"
+    }
+    try {
+      const existing = await store.get("wt-custom-exercises") || {}
+      const dayExercises = Array.isArray(existing[day]) ? existing[day] : []
+      const updated = { ...existing, [day]: [...dayExercises, newEx] }
+      await store.set("wt-custom-exercises", updated)
+      if (supabase && session?.user?.id) {
+        await supabase.from("user_kv").upsert(
+          { user_id: session.user.id, key: "wt-custom-exercises", value: updated, updated_at: new Date().toISOString() },
+          { onConflict: "user_id,key" }
+        )
+      }
+    } catch (e) {
+      console.warn("[Trainer] Exercise log error", e)
+    }
+  }, [session, supabase])
 
 const trainerSessions60 = React.useMemo(() => {
   const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 60); cutoff.setHours(0,0,0,0)
@@ -19101,6 +19199,7 @@ return (
     liftConfig={LIFT_CONFIG}
     onLogMtp={trainerLogMtp}
     onLogWeight={trainerLogWeight}
+    onLogExercise={trainerLogExercise}
   />
   </>
   )
