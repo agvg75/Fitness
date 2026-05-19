@@ -15634,18 +15634,22 @@ const readinessProjectionData = useMemo(() => {
     0,
     100
   )
-  const monthlyGainBase =
+  // Long-term structural gain rate — not affected by temporary OC state.
+  // This is what the 6–12 month projection should reflect once the MTP resolves.
+  const monthlyGainLongTerm = clampNumber(
+    ((adaptiveTrainingState.complianceScores?.running || 0.6) * 4.5) +
+    ((adaptiveTrainingState.absorptionScores?.running || 0.65) * 3.5) +
+    ((adaptiveTrainingState.complianceScores?.tendon || 0.5) * 2.5) -
+    (adaptiveTrainingState.maxTendonRisk > 1 ? (adaptiveTrainingState.maxTendonRisk - 1) * 5 : 0) -
+    (latestWeek.modifiers?.acwr > 1.3 ? 2.5 : 0),
+    -4,
+    6
+  )
+  // Near-term adjustment reflects current OC gate — blends out over ~2.5 months.
+  const monthlyGainNearTerm =
     ocProgressionReadiness === "deload" ? -3.5 :
     ocProgressionReadiness === "hold" ? -0.75 :
-    clampNumber(
-      ((adaptiveTrainingState.complianceScores?.running || 0.6) * 4.5) +
-      ((adaptiveTrainingState.absorptionScores?.running || 0.65) * 3.5) +
-      ((adaptiveTrainingState.complianceScores?.tendon || 0.5) * 2.5) -
-      (adaptiveTrainingState.maxTendonRisk > 1 ? (adaptiveTrainingState.maxTendonRisk - 1) * 5 : 0) -
-      (latestWeek.modifiers?.acwr > 1.3 ? 2.5 : 0),
-      -4,
-      6
-    )
+    monthlyGainLongTerm
 
   const series = []
   for (let month = 0; month <= 12; month += 1) {
@@ -15669,7 +15673,11 @@ const readinessProjectionData = useMemo(() => {
         projectedLongestRunMiles: projectedTenKLongestMiles,
       })
       : null
-    const monthGain = monthlyGainBase * (1 - Math.exp(-month / 3.5)) * 4
+    // Blend from near-term (current OC state) toward long-term (structural) over 2.5 months.
+    // Deload/hold is a temporary signal; it should not suppress the 12-month projection permanently.
+    const blendFactor = month <= 1 ? 1 : Math.max(0, 1 - (month - 1) / 2.5)
+    const blendedMonthlyGain = monthlyGainNearTerm * blendFactor + monthlyGainLongTerm * (1 - blendFactor)
+    const monthGain = blendedMonthlyGain * (1 - Math.exp(-month / 3.5)) * 4
     const baseReadiness = clampNumber(runSpecificNow + monthGain, 0, 100)
     const lrBonus = plannedLR != null ? Math.min(18, plannedLR * 1.5) : 0
     const tendonCap = adaptiveTrainingState.capitals?.tendon || 0
