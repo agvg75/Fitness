@@ -7588,7 +7588,9 @@ function buildOcConstraintState({ ocItems, sleepRecords, healthFitDaily, compute
     tsbPenalty: readiness.tsbPenalty,
     runRamp: Number.isFinite(runRamp) ? Number(runRamp.toFixed(2)) : null,
     crossRamp: Number.isFinite(crossRamp) ? Number(crossRamp.toFixed(2)) : null,
-    longestRunRamp: Number.isFinite(longestRunRamp) ? Number(longestRunRamp.toFixed(2)) : null
+    longestRunRamp: Number.isFinite(longestRunRamp) ? Number(longestRunRamp.toFixed(2)) : null,
+    upperStrengthTsb: tsbV2Panel?.currentRow?.upperStrengthTsb ?? null,
+    lowerStrengthTsb: tsbV2Panel?.currentRow?.lowerStrengthTsb ?? null,
   }
 
   const severity = { progress: 0, hold: 1, deload: 2 }
@@ -15424,7 +15426,7 @@ const tsbV2Panel = useMemo(() => {
   const dayKeys = []
   for (let d = new Date(start); d <= now; d.setDate(d.getDate() + 1))
     dayKeys.push(d.toISOString().slice(0,10))
-  const mkL = () => ({ overall:0, running:0, cycling:0, swimming:0, strength:0, anyWorkout:false })
+  const mkL = () => ({ overall:0, running:0, cycling:0, swimming:0, strength:0, upperStrength:0, lowerStrength:0, anyWorkout:false })
   const dailyLoads = Object.fromEntries(dayKeys.map(k => [k, mkL()]))
   const wkts = Array.isArray(operationalWorkouts) ? operationalWorkouts : []
   function isPlausibleSession(w) {
@@ -15494,16 +15496,30 @@ const tsbV2Panel = useMemo(() => {
     if (cat === 'Running' || cat === 'Walking') dailyLoads[date].running += load
     if (cat === 'Cycling') dailyLoads[date].cycling += load
     if (cat === 'Swimming') dailyLoads[date].swimming += load
-    if (cat === 'Strength') dailyLoads[date].strength += load
+    if (cat === 'Strength') {
+      dailyLoads[date].strength += load
+      // Classify upper vs lower by day-of-week (exercise lists not available on operationalWorkouts)
+      // Mon = Chest & Arms (upper), Thu = Back & Arms (upper)
+      // Tue = Legs (lower), Sat = Hip/Legs (lower)
+      // Fri = Legs + Chest (mixed, split evenly)
+      // All other days default to overall strength only
+      const dow = new Date(date + 'T12:00:00').getDay() // 0=Sun,1=Mon,2=Tue,4=Thu,5=Fri,6=Sat
+      if (dow === 1 || dow === 4) dailyLoads[date].upperStrength += load          // Mon, Thu
+      else if (dow === 2 || dow === 6) dailyLoads[date].lowerStrength += load     // Tue, Sat
+      else if (dow === 5) {                                                         // Fri mixed
+        dailyLoads[date].upperStrength += load * 0.5
+        dailyLoads[date].lowerStrength += load * 0.5
+      }
+    }
   })
-  const acute = {overall:0,running:0,cycling:0,swimming:0,strength:0}
-  const chronic = {overall:0,running:0,cycling:0,swimming:0,strength:0}
+  const acute = {overall:0,running:0,cycling:0,swimming:0,strength:0,upperStrength:0,lowerStrength:0}
+  const chronic = {overall:0,running:0,cycling:0,swimming:0,strength:0,upperStrength:0,lowerStrength:0}
   const aA = 1 - Math.exp(-1/tau2), aC = 1 - Math.exp(-1/tau1)
 
   const allRows = dayKeys.map(date => {
     const load = dailyLoads[date]
     const row = { date }
-    ;['overall','running','cycling','swimming','strength'].forEach(k => {
+    ;['overall','running','cycling','swimming','strength','upperStrength','lowerStrength'].forEach(k => {
       acute[k] += aA * (load[k] - acute[k])
       chronic[k] += aC * (load[k] - chronic[k])
       row[`${k}Tsb`] = Number((chronic[k] - acute[k]).toFixed(2))
@@ -17448,6 +17464,8 @@ return (
               <Line type="monotone" dataKey="cyclingTsb" name="Cycling TSB" stroke="#22d3ee" strokeWidth={modalityStrokeWidth} strokeOpacity={isLongWindow ? 0.78 : 1} dot={false} connectNulls isAnimationActive={false} />
               <Line type="monotone" dataKey="swimmingTsb" name="Swimming TSB" stroke="#a78bfa" strokeWidth={modalityStrokeWidth} strokeOpacity={isLongWindow ? 0.78 : 1} dot={false} connectNulls isAnimationActive={false} />
               <Line type="monotone" dataKey="strengthTsb" name="Strength TSB" stroke="#ffd166" strokeWidth={modalityStrokeWidth} strokeOpacity={isLongWindow ? 0.78 : 1} dot={false} connectNulls strokeDasharray="4 2" isAnimationActive={false} />
+              <Line type="monotone" dataKey="upperStrengthTsb" name="Upper Strength TSB" stroke="#f97316" strokeWidth={1.2} strokeOpacity={isLongWindow ? 0.6 : 0.75} dot={false} connectNulls strokeDasharray="2 3" isAnimationActive={false} />
+              <Line type="monotone" dataKey="lowerStrengthTsb" name="Lower Strength TSB" stroke="#4ade80" strokeWidth={1.2} strokeOpacity={isLongWindow ? 0.6 : 0.75} dot={false} connectNulls strokeDasharray="2 3" isAnimationActive={false} />
               <Line
                 yAxisId="acwr"
                 type="monotone"
@@ -17467,7 +17485,9 @@ return (
               ["Run", panel.currentRow?.runningTsb],
               ["Cycle", panel.currentRow?.cyclingTsb],
               ["Swim", panel.currentRow?.swimmingTsb],
-              ["Strength", panel.currentRow?.strengthTsb]
+              ["Strength", panel.currentRow?.strengthTsb],
+              ["Str·Upper", panel.currentRow?.upperStrengthTsb],
+              ["Str·Lower", panel.currentRow?.lowerStrengthTsb]
             ].map(([label, value]) => (
               <div key={label} style={{ display:"flex", alignItems:"center", gap:4 }}>
                 <span>{label}:</span>
