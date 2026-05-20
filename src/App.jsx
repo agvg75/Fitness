@@ -11103,9 +11103,22 @@ Return ONLY a JSON object with this exact structure, no explanation:
               JSON.parse(localStorage.getItem("lift_biometric_records") || "[]")
             )
           : JSON.parse(localStorage.getItem("lift_biometric_records") || "[]")
+        const bioKey = r => r.biometric_id || r.id || `${r.source || "bio"}_${r.timestamp || r.date}`
         const byKey = {}
-        ;(Array.isArray(existing) ? existing : []).forEach(r => { byKey[r.biometric_id || r.id || `${r.source || "bio"}_${r.timestamp || r.date}`] = r })
-        biometricResult.forEach(r => { byKey[r.biometric_id || r.id || `${r.source || "bio"}_${r.timestamp || r.date}`] = r })
+        ;(Array.isArray(existing) ? existing : []).forEach(r => { byKey[bioKey(r)] = r })
+        biometricResult.forEach(r => {
+          const k = bioKey(r)
+          const ex = byKey[k]
+          // Source priority: a trainer-entered record for this key is never overwritten by an import
+          if (ex && ex.source === "trainer" && r.source !== "trainer") return
+          // Date-level protection: if any existing record for this date was trainer-entered, skip import record
+          const rDate = (r.timestamp || r.date || "").slice(0, 10)
+          const trainerHoldsDate = rDate && Object.values(byKey).some(
+            e => (e.timestamp || e.date || "").slice(0, 10) === rDate && e.source === "trainer"
+          )
+          if (trainerHoldsDate && r.source !== "trainer") return
+          byKey[k] = r
+        })
         const merged = Object.values(byKey).sort((a, b) => String(a.timestamp || a.date || "").localeCompare(String(b.timestamp || b.date || "")))
         localStorage.setItem("lift_biometric_records", JSON.stringify(merged))
         if (setBiometricRecords) setBiometricRecords(merged)
@@ -13776,9 +13789,17 @@ useEffect(() => {
       }
       if (remoteBiometricRecords.length) {
         setBiometricRecords(prev => {
+          // Key by biometric_id || id so trainer entries (which use biometric_id) are never dropped
+          const bioKey = r => r.biometric_id || r.id || `${r.source || "bio"}_${r.timestamp || r.date}`
           const byId = {}
-          ;(Array.isArray(prev) ? prev : []).forEach(r => { if (r.id) byId[r.id] = r })
-          remoteBiometricRecords.forEach(r => { if (r.id) byId[r.id] = r })
+          ;(Array.isArray(prev) ? prev : []).forEach(r => { byId[bioKey(r)] = r })
+          remoteBiometricRecords.forEach(r => {
+            const k = bioKey(r)
+            const existing = byId[k]
+            // Source priority: never let a non-trainer entry overwrite a trainer entry for the same key
+            if (existing && existing.source === "trainer" && r.source !== "trainer") return
+            byId[k] = r
+          })
           return Object.values(byId).sort((a, b) =>
             String(a.measured_date || a.date || "").localeCompare(
               String(b.measured_date || b.date || "")
@@ -16690,6 +16711,7 @@ const overviewExplainButton = (key) => (
     const today = nowIso.slice(0, 10)
     const entry = {
       biometric_id: `trainer_weight_${Date.now()}`,
+      id: `trainer_weight_${Date.now()}`,
       source: "trainer",
       timestamp: nowIso,
       date: today,
