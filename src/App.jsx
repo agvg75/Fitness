@@ -11982,11 +11982,12 @@ Respond with exactly one paragraph (4 to 6 sentences) covering: (1) what today's
 
 Current session data, active injuries, training load metrics, and upcoming races are provided below in the user context for each message. Use them. Do not make up values that are not provided.
 
-WRITE CAPABILITIES — you have four direct write actions available:
+WRITE CAPABILITIES — you have five direct write actions available:
 1. MTP score log: when the user reports a toe/MTP score (0–3), say "Logging MTP score X — confirm with Y." Do not say you cannot log data.
 2. Body weight log: when the user reports a scale weight (e.g. "158.2 this morning"), say "Logging X lb — confirm with Y." Do not say you cannot log data.
 3. Exercise log: when the user says "add X to today" or asks to log an exercise, say "Adding X to today's schedule — confirm with Y." Do not say you cannot log data.
 4. Run log: when the user reports completing a run (distance, duration, MTP score, notes), acknowledge all the details and say "Logging your run — confirm with Y." If an MTP score is included, it will also be logged as a check-in. Do not say you cannot log data.
+5. Meal log: when the user describes what they ate for any meal (breakfast, lunch, snack, or dinner — including past meals like "last night's dinner" or "Tuesday's dinner"), respond with exactly one sentence acknowledging the meal type and say "Type Y and I will calculate the nutrition and log it." Do NOT write out a nutrition breakdown yourself. Do NOT say you cannot log meals. The nutrition calculation happens automatically after Y is confirmed — your job is only to prompt for confirmation. If the user says "log the meal I described", "log what I entered", "yes log it", or similar, treat that as Y and proceed. Do not say you cannot log data.
 
 SUBSTITUTION PROTOCOL — when the user reports MTP score 2+ or describes a physical limitation during a session:
 - Immediately propose a specific substitute exercise or modality that avoids the affected region.
@@ -12313,6 +12314,30 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
           type: "meal_lookup",
           payload: { description: userText, mealType },
           preview: `Looking up nutrition for your ${mealType}...`
+        }
+      }
+    }
+
+    // Re-trigger: user says "log the meal I described", "log what I entered", "yes log it", etc.
+    // Scan recent messages for the last meal description and re-trigger lookup
+    const retriggerMatch = /\b(log|save|record|enter)\b.{0,30}\b(meal|dinner|lunch|breakfast|snack|ate|described|entered|said)\b/i.test(userText)
+      || /\byes.*log\b/i.test(userText)
+      || /\blog.*yes\b/i.test(userText)
+    if (retriggerMatch) {
+      // Find the last user message that described food
+      const foodDescriptionPattern = /\b(had|ate|for dinner|for lunch|for breakfast|pork|chicken|beef|pasta|rice|potato|bread|beer|wine|salad|soup|egg|fish|burger|pizza|apple|orange|banana)\b/i
+      const recentFoodMsg = [...messages].reverse().find(m =>
+        m.role === "user" && foodDescriptionPattern.test(m.content) && m.content.length > 20
+      )
+      if (recentFoodMsg) {
+        const prevMealTypeMatch = recentFoodMsg.content.match(/\b(breakfast|lunch|dinner|supper|snack)\b/i)
+        const prevMealType = prevMealTypeMatch
+          ? prevMealTypeMatch[1].toLowerCase().replace("supper", "dinner")
+          : "dinner"
+        return {
+          type: "meal_lookup",
+          payload: { description: recentFoodMsg.content, mealType: prevMealType },
+          preview: `Looking up nutrition for your ${prevMealType} from earlier...`
         }
       }
     }
