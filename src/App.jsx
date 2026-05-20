@@ -10485,11 +10485,17 @@ function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily,
 
   const handleExportReport = () => {
     generateTrainerReport({
-      healthFitDaily: healthFitDaily || [],
-      biometricRecords: biometricRecords || [],
-      dexaData: typeof DEXA_REGIONAL !== "undefined" ? DEXA_REGIONAL : [],
-      ocItems: ocItems || [],
-      snapshotDate: new Date().toISOString().slice(0, 10)
+      healthFitDaily:      healthFitDaily      || [],
+      biometricRecords:    biometricRecords    || [],
+      dexa:                dexa                || [],
+      ocItems:             ocItems             || [],
+      sleepRecords:        sleepRecords        || [],
+      canonicalSessions:   unifiedCanonicalSessions || canonicalSessions || [],
+      mealRecords:         mealRecords         || [],
+      schedLog:            schedLog            || [],
+      liftConfig:          LIFT_CONFIG,
+      tsbV2Panel:          tsbV2Panel          || null,
+      snapshotDate:        new Date().toISOString().slice(0, 10)
     })
   }
 
