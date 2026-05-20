@@ -12092,6 +12092,7 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
   const [isLoading, setIsLoading] = React.useState(false)
   const messagesEndRef = React.useRef(null)
   const inputRef = React.useRef(null)
+  const imageInputRef = React.useRef(null)
   const [pendingAction, setPendingAction] = React.useState(null)
   // pendingAction shape: { type: "mtp"|"weight"|"exercise"|"run"|"meal", payload: object, preview: string } | null
   const apiKey = typeof ANTHROPIC_API_KEY !== "undefined"
@@ -12150,9 +12151,23 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
   }, [isOpen])
 
   // ── Nutrition lookup via API ───────────────────────────────────────────────
-  const fetchMealNutrition = React.useCallback(async (description) => {
+  const fetchMealNutrition = React.useCallback(async (description, imageBase64 = null, imageMediaType = "image/jpeg") => {
     if (!apiKey) return []
     try {
+      // Build user message content — image first if provided, then text prompt
+      const userContent = []
+      if (imageBase64) {
+        userContent.push({
+          type: "image",
+          source: { type: "base64", media_type: imageMediaType, data: imageBase64 }
+        })
+      }
+      userContent.push({
+        type: "text",
+        text: imageBase64
+          ? `This is a photo of my meal. Identify every food item visible and estimate realistic portion sizes based on the plate. ${description ? `Additional context: ${description}.` : ""} Return nutrition breakdown.`
+          : `Estimate nutrition breakdown for this meal: ${description}`
+      })
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: {
@@ -12164,8 +12179,8 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
         body: JSON.stringify({
           model: "claude-sonnet-4-20250514",
           max_tokens: 600,
-          system: "Return ONLY a JSON array, no markdown, no explanation. Each element must have: name (string), quantity (string), calories (number), protein_g (number), carbs_g (number), fat_g (number), fiber_g (number). Be realistic with portion sizes.",
-          messages: [{ role: "user", content: `Estimate nutrition breakdown for this meal: ${description}` }]
+          system: "Return ONLY a JSON array, no markdown, no explanation. Each element must have: name (string), quantity (string), calories (number), protein_g (number), carbs_g (number), fat_g (number), fiber_g (number). Be realistic with portion sizes. For photos, estimate portions based on visual plate size and typical serving norms.",
+          messages: [{ role: "user", content: userContent }]
         })
       })
       const data = await res.json()
@@ -12604,6 +12619,72 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
           )}
 
           <div style={{ padding: "8px 10px 10px", borderTop: "1px solid rgba(56,189,248,0.1)", flexShrink: 0, display: "flex", gap: 7, alignItems: "flex-end" }}>
+            {/* Hidden file input — triggered by camera button */}
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              style={{ display: "none" }}
+              ref={imageInputRef}
+              onChange={async (e) => {
+                const file = e.target.files?.[0]
+                if (!file) return
+                // Reset so same file can be re-selected
+                e.target.value = ""
+                const mealType = "dinner"
+                const today = new Date().toISOString().slice(0, 10)
+                // Base64 encode
+                const base64 = await new Promise((resolve, reject) => {
+                  const reader = new FileReader()
+                  reader.onload = () => resolve(reader.result.split(",")[1])
+                  reader.onerror = reject
+                  reader.readAsDataURL(file)
+                })
+                const mediaType = file.type || "image/jpeg"
+                // Show loading state and run nutrition lookup
+                setIsLoading(true)
+                const statusMsg = { role: "assistant", content: "Photo received. Identifying food items and estimating nutrition...", ts: Date.now() }
+                setMessages(prev => [...prev, statusMsg])
+                const items = await fetchMealNutrition("", base64, mediaType)
+                setIsLoading(false)
+                if (!items.length) {
+                  const errMsg = { role: "assistant", content: "Could not identify food items from that photo. Try a clearer image or describe the meal in text.", ts: Date.now() }
+                  setMessages(prev => [...prev.filter(m => m !== statusMsg), errMsg])
+                  return
+                }
+                const total_calories  = items.reduce((s, i) => s + (i.calories  || 0), 0)
+                const total_protein_g = items.reduce((s, i) => s + (i.protein_g || 0), 0)
+                const total_carbs_g   = items.reduce((s, i) => s + (i.carbs_g   || 0), 0)
+                const total_fat_g     = items.reduce((s, i) => s + (i.fat_g     || 0), 0)
+                const total_fiber_g   = items.reduce((s, i) => s + (i.fiber_g   || 0), 0)
+                const mealRecord = {
+                  meal_id: `meal_${Date.now()}`, id: `meal_${Date.now()}`,
+                  date: today, timestamp: new Date().toISOString(),
+                  meal: mealType, items, total_calories, total_protein_g,
+                  total_carbs_g, total_fat_g, total_fiber_g, source: "trainer_photo"
+                }
+                const itemLines = items.map(i => `  ${i.name} (${i.quantity}): ${i.calories} cal, ${i.protein_g}g prot`).join("\n")
+                setMessages(prev => prev.filter(m => m !== statusMsg))
+                setPendingAction({
+                  type: "meal",
+                  payload: mealRecord,
+                  preview: `Photo meal — ${mealType}:\n${itemLines}\nTotal: ${total_calories} cal, ${total_protein_g}g protein, ${total_carbs_g}g carbs, ${total_fat_g}g fat.\nType Y to log or anything else to cancel.`
+                })
+              }}
+            />
+            {/* Camera button */}
+            <button
+              onClick={() => imageInputRef.current?.click()}
+              disabled={isLoading || !!pendingAction}
+              title="Photo meal lookup"
+              style={{
+                width: 34, height: 34, borderRadius: "50%", border: "1px solid rgba(56,189,248,0.25)",
+                cursor: isLoading || !!pendingAction ? "default" : "pointer",
+                background: "rgba(56,189,248,0.08)",
+                color: isLoading || !!pendingAction ? "rgba(56,189,248,0.3)" : "#38bdf8",
+                fontSize: 17, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0
+              }}
+            >📷</button>
             <textarea
               ref={inputRef}
               value={inputValue}
