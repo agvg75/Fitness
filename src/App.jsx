@@ -10464,7 +10464,7 @@ function makeImportFileReviewRow(fileInfo, reason) {
   }
 }
 
-function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily, setSleepRecords, setBiometricRecords, setSchedLog, healthFitDaily, biometricRecords, ocItems }) {
+function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily, setSleepRecords, setBiometricRecords, setSchedLog, healthFitDaily, biometricRecords, ocItems, dexa, sleepRecords, schedLog, tsbV2Panel, unifiedCanonicalSessions, mealRecords, liftConfig }) {
   const [queuedFiles, setQueuedFiles] = useState([])  // [{file, detected, firstChunk}]
   const [status, setStatus] = useState("Drop files to import")
   const [progress, setProgress] = useState(null)
@@ -19975,6 +19975,13 @@ return (
     healthFitDaily={healthFitDaily}
     biometricRecords={biometricRecords}
     ocItems={ocItems}
+    dexa={dexa}
+    sleepRecords={sleepRecords}
+    schedLog={schedLog}
+    tsbV2Panel={tsbV2Panel}
+    unifiedCanonicalSessions={unifiedCanonicalSessions}
+    mealRecords={typeof mealRecords !== "undefined" ? mealRecords : []}
+    liftConfig={LIFT_CONFIG}
   />
 )}
 
