@@ -11996,7 +11996,7 @@ SUBSTITUTION PROTOCOL — when the user reports MTP score 2+ or describes a phys
 
 For all other data writes, tell the user you cannot do that yet.`
 
-function assembleTrainerContext({ sessions60, ocItems, tsbData, raceCalendar, liftConfig }) {
+function assembleTrainerContext({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, mealRecords }) {
   const today = new Date().toISOString().slice(0, 10)
   const tsbLine = tsbData
     ? `TSB: ${tsbData.currentOverallTsb != null ? Number(tsbData.currentOverallTsb).toFixed(1) : "?"}, 14-day load: ${tsbData.currentLoad14 != null ? Number(tsbData.currentLoad14).toFixed(0) : "?"}`
@@ -12017,6 +12017,19 @@ function assembleTrainerContext({ sessions60, ocItems, tsbData, raceCalendar, li
     .slice(0, 6)
     .map(r => `  ${r.date}: ${r.name} (${r.dist_mi} mi, ${r.city}) — ${r.note}`)
     .join("\n") || "  None"
+  // Build today's nutrition summary from meal records
+  const todayMeals = (mealRecords || []).filter(m => (m.date || "").slice(0, 10) === today)
+  const totalCal  = todayMeals.reduce((s, m) => s + (m.total_calories  || 0), 0)
+  const totalProt = todayMeals.reduce((s, m) => s + (m.total_protein_g || 0), 0)
+  const totalCarb = todayMeals.reduce((s, m) => s + (m.total_carbs_g   || 0), 0)
+  const totalFat  = todayMeals.reduce((s, m) => s + (m.total_fat_g     || 0), 0)
+  const mealLines = todayMeals.length
+    ? todayMeals.map(m => `  ${m.meal}: ${m.total_calories} cal, ${m.total_protein_g}g prot — ${(m.items||[]).join(", ")}`).join("\n")
+    : "  Nothing logged yet today"
+  const nutritionSummary = todayMeals.length
+    ? `Total: ${totalCal} cal | ${totalProt}g protein | ${totalCarb}g carbs | ${totalFat}g fat`
+    : "No meals logged yet today"
+
   return `=== CURRENT STATE (${today}) ===
 ${tsbLine}
 Risk zone: TSB < -7 AND 14d load > 700
@@ -12029,6 +12042,11 @@ ${sessionLines}
 
 === UPCOMING RACES ===
 ${upcomingRaces}
+
+=== TODAY'S NUTRITION ===
+${mealLines}
+${nutritionSummary}
+Targets: ${liftConfig?.fat_loss_target ?? 1700} cal/day | ${liftConfig?.protein_target_g ?? 140}g protein/day
 
 === LIFT CONFIG ===
 tau1: ${liftConfig?.tau1 ?? 27}d  tau2: ${liftConfig?.tau2 ?? 18}d
@@ -12065,7 +12083,7 @@ const FingerprintIcon = ({ size = 38 }) => {
   )
 }
 
-function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, onLogMtp, onLogWeight, onLogExercise, onLogRun }) {
+function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, onLogMtp, onLogWeight, onLogExercise, onLogRun, onLogMeal, biometricRecords, sleepRecords, mealRecords }) {
   const [isOpen, setIsOpen] = React.useState(false)
   const [messages, setMessages] = React.useState(() => {
     try { return JSON.parse(localStorage.getItem(TRAINER_STORAGE_KEY) || "[]") } catch { return [] }
@@ -12075,7 +12093,7 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
   const messagesEndRef = React.useRef(null)
   const inputRef = React.useRef(null)
   const [pendingAction, setPendingAction] = React.useState(null)
-  // pendingAction shape: { type: "mtp"|"weight"|"exercise"|"run", payload: object, preview: string } | null
+  // pendingAction shape: { type: "mtp"|"weight"|"exercise"|"run"|"meal", payload: object, preview: string } | null
   const apiKey = typeof ANTHROPIC_API_KEY !== "undefined"
     ? ANTHROPIC_API_KEY
     : (import.meta.env?.VITE_ANTHROPIC_API_KEY || import.meta.env?.ANTHROPIC_API_KEY || null)
@@ -12089,6 +12107,72 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
   React.useEffect(() => {
     if (isOpen && inputRef.current) inputRef.current.focus()
   }, [isOpen])
+
+  // ── Startup greeting: fires once per calendar day when panel opens ─────────
+  React.useEffect(() => {
+    if (!isOpen) return
+    const today = new Date().toISOString().slice(0, 10)
+    const greetedKey = `lift-trainer-greeted-${today}`
+    if (localStorage.getItem(greetedKey)) return
+    localStorage.setItem(greetedKey, "1")
+
+    const missing = []
+    // Weight: check biometricRecords for today
+    const hasWeightToday = (biometricRecords || []).some(r => (r.date || "").slice(0, 10) === today)
+    if (!hasWeightToday) missing.push("weight")
+    // Sleep: check sleepRecords for last night
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10)
+    const hasSleepLastNight = (sleepRecords || []).some(r => {
+      const d = r.date || (r.start_at || "").slice(0, 10) || ""
+      return d === yesterday || d === today
+    })
+    if (!hasSleepLastNight) missing.push("sleep")
+    // Dinner: check mealRecords for yesterday or today
+    const hasDinnerRecent = (mealRecords || []).some(r =>
+      r.meal === "dinner" && (r.date === today || r.date === yesterday)
+    )
+    if (!hasDinnerRecent) missing.push("dinner")
+
+    if (!missing.length) return
+
+    // Build a natural single-message greeting covering all gaps
+    const parts = []
+    if (missing.includes("weight"))  parts.push("your weight this morning")
+    if (missing.includes("sleep"))   parts.push("how many hours you slept")
+    if (missing.includes("dinner"))  parts.push("what you had for dinner — I can look up the nutrition")
+    const greeting = `Good to see you. A few things not yet logged: ${parts.join(", and ")}. Start with whichever is easiest.`
+    const greetMsg = { role: "assistant", content: greeting, ts: Date.now() }
+    setMessages(prev => {
+      const updated = [...prev, greetMsg]
+      try { localStorage.setItem(TRAINER_STORAGE_KEY, JSON.stringify(updated.slice(-60))) } catch {}
+      return updated
+    })
+  }, [isOpen])
+
+  // ── Nutrition lookup via API ───────────────────────────────────────────────
+  const fetchMealNutrition = React.useCallback(async (description) => {
+    if (!apiKey) return []
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+          "anthropic-dangerous-direct-browser-access": "true"
+        },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 600,
+          system: "Return ONLY a JSON array, no markdown, no explanation. Each element must have: name (string), quantity (string), calories (number), protein_g (number), carbs_g (number), fat_g (number), fiber_g (number). Be realistic with portion sizes.",
+          messages: [{ role: "user", content: `Estimate nutrition breakdown for this meal: ${description}` }]
+        })
+      })
+      const data = await res.json()
+      const raw = (data.content?.[0]?.text || "[]").replace(/```json|```/g, "").trim()
+      return JSON.parse(raw)
+    } catch { return [] }
+  }, [apiKey])
 
   const saveMessages = (msgs) => {
     setMessages(msgs)
@@ -12170,6 +12254,54 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
         }
       }
     }
+
+    // Meal detection — preset phrases and dinner/custom descriptions
+    const mealKeywords = combined.includes("breakfast") || combined.includes("lunch") ||
+      combined.includes("dinner") || combined.includes("supper") ||
+      combined.includes("snack") || combined.includes("ate") || combined.includes("had for")
+    if (mealKeywords) {
+      const presets = liftConfig?.MEAL_PRESETS || {}
+      // Preset detection — "usual breakfast", "my usual lunch", etc.
+      for (const [key, preset] of Object.entries(presets)) {
+        const isUsual = combined.includes(`usual ${key}`) || combined.includes(`my ${key}`) ||
+          (combined.includes(key) && (combined.includes("usual") || combined.includes("same") || combined.includes("regular")))
+        if (isUsual) {
+          const today = new Date().toISOString().slice(0, 10)
+          return {
+            type: "meal",
+            payload: {
+              meal_id: `meal_${Date.now()}`,
+              id: `meal_${Date.now()}`,
+              date: today,
+              timestamp: new Date().toISOString(),
+              meal: preset.meal,
+              items: preset.items.map(name => ({ name, quantity: "1 serving", calories: null, protein_g: null, carbs_g: null, fat_g: null, fiber_g: null, source: "preset" })),
+              total_calories:  preset.total_calories,
+              total_protein_g: preset.total_protein_g,
+              total_carbs_g:   preset.total_carbs_g,
+              total_fat_g:     preset.total_fat_g,
+              total_fiber_g:   preset.total_fiber_g,
+              source: "trainer",
+              _preset: key
+            },
+            preview: `Log ${preset.label}: ${preset.total_calories} cal, ${preset.total_protein_g}g protein. Type Y to confirm or anything else to cancel.`
+          }
+        }
+      }
+      // Custom meal — extract the meal type and description for nutrition lookup
+      const mealTypeMatch = userText.match(/\b(breakfast|lunch|dinner|supper|snack)\b/i)
+      const mealType = mealTypeMatch ? mealTypeMatch[1].toLowerCase().replace("supper", "dinner") : "meal"
+      // Only proceed if there is actual food described (more than just the meal word)
+      const stripped = userText.replace(/\b(breakfast|lunch|dinner|supper|snack|had|ate|for|my|usual|i|a)\b/gi, "").trim()
+      if (stripped.length >= 5) {
+        return {
+          type: "meal_lookup",
+          payload: { description: userText, mealType },
+          preview: `Looking up nutrition for your ${mealType}...`
+        }
+      }
+    }
+
     return null
   }
 
@@ -12206,7 +12338,7 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
       setInputValue("")
       return
     }
-    const context = assembleTrainerContext({ sessions60, ocItems, tsbData, raceCalendar, liftConfig })
+    const context = assembleTrainerContext({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, mealRecords })
     const userMsg = { role: "user", content: text, ts: Date.now() }
     const updatedMsgs = [...messages, userMsg]
     saveMessages(updatedMsgs)
@@ -12307,6 +12439,42 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
 
 ── A) add sets/reps detail  R) suggest a similar exercise ──`, ts: Date.now() }
         saveMessages([...messages, confirmMsg])
+      } else if (pendingAction.type === "meal" && onLogMeal) {
+        await onLogMeal(pendingAction.payload)
+        const p = pendingAction.payload
+        const confirmMsg = { role: "assistant", content: `${p.meal.charAt(0).toUpperCase() + p.meal.slice(1)} logged: ${p.total_calories} cal, ${p.total_protein_g}g protein, ${p.total_carbs_g}g carbs, ${p.total_fat_g}g fat.`, ts: Date.now() }
+        saveMessages([...messages, confirmMsg])
+      } else if (pendingAction.type === "meal_lookup") {
+        // Nutrition lookup — fetch then confirm
+        setIsLoading(true)
+        const items = await fetchMealNutrition(pendingAction.payload.description)
+        setIsLoading(false)
+        if (!items.length) {
+          saveMessages([...messages, { role: "assistant", content: "Could not look up nutrition for that description. Try being more specific.", ts: Date.now() }])
+          setPendingAction(null)
+          return
+        }
+        const today = new Date().toISOString().slice(0, 10)
+        const total_calories  = items.reduce((s, i) => s + (i.calories  || 0), 0)
+        const total_protein_g = items.reduce((s, i) => s + (i.protein_g || 0), 0)
+        const total_carbs_g   = items.reduce((s, i) => s + (i.carbs_g   || 0), 0)
+        const total_fat_g     = items.reduce((s, i) => s + (i.fat_g     || 0), 0)
+        const total_fiber_g   = items.reduce((s, i) => s + (i.fiber_g   || 0), 0)
+        const mealRecord = {
+          meal_id: `meal_${Date.now()}`, id: `meal_${Date.now()}`,
+          date: today, timestamp: new Date().toISOString(),
+          meal: pendingAction.payload.mealType,
+          items, total_calories, total_protein_g, total_carbs_g, total_fat_g, total_fiber_g,
+          source: "trainer"
+        }
+        const itemLines = items.map(i => `  ${i.name} (${i.quantity}): ${i.calories} cal, ${i.protein_g}g prot`).join("\n")
+        const lookupAction = {
+          type: "meal",
+          payload: mealRecord,
+          preview: `Log ${pendingAction.payload.mealType}:\n${itemLines}\nTotal: ${total_calories} cal, ${total_protein_g}g protein. Type Y to confirm or anything else to cancel.`
+        }
+        setPendingAction(lookupAction)
+        return
       }
     } else {
       const cancelMsg = { role: "assistant", content: "Cancelled. Nothing was written.", ts: Date.now() }
@@ -12541,6 +12709,28 @@ export default function App() {
       upper_cardio:   { lower: 0.00, upper: 0.40, cardio: 0.60 },
       other:          { lower: 0.20, upper: 0.20, cardio: 0.60 },
     },
+
+    // Fixed meal presets — log with "usual breakfast" etc, never re-describe
+    MEAL_PRESETS: {
+      breakfast: {
+        label: "Usual breakfast",
+        meal: "breakfast",
+        items: ["low-fat cottage cheese 1/2 cup", "banana", "strawberry", "raw honey 1 tsp"],
+        total_calories: 228, total_protein_g: 15, total_carbs_g: 38, total_fat_g: 2, total_fiber_g: 3,
+      },
+      lunch: {
+        label: "Usual lunch",
+        meal: "lunch",
+        items: ["2x Lean & Fit yogurt (80 cal, 14g protein each)", "protein bar (210 cal, 20g protein)"],
+        total_calories: 370, total_protein_g: 48, total_carbs_g: 28, total_fat_g: 6, total_fiber_g: 2,
+      },
+      snack: {
+        label: "Usual snack",
+        meal: "snack",
+        items: ["Muscle Milk (160 cal, 30g protein)"],
+        total_calories: 160, total_protein_g: 30, total_carbs_g: 7, total_fat_g: 5, total_fiber_g: 1,
+      },
+    },
   }
   if (typeof window !== "undefined") window.__liftConfig = LIFT_CONFIG
   // ────────────────────────────────────────────────────────────────────────
@@ -12648,6 +12838,7 @@ const [storedWorkouts, setStoredWorkouts] = useState([])
 const [canonicalSessions, setCanonicalSessions] = useState([])
 const [healthFitDaily, setHealthFitDaily] = useState([])
 const [biometricRecords, setBiometricRecords] = useState(() => { try { return JSON.parse(localStorage.getItem("lift_biometric_records") || "[]") } catch { return [] } })
+const [mealRecords, setMealRecords] = useState(() => { try { return JSON.parse(localStorage.getItem("lift_meal_records") || "[]") } catch { return [] } })
 const [sleepRecords, setSleepRecords] = useState(() => { try { return JSON.parse(localStorage.getItem("lift_sleep_records") || "[]") } catch { return [] } })
 const [schedLog, setSchedLog] = useState(() => { try { return JSON.parse(localStorage.getItem('wt-log') || '[]') } catch { return [] } })
 const [ocItems, setOcItems] = useState(() => { try { return JSON.parse(localStorage.getItem('oc-items') || '[]') } catch { return [] } })
@@ -16738,6 +16929,22 @@ const overviewExplainButton = (key) => (
     }
   }, [setBiometricRecords, session, supabase])
 
+  const trainerLogMeal = React.useCallback(async (mealRecord) => {
+    const existing = JSON.parse(localStorage.getItem("lift_meal_records") || "[]")
+    const merged = [...existing.filter(r => r.meal_id !== mealRecord.meal_id), mealRecord]
+      .sort((a, b) => String(a.timestamp || "").localeCompare(String(b.timestamp || "")))
+    localStorage.setItem("lift_meal_records", JSON.stringify(merged))
+    setMealRecords(merged)
+    try {
+      if (supabase && session?.user?.id) {
+        await supabase.from("user_kv").upsert(
+          { user_id: session.user.id, key: "lift_meal_records", value: merged, updated_at: new Date().toISOString() },
+          { onConflict: "user_id,key" }
+        )
+      }
+    } catch (e) { console.warn("[Trainer] Meal save error", e) }
+  }, [setMealRecords, session, supabase])
+
   const trainerLogExercise = React.useCallback(async (exerciseName, day) => {
     const newEx = {
       id: `custom_${Date.now()}`,
@@ -19468,6 +19675,10 @@ return (
     onLogWeight={trainerLogWeight}
     onLogExercise={trainerLogExercise}
     onLogRun={trainerLogRun}
+    onLogMeal={trainerLogMeal}
+    biometricRecords={biometricRecords}
+    sleepRecords={sleepRecords}
+    mealRecords={mealRecords}
   />
   </>
   )
