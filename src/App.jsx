@@ -15662,6 +15662,106 @@ const bodyForecast = useMemo(() => {
   }
 }, [biometricRecords, dailyWithBiometrics, LIFT_CONFIG])
 
+// ── Apple Watch active calorie calibration ────────────────────────────────
+// Solves for k where: true_active_cal = k × watch_active_cal
+// Using energy balance: weight_change_lb = (intake - BMR - k×watch_active) / 3500
+// Requires biometricRecords (weight + active_energy_cal) and mealRecords (dinner logs)
+const calorieCalibration = useMemo(() => {
+  const FIXED_PRESET_CAL = 758    // breakfast + lunch + snack (known constants)
+  const BMR = LIFT_CONFIG.bmr || 1520
+  const CAL_PER_LB = 3500
+  const MIN_DAYS = 14             // minimum triplets before showing k estimate
+
+  // Build daily lookup maps
+  const weightByDate = {}
+  const activeCalByDate = {}
+  ;(Array.isArray(biometricRecords) ? biometricRecords : []).forEach(r => {
+    const d = (r.date || "").slice(0, 10)
+    if (!d) return
+    if (Number(r.weight_lb) > 100) weightByDate[d] = Number(r.weight_lb)
+    if (Number(r.active_energy_cal) > 0) activeCalByDate[d] = Number(r.active_energy_cal)
+  })
+
+  // Build daily meal intake — fixed preset + any logged dinner
+  const mealCalByDate = {}
+  ;(Array.isArray(mealRecords) ? mealRecords : []).forEach(r => {
+    const d = (r.date || "").slice(0, 10)
+    if (!d || !Number.isFinite(r.total_calories)) return
+    mealCalByDate[d] = (mealCalByDate[d] || 0) + Number(r.total_calories)
+  })
+
+  // Collect complete triplets: weight, active_cal, intake estimate
+  // For intake: use logged meals if present, else fixed preset only (no dinner)
+  const triplets = []
+  const dates = [...new Set([...Object.keys(weightByDate), ...Object.keys(activeCalByDate)])]
+    .filter(d => weightByDate[d] && activeCalByDate[d])
+    .sort()
+
+  for (let i = 1; i < dates.length; i++) {
+    const d0 = dates[i - 1], d1 = dates[i]
+    // Only use consecutive days (gap <= 1 day) to avoid multi-day weight swings
+    const gapDays = Math.round((new Date(d1) - new Date(d0)) / 86400000)
+    if (gapDays !== 1) continue
+    const weightChange = weightByDate[d1] - weightByDate[d0]  // lb (negative = loss)
+    const watchActive = (activeCalByDate[d0] + activeCalByDate[d1]) / 2  // avg active cal
+    // Intake: use logged total if available, else fixed preset (758 cal, no dinner)
+    const intake = mealCalByDate[d0] != null
+      ? mealCalByDate[d0]
+      : FIXED_PRESET_CAL
+    triplets.push({ date: d0, weightChange, watchActive, intake })
+  }
+
+  if (triplets.length < MIN_DAYS) {
+    return {
+      k: null,
+      daysUsed: triplets.length,
+      daysNeeded: MIN_DAYS,
+      status: "building",
+      message: `Building calibration — ${triplets.length} of ${MIN_DAYS} days needed.`
+    }
+  }
+
+  // Solve for k: sum over all triplets
+  // weightChange × 3500 = intake - BMR - k × watchActive  →  per day
+  // k = Σ(intake - BMR - weightChange×3500) / Σ(watchActive)
+  let numerator = 0, denominator = 0
+  triplets.forEach(({ weightChange, watchActive, intake }) => {
+    numerator   += intake - BMR - (weightChange * CAL_PER_LB)
+    denominator += watchActive
+  })
+
+  if (denominator <= 0) return { k: null, status: "error", message: "Insufficient active calorie data." }
+
+  const k = numerator / denominator
+  // Clamp to plausible range — watch error unlikely to be below 40% or above 120%
+  const kClamped = Math.max(0.4, Math.min(1.2, k))
+  const kValid = k >= 0.4 && k <= 1.2
+
+  // Implied real TDEE using k
+  const avgWatchActive = denominator / triplets.length
+  const impliedActiveCal = kClamped * avgWatchActive
+  const impliedTDEE = Math.round(BMR + impliedActiveCal)
+  const watchTDEE = Math.round(BMR + avgWatchActive)
+  const overestimatePct = Math.round((1 - kClamped) * 100)
+
+  return {
+    k: +kClamped.toFixed(3),
+    kRaw: +k.toFixed(3),
+    kValid,
+    daysUsed: triplets.length,
+    daysNeeded: MIN_DAYS,
+    status: kValid ? "ready" : "outlier",
+    impliedTDEE,
+    watchTDEE,
+    overestimatePct,
+    avgWatchActive: Math.round(avgWatchActive),
+    avgImpliedActive: Math.round(impliedActiveCal),
+    message: kValid
+      ? `Watch overestimates active burn by ~${overestimatePct}%. Implied TDEE: ${impliedTDEE} cal/day.`
+      : `Calibration result (k=${k.toFixed(2)}) is outside plausible range — more data needed.`
+  }
+}, [biometricRecords, mealRecords, LIFT_CONFIG])
+
 const injuryPenalties = useMemo(() => {
   return getInjuryPenalties(ocItems)
 }, [ocItems])
@@ -19068,6 +19168,77 @@ return (
                   </div>
                 ))}
               </div>
+            )}
+          </div>
+
+          {/* ── Apple Watch Calorie Calibration ── */}
+          <div style={{ ...cardStyle(), maxWidth: "1000px", marginBottom: "16px" }}>
+            <div style={{ fontWeight: "bold", fontSize: 14, marginBottom: "10px" }}>
+              Apple Watch Active Calorie Calibration
+            </div>
+            <div style={{ fontSize: 12, color: "#888", marginBottom: "12px", lineHeight: 1.6 }}>
+              Estimates how much the Watch overstates active calories by comparing your logged
+              intake, scale weight trend, and resting metabolic rate. Needs {calorieCalibration?.daysNeeded ?? 14}+ days
+              with weight readings and active calorie data. Dinner logs improve accuracy.
+            </div>
+
+            {calorieCalibration?.status === "building" && (
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ fontSize: 22, fontWeight: 800, color: "#555" }}>
+                  {calorieCalibration.daysUsed} / {calorieCalibration.daysNeeded}
+                </div>
+                <div style={{ fontSize: 12, color: "#666" }}>days with complete data — keep logging dinner</div>
+              </div>
+            )}
+
+            {calorieCalibration?.status === "ready" && (
+              <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+                <div style={{ textAlign: "center", minWidth: 90 }}>
+                  <div style={{ fontSize: 28, fontWeight: 800, color: "#38bdf8" }}>
+                    {calorieCalibration.k}×
+                  </div>
+                  <div style={{ fontSize: 11, color: "#888" }}>correction factor</div>
+                </div>
+                <div style={{ textAlign: "center", minWidth: 90 }}>
+                  <div style={{ fontSize: 28, fontWeight: 800, color: "#f97316" }}>
+                    {calorieCalibration.overestimatePct}%
+                  </div>
+                  <div style={{ fontSize: 11, color: "#888" }}>watch overestimate</div>
+                </div>
+                <div style={{ textAlign: "center", minWidth: 110 }}>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: "#4ade80" }}>
+                    {calorieCalibration.avgImpliedActive}
+                  </div>
+                  <div style={{ fontSize: 11, color: "#888" }}>true active cal/day</div>
+                </div>
+                <div style={{ textAlign: "center", minWidth: 110 }}>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: "#aaa" }}>
+                    {calorieCalibration.avgWatchActive}
+                  </div>
+                  <div style={{ fontSize: 11, color: "#888" }}>watch active cal/day</div>
+                </div>
+                <div style={{ textAlign: "center", minWidth: 110 }}>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: "#ffd166" }}>
+                    {calorieCalibration.impliedTDEE}
+                  </div>
+                  <div style={{ fontSize: 11, color: "#888" }}>implied TDEE (cal/day)</div>
+                </div>
+              </div>
+            )}
+
+            {calorieCalibration?.status === "ready" && (
+              <div style={{ marginTop: 12, fontSize: 12, color: "#556", lineHeight: 1.6, borderTop: "1px solid #1a1b2e", paddingTop: 10 }}>
+                Based on {calorieCalibration.daysUsed} days of data.
+                {" "}Watch reports TDEE of {calorieCalibration.watchTDEE} cal/day.
+                {" "}Corrected estimate is {calorieCalibration.impliedTDEE} cal/day
+                ({calorieCalibration.watchTDEE - calorieCalibration.impliedTDEE} cal/day lower).
+                {" "}If LIFT_CONFIG fat_loss_target is 1700, your real deficit is approximately{" "}
+                {calorieCalibration.impliedTDEE - 1700} cal/day on average.
+              </div>
+            )}
+
+            {calorieCalibration?.status === "outlier" && (
+              <div style={{ fontSize: 12, color: "#f97316" }}>{calorieCalibration.message}</div>
             )}
           </div>
 
