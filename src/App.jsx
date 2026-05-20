@@ -17304,7 +17304,7 @@ return (
   <div style={{ fontSize: "64px", fontWeight: "800", lineHeight: 1, marginTop: 0, marginBottom: "6px" }}>
     L.I.F.T.
   </div>
-  <div style={{ fontSize: 11, opacity: 0.4 }}>Build check: Apr 29 2026</div>
+  <div style={{ fontSize: 11, opacity: 0.4 }}>Build: {typeof __BUILD_DATE__ !== "undefined" ? __BUILD_DATE__ : "dev"}</div>
   <div style={{ fontSize: "11px", opacity: 0.85, marginBottom: "4px" }}>
     Longitudinal Integrated Fitness Tracker
   </div>
