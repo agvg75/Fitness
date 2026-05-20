@@ -10484,19 +10484,24 @@ function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily,
   const [photoError, setPhotoError] = useState(null)
 
   const handleExportReport = () => {
-    generateTrainerReport({
-      healthFitDaily:      healthFitDaily      || [],
-      biometricRecords:    biometricRecords    || [],
-      dexa:                dexa                || [],
-      ocItems:             ocItems             || [],
-      sleepRecords:        sleepRecords        || [],
-      canonicalSessions:   unifiedCanonicalSessions || canonicalSessions || [],
-      mealRecords:         mealRecords         || [],
-      schedLog:            schedLog            || [],
-      liftConfig:          LIFT_CONFIG,
-      tsbV2Panel:          tsbV2Panel          || null,
-      snapshotDate:        new Date().toISOString().slice(0, 10)
-    })
+    try {
+      generateTrainerReport({
+        healthFitDaily:    healthFitDaily                              || [],
+        biometricRecords:  biometricRecords                           || [],
+        dexa:              dexa                                       || [],
+        ocItems:           ocItems                                    || [],
+        sleepRecords:      sleepRecords                               || [],
+        canonicalSessions: unifiedCanonicalSessions || canonicalSessions || [],
+        mealRecords:       mealRecords                                || [],
+        schedLog:          schedLog                                   || [],
+        liftConfig:        liftConfig                                 || {},
+        tsbV2Panel:        tsbV2Panel                                 || null,
+        snapshotDate:      new Date().toISOString().slice(0, 10)
+      })
+    } catch (err) {
+      console.error("[Export] failed:", err)
+      alert("Export failed: " + (err?.message || String(err)))
+    }
   }
 
   const worker = useMemo(() => createInlineImportWorker(), [])
