@@ -4610,9 +4610,19 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     const vColors = { machine: "#3b82f6", db: "#22c55e", friendly: "#f97316" }
     const vBgs = { machine: "rgba(59,130,246,0.12)", db: "rgba(34,197,94,0.12)", friendly: "rgba(249,115,22,0.12)" }
     const fl = ex.fi === "toe" ? "Toe-safe" : "Shoulder-safe"
+    const _exNameLower = String(ex.n || "").toLowerCase()
+    const _isLowerBodyEx = ["leg press","leg curl","leg extension","hip thrust","hip abduction",
+      "hip adduction","calf raise","rdl","romanian","squat","lunge"].some(k => _exNameLower.includes(k))
+    const _isUpperBodyEx = ["chest press","chest-press","lat pulldown","cable row","seated row",
+      "bicep curl","shoulder press","tricep","pull-up","push-up"].some(k => _exNameLower.includes(k))
+    const _exCompartmentReadiness = _isLowerBodyEx
+      ? (ocConstraintState?.gate?.lowerProgressionReadiness ?? progressionReadiness)
+      : _isUpperBodyEx
+        ? (ocConstraintState?.gate?.upperProgressionReadiness ?? progressionReadiness)
+        : progressionReadiness
     const workoutSuggestion = chooseTodayWorkout(
       { type: "strength", modality: "strength", name: ex.n },
-      progressionReadiness,
+      _exCompartmentReadiness,
       tendonStatus
     )
     const structuredFlags = !isCustom ? getStructuredExerciseFlags(ex.id) : []
@@ -7653,13 +7663,26 @@ function buildOcConstraintState({ ocItems, sleepRecords, healthFitDaily, compute
     applyState("hold", "Bike/swim are rising alongside run volume")
   }
 
+  // Compartment-specific gates — use lowerStrengthTsb and upperStrengthTsb
+  // Thresholds match the empirical personal dangerous zone calibration (April 2026)
+  const evalCompartmentGate = (compartmentTsb) => {
+    if (!Number.isFinite(compartmentTsb)) return "progress"
+    if (compartmentTsb <= -12) return "deload"
+    if (compartmentTsb <= -5)  return "hold"
+    return "progress"
+  }
+  const lowerProgressionReadiness = evalCompartmentGate(load.lowerStrengthTsb)
+  const upperProgressionReadiness = evalCompartmentGate(load.upperStrengthTsb)
+
   return {
     tendon,
     systemic,
     load,
     gate: {
       progressionReadiness,
-      progressionReasons
+      progressionReasons,
+      lowerProgressionReadiness,
+      upperProgressionReadiness,
     }
   }
 }
@@ -17533,15 +17556,15 @@ return (
             })
           ) : (
             <ResponsiveContainer width="100%" height={72}>
-              <BarChart data={panel.rows} margin={{ top:0, right:4, left:2, bottom:0 }}>
+              <BarChart data={panel.rows} margin={{ top:0, right:4, left:2, bottom:0 }} barCategoryGap="2%" barGap={1}>
                 <XAxis dataKey="label" hide />
                 <YAxis hide domain={[0, 100]} />
                 <Tooltip formatter={(value, name) => {
                   if (name === "Zero logged strength") return ["0", "Zero logged strength"]
                   return [`${Number(value).toFixed(0)}`, "Relative strength load"]
                 }} />
-                <Bar dataKey="strengthNormDisplay" name="Relative strength load" fill="#7c3aed" fillOpacity={0.5} radius={[2, 2, 0, 0]} />
-                <Bar dataKey="strengthZeroMarker" name="Zero logged strength" fill="#c4b5fd" radius={[2, 2, 0, 0]} />
+                <Bar dataKey="strengthNormDisplay" name="Relative strength load" fill="#e2e8f0" fillOpacity={0.82} radius={[2, 2, 0, 0]} maxBarSize={10} />
+                <Bar dataKey="strengthZeroMarker" name="Zero logged strength" fill="#94a3b8" fillOpacity={0.6} radius={[2, 2, 0, 0]} maxBarSize={10} />
               </BarChart>
             </ResponsiveContainer>
           )}
