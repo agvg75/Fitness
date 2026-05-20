@@ -220,6 +220,79 @@ const store = {
   }
 }
 
+// ── Session compartment classifier ───────────────────────────────────────
+// Returns the COMPARTMENT_SPLITS key for a canonical session.
+// Priority: canonical_type → exercise list analysis → day-of-week → "other"
+// Call signature: classifySession(session, config) where config is LIFT_CONFIG.
+function classifySession(session, config) {
+  if (!session || !config?.COMPARTMENT_SPLITS) return "other"
+
+  const raw = String(
+    session.canonical_type || session.type || session.raw_type || ""
+  ).toLowerCase()
+
+  // Pure cardio modalities — resolved by type string alone
+  if (raw.includes("running") || raw.includes("run"))     return "running"
+  if (raw.includes("swimming") || raw.includes("swim"))   return "swimming"
+  if (raw.includes("cycling") || raw.includes("cycl") || raw.includes("bike") || raw.includes("spin")) return "cycling"
+  if (raw.includes("rowing")  || raw.includes("row"))     return "rowing"
+  if (raw.includes("walking") || raw.includes("walk"))    return "walking"
+
+  // Strength sessions — disambiguate by exercise list first, then day
+  if (raw.includes("strength") || raw.includes("weight") || raw.includes("traditional")) {
+    const exs = Array.isArray(session.exercises) ? session.exercises : []
+
+    // Lower-body indicator exercises
+    const lowerKeywords = ["leg press", "leg curl", "leg extension", "hip thrust",
+      "hip abduction", "hip adduction", "calf raise", "rdl", "romanian", "squat", "lunge"]
+    // Upper-body indicator exercises
+    const upperKeywords = ["chest press", "chest-press", "lat pulldown", "cable row",
+      "seated row", "bicep curl", "shoulder press", "tricep", "pull-up", "push-up"]
+
+    let lowerHits = 0, upperHits = 0
+    exs.forEach(ex => {
+      const n = String(ex.exercise_name || ex.name || "").toLowerCase()
+      if (lowerKeywords.some(k => n.includes(k))) lowerHits++
+      if (upperKeywords.some(k => n.includes(k))) upperHits++
+    })
+
+    if (lowerHits > 0 || upperHits > 0) {
+      if (lowerHits > 0 && upperHits === 0) return "lower_strength"
+      if (upperHits > 0 && lowerHits === 0) return "upper_strength"
+      return "mixed_strength"
+    }
+
+    // Fallback: day-of-week map from known weekly structure
+    // Mon = Chest & Arms (upper), Tue = Legs (lower),
+    // Thu = Back & Arms (upper), Fri = Legs + chest (mixed), Sat = Hip/Legs (lower)
+    const day = String(session.day || "").slice(0, 3)
+    if (day === "Mon" || day === "Thu") return "upper_strength"
+    if (day === "Tue")                  return "lower_strength"
+    if (day === "Fri")                  return "mixed_strength"
+    if (day === "Sat")                  return "lower_cardio"
+  }
+
+  return "other"
+}
+
+// ── Allocate session TRIMP across compartments ────────────────────────────
+// Returns { lower, upper, cardio } TRIMP values summing to total session TRIMP.
+function allocateSessionTRIMP(session, trimp, config) {
+  const key = classifySession(session, config)
+  const splits = config?.COMPARTMENT_SPLITS?.[key] || { lower: 0.20, upper: 0.20, cardio: 0.60 }
+  return {
+    compartmentKey: key,
+    lower:  +(trimp * splits.lower).toFixed(2),
+    upper:  +(trimp * splits.upper).toFixed(2),
+    cardio: +(trimp * splits.cardio).toFixed(2),
+  }
+}
+
+if (typeof window !== "undefined") {
+  window.classifySession = classifySession
+  window.allocateSessionTRIMP = allocateSessionTRIMP
+}
+
 function getExerciseHistory(exerciseName, wtSessions) {
   if (!exerciseName || !Array.isArray(wtSessions) || !wtSessions.length) return []
   const lower = exerciseName.toLowerCase()
@@ -12413,7 +12486,25 @@ export default function App() {
     hm_peak_mi_week: 9,
     hm_taper_factor: 0.90,
     hm_weekly_build: 1.10,
+
+    // Compartment TRIMP allocation vectors — { lower, upper, cardio }
+    // Tune these after 4 to 6 weeks of per-compartment episode data.
+    // All three values in each vector must sum to 1.0.
+    COMPARTMENT_SPLITS: {
+      running:        { lower: 0.25, upper: 0.00, cardio: 0.75 },
+      swimming:       { lower: 0.00, upper: 0.30, cardio: 0.70 },
+      cycling:        { lower: 0.15, upper: 0.00, cardio: 0.85 },
+      rowing:         { lower: 0.20, upper: 0.10, cardio: 0.70 },
+      walking:        { lower: 0.15, upper: 0.00, cardio: 0.85 },
+      lower_strength: { lower: 0.85, upper: 0.00, cardio: 0.15 },
+      upper_strength: { lower: 0.00, upper: 0.85, cardio: 0.15 },
+      mixed_strength: { lower: 0.45, upper: 0.35, cardio: 0.20 },
+      lower_cardio:   { lower: 0.40, upper: 0.00, cardio: 0.60 },
+      upper_cardio:   { lower: 0.00, upper: 0.40, cardio: 0.60 },
+      other:          { lower: 0.20, upper: 0.20, cardio: 0.60 },
+    },
   }
+  if (typeof window !== "undefined") window.__liftConfig = LIFT_CONFIG
   // ────────────────────────────────────────────────────────────────────────
 
   // ── Half Marathon Race Calendar ─────────────────────────────────────────
