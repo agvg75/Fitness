@@ -14672,7 +14672,46 @@ const overviewWeightDomain = useMemo(() => {
       .sort((a, b) => a.date.localeCompare(b.date))
   }, [healthFitDaily])
 
-  const mealDerivedDays = useMemo(() => deriveDailyNutrition(mealEntries), [mealEntries])
+  // Merge mealEntries (manual Calories tab entries) with trainer-logged meals
+  // from lift_meal_records (Phase A trainer pipeline).
+  // Both are combined by date — trainer entries are lower fidelity per item
+  // but correct at the daily total level.
+  const trainerMealEntries = useMemo(() => {
+    const raw = (() => { try { return JSON.parse(localStorage.getItem("lift_meal_records") || "[]") } catch { return [] } })()
+    // Also include mealRecords from state if available (reactive updates)
+    const stateMeals = typeof mealRecords !== "undefined" && Array.isArray(mealRecords) ? mealRecords : []
+    const combined = [...raw, ...stateMeals]
+    // Deduplicate by meal_id
+    const seen = new Set()
+    return combined.filter(m => {
+      const k = m.meal_id || m.id || `${m.date}_${m.meal}`
+      if (seen.has(k)) return false
+      seen.add(k)
+      return true
+    })
+  }, [typeof mealRecords !== "undefined" ? mealRecords : null])
+
+  const trainerDerivedDays = useMemo(() => {
+    // Convert lift_meal_records shape to mealEntries shape for deriveDailyNutrition
+    return trainerMealEntries.map(m => ({
+      id:        m.meal_id || m.id,
+      date:      (m.date || "").slice(0, 10),
+      meal_type: m.meal || "dinner",
+      preset_name: Array.isArray(m.items) ? m.items.map(i => i.name || "").filter(Boolean).slice(0, 3).join(", ") : (m.meal || "trainer log"),
+      calories:  Number(m.total_calories  || 0),
+      protein_g: Number(m.total_protein_g || 0),
+      carbs_g:   Number(m.total_carbs_g   || 0),
+      fat_g:     Number(m.total_fat_g     || 0),
+      fiber_g:   Number(m.total_fiber_g   || 0),
+      source:    m.source || "trainer",
+    })).filter(m => m.date && m.calories > 0)
+  }, [trainerMealEntries])
+
+  const mealDerivedDays = useMemo(() => {
+    // Combine manual entries and trainer entries, deduplicated by date+meal_type
+    const allEntries = [...mealEntries, ...trainerDerivedDays]
+    return deriveDailyNutrition(allEntries)
+  }, [mealEntries, trainerDerivedDays])
 
   const nutritionSeries = useMemo(() => {
     const staticDays = [...nutrition]
@@ -15046,10 +15085,10 @@ async function persistMealEntries(nextEntries, currentUserId) {
   }
 
   const todayMeals = useMemo(() => {
-    return mealEntries
+    return [...mealEntries, ...trainerDerivedDays]
       .filter(row => row.date === mealDate)
       .sort((a, b) => String(a.created_at || "").localeCompare(String(b.created_at || "")))
-  }, [mealEntries, mealDate])
+  }, [mealEntries, trainerDerivedDays, mealDate])
 
     const chartMaxCalories = useMemo(() => {
     if (!filteredNutrition.length) return 2500
