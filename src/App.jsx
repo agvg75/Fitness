@@ -16251,7 +16251,9 @@ const bodyForecast = useMemo(() => {
   // 2. Latest weight from dailyWithBiometrics
   // 3. LIFT_CONFIG DEXA anchor (April 2026)
   const sortedBio = [...(biometricRecords || [])].sort((a, b) =>
-    String(b.timestamp || b.date || "").localeCompare(String(a.timestamp || a.date || ""))
+    String(b.measured_date || b.date || b.timestamp || "").localeCompare(
+      String(a.measured_date || a.date || a.timestamp || "")
+    )
   )
   const latestBioWeight = sortedBio.find(r => Number(r.weight_lb) > 100)?.weight_lb
   const latestDailyWeight = [...(dailyWithBiometrics || [])]
@@ -17496,22 +17498,39 @@ return [...actual, ...projected]
 
 // Body weight forecast chart: last 90 days of actuals + projected points
 const bodyWeightForecastChart = useMemo(() => {
-  if (!bodyForecast || !weightSmoothed.length) return []
+  if (!bodyForecast) return []
 
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const cutoff = new Date(today)
   cutoff.setDate(cutoff.getDate() - 90)
 
-  const actuals = weightSmoothed
-    .filter(d => new Date(d.date) >= cutoff)
-    .map(d => ({
-      label: fmtShortDate(d.date),
-      actual: d.avg != null ? Number(d.avg.toFixed(1)) : null,
+  // Build actuals directly from biometricRecords — avoids null gaps from
+  // fitness_daily rows that have no scale reading in weightSmoothed.
+  const bio90 = (Array.isArray(biometricRecords) ? biometricRecords : [])
+    .map(r => {
+      const date = String(r.measured_date || r.date || "").slice(0, 10)
+      const lb = Number(r.weight_lb)
+      if (!date || !Number.isFinite(lb) || lb <= 0) return null
+      return { date, lb }
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .filter(r => new Date(r.date + "T12:00:00") >= cutoff)
+
+  const actuals = bio90.map((r, i) => {
+    const start = Math.max(0, i - 6)
+    const subset = bio90.slice(start, i + 1).map(x => x.lb)
+    const avg = subset.reduce((a, b) => a + b, 0) / subset.length
+    return {
+      label: fmtShortDate(r.date),
+      date: r.date,
+      actual: Number(avg.toFixed(1)),
       forecast: null,
       phase1: null,
       target: null
-    }))
+    }
+  })
 
   const addFuture = (days, value) => {
     const d = new Date(today)
@@ -17525,8 +17544,7 @@ const bodyWeightForecastChart = useMemo(() => {
     }
   }
 
-  // Bridge point: last known smoothed weight plotted at today so the
-  // projected line starts exactly where the actual line ends.
+  // Bridge: start projected line from the most recent actual reading
   const lastActual = actuals.length ? actuals[actuals.length - 1] : null
   const bridgeWeight = lastActual?.actual ?? bodyForecast.currentWeight
   const bridge = {
@@ -17546,7 +17564,20 @@ const bodyWeightForecastChart = useMemo(() => {
   ]
 
   return [...actuals, ...projected]
-}, [weightSmoothed, bodyForecast])
+}, [biometricRecords, bodyForecast])
+
+// Y-axis domain: cap top at max of recent 90d actuals + 5 lb so history
+// (230+ lb) does not compress the current-weight range.
+const forecastYDomain = useMemo(() => {
+  if (!bodyWeightForecastChart.length) return ["auto", "auto"]
+  const recentActuals = bodyWeightForecastChart.filter(r => r.actual != null).map(r => r.actual)
+  const projected    = bodyWeightForecastChart.filter(r => r.forecast != null).map(r => r.forecast)
+  const allVals = [...recentActuals, ...projected].filter(Number.isFinite)
+  if (!allVals.length) return ["auto", "auto"]
+  const upper = recentActuals.length ? Math.max(...recentActuals) + 5 : Math.max(...allVals) + 5
+  const lower = Math.min(...allVals) - 3
+  return [Math.floor(lower), Math.ceil(upper)]
+}, [bodyWeightForecastChart])
 
 // Per-modality volume forecast charts (actuals from weeklyBuckets + projected points)
 const makeVolumeForecastChart = (field, forecastKeys) => {
@@ -20298,7 +20329,7 @@ return (
         <ComposedChart data={bodyWeightForecastChart} margin={{ top: 10, right: 20, left: 55, bottom: 20 }}>
           <CartesianGrid stroke="#1a1b2e" />
           <XAxis dataKey="label" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
-          <YAxis domain={["auto", "auto"]} label={{ value: "Weight (lb)", angle: -90, position: "insideLeft", offset: 15, fill: "#ced2f0", style: { textAnchor: "middle" } }} />
+          <YAxis domain={forecastYDomain} label={{ value: "Weight (lb)", angle: -90, position: "insideLeft", offset: 15, fill: "#ced2f0", style: { textAnchor: "middle" } }} />
           <Tooltip formatter={(v, n) => [v != null ? `${v} lb` : "—", n === "actual" ? "Actual (7d avg)" : "Projected"]} />
           <Legend verticalAlign="top" height={28} />
           <Line type="monotone" dataKey="actual"   name="Actual (7d avg)" stroke="#4a9ee8" strokeWidth={2} dot={false} connectNulls={false} />
