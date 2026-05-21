@@ -5430,8 +5430,8 @@
   {
     "id": "47c144b4-2ffe-45e1-a8ec-cc3c31632b30",
     "user_id": "9ec703fb-9e9e-4a57-a365-6222b1a822f5",
-    "biometric_id": "bio_mjwafx",
-    "source": "AppleHealthCSV_DailyMetrics",
+    "biometric_id": "sync_2025-07-14_FitnessView",
+    "source": "FitnessView",
     "measured_at": null,
     "measured_date": "2025-07-14",
     "active_energy_cal": 627,
@@ -5442,7 +5442,7 @@
     "vo2_max": null,
     "exercise_minutes": 22,
     "stand_hours": 12,
-    "weight_lb": null,
+    "weight_lb": 182,
     "body_fat_pct": null,
     "bmi": null,
     "bp_systolic": null,
@@ -5471,7 +5471,7 @@
       "resting_energy_cal": 2203
     },
     "created_at": "2026-04-08T14:17:58.899632+00:00",
-    "updated_at": "2026-04-13T21:31:02.626889+00:00"
+    "updated_at": "2026-05-21T00:27:19.976718+00:00"
   },
   {
     "id": "b260e8b8-4431-49d2-bd0e-0f24cd69912c",
@@ -5568,8 +5568,8 @@
   {
     "id": "c43391e0-f6b3-4617-90a4-1863f0f6b861",
     "user_id": "9ec703fb-9e9e-4a57-a365-6222b1a822f5",
-    "biometric_id": "bio_1kmxmqc",
-    "source": "AppleHealthCSV_DailyMetrics",
+    "biometric_id": "sync_2025-07-17_Health",
+    "source": "Health",
     "measured_at": null,
     "measured_date": "2025-07-17",
     "active_energy_cal": 569,
@@ -5580,7 +5580,7 @@
     "vo2_max": null,
     "exercise_minutes": 38,
     "stand_hours": 13,
-    "weight_lb": null,
+    "weight_lb": 180,
     "body_fat_pct": null,
     "bmi": null,
     "bp_systolic": null,
@@ -5609,7 +5609,7 @@
       "resting_energy_cal": 1952
     },
     "created_at": "2026-04-08T14:17:58.899632+00:00",
-    "updated_at": "2026-04-13T21:31:02.626889+00:00"
+    "updated_at": "2026-05-21T00:27:19.879945+00:00"
   },
   {
     "id": "54412d13-b61d-47d8-995d-0df2b21d92c4",
@@ -8006,8 +8006,8 @@
   {
     "id": "3a9d74b2-731b-4dfd-b5b6-806afc8f8e66",
     "user_id": "9ec703fb-9e9e-4a57-a365-6222b1a822f5",
-    "biometric_id": "bio_7xqoa2",
-    "source": "AppleHealthCSV_DailyMetrics",
+    "biometric_id": "sync_2025-09-08_Health",
+    "source": "Health",
     "measured_at": null,
     "measured_date": "2025-09-08",
     "active_energy_cal": 596,
@@ -8018,7 +8018,7 @@
     "vo2_max": null,
     "exercise_minutes": 35,
     "stand_hours": 14,
-    "weight_lb": null,
+    "weight_lb": 173,
     "body_fat_pct": null,
     "bmi": null,
     "bp_systolic": null,
@@ -8047,7 +8047,7 @@
       "resting_energy_cal": 1867
     },
     "created_at": "2026-04-08T14:17:58.899632+00:00",
-    "updated_at": "2026-04-13T21:31:02.626889+00:00"
+    "updated_at": "2026-05-21T00:27:19.781233+00:00"
   },
   {
     "id": "0e5dbafc-cab3-4f8a-a61a-1306c4f00f86",
@@ -9064,8 +9064,8 @@
   {
     "id": "e722f74c-52ce-4f8f-b271-489c07fa3901",
     "user_id": "9ec703fb-9e9e-4a57-a365-6222b1a822f5",
-    "biometric_id": "bio_zutpvz",
-    "source": "AppleHealthCSV_DailyMetrics",
+    "biometric_id": "sync_2025-10-01_FitnessView",
+    "source": "FitnessView",
     "measured_at": null,
     "measured_date": "2025-10-01",
     "active_energy_cal": 712,
@@ -9076,7 +9076,7 @@
     "vo2_max": null,
     "exercise_minutes": 59,
     "stand_hours": 14,
-    "weight_lb": null,
+    "weight_lb": 169,
     "body_fat_pct": null,
     "bmi": null,
     "bp_systolic": null,
@@ -9105,7 +9105,7 @@
       "resting_energy_cal": 1675
     },
     "created_at": "2026-04-08T14:17:58.899632+00:00",
-    "updated_at": "2026-04-13T21:31:02.626889+00:00"
+    "updated_at": "2026-05-21T00:27:19.316021+00:00"
   },
   {
     "id": "adf01db6-8cf5-41e7-be94-330bd8765ba5",
@@ -12054,8 +12054,8 @@
   {
     "id": "c05466e9-580f-4d12-a65f-5959a9777aa1",
     "user_id": "9ec703fb-9e9e-4a57-a365-6222b1a822f5",
-    "biometric_id": "bio_h4kuwh",
-    "source": "AppleHealthCSV_DailyMetrics",
+    "biometric_id": "sync_2025-12-05_FitnessView",
+    "source": "FitnessView",
     "measured_at": null,
     "measured_date": "2025-12-05",
     "active_energy_cal": 1092,
@@ -12066,7 +12066,7 @@
     "vo2_max": null,
     "exercise_minutes": 104,
     "stand_hours": 14,
-    "weight_lb": null,
+    "weight_lb": 164.6,
     "body_fat_pct": null,
     "bmi": null,
     "bp_systolic": null,
@@ -12095,7 +12095,7 @@
       "resting_energy_cal": 1412
     },
     "created_at": "2026-04-08T14:17:58.899632+00:00",
-    "updated_at": "2026-04-13T21:31:02.626889+00:00"
+    "updated_at": "2026-05-21T00:27:19.221023+00:00"
   },
   {
     "id": "684676c0-3479-442b-b3a2-c31dccc353cf",
@@ -12560,8 +12560,8 @@
   {
     "id": "d3e2ffc4-7db3-46c0-9420-3068f19d7840",
     "user_id": "9ec703fb-9e9e-4a57-a365-6222b1a822f5",
-    "biometric_id": "bio_1x37kp1",
-    "source": "AppleHealthCSV_DailyMetrics",
+    "biometric_id": "sync_2025-12-16_FitnessView",
+    "source": "FitnessView",
     "measured_at": null,
     "measured_date": "2025-12-16",
     "active_energy_cal": 705,
@@ -12572,7 +12572,7 @@
     "vo2_max": null,
     "exercise_minutes": 68,
     "stand_hours": 12,
-    "weight_lb": null,
+    "weight_lb": 162.2,
     "body_fat_pct": null,
     "bmi": null,
     "bp_systolic": null,
@@ -12601,7 +12601,7 @@
       "resting_energy_cal": 1523
     },
     "created_at": "2026-04-08T14:17:58.899632+00:00",
-    "updated_at": "2026-04-13T21:31:02.626889+00:00"
+    "updated_at": "2026-05-21T00:27:19.119998+00:00"
   },
   {
     "id": "8a851c58-4153-4199-a065-aacec4304638",
@@ -13618,8 +13618,8 @@
   {
     "id": "bd44c0ce-5427-4cd3-b145-55165dbaae58",
     "user_id": "9ec703fb-9e9e-4a57-a365-6222b1a822f5",
-    "biometric_id": "bio_x54qaf",
-    "source": "AppleHealthCSV_DailyMetrics",
+    "biometric_id": "sync_2026-01-08_ADHeartTrack",
+    "source": "A&D Heart Track",
     "measured_at": null,
     "measured_date": "2026-01-08",
     "active_energy_cal": 825,
@@ -13630,7 +13630,7 @@
     "vo2_max": null,
     "exercise_minutes": 99,
     "stand_hours": 13,
-    "weight_lb": null,
+    "weight_lb": 161.5,
     "body_fat_pct": null,
     "bmi": null,
     "bp_systolic": null,
@@ -13659,13 +13659,13 @@
       "resting_energy_cal": 1818
     },
     "created_at": "2026-04-08T14:17:58.899632+00:00",
-    "updated_at": "2026-04-13T21:31:02.626889+00:00"
+    "updated_at": "2026-05-21T00:27:19.031555+00:00"
   },
   {
     "id": "a9915614-1064-45a8-b514-b85482172ef1",
     "user_id": "9ec703fb-9e9e-4a57-a365-6222b1a822f5",
-    "biometric_id": "bio_rwqelw",
-    "source": "AppleHealthCSV_DailyMetrics",
+    "biometric_id": "sync_2026-01-09_ADHeartTrack",
+    "source": "A&D Heart Track",
     "measured_at": null,
     "measured_date": "2026-01-09",
     "active_energy_cal": 696,
@@ -13676,7 +13676,7 @@
     "vo2_max": null,
     "exercise_minutes": 82,
     "stand_hours": 15,
-    "weight_lb": null,
+    "weight_lb": 161.8,
     "body_fat_pct": null,
     "bmi": null,
     "bp_systolic": null,
@@ -13705,13 +13705,13 @@
       "resting_energy_cal": 1786
     },
     "created_at": "2026-04-08T14:17:58.899632+00:00",
-    "updated_at": "2026-04-13T21:31:02.626889+00:00"
+    "updated_at": "2026-05-21T00:27:18.941404+00:00"
   },
   {
     "id": "5227a75a-87af-4674-8ad0-adda58c319e6",
     "user_id": "9ec703fb-9e9e-4a57-a365-6222b1a822f5",
-    "biometric_id": "bio_nmwgly",
-    "source": "AppleHealthCSV_DailyMetrics",
+    "biometric_id": "sync_2026-01-10_ADHeartTrack",
+    "source": "A&D Heart Track",
     "measured_at": null,
     "measured_date": "2026-01-10",
     "active_energy_cal": 766,
@@ -13722,7 +13722,7 @@
     "vo2_max": null,
     "exercise_minutes": 57,
     "stand_hours": 16,
-    "weight_lb": null,
+    "weight_lb": 162.7,
     "body_fat_pct": null,
     "bmi": null,
     "bp_systolic": null,
@@ -13751,7 +13751,7 @@
       "resting_energy_cal": 1878
     },
     "created_at": "2026-04-08T14:17:58.899632+00:00",
-    "updated_at": "2026-04-13T21:31:02.626889+00:00"
+    "updated_at": "2026-05-21T00:27:18.856485+00:00"
   },
   {
     "id": "4e25f156-dadf-4971-a949-51a6de07c83a",
@@ -13802,8 +13802,8 @@
   {
     "id": "e5d9ac63-9c00-409e-9474-979da2793ad9",
     "user_id": "9ec703fb-9e9e-4a57-a365-6222b1a822f5",
-    "biometric_id": "bio_y7ghz4",
-    "source": "AppleHealthCSV_DailyMetrics",
+    "biometric_id": "sync_2026-01-12_ADHeartTrack",
+    "source": "A&D Heart Track",
     "measured_at": null,
     "measured_date": "2026-01-12",
     "active_energy_cal": 831,
@@ -13814,7 +13814,7 @@
     "vo2_max": null,
     "exercise_minutes": 94,
     "stand_hours": 12,
-    "weight_lb": null,
+    "weight_lb": 163.6,
     "body_fat_pct": null,
     "bmi": null,
     "bp_systolic": null,
@@ -13843,13 +13843,13 @@
       "resting_energy_cal": 1848
     },
     "created_at": "2026-04-08T14:17:58.899632+00:00",
-    "updated_at": "2026-04-13T21:31:02.626889+00:00"
+    "updated_at": "2026-05-21T00:27:18.765105+00:00"
   },
   {
     "id": "a529fe2b-f323-4351-80dd-697fe4b1ff86",
     "user_id": "9ec703fb-9e9e-4a57-a365-6222b1a822f5",
-    "biometric_id": "bio_13futnn",
-    "source": "AppleHealthCSV_DailyMetrics",
+    "biometric_id": "sync_2026-01-13_ADHeartTrack",
+    "source": "A&D Heart Track",
     "measured_at": null,
     "measured_date": "2026-01-13",
     "active_energy_cal": 675,
@@ -13860,7 +13860,7 @@
     "vo2_max": null,
     "exercise_minutes": 82,
     "stand_hours": 16,
-    "weight_lb": null,
+    "weight_lb": 161.7,
     "body_fat_pct": null,
     "bmi": null,
     "bp_systolic": null,
@@ -13889,13 +13889,13 @@
       "resting_energy_cal": 1816
     },
     "created_at": "2026-04-08T14:17:58.899632+00:00",
-    "updated_at": "2026-04-13T21:31:02.626889+00:00"
+    "updated_at": "2026-05-21T00:27:18.440216+00:00"
   },
   {
     "id": "938b718b-99b0-4628-92a9-df70089561dc",
     "user_id": "9ec703fb-9e9e-4a57-a365-6222b1a822f5",
-    "biometric_id": "bio_blkraa",
-    "source": "AppleHealthCSV_DailyMetrics",
+    "biometric_id": "sync_2026-01-14_ADHeartTrack",
+    "source": "A&D Heart Track",
     "measured_at": null,
     "measured_date": "2026-01-14",
     "active_energy_cal": 932,
@@ -13906,7 +13906,7 @@
     "vo2_max": null,
     "exercise_minutes": 129,
     "stand_hours": 14,
-    "weight_lb": null,
+    "weight_lb": 160.2,
     "body_fat_pct": null,
     "bmi": null,
     "bp_systolic": null,
@@ -13935,13 +13935,13 @@
       "resting_energy_cal": 1731
     },
     "created_at": "2026-04-08T14:17:58.899632+00:00",
-    "updated_at": "2026-04-13T21:31:02.626889+00:00"
+    "updated_at": "2026-05-21T00:27:18.35085+00:00"
   },
   {
     "id": "9a3726d5-f40d-4ea8-88cf-3a4c85c625da",
     "user_id": "9ec703fb-9e9e-4a57-a365-6222b1a822f5",
-    "biometric_id": "bio_1nt0uqd",
-    "source": "AppleHealthCSV_DailyMetrics",
+    "biometric_id": "sync_2026-01-15_ADHeartTrack",
+    "source": "A&D Heart Track",
     "measured_at": null,
     "measured_date": "2026-01-15",
     "active_energy_cal": 489,
@@ -13952,7 +13952,7 @@
     "vo2_max": null,
     "exercise_minutes": 112,
     "stand_hours": 14,
-    "weight_lb": null,
+    "weight_lb": 160.2,
     "body_fat_pct": null,
     "bmi": null,
     "bp_systolic": null,
@@ -13981,7 +13981,7 @@
       "resting_energy_cal": 1501
     },
     "created_at": "2026-04-08T14:17:58.899632+00:00",
-    "updated_at": "2026-04-13T21:31:02.626889+00:00"
+    "updated_at": "2026-05-21T00:27:18.259806+00:00"
   },
   {
     "id": "02b3da5d-9fa5-4040-b0b1-21c8665f05c7",
@@ -14032,8 +14032,8 @@
   {
     "id": "ca5d1e3c-abe4-4e4b-9858-c5e39f1fdaac",
     "user_id": "9ec703fb-9e9e-4a57-a365-6222b1a822f5",
-    "biometric_id": "bio_mu3c8f",
-    "source": "AppleHealthCSV_DailyMetrics",
+    "biometric_id": "sync_2026-01-17_ADHeartTrack",
+    "source": "A&D Heart Track",
     "measured_at": null,
     "measured_date": "2026-01-17",
     "active_energy_cal": 380,
@@ -14044,7 +14044,7 @@
     "vo2_max": null,
     "exercise_minutes": 22,
     "stand_hours": 15,
-    "weight_lb": null,
+    "weight_lb": 161,
     "body_fat_pct": null,
     "bmi": null,
     "bp_systolic": null,
@@ -14073,7 +14073,7 @@
       "resting_energy_cal": 1210
     },
     "created_at": "2026-04-08T14:17:58.899632+00:00",
-    "updated_at": "2026-04-13T21:31:02.626889+00:00"
+    "updated_at": "2026-05-21T00:27:18.161668+00:00"
   },
   {
     "id": "1748d219-706a-4ed7-aa65-7f2d5148afa9",
@@ -14124,8 +14124,8 @@
   {
     "id": "4674af22-0c28-4ff7-8921-17c0ff123521",
     "user_id": "9ec703fb-9e9e-4a57-a365-6222b1a822f5",
-    "biometric_id": "bio_zhsn1d",
-    "source": "AppleHealthCSV_DailyMetrics",
+    "biometric_id": "sync_2026-01-19_ADHeartTrack",
+    "source": "A&D Heart Track",
     "measured_at": null,
     "measured_date": "2026-01-19",
     "active_energy_cal": 335,
@@ -14136,7 +14136,7 @@
     "vo2_max": null,
     "exercise_minutes": 11,
     "stand_hours": 11,
-    "weight_lb": null,
+    "weight_lb": 162.9,
     "body_fat_pct": null,
     "bmi": null,
     "bp_systolic": null,
@@ -14165,13 +14165,13 @@
       "resting_energy_cal": 1631
     },
     "created_at": "2026-04-08T14:17:58.899632+00:00",
-    "updated_at": "2026-04-13T21:31:02.626889+00:00"
+    "updated_at": "2026-05-21T00:27:18.075334+00:00"
   },
   {
     "id": "3b3c005c-02e4-41ab-994b-537fde4b731c",
     "user_id": "9ec703fb-9e9e-4a57-a365-6222b1a822f5",
-    "biometric_id": "bio_1enfl71",
-    "source": "AppleHealthCSV_DailyMetrics",
+    "biometric_id": "sync_2026-01-20_ADHeartTrack",
+    "source": "A&D Heart Track",
     "measured_at": null,
     "measured_date": "2026-01-20",
     "active_energy_cal": 762,
@@ -14182,7 +14182,7 @@
     "vo2_max": null,
     "exercise_minutes": 103,
     "stand_hours": 15,
-    "weight_lb": null,
+    "weight_lb": 161.9,
     "body_fat_pct": null,
     "bmi": null,
     "bp_systolic": null,
@@ -14211,7 +14211,7 @@
       "resting_energy_cal": 1364
     },
     "created_at": "2026-04-08T14:17:58.899632+00:00",
-    "updated_at": "2026-04-13T21:31:02.626889+00:00"
+    "updated_at": "2026-05-21T00:27:17.977184+00:00"
   },
   {
     "id": "aa1de1cb-7819-4013-b609-9bb3f9389d82",
@@ -14262,8 +14262,8 @@
   {
     "id": "d6c88dff-fb86-4a44-beb9-a0bf1280e552",
     "user_id": "9ec703fb-9e9e-4a57-a365-6222b1a822f5",
-    "biometric_id": "bio_6nq9lz",
-    "source": "AppleHealthCSV_DailyMetrics",
+    "biometric_id": "sync_2026-01-22_ADHeartTrack",
+    "source": "A&D Heart Track",
     "measured_at": null,
     "measured_date": "2026-01-22",
     "active_energy_cal": 835,
@@ -14274,7 +14274,7 @@
     "vo2_max": null,
     "exercise_minutes": 90,
     "stand_hours": 14,
-    "weight_lb": null,
+    "weight_lb": 159.6,
     "body_fat_pct": null,
     "bmi": null,
     "bp_systolic": null,
@@ -14303,13 +14303,13 @@
       "resting_energy_cal": 1720
     },
     "created_at": "2026-04-08T14:17:58.899632+00:00",
-    "updated_at": "2026-04-13T21:31:02.626889+00:00"
+    "updated_at": "2026-05-21T00:27:17.887603+00:00"
   },
   {
     "id": "0010bc1f-e462-42c4-9464-a757fb3ca0b1",
     "user_id": "9ec703fb-9e9e-4a57-a365-6222b1a822f5",
-    "biometric_id": "bio_8g3r0k",
-    "source": "AppleHealthCSV_DailyMetrics",
+    "biometric_id": "sync_2026-01-23_ADHeartTrack",
+    "source": "A&D Heart Track",
     "measured_at": null,
     "measured_date": "2026-01-23",
     "active_energy_cal": 1217,
@@ -14320,7 +14320,7 @@
     "vo2_max": null,
     "exercise_minutes": 95,
     "stand_hours": 15,
-    "weight_lb": null,
+    "weight_lb": 159.8,
     "body_fat_pct": null,
     "bmi": null,
     "bp_systolic": null,
@@ -14349,7 +14349,7 @@
       "resting_energy_cal": 1325
     },
     "created_at": "2026-04-08T14:17:58.899632+00:00",
-    "updated_at": "2026-04-13T21:31:02.626889+00:00"
+    "updated_at": "2026-05-21T00:27:17.797158+00:00"
   },
   {
     "id": "530cd4a2-228d-49e5-b5aa-b82815728305",
@@ -14538,8 +14538,8 @@
   {
     "id": "31c8aae7-557f-4a3c-b2af-278955fdb26f",
     "user_id": "9ec703fb-9e9e-4a57-a365-6222b1a822f5",
-    "biometric_id": "bio_1v0k1yt",
-    "source": "AppleHealthCSV_DailyMetrics",
+    "biometric_id": "sync_2026-01-28_ADHeartTrack",
+    "source": "A&D Heart Track",
     "measured_at": null,
     "measured_date": "2026-01-28",
     "active_energy_cal": 735,
@@ -14550,7 +14550,7 @@
     "vo2_max": null,
     "exercise_minutes": 108,
     "stand_hours": 16,
-    "weight_lb": null,
+    "weight_lb": 159.3,
     "body_fat_pct": null,
     "bmi": null,
     "bp_systolic": null,
@@ -14579,13 +14579,13 @@
       "resting_energy_cal": 1669
     },
     "created_at": "2026-04-08T14:17:58.899632+00:00",
-    "updated_at": "2026-04-13T21:31:02.626889+00:00"
+    "updated_at": "2026-05-21T00:27:17.703969+00:00"
   },
   {
     "id": "d01ac31a-6f08-495f-b6b8-a674215f2d99",
     "user_id": "9ec703fb-9e9e-4a57-a365-6222b1a822f5",
-    "biometric_id": "bio_jhv3b6",
-    "source": "AppleHealthCSV_DailyMetrics",
+    "biometric_id": "sync_2026-01-29_ADHeartTrack",
+    "source": "A&D Heart Track",
     "measured_at": null,
     "measured_date": "2026-01-29",
     "active_energy_cal": 948,
@@ -14596,7 +14596,7 @@
     "vo2_max": null,
     "exercise_minutes": 120,
     "stand_hours": 15,
-    "weight_lb": null,
+    "weight_lb": 158.7,
     "body_fat_pct": null,
     "bmi": null,
     "bp_systolic": null,
@@ -14625,7 +14625,7 @@
       "resting_energy_cal": 1473
     },
     "created_at": "2026-04-08T14:17:58.899632+00:00",
-    "updated_at": "2026-04-13T21:31:02.626889+00:00"
+    "updated_at": "2026-05-21T00:27:17.603139+00:00"
   },
   {
     "id": "5776d36b-4e7f-4b13-a891-b9958e273a1a",
@@ -15458,8 +15458,8 @@
   {
     "id": "93ffd4a0-bf13-458e-8513-08d0d9229b52",
     "user_id": "9ec703fb-9e9e-4a57-a365-6222b1a822f5",
-    "biometric_id": "bio_daqajk",
-    "source": "AppleHealthCSV_DailyMetrics",
+    "biometric_id": "sync_2026-02-17_ADHeartTrack",
+    "source": "A&D Heart Track",
     "measured_at": null,
     "measured_date": "2026-02-17",
     "active_energy_cal": 640,
@@ -15470,7 +15470,7 @@
     "vo2_max": null,
     "exercise_minutes": 63,
     "stand_hours": 11,
-    "weight_lb": null,
+    "weight_lb": 159.2,
     "body_fat_pct": null,
     "bmi": null,
     "bp_systolic": null,
@@ -15499,7 +15499,7 @@
       "resting_energy_cal": 1748
     },
     "created_at": "2026-04-08T14:17:58.899632+00:00",
-    "updated_at": "2026-04-13T21:31:02.626889+00:00"
+    "updated_at": "2026-05-21T00:27:17.514056+00:00"
   },
   {
     "id": "412bb5c3-fd8e-4aeb-a935-bef257e46a25",
@@ -15918,8 +15918,8 @@
   {
     "id": "13149b5f-940a-46a7-8b1d-47ce9930817a",
     "user_id": "9ec703fb-9e9e-4a57-a365-6222b1a822f5",
-    "biometric_id": "bio_hhlfqv",
-    "source": "AppleHealthCSV_DailyMetrics",
+    "biometric_id": "sync_2026-02-27_ADHeartTrack",
+    "source": "A&D Heart Track",
     "measured_at": null,
     "measured_date": "2026-02-27",
     "active_energy_cal": 528,
@@ -15930,7 +15930,7 @@
     "vo2_max": null,
     "exercise_minutes": 33,
     "stand_hours": 12,
-    "weight_lb": null,
+    "weight_lb": 159.3,
     "body_fat_pct": null,
     "bmi": null,
     "bp_systolic": null,
@@ -15959,7 +15959,7 @@
       "resting_energy_cal": 1724
     },
     "created_at": "2026-04-08T14:17:58.899632+00:00",
-    "updated_at": "2026-04-13T21:31:02.626889+00:00"
+    "updated_at": "2026-05-21T00:27:17.415227+00:00"
   },
   {
     "id": "192835e4-018c-45b8-a924-6f1c66a1c13f",
@@ -16148,8 +16148,8 @@
   {
     "id": "f62bf188-6eb9-4f08-96bd-ec07488d0651",
     "user_id": "9ec703fb-9e9e-4a57-a365-6222b1a822f5",
-    "biometric_id": "bio_quxj91",
-    "source": "AppleHealthCSV_DailyMetrics",
+    "biometric_id": "sync_2026-03-04_ADHeartTrack",
+    "source": "A&D Heart Track",
     "measured_at": null,
     "measured_date": "2026-03-04",
     "active_energy_cal": 982,
@@ -16160,7 +16160,7 @@
     "vo2_max": null,
     "exercise_minutes": 114,
     "stand_hours": 17,
-    "weight_lb": null,
+    "weight_lb": 158.1,
     "body_fat_pct": null,
     "bmi": null,
     "bp_systolic": null,
@@ -16189,7 +16189,7 @@
       "resting_energy_cal": 1805
     },
     "created_at": "2026-04-08T14:17:58.899632+00:00",
-    "updated_at": "2026-04-13T21:31:02.626889+00:00"
+    "updated_at": "2026-05-21T00:27:17.315709+00:00"
   },
   {
     "id": "1fd0c1c8-b17c-4310-898c-27aab8398187",
@@ -16516,8 +16516,8 @@
   {
     "id": "c98aa6cb-3d2b-4ada-a01c-7320889c5e69",
     "user_id": "9ec703fb-9e9e-4a57-a365-6222b1a822f5",
-    "biometric_id": "bio_kbl0iu",
-    "source": "AppleHealthCSV_DailyMetrics",
+    "biometric_id": "sync_2026-03-12_Health",
+    "source": "Health",
     "measured_at": null,
     "measured_date": "2026-03-12",
     "active_energy_cal": 742,
@@ -16528,7 +16528,7 @@
     "vo2_max": null,
     "exercise_minutes": 96,
     "stand_hours": 13,
-    "weight_lb": null,
+    "weight_lb": 158.8,
     "body_fat_pct": null,
     "bmi": null,
     "bp_systolic": null,
@@ -16557,7 +16557,7 @@
       "resting_energy_cal": 1751
     },
     "created_at": "2026-04-08T14:17:58.899632+00:00",
-    "updated_at": "2026-04-13T21:31:02.626889+00:00"
+    "updated_at": "2026-05-21T00:27:17.22229+00:00"
   },
   {
     "id": "e48d3b04-c325-452f-a7a3-8ef48217e22a",
@@ -16608,8 +16608,8 @@
   {
     "id": "0ec53f8c-b142-448e-881d-a940c60b6183",
     "user_id": "9ec703fb-9e9e-4a57-a365-6222b1a822f5",
-    "biometric_id": "bio_lb35y4",
-    "source": "AppleHealthCSV_DailyMetrics",
+    "biometric_id": "sync_2026-03-14_ADHeartTrack",
+    "source": "A&D Heart Track",
     "measured_at": null,
     "measured_date": "2026-03-14",
     "active_energy_cal": 675,
@@ -16620,7 +16620,7 @@
     "vo2_max": null,
     "exercise_minutes": 73,
     "stand_hours": 12,
-    "weight_lb": null,
+    "weight_lb": 158.2,
     "body_fat_pct": null,
     "bmi": null,
     "bp_systolic": null,
@@ -16649,7 +16649,7 @@
       "resting_energy_cal": 1702
     },
     "created_at": "2026-04-08T14:17:58.899632+00:00",
-    "updated_at": "2026-04-13T21:31:02.626889+00:00"
+    "updated_at": "2026-05-21T00:27:17.138283+00:00"
   },
   {
     "id": "3538335a-a77e-4eb3-95e6-879acfd64e02",
@@ -16792,8 +16792,8 @@
   {
     "id": "e52a7f9f-123d-42be-8cd1-809084c20bfc",
     "user_id": "9ec703fb-9e9e-4a57-a365-6222b1a822f5",
-    "biometric_id": "bio_1wpq50o",
-    "source": "AppleHealthCSV_DailyMetrics",
+    "biometric_id": "sync_2026-03-18_ADHeartTrack",
+    "source": "A&D Heart Track",
     "measured_at": null,
     "measured_date": "2026-03-18",
     "active_energy_cal": 839,
@@ -16804,7 +16804,7 @@
     "vo2_max": null,
     "exercise_minutes": 92,
     "stand_hours": 16,
-    "weight_lb": null,
+    "weight_lb": 157.5,
     "body_fat_pct": null,
     "bmi": null,
     "bp_systolic": null,
@@ -16833,7 +16833,7 @@
       "resting_energy_cal": 1670
     },
     "created_at": "2026-04-08T14:17:58.899632+00:00",
-    "updated_at": "2026-04-13T21:31:02.626889+00:00"
+    "updated_at": "2026-05-21T00:27:17.049749+00:00"
   },
   {
     "id": "d15c3d12-fec1-4d8a-a9b2-3f9fa91e0520",
@@ -17436,8 +17436,8 @@
   {
     "id": "2c082932-f9a8-4dae-978b-b7bcd31836a5",
     "user_id": "9ec703fb-9e9e-4a57-a365-6222b1a822f5",
-    "biometric_id": "bio_d8m3u1",
-    "source": "AppleHealthCSV_DailyMetrics",
+    "biometric_id": "sync_2026-04-01_ADHeartTrack",
+    "source": "A&D Heart Track",
     "measured_at": null,
     "measured_date": "2026-04-01",
     "active_energy_cal": 347,
@@ -17448,7 +17448,7 @@
     "vo2_max": null,
     "exercise_minutes": 26,
     "stand_hours": 11,
-    "weight_lb": null,
+    "weight_lb": 160.2,
     "body_fat_pct": null,
     "bmi": null,
     "bp_systolic": null,
@@ -17477,7 +17477,7 @@
       "resting_energy_cal": 1696
     },
     "created_at": "2026-04-08T14:17:58.899632+00:00",
-    "updated_at": "2026-04-13T21:31:02.626889+00:00"
+    "updated_at": "2026-05-21T00:27:16.776144+00:00"
   },
   {
     "id": "5bd8be85-031a-4d5c-b66b-d5ce57b50852",
@@ -17574,8 +17574,8 @@
   {
     "id": "84bc78ea-3cbf-47ca-839b-80bb0581b2f6",
     "user_id": "9ec703fb-9e9e-4a57-a365-6222b1a822f5",
-    "biometric_id": "bio_cfszgi",
-    "source": "AppleHealthCSV_DailyMetrics",
+    "biometric_id": "sync_2026-04-04_ADHeartTrack",
+    "source": "A&D Heart Track",
     "measured_at": null,
     "measured_date": "2026-04-04",
     "active_energy_cal": 729,
@@ -17586,7 +17586,7 @@
     "vo2_max": null,
     "exercise_minutes": 69,
     "stand_hours": 14,
-    "weight_lb": null,
+    "weight_lb": 158,
     "body_fat_pct": null,
     "bmi": null,
     "bp_systolic": null,
@@ -17615,7 +17615,7 @@
       "resting_energy_cal": 1759
     },
     "created_at": "2026-04-08T14:17:58.899632+00:00",
-    "updated_at": "2026-04-13T21:31:02.626889+00:00"
+    "updated_at": "2026-05-21T00:27:14.113801+00:00"
   },
   {
     "id": "34ea1be0-946b-460b-8797-fcd3746acea3",
@@ -17732,7 +17732,7 @@
     "pulse_bpm": null,
     "raw": {},
     "created_at": "2026-05-21T00:25:24.702871+00:00",
-    "updated_at": "2026-05-21T00:25:36.438153+00:00"
+    "updated_at": "2026-05-21T00:27:14.021348+00:00"
   },
   {
     "id": "946bce09-db76-4a88-9ac1-8ec8860ab5f6",
@@ -17757,7 +17757,7 @@
     "pulse_bpm": null,
     "raw": {},
     "created_at": "2026-05-21T00:25:24.566812+00:00",
-    "updated_at": "2026-05-21T00:25:36.344561+00:00"
+    "updated_at": "2026-05-21T00:27:13.919346+00:00"
   },
   {
     "id": "b2d973b0-5763-41bb-bbef-c6d5eff83e1a",
@@ -17782,7 +17782,7 @@
     "pulse_bpm": null,
     "raw": {},
     "created_at": "2026-05-21T00:25:24.416302+00:00",
-    "updated_at": "2026-05-21T00:25:36.195205+00:00"
+    "updated_at": "2026-05-21T00:27:13.810172+00:00"
   },
   {
     "id": "dec64d73-bdc8-4301-a50a-854fe01669da",
@@ -17807,7 +17807,7 @@
     "pulse_bpm": null,
     "raw": {},
     "created_at": "2026-05-21T00:25:24.300368+00:00",
-    "updated_at": "2026-05-21T00:25:36.087425+00:00"
+    "updated_at": "2026-05-21T00:27:13.716665+00:00"
   },
   {
     "id": "da41b696-d557-4750-929f-e92750839487",
@@ -17832,7 +17832,7 @@
     "pulse_bpm": null,
     "raw": {},
     "created_at": "2026-05-21T00:25:24.174693+00:00",
-    "updated_at": "2026-05-21T00:25:28.460485+00:00"
+    "updated_at": "2026-05-21T00:27:07.308873+00:00"
   },
   {
     "id": "62b5ca61-5e2e-49e8-b493-7c39f3dd697a",
@@ -17857,7 +17857,7 @@
     "pulse_bpm": null,
     "raw": {},
     "created_at": "2026-05-21T00:25:23.901756+00:00",
-    "updated_at": "2026-05-21T00:25:28.35323+00:00"
+    "updated_at": "2026-05-21T00:27:07.210056+00:00"
   },
   {
     "id": "9cd0b498-b29e-4f5c-9d3a-51e4b30b310c",
