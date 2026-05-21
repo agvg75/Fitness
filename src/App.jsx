@@ -15450,8 +15450,24 @@ async function persistMealEntries(nextEntries, currentUserId) {
   }
 
   async function deleteMealEntry(entryId) {
-    const nextEntries = mealEntries.filter(row => row.id !== entryId)
+    const idStr = String(entryId)
+    const nextEntries = mealEntries.filter(row => String(row.id) !== idStr)
     await persistMealEntries(nextEntries, session?.user?.id)
+    // Also remove from mealRecords (trainer-sourced meals stored in lift_meal_records)
+    const prevMealRecords = Array.isArray(mealRecords) ? mealRecords : []
+    const nextMealRecords = prevMealRecords.filter(r => String(r.meal_id || r.id) !== idStr)
+    if (nextMealRecords.length !== prevMealRecords.length) {
+      localStorage.setItem("lift_meal_records", JSON.stringify(nextMealRecords))
+      setMealRecords(nextMealRecords)
+      try {
+        if (supabase && session?.user?.id) {
+          await supabase.from("user_kv").upsert(
+            { user_id: session.user.id, key: "lift_meal_records", value: nextMealRecords, updated_at: new Date().toISOString() },
+            { onConflict: "user_id,key" }
+          )
+        }
+      } catch (e) { /* sync best-effort */ }
+    }
   }
 
   const todayMeals = useMemo(() => {
