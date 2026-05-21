@@ -65,16 +65,18 @@ export function generateTrainerReport({
 
   const runSessions = [...canonicalSessions]
     .filter(s => {
-      const t = String(s.canonical_type || s.type || "").toLowerCase()
-      return t.includes("run") || t.includes("walk")
+      const t = String(s.canonical_type || s.type || s.category || s.workout_type || "").toLowerCase()
+      return t.includes("run") || t.includes("walk") || t.includes("outdoor running")
     })
-    .sort((a, b) => String(a.start_date || a.date || "").localeCompare(String(b.start_date || b.date || "")))
+    .sort((a, b) => String(a.start_date || a.date || a.dateTime || "").localeCompare(String(b.start_date || b.date || b.dateTime || "")))
     .slice(-40)
     .map(s => {
-      const dist = Number(s.distance_mi ?? s.distance ?? 0)
-      const dur = Number(s.duration_min ?? s.dur_min ?? s.dur ?? 0)
+      const dist = Number(s.distance_mi ?? s.distance ?? s.preferred_metrics?.distance_mi ?? 0)
+      const dur = Number(s.duration_min ?? s.dur_min ??
+        (s.duration_sec ? s.duration_sec / 60 : null) ??
+        (s.preferred_metrics?.duration_min) ?? 0)
       return {
-        date: iso(s.start_date || s.date),
+        date: iso(s.start_date || s.date || s.dateTime),
         dist,
         dur,
         pace: dist > 0 && dur > 0 ? (dur / dist).toFixed(1) : null,
@@ -98,12 +100,18 @@ export function generateTrainerReport({
     }))
 
   const sleepSeries = [...sleepRecords]
-    .filter(r => r.date || r.start_at)
-    .sort((a, b) => String(a.date || a.start_at || "").localeCompare(String(b.date || b.start_at || "")))
+    .filter(r => r.sleep_date || r.date || r.start_at)
+    .sort((a, b) => String(a.sleep_date || a.date || a.start_at || "").localeCompare(String(b.sleep_date || b.date || b.start_at || "")))
     .slice(-30)
     .map(r => ({
-      date: iso(r.date || r.start_at),
-      hours: Number(r.duration_hr ?? r.hours ?? r.total_sleep_hr ?? 0),
+      date: iso(r.sleep_date || r.date || r.start_at),
+      hours: Number(
+        r.duration_hr ??
+        r.hours ??
+        r.total_sleep_hr ??
+        (r.duration_min ? r.duration_min / 60 : null) ??
+        0
+      ),
     }))
     .filter(r => r.hours > 0)
   const avgSleep = sleepSeries.length
