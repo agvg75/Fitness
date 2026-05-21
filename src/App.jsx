@@ -19345,6 +19345,118 @@ return (
             </div>
           )}
 
+          {/* ── Training Context per DEXA Period ── */}
+          {(() => {
+            const periods = DEXA_REGIONAL.map(scan => {
+              const scanDate = scan.date
+              const windowStart = new Date(`${scanDate}T12:00:00`)
+              windowStart.setDate(windowStart.getDate() - 28)
+              const windowStartStr = windowStart.toISOString().slice(0, 10)
+
+              const windowSessions = (Array.isArray(schedLog) ? schedLog : []).filter(entry => {
+                const d = String(entry.date || "").slice(0, 10)
+                return d >= windowStartStr && d <= scanDate
+              })
+
+              let strengthCount = 0, cardioCount = 0, mixedCount = 0
+              windowSessions.forEach(entry => {
+                const hasStrength = (entry.exercises || []).some(ex => ex?.variant !== "cardio")
+                const hasCardio = Array.isArray(entry.cardio) && entry.cardio.length > 0
+                if (hasStrength && hasCardio) mixedCount++
+                else if (hasStrength) strengthCount++
+                else if (hasCardio) cardioCount++
+              })
+              const dominant = windowSessions.length === 0 ? "—"
+                : strengthCount >= cardioCount && strengthCount >= mixedCount ? "Strength"
+                : cardioCount >= strengthCount && cardioCount >= mixedCount ? "Cardio"
+                : "Mixed"
+
+              const activeOc = (Array.isArray(ocItems) ? ocItems : []).filter(item => {
+                const start = String(item.startDate || "").slice(0, 10)
+                const resolved = String(item.lastResolvedDate || "").slice(0, 10)
+                if (!start || start > scanDate) return false
+                if (resolved && resolved < windowStartStr) return false
+                return true
+              })
+
+              return { label: scan.label, date: scanDate, totalSessions: windowSessions.length, dominant, activeOc }
+            })
+
+            const latestScan = DEXA_REGIONAL[DEXA_REGIONAL.length - 1]
+            const hasLLegGap = latestScan && latestScan.rLeg > latestScan.lLeg
+            const lLegGapPct = hasLLegGap
+              ? ((latestScan.rLeg - latestScan.lLeg) / latestScan.rLeg * 100).toFixed(1)
+              : null
+            const toeLOc = (Array.isArray(ocItems) ? ocItems : []).find(i =>
+              (i.location || "").toLowerCase().includes("toe") && (i.location || "").toLowerCase().includes("l")
+            )
+
+            return (
+              <>
+                <div style={{ ...cardStyle(), marginBottom: "16px" }}>
+                  <div style={{ fontWeight: "bold", marginBottom: "8px" }}>Training Context per DEXA Period</div>
+                  <div style={{ fontSize: 11, color: "#667", marginBottom: 10 }}>
+                    Schedule log sessions in the 4 weeks preceding each scan date.
+                  </div>
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                      <thead>
+                        <tr style={{ borderBottom: "1px solid #1a1b2e", color: "#8fa8d8", textAlign: "left" }}>
+                          <th style={{ padding: "5px 10px", fontWeight: 600 }}>Scan</th>
+                          <th style={{ padding: "5px 10px", fontWeight: 600 }}>Date</th>
+                          <th style={{ padding: "5px 10px", fontWeight: 600, textAlign: "right" }}>Sessions (4w)</th>
+                          <th style={{ padding: "5px 10px", fontWeight: 600 }}>Dominant</th>
+                          <th style={{ padding: "5px 10px", fontWeight: 600 }}>Active OC items</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {periods.map((p, i) => (
+                          <tr key={i} style={{ borderBottom: "1px solid #0d0e1c" }}>
+                            <td style={{ padding: "5px 10px", color: "#ced2f0" }}>{p.label}</td>
+                            <td style={{ padding: "5px 10px", color: "#667" }}>{p.date}</td>
+                            <td style={{ padding: "5px 10px", textAlign: "right", color: "#ced2f0" }}>{p.totalSessions}</td>
+                            <td style={{ padding: "5px 10px", color: "#ced2f0" }}>{p.dominant}</td>
+                            <td style={{ padding: "5px 10px", color: p.activeOc.length > 0 ? "#fbbf24" : "#667" }}>
+                              {p.activeOc.length > 0
+                                ? p.activeOc.map(item => `${item.label || item.key} (${item.location})`).join(", ")
+                                : "None"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div style={{ ...cardStyle(), marginBottom: "16px" }}>
+                  <div style={{ fontWeight: "bold", marginBottom: "8px" }}>Left Leg Lean Mass — Asymmetry Note</div>
+                  {hasLLegGap && lLegGapPct != null ? (
+                    <div style={{ fontSize: 12, color: "#ced2f0", lineHeight: 1.7 }}>
+                      Left leg lean mass is {lLegGapPct}% lower than right at the {latestScan.label} scan
+                      {" "}({(latestScan.lLeg / 1000).toFixed(2)} kg vs {(latestScan.rLeg / 1000).toFixed(2)} kg).
+                      {toeLOc ? (
+                        <span style={{ color: "#fbbf24" }}>
+                          {" "}Active Toe L OC episode (started {String(toeLOc.startDate || "").slice(0, 10)}) is a plausible
+                          unloading driver — chronic left MTP pain biases weight-bearing away from the left foot during
+                          running and loaded strength work.
+                        </span>
+                      ) : (
+                        <span style={{ color: "#fbbf24" }}>
+                          {" "}Active Toe L OC episode March–April 2026 is a plausible unloading driver.
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 12, color: "#fbbf24", lineHeight: 1.7 }}>
+                      Left leg lean mass asymmetry detected at April 2026 DEXA. Active Toe L OC episode March–April 2026
+                      is a plausible unloading driver.
+                    </div>
+                  )}
+                </div>
+              </>
+            )
+          })()}
+
         </div>
       )}
 
