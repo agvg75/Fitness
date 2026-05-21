@@ -13200,6 +13200,21 @@ const [healthFitDaily, setHealthFitDaily] = useState(() => {
     return JSON.parse(localStorage.getItem('lift_healthfit_daily') || '[]');
   } catch { return []; }
 })
+
+useEffect(() => {
+  fetch("/data/fitness_daily.json")
+    .then(r => r.json())
+    .then(fetched => {
+      if (!Array.isArray(fetched) || fetched.length === 0) return;
+      setHealthFitDaily(prev => {
+        const map = {};
+        [...fetched, ...(Array.isArray(prev) ? prev : [])]
+          .forEach(row => { if (row?.date) map[row.date] = row; });
+        return Object.values(map).sort((a,b) => a.date.localeCompare(b.date));
+      });
+    })
+    .catch(() => {});
+}, []);
 const [biometricRecords, setBiometricRecords] = useState(() => { try { return JSON.parse(localStorage.getItem("lift_biometric_records") || "[]") } catch { return [] } })
 const [mealRecords, setMealRecords] = useState(() => { try { return JSON.parse(localStorage.getItem("lift_meal_records") || "[]") } catch { return [] } })
 const [sleepRecords, setSleepRecords] = useState(() => { try { return JSON.parse(localStorage.getItem("lift_sleep_records") || "[]") } catch { return [] } })
