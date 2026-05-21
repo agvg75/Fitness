@@ -6168,7 +6168,7 @@ function projectWeightTrend(weights, nutritionSeries, weeks = 12) {
   return out
 }
 
-function TrainingDashboard({ workouts, recentNutrition, healthFitDaily = [], schedLog = [] }) {
+function TrainingDashboard({ workouts, recentNutrition, healthFitDaily = [], schedLog = [], ocItems = [] }) {
   const fmt0 = n => Number.isFinite(Number(n)) ? Math.round(Number(n)).toLocaleString() : "0"
   const fmt1 = n => Number.isFinite(Number(n)) ? Number(n).toFixed(1) : "0.0"
 
@@ -6221,6 +6221,25 @@ function TrainingDashboard({ workouts, recentNutrition, healthFitDaily = [], sch
     return `${d.getMonth() + 1}/${d.getDate()}`
   }
 
+  const getWorkoutDateKey = workout => String(workout?.dateTime || workout?.date || workout?.start_date || workout?.startDate || "").slice(0, 10)
+  const getOcRegion = item => String(item?.location || item?.region || item?.label || item?.key || "OC").trim()
+  const getOcDateMs = value => {
+    if (!value) return NaN
+    const dateKey = String(value).slice(0, 10)
+    return new Date(`${dateKey}T12:00:00`).getTime()
+  }
+  const activeOcRegionsForDate = dateKey => {
+    const targetMs = getOcDateMs(dateKey)
+    if (!Number.isFinite(targetMs)) return []
+    return [...new Set((Array.isArray(ocItems) ? ocItems : []).filter(item => {
+      const startMs = getOcDateMs(item?.createdAt || item?.startDate)
+      if (!Number.isFinite(startMs) || targetMs < startMs) return false
+      const resolvedMs = getOcDateMs(item?.lastResolvedDate || item?.resolvedAt || item?.resolvedDate || item?.resolutionDate || item?.endDate)
+      const endMs = Number.isFinite(resolvedMs) ? resolvedMs : getOcDateMs(new Date().toISOString())
+      return targetMs <= endMs
+    }).map(getOcRegion).filter(Boolean))]
+  }
+
   const chartData = useMemo(() => {
     const grouped = {}
 
@@ -6253,11 +6272,16 @@ function TrainingDashboard({ workouts, recentNutrition, healthFitDaily = [], sch
           hasEstimatedCal: false,
           cardioMinutes: 0,
           strengthSessions: 0,
-          totalWorkouts: 0
+          totalWorkouts: 0,
+          ocRegions: []
         }
       }
 
       grouped[key].totalWorkouts += 1
+      const workoutOcRegions = activeOcRegionsForDate(getWorkoutDateKey(w))
+      workoutOcRegions.forEach(region => {
+        if (!grouped[key].ocRegions.includes(region)) grouped[key].ocRegions.push(region)
+      })
 
 if (w.category === "Strength") {
   const strengthDate = String(w.date || w.start_date || w.dateTime || "").slice(0, 10)
@@ -6304,7 +6328,23 @@ if (w.category === "Strength") {
     })
 
     return Object.values(grouped).sort((a, b) => a.bucket.localeCompare(b.bucket))
-  }, [filteredWorkouts, rangeMode])
+  }, [filteredWorkouts, rangeMode, ocItems])
+
+  const ocRegionsByChartLabel = useMemo(() => {
+    return new Map(chartData.map(row => [row.label, row.ocRegions || []]))
+  }, [chartData])
+
+  const renderTimelineTick = props => {
+    const { x, y, payload } = props
+    const regions = ocRegionsByChartLabel.get(payload?.value) || []
+    const label = regions.length ? `OC ${regions.slice(0, 2).join(", ")}${regions.length > 2 ? ` +${regions.length - 2}` : ""}` : ""
+    return (
+      <g transform={`translate(${x},${y})`}>
+        <text x={0} y={0} dy={12} textAnchor="middle" fill="#8fa8d8" fontSize={11}>{payload?.value}</text>
+        {label && <text x={0} y={0} dy={25} textAnchor="middle" fill="#f59e0b" fontSize={9}>{label}</text>}
+      </g>
+    )
+  }
 
   const totals = useMemo(() => {
     return chartData.reduce(
@@ -6516,7 +6556,7 @@ if (w.category === "Strength") {
 <ResponsiveContainer width="100%" height={240}>
   <BarChart data={chartData}>
     <CartesianGrid stroke="#1a1b2e" />
-    <XAxis dataKey="label" />
+    <XAxis dataKey="label" tick={renderTimelineTick} height={38} />
     <YAxis unit="" />
     <Tooltip formatter={(value) => [fmt1(value), "Distance (mi)"]} />
 <Bar dataKey="cardioDistance" name="Cardio Distance (logged)" fill="#4a9ee8" stackId="dist" />
@@ -6532,7 +6572,7 @@ if (w.category === "Strength") {
           <ResponsiveContainer width="100%" height={240}>
             <BarChart data={chartData}>
               <CartesianGrid stroke="#1a1b2e" />
-              <XAxis dataKey="label" />
+              <XAxis dataKey="label" tick={renderTimelineTick} height={38} />
               <YAxis />
               <Tooltip />
               <Bar dataKey="cardioCalories" name="Cardio Calories (logged)" fill="#ff9f6e" stackId="cal" />
@@ -6548,7 +6588,7 @@ if (w.category === "Strength") {
           <ResponsiveContainer width="100%" height={240}>
             <BarChart data={chartData}>
               <CartesianGrid stroke="#1a1b2e" />
-              <XAxis dataKey="label" />
+              <XAxis dataKey="label" tick={renderTimelineTick} height={38} />
               <YAxis />
               <Tooltip />
               <Bar dataKey="cardioMinutes" name="Cardio Minutes" fill="#4ae890" />
@@ -6563,7 +6603,7 @@ if (w.category === "Strength") {
           <ResponsiveContainer width="100%" height={240}>
             <BarChart data={chartData}>
               <CartesianGrid stroke="#1a1b2e" />
-              <XAxis dataKey="label" />
+              <XAxis dataKey="label" tick={renderTimelineTick} height={38} />
               <YAxis allowDecimals={false} />
               <Tooltip />
               <Bar dataKey="strengthSessions" name="Strength Sessions" fill="#ffd166" />
@@ -19509,6 +19549,7 @@ return (
     recentNutrition={recentNutrition}
     healthFitDaily={healthFitDaily}
     schedLog={schedLog}
+    ocItems={ocItems}
   />
 )}
 {tab === "Capacity" && (
