@@ -13376,9 +13376,11 @@ useEffect(() => {
         fetched.forEach(r => {
           if (r.measured_date) map[r.measured_date] = r;
         });
-        return Object.values(map).sort((a, b) =>
+        const merged = Object.values(map).sort((a, b) =>
           String(a.measured_date || a.date).localeCompare(String(b.measured_date || b.date))
         );
+        try { localStorage.setItem("lift_biometric_records", JSON.stringify(merged)); } catch {}
+        return merged;
       });
     })
     .catch(() => {});
@@ -19045,6 +19047,11 @@ return (
       <div style={{ ...cardStyle(), minWidth: "0" }}>
         <div style={{ fontWeight: "bold", marginBottom: "12px" }}>Weight Trend, actual and 7 day average ({rangeOptions.find(r => r.key === rangeKey)?.label ?? rangeKey})</div>
         <div style={{ fontSize: 11, color: "#667", marginBottom: 10 }}>Daily scale weight and 7-day smoothing.</div>
+        {biometricRecords.length === 0 ? (
+          <div style={{ height: 320, display: "flex", alignItems: "center", justifyContent: "center", color: "#667", fontSize: 13 }}>
+            Loading weight data…
+          </div>
+        ) : (
         <ResponsiveContainer width="100%" height={320}>
           <LineChart
   data={weightSmoothed}
@@ -19083,6 +19090,7 @@ return (
             />
           </LineChart>
         </ResponsiveContainer>
+        )}
       </div>
 
       <div style={{ ...cardStyle(), minWidth: "0" }}>
