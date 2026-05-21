@@ -293,27 +293,44 @@ if (typeof window !== "undefined") {
   window.allocateSessionTRIMP = allocateSessionTRIMP
 }
 
-function getExerciseHistory(exerciseName, wtSessions) {
-  if (!exerciseName || !Array.isArray(wtSessions) || !wtSessions.length) return []
+function getExerciseHistory(exerciseName, wtSessions, canonicalSessions = []) {
+  if (!exerciseName) return []
   const lower = exerciseName.toLowerCase()
-  const entries = []
-  for (const sess of wtSessions) {
-    const exs = sess.exercises || []
-    const match = exs.find(e => {
-      const n = (e.exercise_name || e.name || "").toLowerCase()
-      return n.includes(lower) || lower.includes(n.split(" ")[0])
-    })
-    if (!match) continue
-    // extract max numeric weight from sets
+  const matchName = n => n.includes(lower) || lower.includes(n.split(" ")[0])
+  const maxWeightFromMatch = match => {
     let maxW = null
     const sets = match.sets || (match.actual ? [match.actual] : [])
     for (const s of sets) {
       const w = parseFloat(s.weight ?? s.load ?? s.w ?? 0)
       if (Number.isFinite(w) && w > 0 && (maxW === null || w > maxW)) maxW = w
     }
-    if (maxW !== null) entries.push({ date: sess.date || "", weight: maxW })
+    return maxW
   }
-  return entries.sort((a, b) => a.date.localeCompare(b.date)).slice(-8)
+
+  const byDate = {}
+  for (const sess of (Array.isArray(wtSessions) ? wtSessions : [])) {
+    const match = (sess.exercises || []).find(e => matchName((e.exercise_name || e.name || "").toLowerCase()))
+    if (!match) continue
+    const maxW = maxWeightFromMatch(match)
+    if (maxW !== null) {
+      const d = sess.date || ""
+      if (d && (!byDate[d] || maxW > byDate[d])) byDate[d] = maxW
+    }
+  }
+  for (const sess of (Array.isArray(canonicalSessions) ? canonicalSessions : [])) {
+    const schedExs = sess?.sources?.schedule?.exercises || []
+    const match = schedExs.find(e => matchName((e.exercise_name || e.name || "").toLowerCase()))
+    if (!match) continue
+    const maxW = maxWeightFromMatch(match)
+    if (maxW !== null) {
+      const d = String(sess.start_date || sess.date || "").slice(0, 10)
+      if (d && (!byDate[d] || maxW > byDate[d])) byDate[d] = maxW
+    }
+  }
+  return Object.entries(byDate)
+    .map(([date, weight]) => ({ date, weight }))
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(-8)
 }
 
 const tabs = [
@@ -3498,7 +3515,7 @@ function SubstituteDrawer({ flag, onSelectSubstitute, onClose }) {
   )
 }
 
-function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, setSchedLog, readinessScore, latestHealthFit = null, ocItems = [], computedTSB = null, tsbV2Panel = null, progressionReadiness = "progress", progressionReasons = [], tendonStatus = { painScore: 0, stiffness: false, override: null }, scheduleFeedback = [], sleepRecords = [], setSleepRecords = () => {}, scheduleTarget = null, clearScheduleTarget = () => {}, ocConstraintState = null }) {
+function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, setSchedLog, readinessScore, latestHealthFit = null, ocItems = [], computedTSB = null, tsbV2Panel = null, progressionReadiness = "progress", progressionReasons = [], tendonStatus = { painScore: 0, stiffness: false, override: null }, scheduleFeedback = [], sleepRecords = [], setSleepRecords = () => {}, scheduleTarget = null, clearScheduleTarget = () => {}, ocConstraintState = null, canonicalSessions = [] }) {
   const safeScheduleFeedback = Array.isArray(scheduleFeedback) ? scheduleFeedback : []
   const [activeDay, setActiveDay] = useState(todayDayKey())
   const [schedView, setSchedView] = useState("schedule")
@@ -4831,7 +4848,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     )
     const workoutSuggestion = isCustom ? rawWorkoutSuggestion : gateRunningRampSuggestion(ex.id, rawWorkoutSuggestion)
     const structuredFlags = !isCustom ? getStructuredExerciseFlags(ex.id) : []
-    const history = !isCustom ? getExerciseHistory(ex.n, schedLog) : []
+    const history = !isCustom ? getExerciseHistory(ex.n, schedLog, canonicalSessions) : []
     const historySparkline = !isCustom && history.length >= 3 ? (() => {
       const weights = history.map(h => h.weight)
       const minW = Math.min(...weights)
@@ -19750,6 +19767,7 @@ return (
     setSleepRecords={setSleepRecords}
     scheduleTarget={scheduleTarget}
     clearScheduleTarget={() => setScheduleTarget(null)}
+    canonicalSessions={unifiedCanonicalSessions}
   />
 )}
 
