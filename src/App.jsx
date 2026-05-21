@@ -33,6 +33,7 @@ import {
   ResponsiveContainer,
   BarChart,
   Bar,
+  Cell,
   Legend,
   AreaChart,
   Area,
@@ -15171,6 +15172,34 @@ cutoff.setDate(cutoff.getDate() - selectedRangePoints)
     }
   }, [filteredNutrition])
 
+  const netEnergyBalance = useMemo(() => {
+    const expendByDate = {}
+    ;(Array.isArray(biometricRecords) ? biometricRecords : []).forEach(r => {
+      const d = String(r.measured_date || r.date || "").slice(0, 10)
+      if (d && Number(r.active_energy_cal) > 0) expendByDate[d] = Number(r.active_energy_cal)
+    })
+    const intakeByDate = {}
+    ;(Array.isArray(nutritionSeries) ? nutritionSeries : []).forEach(r => {
+      const d = String(r.date || "").slice(0, 10)
+      const cal = Number(r.calories ?? r.kcal ?? 0)
+      if (d && cal > 0) intakeByDate[d] = cal
+    })
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - 30)
+    cutoff.setHours(0, 0, 0, 0)
+    const days = []
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date()
+      d.setDate(d.getDate() - i)
+      const dateStr = d.toISOString().slice(0, 10)
+      const intake = intakeByDate[dateStr] ?? null
+      const expenditure = expendByDate[dateStr] ?? null
+      const balance = intake != null && expenditure != null ? expenditure - intake : null
+      days.push({ date: dateStr, label: dateStr.slice(5), intake, expenditure, balance })
+    }
+    return days
+  }, [biometricRecords, nutritionSeries])
+
   const forecastSeries = useMemo(() => {
     return projectWeightTrend(mergedDailyWeights, nutritionSeries, 12)
   }, [mergedDailyWeights, nutritionSeries])
@@ -19030,6 +19059,18 @@ return (
             </LineChart>
           </ResponsiveContainer>
         )}
+        {(() => {
+          const last7 = netEnergyBalance.slice(-7).filter(d => d.balance !== null)
+          if (!last7.length) return null
+          const avg7 = Math.round(last7.reduce((s, d) => s + d.balance, 0) / last7.length)
+          const color = avg7 >= 0 ? "#4ade80" : "#fbbf24"
+          return (
+            <div style={{ marginTop: 8, fontSize: 12, color }}>
+              7-day avg energy balance: <strong>{avg7 > 0 ? "+" : ""}{avg7} kcal</strong>
+              <span style={{ color: "#667", fontWeight: 400 }}> ({avg7 >= 0 ? "deficit" : "surplus"})</span>
+            </div>
+          )
+        })()}
       </div>
 
     </div>
@@ -19459,6 +19500,45 @@ return (
               </LineChart>
             </ResponsiveContainer>
           </div>
+
+          {/* ── Energy Balance (30d) ── */}
+          {(() => {
+            const balanceDays = netEnergyBalance.filter(d => d.balance !== null)
+            const avg7 = (() => {
+              const last7 = netEnergyBalance.slice(-7).filter(d => d.balance !== null)
+              if (!last7.length) return null
+              return Math.round(last7.reduce((s, d) => s + d.balance, 0) / last7.length)
+            })()
+            if (balanceDays.length === 0) return null
+            return (
+              <div style={{ ...cardStyle(), marginBottom: "20px", maxWidth: "1000px" }}>
+                <div style={{ fontWeight: "bold", marginBottom: "4px" }}>Energy Balance (30d)</div>
+                <div style={{ fontSize: 11, color: "#667", marginBottom: 10 }}>
+                  Active expenditure minus caloric intake per day. Positive = deficit (burned more than eaten).
+                </div>
+                <ResponsiveContainer width="100%" height={160}>
+                  <BarChart data={netEnergyBalance} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                    <CartesianGrid stroke="#1a1b2e" vertical={false} />
+                    <XAxis dataKey="label" tick={{ fontSize: 9 }} interval={4} />
+                    <YAxis tick={{ fontSize: 9 }} width={38} />
+                    <Tooltip formatter={(v, n) => [v != null ? `${v > 0 ? "+" : ""}${v} kcal` : "—", "Balance"]} labelFormatter={l => `Date: ${l}`} />
+                    <ReferenceLine y={0} stroke="#444" />
+                    <Bar dataKey="balance" radius={[2, 2, 0, 0]}>
+                      {netEnergyBalance.map((d, i) => (
+                        <Cell key={i} fill={d.balance == null ? "transparent" : d.balance >= 0 ? "#4ade80" : "#fbbf24"} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+                {avg7 != null && (
+                  <div style={{ fontSize: 13, marginTop: 8, color: avg7 >= 0 ? "#4ade80" : "#fbbf24" }}>
+                    7-day avg: <strong>{avg7 > 0 ? "+" : ""}{avg7} kcal</strong>
+                    <span style={{ color: "#667", fontWeight: 400 }}> ({avg7 >= 0 ? "deficit" : "surplus"})</span>
+                  </div>
+                )}
+              </div>
+            )
+          })()}
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "20px" }}>
             <div style={{ ...cardStyle(), minWidth: "0" }}>
