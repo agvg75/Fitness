@@ -6381,7 +6381,7 @@ function projectWeightTrend(weights, nutritionSeries, weeks = 12) {
   return out
 }
 
-function TrainingDashboard({ workouts, recentNutrition, healthFitDaily = [], schedLog = [], ocItems = [], biometricRecords = [] }) {
+function TrainingDashboard({ workouts, recentNutrition, healthFitDaily = [], schedLog = [], ocItems = [], biometricRecords = [], tsbV2Panel = null }) {
   const fmt0 = n => Number.isFinite(Number(n)) ? Math.round(Number(n)).toLocaleString() : "0"
   const fmt1 = n => Number.isFinite(Number(n)) ? Number(n).toFixed(1) : "0.0"
 
@@ -6628,18 +6628,37 @@ if (w.category === "Strength") {
     const cutoff = new Date()
     cutoff.setDate(cutoff.getDate() - 90)
     cutoff.setHours(0, 0, 0, 0)
-    return (Array.isArray(healthFitDaily) ? healthFitDaily : [])
+
+    const hfRows = (Array.isArray(healthFitDaily) ? healthFitDaily : [])
+      .filter(r => r.date && new Date(r.date) >= cutoff)
+    const hfHasData = hfRows.some(r => r.ctl != null || r.atl != null || r.tsb != null)
+
+    if (hfHasData) {
+      return hfRows
+        .map(r => ({
+          date: r.date,
+          label: String(r.date).slice(5),
+          ctl:  r.ctl  != null ? Number(r.ctl)  : null,
+          atl:  r.atl  != null ? Number(r.atl)  : null,
+          tsb:  r.tsb  != null ? Number(r.tsb)  : null,
+          acwr: r.acwr != null ? Number(r.acwr) : null,
+        }))
+        .sort((a, b) => a.date.localeCompare(b.date))
+    }
+
+    // Fallback: derive CTL/ATL/TSB from session-based Banister model
+    return (Array.isArray(tsbV2Panel?.rows) ? tsbV2Panel.rows : [])
       .filter(r => r.date && new Date(r.date) >= cutoff)
       .map(r => ({
         date: r.date,
         label: String(r.date).slice(5),
-        ctl:  r.ctl  != null ? Number(r.ctl)  : null,
-        atl:  r.atl  != null ? Number(r.atl)  : null,
-        tsb:  r.tsb  != null ? Number(r.tsb)  : null,
-        acwr: r.acwr != null ? Number(r.acwr) : null,
+        ctl:  r.overallCtl != null ? Number(r.overallCtl) : null,
+        atl:  r.overallAtl != null ? Number(r.overallAtl) : null,
+        tsb:  r.overallTsb != null ? Number(r.overallTsb) : null,
+        acwr: r.acwr       != null ? Number(r.acwr)       : null,
       }))
       .sort((a, b) => a.date.localeCompare(b.date))
-  }, [healthFitDaily])
+  }, [healthFitDaily, tsbV2Panel])
 
   const showLiveStateDebug = useMemo(() => {
     try {
@@ -6935,18 +6954,25 @@ if (w.category === "Strength") {
             const charts = exercises.map(({ name, match, baseline }) => {
               const points = []
               for (const sess of allSessions) {
-                const ex = (sess.exercises || []).find(e =>
+                // Collect ALL sets for this exercise (not just the first) so the
+                // max e1RM across the session is used, not a warmup set.
+                const matches = (sess.exercises || []).filter(e =>
                   (e.exercise_name || "").toLowerCase().includes(match.toLowerCase())
                 )
-                if (!ex) continue
-                const w = parseFloat(ex.actual?.load ?? ex.load)
-                if (!Number.isFinite(w) || w <= 0) continue
-                const r = parseFloat(ex.actual?.reps ?? ex.reps)
-                // Use e1RM if reps available (Epley: w * (1 + r/30)), cap at 15 reps
-                const e1rm = Number.isFinite(r) && r > 0 && r <= 15
-                  ? Math.round(w * (1 + r / 30))
-                  : w
-                points.push({ date: (sess.date || sess.start_date || "").slice(0, 10), weight: e1rm })
+                if (!matches.length) continue
+                let bestE1rm = 0
+                for (const ex of matches) {
+                  const w = parseFloat(ex.actual?.load ?? ex.load)
+                  if (!Number.isFinite(w) || w <= 0) continue
+                  const r = parseFloat(ex.actual?.reps ?? ex.reps)
+                  // Epley: w × (1 + r/30), capped at 15 reps to avoid extrapolation
+                  const e1rm = Number.isFinite(r) && r > 0 && r <= 15
+                    ? Math.round(w * (1 + r / 30))
+                    : w
+                  if (e1rm > bestE1rm) bestE1rm = e1rm
+                }
+                if (bestE1rm > 0)
+                  points.push({ date: (sess.date || sess.start_date || "").slice(0, 10), weight: bestE1rm })
               }
               const sorted = points
                 .filter(p => p.date)
@@ -16246,26 +16272,25 @@ const trainingLoadDistanceMax = useMemo(() => {
   return Math.max(6, Math.ceil(maxVal * 1.1))
 }, [trainingLoadChartData])
 const bodyForecast = useMemo(() => {
-  // Anchor to the most recent known weight in priority order:
-  // 1. Latest biometric record (trainer entry or import)
-  // 2. Latest weight from dailyWithBiometrics
-  // 3. LIFT_CONFIG DEXA anchor (April 2026)
-  const sortedBio = [...(biometricRecords || [])].sort((a, b) =>
-    String(b.measured_date || b.date || b.timestamp || "").localeCompare(
-      String(a.measured_date || a.date || a.timestamp || "")
-    )
-  )
-  const latestBioWeight = sortedBio.find(r => Number(r.weight_lb) > 100)?.weight_lb
-  const latestDailyWeight = [...(dailyWithBiometrics || [])]
-    .reverse()
-    .find(r => Number(r.weight_lb || r.weight) > 100)
-  const dailyWeight = latestDailyWeight
-    ? Number(latestDailyWeight.weight_lb || latestDailyWeight.weight)
-    : null
-
-  const anchorWeight = Number(latestBioWeight) > 100
-    ? Number(latestBioWeight)
-    : dailyWeight ?? LIFT_CONFIG.total_mass_lb ?? 162.3
+  // Anchor: extract explicit {date, lb} pairs so mixed field names (measured_date
+  // vs date vs timestamp) don't silently collapse to "" in the sort key.
+  const anchorWeight = (() => {
+    const candidates = (Array.isArray(biometricRecords) ? biometricRecords : [])
+      .map(r => ({
+        date: String(r.measured_date || r.date || r.timestamp || "").slice(0, 10),
+        lb: Number(r.weight_lb)
+      }))
+      .filter(r => r.date && r.lb > 100)
+      .sort((a, b) => b.date.localeCompare(a.date))
+    if (candidates.length) return candidates[0].lb
+    // Fallback: latest weight from the joined daily series
+    const fromDaily = [...(dailyWithBiometrics || [])]
+      .reverse()
+      .find(r => Number(r.weight_lb || r.weight) > 100)
+    return fromDaily
+      ? Number(fromDaily.weight_lb || fromDaily.weight)
+      : (LIFT_CONFIG.total_mass_lb ?? 162.3)
+  })()
 
   const lossRateMonthly = LIFT_CONFIG.fat_loss_rate_monthly ?? 1.7
   const slopePerDay = -(lossRateMonthly / 30.44)
@@ -16678,6 +16703,8 @@ const tsbV2Panel = useMemo(() => {
       acute[k] += aA * (load[k] - acute[k])
       chronic[k] += aC * (load[k] - chronic[k])
       row[`${k}Tsb`] = Number((chronic[k] - acute[k]).toFixed(2))
+      row[`${k}Ctl`] = Number(chronic[k].toFixed(2))
+      row[`${k}Atl`] = Number(acute[k].toFixed(2))
     })
     row.dailyLoad = Number((load.overall || 0).toFixed(2))
     row.strengthLoad = Number((load.strength || 0).toFixed(2))
@@ -20291,6 +20318,7 @@ return (
     schedLog={schedLog}
     ocItems={ocItems}
     biometricRecords={biometricRecords}
+    tsbV2Panel={tsbV2Panel}
   />
 )}
 {tab === "Capacity" && (
