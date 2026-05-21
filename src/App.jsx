@@ -2932,8 +2932,8 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
         if (!activeEpisode) return null
         const episodeStart = String(activeEpisode.startDate).slice(0, 10)
         const bioRecords = (Array.isArray(biometricRecords) ? biometricRecords : [])
-          .filter(r => r.date && String(r.date).slice(0, 10) >= episodeStart && Number(r.weight_lb) > 100)
-          .sort((a, b) => String(a.date).localeCompare(String(b.date)))
+          .filter(r => { const d = r.measured_date || r.date; return d && String(d).slice(0, 10) >= episodeStart && Number(r.weight_lb) > 100 })
+          .sort((a, b) => String(a.measured_date || a.date).localeCompare(String(b.measured_date || b.date)))
         if (bioRecords.length < 1) return null
         const startW = Number(bioRecords[0].weight_lb)
         const curW = Number(bioRecords[bioRecords.length - 1].weight_lb)
@@ -6680,8 +6680,8 @@ if (w.category === "Strength") {
   cutoff.setDate(cutoff.getDate() - 30)
   cutoff.setHours(0, 0, 0, 0)
   const recent = (Array.isArray(biometricRecords) ? biometricRecords : [])
-    .filter(r => r.date && new Date(r.date) >= cutoff && Number(r.weight_lb) > 100)
-    .sort((a, b) => String(a.date).localeCompare(String(b.date)))
+    .filter(r => { const d = r.measured_date || r.date; return d && new Date(d) >= cutoff && Number(r.weight_lb) > 100 })
+    .sort((a, b) => String(a.measured_date || a.date).localeCompare(String(b.measured_date || b.date)))
   if (recent.length < 2) return null
   const first = Number(recent[0].weight_lb)
   const last = Number(recent[recent.length - 1].weight_lb)
@@ -13278,6 +13278,27 @@ useEffect(() => {
     .catch(() => {});
 }, []);
 const [biometricRecords, setBiometricRecords] = useState(() => { try { return JSON.parse(localStorage.getItem("lift_biometric_records") || "[]") } catch { return [] } })
+useEffect(() => {
+  fetch("/data/weight_daily.json")
+    .then(r => r.json())
+    .then(fetched => {
+      if (!Array.isArray(fetched) || fetched.length === 0) return;
+      setBiometricRecords(prev => {
+        const map = {};
+        (Array.isArray(prev) ? prev : []).forEach(r => {
+          const key = r.measured_date || r.date;
+          if (key) map[key] = r;
+        });
+        fetched.forEach(r => {
+          if (r.measured_date) map[r.measured_date] = r;
+        });
+        return Object.values(map).sort((a, b) =>
+          String(a.measured_date || a.date).localeCompare(String(b.measured_date || b.date))
+        );
+      });
+    })
+    .catch(() => {});
+}, []);
 const [mealRecords, setMealRecords] = useState(() => { try { return JSON.parse(localStorage.getItem("lift_meal_records") || "[]") } catch { return [] } })
 const [sleepRecords, setSleepRecords] = useState(() => { try { return JSON.parse(localStorage.getItem("lift_sleep_records") || "[]") } catch { return [] } })
 const [schedLog, setSchedLog] = useState(() => { try { return JSON.parse(localStorage.getItem('wt-log') || '[]') } catch { return [] } })
