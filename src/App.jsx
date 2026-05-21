@@ -15064,6 +15064,38 @@ const weightSmoothed = useMemo(() => {
   })
 }, [filteredDaily])
 
+// Direct biometricRecords → chart data, bypassing the sparse dailyWithBiometrics join.
+// weightSmoothed has a null weight for every day in `daily` that has no scale reading,
+// producing a fragmented line. This memo only includes days that actually have weight_lb.
+const weightChartData = useMemo(() => {
+  let rows = (Array.isArray(biometricRecords) ? biometricRecords : [])
+    .map(r => {
+      const date = String(r.measured_date || r.date || "").slice(0, 10)
+      const lb = Number(r.weight_lb)
+      if (!date || !Number.isFinite(lb) || lb <= 0) return null
+      return { date, weight_lb: lb }
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.date.localeCompare(b.date))
+
+  if (selectedRangePoints != null) {
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - selectedRangePoints)
+    cutoff.setHours(0, 0, 0, 0)
+    rows = rows.filter(r => {
+      const d = new Date(r.date + "T12:00:00")
+      return Number.isFinite(d.getTime()) && d >= cutoff
+    })
+  }
+
+  return rows.map((r, i) => {
+    const start = Math.max(0, i - 6)
+    const subset = rows.slice(start, i + 1).map(x => x.weight_lb)
+    const avg = subset.reduce((a, b) => a + b, 0) / subset.length
+    return { date: r.date, label: fmtShortDate(r.date), weight_lb: r.weight_lb, avg: Number(avg.toFixed(2)) }
+  })
+}, [biometricRecords, selectedRangePoints])
+
 useEffect(() => {
   const hasWeight = weightSmoothed.some(r => r.weight != null && Number.isFinite(r.weight) && r.weight > 0)
   const hasAvg = weightSmoothed.some(r => r.avg != null && Number.isFinite(r.avg) && r.avg > 0)
@@ -15098,8 +15130,8 @@ useEffect(() => {
 }, [operationalWorkouts, weightSmoothed])
 
 const overviewWeightDomain = useMemo(() => {
-  const vals = weightSmoothed
-    .map(row => Number(row.weight))
+  const vals = weightChartData
+    .map(row => row.weight_lb)
     .filter(v => Number.isFinite(v) && v > 0)
 
   if (!vals.length) return [140, 190]
@@ -15117,7 +15149,7 @@ const overviewWeightDomain = useMemo(() => {
   }
 
   return [low, high]
-}, [weightSmoothed])
+}, [weightChartData])
   const dexaSeries = useMemo(() => {
     return DEXA_REGIONAL.map(s => ({
       date: s.date,
@@ -19092,7 +19124,7 @@ return (
         ) : (
         <ResponsiveContainer width="100%" height={320}>
           <LineChart
-  data={weightSmoothed}
+  data={weightChartData}
   margin={{ top: 8, right: 14, left: 10, bottom: 18 }}
 >
             <CartesianGrid stroke="#1a1b2e" />
@@ -19103,16 +19135,12 @@ return (
               width={38}
             />
             <Tooltip
-              formatter={(value, name) => {
-                if (name === "weight") return [`${Number(value).toFixed(1)} lb`, "Weight"]
-                if (name === "avg") return [`${Number(value).toFixed(1)} lb`, "7 day avg"]
-                return [value, name]
-              }}
+              formatter={(value, name) => [`${Number(value).toFixed(1)} lb`, name]}
             />
             <Legend verticalAlign="top" height={36} />
             <Line
               type="monotone"
-              dataKey="weight"
+              dataKey="weight_lb"
               stroke="#4a9ee8"
               strokeWidth={2}
               dot={false}
