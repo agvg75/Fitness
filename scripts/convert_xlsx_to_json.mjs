@@ -214,6 +214,72 @@ async function fetchFitnessDaily(healthFitMap) {
 }
 
 // ---------------------------------------------------------------------------
+// Merge Excel Body_Weight_Daily with Supabase biometric_records weight rows
+// ---------------------------------------------------------------------------
+async function buildWeightDaily() {
+  // 1. Excel source — Body_Weight_Daily sheet
+  const excelRows = sheet("Body_Weight_Daily")
+    .map(row => {
+      const date = normalizeDate(row.date ?? row.Date)
+      const lb = numOrNull(row.weight_lbs_mean ?? row["Weight (lbs)"] ?? row.weight_lb)
+      if (!date || lb === null) return null
+      return { measured_date: date, weight_lb: round1(lb), source: "excel" }
+    })
+    .filter(r => r !== null)
+
+  // 2. Supabase source — rows that have a weight_lb value
+  let supabaseRows = []
+  if (SUPABASE_URL && SUPABASE_ANON_KEY) {
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+    let from = 0
+    const PAGE = 1000
+    for (;;) {
+      const { data, error } = await supabase
+        .from("biometric_records")
+        .select("measured_date,weight_lb")
+        .not("weight_lb", "is", null)
+        .order("measured_date", { ascending: true })
+        .range(from, from + PAGE - 1)
+      if (error) {
+        console.error("[weight_daily] Supabase error:", error.message)
+        break
+      }
+      if (!data || data.length === 0) break
+      supabaseRows = supabaseRows.concat(data)
+      if (data.length < PAGE) break
+      from += PAGE
+    }
+    console.log(`[weight_daily] Fetched ${supabaseRows.length} weight rows from Supabase`)
+  } else {
+    console.warn("[weight_daily] No Supabase credentials — using Excel data only")
+  }
+
+  const mappedSupabase = supabaseRows
+    .map(row => {
+      const date = row.measured_date ? String(row.measured_date).slice(0, 10) : null
+      const lb = numOrNull(row.weight_lb)
+      if (!date || lb === null) return null
+      return { measured_date: date, weight_lb: round1(lb), source: "supabase" }
+    })
+    .filter(r => r !== null)
+
+  // 3. Merge — Supabase wins on duplicate dates
+  const byDate = new Map()
+  for (const r of excelRows) byDate.set(r.measured_date, r)
+  for (const r of mappedSupabase) byDate.set(r.measured_date, r)   // overwrites
+
+  const merged = Array.from(byDate.values()).sort((a, b) =>
+    a.measured_date.localeCompare(b.measured_date)
+  )
+
+  const dateRange = merged.length
+    ? `${merged[0].measured_date} → ${merged[merged.length - 1].measured_date}`
+    : "empty"
+  console.log(`[weight_daily] Merged ${merged.length} rows (${dateRange})`)
+  return merged
+}
+
+// ---------------------------------------------------------------------------
 // Excel-derived datasets (unchanged)
 // ---------------------------------------------------------------------------
 const nutritionDaily = sheet("Nutrition_Daily").map(row => ({
@@ -255,7 +321,10 @@ const workoutLog = sheet("Workout_Log").map(row => ({
 fs.mkdirSync("public/data", { recursive: true })
 
 const healthFitMap = loadHealthFitCsv()
-const fitnessDaily = await fetchFitnessDaily(healthFitMap)
+const [fitnessDaily, weightDaily] = await Promise.all([
+  fetchFitnessDaily(healthFitMap),
+  buildWeightDaily(),
+])
 
 if (fitnessDaily.length > 0) {
   const latest = fitnessDaily[fitnessDaily.length - 1].date
@@ -267,6 +336,7 @@ if (fitnessDaily.length > 0) {
 }
 
 fs.writeFileSync("public/data/fitness_daily.json", JSON.stringify(fitnessDaily, null, 2))
+fs.writeFileSync("public/data/weight_daily.json", JSON.stringify(weightDaily, null, 2))
 fs.writeFileSync("public/data/nutrition_daily.json", JSON.stringify(nutritionDaily, null, 2))
 fs.writeFileSync("public/data/injury_daily.json", JSON.stringify(injuryDaily, null, 2))
 fs.writeFileSync("public/data/dexa_summary.json", JSON.stringify(dexaSummary, null, 2))
