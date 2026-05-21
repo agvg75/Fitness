@@ -3684,15 +3684,6 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     }
   }
   const tissueName = tissue => String(tissue?.region || "").replace(/\s+[LR]$/, "").trim()
-  const normalizeExerciseName = name => String(name || "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim()
-  const findExerciseLibraryEntryByName = exerciseName => {
-    const normalizedExerciseName = normalizeExerciseName(exerciseName)
-    if (!normalizedExerciseName) return null
-    return EXERCISE_LIBRARY.find(entry => {
-      const normalizedLibraryName = normalizeExerciseName(entry.name)
-      return normalizedLibraryName.includes(normalizedExerciseName) || normalizedExerciseName.includes(normalizedLibraryName)
-    }) || null
-  }
   const renderFormDecayAlerts = alerts => {
     if (!Array.isArray(alerts) || alerts.length === 0) return null
     return (
@@ -4286,43 +4277,46 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
 
     const completedCardio = getCardioEntries(day).filter((_, i) => isChecked(day, "cardio", i))
     const currentLog = await loadScheduleLogForMutation(schedLog)
-    const formDecayAlerts = []
-    for (const exercise of [...filteredExercises, ...filteredCustomExs]) {
-      const libraryEntry = findExerciseLibraryEntryByName(exercise.exercise_name)
-      const formDecay = libraryEntry?.form_decay
-      if (!libraryEntry || !formDecay) continue
-
-      const actualLoad = parseFloat(exercise.actual.load)
-      const prescribedLoad = parseFloat(exercise.prescribed.load)
-      const loadRampFired = !Number.isNaN(actualLoad) && !Number.isNaN(prescribedLoad) && actualLoad !== 0 && prescribedLoad !== 0
-        ? actualLoad > prescribedLoad * (1 + formDecay.trigger_threshold.load_increase_pct / 100)
-        : false
-
-      const actualReps = parseInt(exercise.actual.reps, 10)
-      const prescribedReps = parseInt(exercise.prescribed.reps, 10)
-      const repRangeExceededFired = !Number.isNaN(actualReps) && !Number.isNaN(prescribedReps)
-        ? actualReps - prescribedReps >= formDecay.trigger_threshold.excess_reps
-        : false
-
-      const triggerFired =
-        formDecay.trigger === "load_ramp"
-          ? loadRampFired
-          : formDecay.trigger === "rep_range_exceeded"
-            ? repRangeExceededFired
-            : formDecay.trigger === "combined"
-              ? loadRampFired && repRangeExceededFired
-              : false
-
-      if (triggerFired) {
-        formDecayAlerts.push({
-          exerciseId: exercise.exercise_id,
-          exerciseName: exercise.exercise_name,
-          trigger: formDecay.trigger,
-          secondary_tissues: formDecay.secondary_tissues,
-          warning_text: formDecay.warning_text,
-        })
+    const form_decay_alerts = [];
+    ([...filteredExercises, ...filteredCustomExs] || []).forEach(ex => {
+      const libEntry = EXERCISE_LIBRARY.find(e => {
+        const a = (e.name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+        const b = (ex.exercise_name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+        return a.includes(b) || b.includes(a);
+      });
+      if (!libEntry || !libEntry.form_decay) return;
+      const fd = libEntry.form_decay;
+      const actualLoad = parseFloat(ex.actual?.load);
+      const prescribedLoad = parseFloat(ex.prescribed?.load);
+      const actualReps = parseInt(ex.actual?.reps);
+      const prescribedReps = parseInt(ex.prescribed?.reps);
+      const threshold = fd.trigger_threshold || {};
+      let triggered = false;
+      if (fd.trigger === "load_ramp") {
+        if (!isNaN(actualLoad) && !isNaN(prescribedLoad) && prescribedLoad > 0) {
+          triggered = actualLoad > prescribedLoad * (1 + (threshold.load_increase_pct || 10) / 100);
+        }
+      } else if (fd.trigger === "rep_range_exceeded") {
+        if (!isNaN(actualReps) && !isNaN(prescribedReps)) {
+          triggered = (actualReps - prescribedReps) >= (threshold.excess_reps || 3);
+        }
+      } else if (fd.trigger === "combined") {
+        const loadOk = !isNaN(actualLoad) && !isNaN(prescribedLoad) && prescribedLoad > 0 &&
+          actualLoad > prescribedLoad * (1 + (threshold.load_increase_pct || 10) / 100);
+        const repOk = !isNaN(actualReps) && !isNaN(prescribedReps) &&
+          (actualReps - prescribedReps) >= (threshold.rep_range_exceeded || 3);
+        triggered = loadOk && repOk;
       }
-    }
+      if (triggered) {
+        form_decay_alerts.push({
+          exerciseId: ex.exercise_id,
+          exerciseName: ex.exercise_name,
+          trigger: fd.trigger,
+          secondary_tissues: fd.secondary_tissues,
+          warning_text: fd.warning_text
+        });
+      }
+    });
 
     const entry = {
       id: Date.now(),
@@ -4334,14 +4328,14 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       program: "Kinesiology (primary)",
       rpe: sessionRPE[`${day}_${venue}`] ?? null,
       exercises: [...filteredExercises, ...filteredCustomExs],
-      form_decay_alerts: formDecayAlerts,
+      form_decay_alerts,
       tendon_work: completedTendonWork,
       cardio: completedCardio,
       stretch_completed: checkedStretch,
       warmup_completed: checkedWarmup,
       source: "LIFT Schedule Tab", apple_watch_sync_pending: true,
       metadata: {
-        form_decay_alerts: formDecayAlerts,
+        form_decay_alerts,
       },
       data: Object.fromEntries(filteredExercises.map(ex => {
         // If the program exercise has a full def array (_def), use it as the per-set record
