@@ -3019,9 +3019,23 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
   )
 }
 
-function DailyReadinessPanel({ readinessScore, latestHealthFit, ocItems, computedTSB = null, tsbV2Panel = null }) {
+function DailyReadinessPanel({ readinessScore, latestHealthFit, ocItems, computedTSB = null, tsbV2Panel = null, sleepRecords = [] }) {
   const tsb = latestHealthFit?.tsb ?? tsbV2Panel?.currentOverallTsb ?? computedTSB?.global?.tsb ?? null
   const hasActiveIssue = (ocItems || []).some(i => i.currentScore >= 3)
+  const recentSleep = (Array.isArray(sleepRecords) ? sleepRecords : [])
+    .filter(record => getSleepRecordDate(record))
+    .sort((a, b) => String(getSleepRecordDate(b)).localeCompare(String(getSleepRecordDate(a))))
+    .slice(0, 3)
+  const sleepAverageHours = recentSleep.length
+    ? recentSleep.reduce((sum, record) => sum + sleepMinutesForReadiness(record), 0) / recentSleep.length / 60
+    : null
+  const sleepColor = sleepAverageHours == null
+    ? "#555"
+    : sleepAverageHours < 6
+      ? "#ef4444"
+      : sleepAverageHours < 7
+        ? "#f59e0b"
+        : "#4ade80"
   let status, color, bg, rationale
   if (readinessScore < 40 || hasActiveIssue) {
     status = "RED"; color = "#ff5252"; bg = "rgba(255,82,82,0.15)"
@@ -3049,6 +3063,15 @@ function DailyReadinessPanel({ readinessScore, latestHealthFit, ocItems, compute
         )}
         {tsb == null && computedTSB == null && (
           <span style={{ fontSize: 11, color: "#555", marginLeft: 8 }}>· Import HealthFit CSV for TSB data</span>
+        )}
+        {recentSleep.length > 0 && (
+          <div style={{ fontSize: 11, color: sleepColor, marginTop: 4 }}>
+            3-night sleep avg {sleepAverageHours.toFixed(1)}h · {recentSleep.map(record => {
+              const date = getSleepRecordDate(record)
+              const hours = sleepMinutesForReadiness(record) / 60
+              return `${date} ${hours.toFixed(1)}h`
+            }).join(" · ")}
+          </div>
         )}
       </div>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -5491,7 +5514,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
           ))}
         </div>
       )}
-      <DailyReadinessPanel readinessScore={readinessScore} latestHealthFit={latestHealthFit} ocItems={ocItems} computedTSB={computedTSB} tsbV2Panel={tsbV2Panel} />
+      <DailyReadinessPanel readinessScore={readinessScore} latestHealthFit={latestHealthFit} ocItems={ocItems} computedTSB={computedTSB} tsbV2Panel={tsbV2Panel} sleepRecords={sleepRecords} />
       <ScheduleMismatchDiagnostics
         report={scheduleMismatchReport}
         onOpenEntry={openDiagnosticEntry}
