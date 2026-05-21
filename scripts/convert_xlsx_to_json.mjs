@@ -1,6 +1,33 @@
 import fs from "fs"
 import xlsx from "xlsx"
+import { createClient } from "@supabase/supabase-js"
 
+// ---------------------------------------------------------------------------
+// Supabase credentials — read from .env.local first, then .env
+// ---------------------------------------------------------------------------
+function readEnvFile(path) {
+  try {
+    return fs.readFileSync(path, "utf8")
+  } catch {
+    return ""
+  }
+}
+
+function getEnvVar(key) {
+  for (const file of [".env.local", ".env"]) {
+    const content = readEnvFile(file)
+    const match = content.match(new RegExp(`^${key}=(.+)`, "m"))
+    if (match) return match[1].trim()
+  }
+  return null
+}
+
+const SUPABASE_URL = getEnvVar("VITE_SUPABASE_URL")
+const SUPABASE_ANON_KEY = getEnvVar("VITE_SUPABASE_ANON_KEY")
+
+// ---------------------------------------------------------------------------
+// Helpers shared with Excel conversion
+// ---------------------------------------------------------------------------
 const workbook = xlsx.readFile("data_source/Andres_Fitness_AllData.xlsx")
 
 function sheet(name) {
@@ -22,6 +49,11 @@ function round2(v) {
   return Number.isFinite(n) ? Number(n.toFixed(2)) : null
 }
 
+function numOrNull(v) {
+  const n = Number(v)
+  return Number.isFinite(n) ? n : null
+}
+
 function normalizeDate(v) {
   if (v == null || v === "") return null
 
@@ -29,8 +61,16 @@ function normalizeDate(v) {
     const s = v.trim()
     if (!s) return null
 
-    const d = new Date(s)
-    if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10)
+    // M/D/YY or M/D/YYYY
+    const mdy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/)
+    if (mdy) {
+      let [, m, d, y] = mdy
+      if (y.length === 2) y = `20${y}`
+      return `${y.padStart(4, "0")}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`
+    }
+
+    const dt = new Date(s)
+    if (!Number.isNaN(dt.getTime())) return dt.toISOString().slice(0, 10)
 
     return s
   }
@@ -48,16 +88,133 @@ function normalizeDate(v) {
   return null
 }
 
-fs.mkdirSync("public/data", { recursive: true })
+// ---------------------------------------------------------------------------
+// HealthFit CSV → CTL/ATL/TSB/TRIMP lookup
+// Looks for Fitness*.csv in data_source/ or the project root.
+// HealthFit export columns vary; we try several known names.
+// ---------------------------------------------------------------------------
+function loadHealthFitCsv() {
+  const candidates = [
+    ...fs.readdirSync("data_source").map(f => `data_source/${f}`),
+    ...fs.readdirSync(".").filter(f => !f.startsWith(".") && !fs.statSync(f).isDirectory())
+  ].filter(f => /Fitness\d+.*\.csv$/i.test(f))
 
-const weightDaily = sheet("Body_Weight_Daily").map(row => ({
-  date: normalizeDate(row.date),
-  weight_lb: round1(row.weight_lbs_mean),
-  weight_lb_min: round1(row.weight_lbs_min),
-  weight_lb_max: round1(row.weight_lbs_max),
-  n_measurements: row.n_measurements == null ? null : Number(row.n_measurements)
-}))
+  if (!candidates.length) {
+    console.warn(
+      "[fitness_daily] No HealthFit CSV found (Fitness*.csv). CTL/ATL/TSB/TRIMP will be null."
+    )
+    return new Map()
+  }
 
+  // Use the most recently named file (timestamps are in the filename)
+  candidates.sort()
+  const chosen = candidates[candidates.length - 1]
+  console.log(`[fitness_daily] Merging CTL/ATL/TSB/TRIMP from ${chosen}`)
+
+  const wb = xlsx.readFile(chosen, { type: "file" })
+  const ws = wb.Sheets[wb.SheetNames[0]]
+  const rows = xlsx.utils.sheet_to_json(ws, { defval: null })
+
+  // Column name aliases used by HealthFit exports
+  const pick = (row, ...keys) => {
+    for (const k of keys) {
+      const v = row[k] ?? row[k.toLowerCase()] ?? row[k.toUpperCase()]
+      if (v != null && v !== "") return numOrNull(v)
+    }
+    return null
+  }
+
+  const map = new Map()
+  for (const row of rows) {
+    const date = normalizeDate(
+      row.Date ?? row.date ?? row.DATE ?? row["Date"]
+    )
+    if (!date) continue
+    map.set(date, {
+      ctl:   pick(row, "CTL", "Fitness", "Training Load", "Chronic Training Load"),
+      atl:   pick(row, "ATL", "Fatigue", "Acute Training Load"),
+      tsb:   pick(row, "TSB", "Form", "Training Stress Balance"),
+      trimp: pick(row, "TRIMP", "Load", "Training Load Value"),
+    })
+  }
+
+  console.log(`[fitness_daily] Loaded ${map.size} CTL/ATL/TSB rows from ${chosen}`)
+  return map
+}
+
+// ---------------------------------------------------------------------------
+// Fetch biometric daily rows from Supabase lift_biometric_records
+// ---------------------------------------------------------------------------
+async function fetchFitnessDaily(healthFitMap) {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    console.warn(
+      "[fitness_daily] VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY not found in .env.local or .env. " +
+      "Skipping Supabase fetch — fitness_daily.json will be empty."
+    )
+    return []
+  }
+
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+
+  let allRows = []
+  const PAGE = 1000
+  let from = 0
+
+  for (;;) {
+    const { data, error } = await supabase
+      .from("biometric_records")
+      .select(
+        "measured_date,active_energy_cal,exercise_minutes,stand_hours,steps," +
+        "resting_hr_bpm,hrv,vo2_max,resting_energy_cal"
+      )
+      .order("measured_date", { ascending: true })
+      .range(from, from + PAGE - 1)
+
+    if (error) {
+      console.error("[fitness_daily] Supabase error:", error.message)
+      return []
+    }
+
+    if (!data || data.length === 0) break
+    allRows = allRows.concat(data)
+    if (data.length < PAGE) break
+    from += PAGE
+  }
+
+  console.log(`[fitness_daily] Fetched ${allRows.length} rows from biometric_records`)
+
+  return allRows
+    .map(row => {
+      const date = row.measured_date
+        ? String(row.measured_date).slice(0, 10)
+        : null
+      if (!date) return null
+
+      const hf = healthFitMap.get(date) || {}
+
+      return {
+        date,
+        active_energy_cal:   numOrNull(row.active_energy_cal),
+        resting_energy_cal:  numOrNull(row.resting_energy_cal),
+        resting_hr_bpm:      numOrNull(row.resting_hr_bpm),
+        hrv:                 numOrNull(row.hrv),
+        steps:               numOrNull(row.steps),
+        vo2_max:             numOrNull(row.vo2_max),
+        exercise_minutes:    numOrNull(row.exercise_minutes),
+        stand_hours:         numOrNull(row.stand_hours),
+        ctl:                 hf.ctl  ?? null,
+        atl:                 hf.atl  ?? null,
+        tsb:                 hf.tsb  ?? null,
+        trimp:               hf.trimp ?? null,
+      }
+    })
+    .filter(r => r !== null)
+    .sort((a, b) => a.date.localeCompare(b.date))
+}
+
+// ---------------------------------------------------------------------------
+// Excel-derived datasets (unchanged)
+// ---------------------------------------------------------------------------
 const nutritionDaily = sheet("Nutrition_Daily").map(row => ({
   date: normalizeDate(row.date ?? row.Date),
   calories: row.calories ?? row.Calories ?? row.kcal ?? row.Kcal ?? null,
@@ -91,7 +248,24 @@ const workoutLog = sheet("Workout_Log").map(row => ({
   notes: row.notes ?? row.Notes ?? null
 }))
 
-fs.writeFileSync("public/data/fitness_daily.json", JSON.stringify(weightDaily, null, 2))
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
+fs.mkdirSync("public/data", { recursive: true })
+
+const healthFitMap = loadHealthFitCsv()
+const fitnessDaily = await fetchFitnessDaily(healthFitMap)
+
+if (fitnessDaily.length > 0) {
+  const latest = fitnessDaily[fitnessDaily.length - 1].date
+  console.log(
+    `[fitness_daily] Writing ${fitnessDaily.length} rows (latest: ${latest}) to public/data/fitness_daily.json`
+  )
+} else {
+  console.warn("[fitness_daily] No rows written — fitness_daily.json will be empty array.")
+}
+
+fs.writeFileSync("public/data/fitness_daily.json", JSON.stringify(fitnessDaily, null, 2))
 fs.writeFileSync("public/data/nutrition_daily.json", JSON.stringify(nutritionDaily, null, 2))
 fs.writeFileSync("public/data/injury_daily.json", JSON.stringify(injuryDaily, null, 2))
 fs.writeFileSync("public/data/dexa_summary.json", JSON.stringify(dexaSummary, null, 2))

@@ -1,6 +1,7 @@
 node_modules/
 dist/
 .env
+.env.local
 .codex
 data_source/export.xml
 data_source/*.xml
