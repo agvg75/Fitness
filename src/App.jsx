@@ -10485,17 +10485,38 @@ function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily,
 
   const handleExportReport = () => {
     try {
+      // Read directly from localStorage at click time to avoid async load race.
+      // Props may be empty if Supabase hasn't finished loading when ImportTab mounted.
+      const safeRead = (key, fallback = []) => {
+        try { return JSON.parse(localStorage.getItem(key) || "null") || fallback } catch { return fallback }
+      }
+      const lsHealthFit    = safeRead("healthfit-daily")
+      const lsBiometrics   = safeRead("lift_biometric_records")
+      const lsSleep        = safeRead("lift_sleep_records")
+      const lsMeals        = safeRead("lift_meal_records")
+      const lsSchedLog     = safeRead("wt-log")
+      const lsSessions     = safeRead("lift_canonical_sessions")
+
+      // Merge prop data (may have fresher Supabase records) with localStorage
+      const merge = (ls, prop) => {
+        const byKey = {}
+        const key = r => r.id || r.date || r.start_date || JSON.stringify(r).slice(0,40)
+        ls.forEach(r => { byKey[key(r)] = r })
+        ;(Array.isArray(prop) ? prop : []).forEach(r => { byKey[key(r)] = r })
+        return Object.values(byKey)
+      }
+
       generateTrainerReport({
-        healthFitDaily:    healthFitDaily                              || [],
-        biometricRecords:  biometricRecords                           || [],
-        dexa:              dexa                                       || [],
-        ocItems:           ocItems                                    || [],
-        sleepRecords:      sleepRecords                               || [],
-        canonicalSessions: unifiedCanonicalSessions || canonicalSessions || [],
-        mealRecords:       mealRecords                                || [],
-        schedLog:          schedLog                                   || [],
-        liftConfig:        liftConfig                                 || {},
-        tsbV2Panel:        tsbV2Panel                                 || null,
+        healthFitDaily:    merge(lsHealthFit,  healthFitDaily),
+        biometricRecords:  merge(lsBiometrics, biometricRecords),
+        dexa:              dexa || [],
+        ocItems:           ocItems || [],
+        sleepRecords:      merge(lsSleep,      sleepRecords),
+        canonicalSessions: merge(lsSessions,   unifiedCanonicalSessions || canonicalSessions || []),
+        mealRecords:       merge(lsMeals,      mealRecords || []),
+        schedLog:          merge(lsSchedLog,   schedLog || []),
+        liftConfig:        liftConfig || {},
+        tsbV2Panel:        tsbV2Panel || null,
         snapshotDate:      new Date().toISOString().slice(0, 10)
       })
     } catch (err) {
