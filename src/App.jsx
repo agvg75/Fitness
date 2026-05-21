@@ -1829,7 +1829,7 @@ function computeOcRecoveryDate(item) {
 }
 
 // ─── TabOperationalCapacity ────────────────────────────────────────────────────
-function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapacityData, healthFitDaily, sleepRecords, tsbFallback = null, runSessions = [], canonicalSessions = [], schedLog = [] }) {
+function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapacityData, healthFitDaily, sleepRecords, tsbFallback = null, runSessions = [], canonicalSessions = [], schedLog = [], biometricRecords = [] }) {
   const [selectedId, setSelectedId] = useState(null)
   const [addForm, setAddForm] = useState({
     key: "muscleStatus",
@@ -2924,6 +2924,44 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
           </div>
         </div>
       )}
+
+      {(() => {
+        const activeEpisode = (Array.isArray(ocItems) ? ocItems : [])
+          .filter(i => Number(i.currentScore || 0) > 0 && i.startDate)
+          .sort((a, b) => String(b.startDate).localeCompare(String(a.startDate)))[0] || null
+        if (!activeEpisode) return null
+        const episodeStart = String(activeEpisode.startDate).slice(0, 10)
+        const bioRecords = (Array.isArray(biometricRecords) ? biometricRecords : [])
+          .filter(r => r.date && String(r.date).slice(0, 10) >= episodeStart && Number(r.weight_lb) > 100)
+          .sort((a, b) => String(a.date).localeCompare(String(b.date)))
+        if (bioRecords.length < 1) return null
+        const startW = Number(bioRecords[0].weight_lb)
+        const curW = Number(bioRecords[bioRecords.length - 1].weight_lb)
+        const delta = curW - startW
+        const arrow = delta < -0.5 ? "↓" : delta > 0.5 ? "↑" : "→"
+        const deltaColor = delta < -0.5 ? "#f97316" : delta > 0.5 ? "#4ade80" : "#fbbf24"
+        const latestFat = [...bioRecords].reverse().find(r => Number(r.body_fat_pct) > 0)
+        const startFat = bioRecords.find(r => Number(r.body_fat_pct) > 0)
+        const fatDelta = (latestFat && startFat) ? Number(latestFat.body_fat_pct) - Number(startFat.body_fat_pct) : null
+        return (
+          <div style={{ ...cardStyle(), marginBottom: "16px" }}>
+            <div style={{ fontSize: "11px", fontWeight: "700", color: "#8fa8d8", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+              Body Composition — since episode start ({episodeStart})
+            </div>
+            <div style={{ display: "flex", gap: "20px", flexWrap: "wrap", fontSize: "12px", color: "#ced2f0" }}>
+              <span>Start: <strong>{startW.toFixed(1)} lb</strong></span>
+              <span>Current: <strong>{curW.toFixed(1)} lb</strong></span>
+              <span style={{ color: deltaColor }}>{arrow} {delta >= 0 ? "+" : ""}{delta.toFixed(1)} lb</span>
+              {fatDelta != null && (
+                <span style={{ color: "#8fa8d8" }}>Body fat: {fatDelta >= 0 ? "+" : ""}{fatDelta.toFixed(1)}%</span>
+              )}
+            </div>
+            <div style={{ fontSize: "10px", color: "#555", marginTop: "6px" }}>
+              Weight change during active OC episode — context for energy availability.
+            </div>
+          </div>
+        )
+      })()}
 
       {/* ── Operational Capacity current projection chart ─────────── */}
       <div style={{ ...cardStyle(), minWidth: "0" }}>
@@ -6259,7 +6297,7 @@ function projectWeightTrend(weights, nutritionSeries, weeks = 12) {
   return out
 }
 
-function TrainingDashboard({ workouts, recentNutrition, healthFitDaily = [], schedLog = [], ocItems = [] }) {
+function TrainingDashboard({ workouts, recentNutrition, healthFitDaily = [], schedLog = [], ocItems = [], biometricRecords = [] }) {
   const fmt0 = n => Number.isFinite(Number(n)) ? Math.round(Number(n)).toLocaleString() : "0"
   const fmt1 = n => Number.isFinite(Number(n)) ? Number(n).toFixed(1) : "0.0"
 
@@ -6636,6 +6674,30 @@ if (w.category === "Strength") {
   <div style={labelStyle}>Protein (7d avg g)</div>
   <div style={valueStyle}>{fmt0(recentNutrition.avgProtein)}</div>
 </div>
+
+{(() => {
+  const cutoff = new Date()
+  cutoff.setDate(cutoff.getDate() - 30)
+  cutoff.setHours(0, 0, 0, 0)
+  const recent = (Array.isArray(biometricRecords) ? biometricRecords : [])
+    .filter(r => r.date && new Date(r.date) >= cutoff && Number(r.weight_lb) > 100)
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)))
+  if (recent.length < 2) return null
+  const first = Number(recent[0].weight_lb)
+  const last = Number(recent[recent.length - 1].weight_lb)
+  const delta = last - first
+  const arrow = delta < -0.5 ? "↓" : delta > 0.5 ? "↑" : "→"
+  const deltaColor = delta < -0.5 ? "#4ade80" : delta > 0.5 ? "#f97316" : "#fbbf24"
+  return (
+    <div style={cardStyle}>
+      <div style={labelStyle}>Weight (30d)</div>
+      <div style={valueStyle}>{fmt1(last)} lb</div>
+      <div style={{ fontSize: "12px", color: deltaColor, marginTop: "4px" }}>
+        {arrow} {delta >= 0 ? "+" : ""}{fmt1(delta)} lb
+      </div>
+    </div>
+  )
+})()}
 
 </div>
 
@@ -19677,6 +19739,7 @@ return (
     healthFitDaily={healthFitDaily}
     schedLog={schedLog}
     ocItems={ocItems}
+    biometricRecords={biometricRecords}
   />
 )}
 {tab === "Capacity" && (
@@ -19691,6 +19754,7 @@ return (
     runSessions={operationalWorkouts.filter(w => w.category === "Running" && w.distance > 0)}
     canonicalSessions={unifiedCanonicalSessions}
     schedLog={schedLog}
+    biometricRecords={biometricRecords}
   />
 )}
 {tab === "_InjuryLegacy" && (
