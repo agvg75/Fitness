@@ -10690,6 +10690,10 @@ function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily,
   const [photoExtracting, setPhotoExtracting] = useState(false)
   const [photoResult, setPhotoResult] = useState(null)
   const [photoError, setPhotoError] = useState(null)
+  const lastImported = localStorage.getItem('lift_healthfit_daily_imported_at')
+  const lastImportedLabel = lastImported
+    ? new Date(lastImported).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })
+    : null
 
   const handleExportReport = () => {
     try {
@@ -11380,12 +11384,16 @@ Return ONLY a JSON object with this exact structure, no explanation:
         const merged = Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date))
         localStorage.setItem("healthfit-daily", JSON.stringify(merged))
         if (setHealthFitDaily) setHealthFitDaily(merged)
+        localStorage.setItem('lift_healthfit_daily', JSON.stringify(merged));
+        localStorage.setItem('lift_healthfit_daily_imported_at', new Date().toISOString());
         committed += healthFitResult.length
         if (supabase && STORE_USER_ID) {
           await upsertHealthfitDaily(supabase, STORE_USER_ID, merged)
           const remoteHealthFit = await loadHealthfitDaily(supabase, STORE_USER_ID)
           localStorage.setItem("healthfit-daily", JSON.stringify(remoteHealthFit))
           if (setHealthFitDaily) setHealthFitDaily(remoteHealthFit)
+          localStorage.setItem('lift_healthfit_daily', JSON.stringify(remoteHealthFit));
+          localStorage.setItem('lift_healthfit_daily_imported_at', new Date().toISOString());
         }
       }
 
@@ -11467,6 +11475,11 @@ Return ONLY a JSON object with this exact structure, no explanation:
         </div>
 
         <div style={{ fontSize: "13px", color: "#888" }}>Status: {status}</div>
+        {lastImportedLabel && (
+          <div style={{ fontSize: "11px", color: "#666", marginTop: 4 }}>
+            Last imported: {lastImportedLabel}
+          </div>
+        )}
         {progress?.processed_bytes && (
           <div style={{ fontSize: "12px", color: "#555", marginTop: 4 }}>
             {Math.round((100 * progress.processed_bytes) / Math.max(1, progress.total_bytes || 1))}% of Apple file parsed ({progress.parsed_lines?.toLocaleString() || 0} lines)
@@ -13182,7 +13195,11 @@ export default function App() {
 const [error, setError] = useState("")
 const [storedWorkouts, setStoredWorkouts] = useState([])
 const [canonicalSessions, setCanonicalSessions] = useState([])
-const [healthFitDaily, setHealthFitDaily] = useState([])
+const [healthFitDaily, setHealthFitDaily] = useState(() => {
+  try {
+    return JSON.parse(localStorage.getItem('lift_healthfit_daily') || '[]');
+  } catch { return []; }
+})
 const [biometricRecords, setBiometricRecords] = useState(() => { try { return JSON.parse(localStorage.getItem("lift_biometric_records") || "[]") } catch { return [] } })
 const [mealRecords, setMealRecords] = useState(() => { try { return JSON.parse(localStorage.getItem("lift_meal_records") || "[]") } catch { return [] } })
 const [sleepRecords, setSleepRecords] = useState(() => { try { return JSON.parse(localStorage.getItem("lift_sleep_records") || "[]") } catch { return [] } })
@@ -14532,7 +14549,7 @@ useEffect(() => {
     const wo = await store.get("ufd-workouts")
     const lg = await store.get("wt-log")
     const ocLocal = await store.get("oc-items")
-    const hfLocal = await store.get("healthfit-daily")
+    const hfLocal = await store.get("lift_healthfit_daily") || await store.get("healthfit-daily")
     const dedupedWorkouts = dedupeUfdWorkouts(wo)
     const ninetyDaysAgo = Date.now() - 90 * 24 * 3600000
     const cleanedOcLocal = (Array.isArray(ocLocal) ? ocLocal : []).filter(item => {
@@ -14550,7 +14567,10 @@ useEffect(() => {
       setOcItems(cleanedOcLocal)
       console.log(`[migration] Removed ${ocLocal.length - cleanedOcLocal.length} zero-score OC items`)
     }
-    if (Array.isArray(hfLocal)) setHealthFitDaily(hfLocal)
+    if (Array.isArray(hfLocal)) {
+      localStorage.setItem("lift_healthfit_daily", JSON.stringify(hfLocal))
+      setHealthFitDaily(hfLocal)
+    }
     // Then fetch from Supabase and merge
     if (supabase) {
       try {
@@ -14656,6 +14676,7 @@ useEffect(() => {
             const merged = Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date))
             setHealthFitDaily(merged)
             await store.set("healthfit-daily", merged)
+            localStorage.setItem("lift_healthfit_daily", JSON.stringify(merged))
           }
         }
       } catch (err) {
