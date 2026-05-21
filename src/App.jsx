@@ -3369,7 +3369,7 @@ function SubstituteDrawer({ flag, onSelectSubstitute, onClose }) {
   )
 }
 
-function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, setSchedLog, readinessScore, latestHealthFit = null, ocItems = [], computedTSB = null, tsbV2Panel = null, progressionReadiness = "progress", progressionReasons = [], tendonStatus = { painScore: 0, stiffness: false, override: null }, scheduleFeedback = [], sleepRecords = [], setSleepRecords = () => {}, scheduleTarget = null, clearScheduleTarget = () => {}, ocConstraintState = null }) {
+function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, setSchedLog, readinessScore, latestHealthFit = null, ocItems = [], computedTSB = null, tsbV2Panel = null, progressionReadiness = "progress", progressionReasons = [], tendonStatus = { painScore: 0, stiffness: false, override: null }, scheduleFeedback = [], sleepRecords = [], setSleepRecords = () => {}, scheduleTarget = null, clearScheduleTarget = () => {} }) {
   const safeScheduleFeedback = Array.isArray(scheduleFeedback) ? scheduleFeedback : []
   const [activeDay, setActiveDay] = useState(todayDayKey())
   const [schedView, setSchedView] = useState("schedule")
@@ -19417,7 +19417,6 @@ return (
     progressionReadiness={ocConstraintState?.gate?.progressionReadiness ?? "hold"}
     progressionReasons={ocConstraintState?.gate?.progressionReasons ?? []}
     tendonStatus={ocConstraintState?.tendon ?? { painScore: 0, stiffness: false, override: null }}
-    ocConstraintState={ocConstraintState}
     scheduleFeedback={Array.isArray(adaptiveTrainingState?.feedback) ? adaptiveTrainingState.feedback : []}
     sleepRecords={sleepRecords}
     setSleepRecords={setSleepRecords}
