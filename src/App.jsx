@@ -1829,7 +1829,7 @@ function computeOcRecoveryDate(item) {
 }
 
 // ─── TabOperationalCapacity ────────────────────────────────────────────────────
-function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapacityData, healthFitDaily, sleepRecords, tsbFallback = null, runSessions = [], canonicalSessions = [] }) {
+function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapacityData, healthFitDaily, sleepRecords, tsbFallback = null, runSessions = [], canonicalSessions = [], schedLog = [] }) {
   const [selectedId, setSelectedId] = useState(null)
   const [addForm, setAddForm] = useState({
     key: "muscleStatus",
@@ -1892,6 +1892,72 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
       return sum + Number(session?.trimp || session?.duration_min || 0)
     }, 0)
     return total > 0 ? Number(total.toFixed(2)) : null
+  }
+  const getOcEpisodeDateKey = value => String(value || "").slice(0, 10)
+  const getOcEpisodeDateMs = value => {
+    const key = getOcEpisodeDateKey(value)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) return NaN
+    return new Date(`${key}T12:00:00`).getTime()
+  }
+  const isScheduledTrainingDay = dateKey => {
+    const day = dayKeyFromScheduleDate(dateKey)
+    if (!day) return false
+    const hasStrength = (PLAN[day]?.sections || []).some(section => Array.isArray(section.ex) && section.ex.length > 0)
+    const hasCardio = Array.isArray(CARDIO[day]?.sessions) && CARDIO[day].sessions.length > 0
+    const hasTendon = getDefaultTendonWork(day).length > 0
+    return hasStrength || hasCardio || hasTendon
+  }
+  const getSessionsForDate = dateKey => (Array.isArray(schedLog) ? schedLog : []).filter(entry =>
+    String(entry?.date || entry?.logged_at || "").slice(0, 10) === dateKey
+  )
+  const getSessionComplianceRows = item => {
+    const startMs = getOcEpisodeDateMs(item?.createdAt || item?.startDate)
+    if (!Number.isFinite(startMs)) return []
+    const resolvedMs = getOcEpisodeDateMs(item?.lastResolvedDate || item?.resolvedAt || item?.resolvedDate || item?.resolutionDate || item?.endDate)
+    const endMs = Number.isFinite(resolvedMs) ? resolvedMs : getOcEpisodeDateMs(new Date().toISOString())
+    const rows = []
+    const cursor = new Date(startMs)
+    const end = new Date(endMs)
+    while (cursor <= end) {
+      const date = cursor.toISOString().slice(0, 10)
+      const sessions = getSessionsForDate(date)
+      if (sessions.length > 0) {
+        const modified = sessions.some(entry =>
+          (Array.isArray(entry?.form_decay_alerts) && entry.form_decay_alerts.length > 0) ||
+          (Array.isArray(entry?.metadata?.form_decay_alerts) && entry.metadata.form_decay_alerts.length > 0) ||
+          (Array.isArray(entry?.exercises) && entry.exercises.some(ex => ex?.changed === true))
+        )
+        rows.push({ date, status: modified ? "modified" : "completed as written" })
+      } else if (isScheduledTrainingDay(date)) {
+        rows.push({ date, status: "skipped" })
+      }
+      cursor.setDate(cursor.getDate() + 1)
+    }
+    return rows
+  }
+  const renderSessionCompliance = item => {
+    const rows = getSessionComplianceRows(item)
+    if (rows.length === 0) return null
+    const colorForStatus = status =>
+      status === "completed as written" ? "#4ade80" :
+      status === "modified" ? "#f59e0b" :
+      "#ef4444"
+    return (
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginTop: "6px" }}>
+        {rows.map(row => (
+          <span key={`${item.id}_${row.date}_${row.status}`} style={{
+            fontSize: "9px",
+            color: colorForStatus(row.status),
+            border: `1px solid ${colorForStatus(row.status)}55`,
+            background: `${colorForStatus(row.status)}10`,
+            borderRadius: "4px",
+            padding: "2px 5px",
+          }}>
+            {row.date.slice(5)} · {row.status}
+          </span>
+        ))}
+      </div>
+    )
   }
 
   const saveOcItems = async items => {
@@ -2676,6 +2742,7 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
                   <div style={{ fontSize: "10px", color: "#444", marginTop: "2px" }}>
                     pred {pred.toFixed(1)} · recovery {recov || "—"}
                   </div>
+                  {renderSessionCompliance(item)}
                 </div>
               )
             })}
@@ -2724,6 +2791,7 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
                         {item.note && !isEditing && (
                           <div style={{ fontSize: "10px", color: "#555", marginTop: "4px" }}>{item.note}</div>
                         )}
+                        {renderSessionCompliance(item)}
                         {isEditing && (
                           <div style={{ display: "grid", gap: "6px", marginTop: "8px", paddingTop: "8px", borderTop: "1px solid #1a1b2e" }}>
                             <input
@@ -19563,6 +19631,7 @@ return (
     tsbFallback={tsbV2Panel?.currentOverallTsb ?? computedTSBFromSessions?.tsb ?? null}
     runSessions={operationalWorkouts.filter(w => w.category === "Running" && w.distance > 0)}
     canonicalSessions={unifiedCanonicalSessions}
+    schedLog={schedLog}
   />
 )}
 {tab === "_InjuryLegacy" && (
