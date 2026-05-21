@@ -22,7 +22,7 @@ import {
   upsertHealthfitDaily,
   upsertSleepRecords
 } from "./lib/persistence.js"
-import { flagExercisesForOcItems, isMtpSafe, getExerciseProfile, isRunningChainExercise, evaluateFormDecayAlert, EXERCISE_LIBRARY } from "./lib/exerciseLibrary.js"
+import { flagExercisesForOcItems, isMtpSafe, getExerciseProfile, isRunningChainExercise, EXERCISE_LIBRARY } from "./lib/exerciseLibrary.js"
 import {
   LineChart,
   Line,
@@ -3684,6 +3684,15 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     }
   }
   const tissueName = tissue => String(tissue?.region || "").replace(/\s+[LR]$/, "").trim()
+  const normalizeExerciseName = name => String(name || "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim()
+  const findExerciseLibraryEntryByName = exerciseName => {
+    const normalizedExerciseName = normalizeExerciseName(exerciseName)
+    if (!normalizedExerciseName) return null
+    return EXERCISE_LIBRARY.find(entry => {
+      const normalizedLibraryName = normalizeExerciseName(entry.name)
+      return normalizedLibraryName.includes(normalizedExerciseName) || normalizedExerciseName.includes(normalizedLibraryName)
+    }) || null
+  }
   const renderFormDecayAlerts = alerts => {
     if (!Array.isArray(alerts) || alerts.length === 0) return null
     return (
@@ -4277,9 +4286,43 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
 
     const completedCardio = getCardioEntries(day).filter((_, i) => isChecked(day, "cardio", i))
     const currentLog = await loadScheduleLogForMutation(schedLog)
-    const formDecayAlerts = [...filteredExercises, ...filteredCustomExs]
-      .map(ex => evaluateFormDecayAlert(ex, currentLog, ts))
-      .filter(Boolean)
+    const formDecayAlerts = []
+    for (const exercise of [...filteredExercises, ...filteredCustomExs]) {
+      const libraryEntry = findExerciseLibraryEntryByName(exercise.exercise_name)
+      const formDecay = libraryEntry?.form_decay
+      if (!libraryEntry || !formDecay) continue
+
+      const actualLoad = parseFloat(exercise.actual.load)
+      const prescribedLoad = parseFloat(exercise.prescribed.load)
+      const loadRampFired = !Number.isNaN(actualLoad) && !Number.isNaN(prescribedLoad) && actualLoad !== 0 && prescribedLoad !== 0
+        ? actualLoad > prescribedLoad * (1 + formDecay.trigger_threshold.load_increase_pct / 100)
+        : false
+
+      const actualReps = parseInt(exercise.actual.reps, 10)
+      const prescribedReps = parseInt(exercise.prescribed.reps, 10)
+      const repRangeExceededFired = !Number.isNaN(actualReps) && !Number.isNaN(prescribedReps)
+        ? actualReps - prescribedReps >= formDecay.trigger_threshold.excess_reps
+        : false
+
+      const triggerFired =
+        formDecay.trigger === "load_ramp"
+          ? loadRampFired
+          : formDecay.trigger === "rep_range_exceeded"
+            ? repRangeExceededFired
+            : formDecay.trigger === "combined"
+              ? loadRampFired && repRangeExceededFired
+              : false
+
+      if (triggerFired) {
+        formDecayAlerts.push({
+          exerciseId: exercise.exercise_id,
+          exerciseName: exercise.exercise_name,
+          trigger: formDecay.trigger,
+          secondary_tissues: formDecay.secondary_tissues,
+          warning_text: formDecay.warning_text,
+        })
+      }
+    }
 
     const entry = {
       id: Date.now(),

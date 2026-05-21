@@ -350,7 +350,7 @@ export const EXERCISE_LIBRARY = [
   },
   {
     id: "cable_row_single_arm",
-    name: "Cable Row — Single Arm (Mid Height)",
+    name: "Cable Row (mid) — Single Arm",
     scheduleIds: ["th1", "cable_row"],
     days: ["Thu"],
     primaryStress: "peak",
@@ -368,7 +368,7 @@ export const EXERCISE_LIBRARY = [
   },
   {
     id: "lat_pulldown",
-    name: "Lat Pulldown (Machine / Cable)",
+    name: "Lat Pulldown",
     scheduleIds: ["th2", "lat_pull"],
     days: ["Thu"],
     primaryStress: "peak",
@@ -385,7 +385,7 @@ export const EXERCISE_LIBRARY = [
   },
   {
     id: "straight_arm_pulldown",
-    name: "Straight Arm Pulldowns (Cable)",
+    name: "Straight Arm Pulldowns",
     scheduleIds: ["th3"],
     days: ["Thu"],
     primaryStress: "isometric",
@@ -400,7 +400,7 @@ export const EXERCISE_LIBRARY = [
   },
   {
     id: "inverted_row",
-    name: "Inverted Row (TRX / Bar)",
+    name: "Inverted Row",
     scheduleIds: ["th4"],
     days: ["Thu"],
     primaryStress: "peak",
@@ -418,7 +418,7 @@ export const EXERCISE_LIBRARY = [
   },
   {
     id: "bicep_curl_heavy",
-    name: "Biceps Curl (DB / BB, Palms Up, Heavy)",
+    name: "Biceps Curl",
     scheduleIds: ["th5", "bicep_db"],
     days: ["Thu"],
     primaryStress: "peak",
@@ -431,6 +431,39 @@ export const EXERCISE_LIBRARY = [
     substitutes: ["hammer_curl", "cable_d2_flexion"],
     mtp_safe: true,
     notes: "Highest per-rep elbow flexor tendon load in the program. Accumulates with cable row and lat pulldown in the same session.",
+  },
+  {
+    id: "chinups",
+    name: "Chin-ups",
+    scheduleIds: ["th10", "chinups"],
+    days: ["Mon", "Thu"],
+    primaryStress: "cyclic",
+    loads: [
+      { region: "Upper Back", tissueType: "muscleStatus", score: 3 },
+      { region: "Shoulder L", tissueType: "tendonStatus", score: 2 },
+      { region: "Shoulder R", tissueType: "tendonStatus", score: 2 },
+      { region: "Elbow L", tissueType: "tendonStatus", score: 2 },
+      { region: "Elbow R", tissueType: "tendonStatus", score: 2 },
+    ],
+    substitutes: [],
+    mtp_safe: true,
+    notes: "Bodyweight vertical pull. Logged as Chin-ups in schedule sessions.",
+  },
+  {
+    id: "bicep_curl_reverse",
+    name: "reverse biceps",
+    scheduleIds: ["bicep_curl_reverse"],
+    days: ["Mon"],
+    primaryStress: "cyclic",
+    loads: [
+      { region: "Elbow L", tissueType: "tendonStatus", score: 2 },
+      { region: "Elbow R", tissueType: "tendonStatus", score: 2 },
+      { region: "Wrist L", tissueType: "tendonStatus", score: 1 },
+      { region: "Wrist R", tissueType: "tendonStatus", score: 1 },
+    ],
+    substitutes: [],
+    mtp_safe: true,
+    notes: "Reverse-grip biceps curl logged from wt-log sessions.",
   },
   {
     id: "cable_d2_flexion",
@@ -464,7 +497,7 @@ export const EXERCISE_LIBRARY = [
   },
   {
     id: "hammer_curl",
-    name: "Hammer Curl (DB Alternating)",
+    name: "Hammer Curl",
     scheduleIds: ["th8"],
     days: ["Thu"],
     primaryStress: "cyclic",
@@ -480,7 +513,7 @@ export const EXERCISE_LIBRARY = [
   },
   {
     id: "suitcase_carry",
-    name: "Suitcase Carry (DB)",
+    name: "Suitcase Carry",
     scheduleIds: ["th9"],
     days: ["Thu"],
     primaryStress: "isometric",
