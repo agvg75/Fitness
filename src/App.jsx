@@ -13321,6 +13321,44 @@ const [mealRecords, setMealRecords] = useState(() => { try { return JSON.parse(l
 const [sleepRecords, setSleepRecords] = useState(() => { try { return JSON.parse(localStorage.getItem("lift_sleep_records") || "[]") } catch { return [] } })
 const [schedLog, setSchedLog] = useState(() => { try { return JSON.parse(localStorage.getItem('wt-log') || '[]') } catch { return [] } })
 const [ocItems, setOcItems] = useState(() => { try { return JSON.parse(localStorage.getItem('oc-items') || '[]') } catch { return [] } })
+useEffect(() => {
+  try {
+    const raw = localStorage.getItem("injuries")
+    if (!raw) return
+    const legacyEntries = JSON.parse(raw)
+    if (!Array.isArray(legacyEntries) || legacyEntries.length === 0) {
+      localStorage.removeItem("injuries")
+      return
+    }
+    setOcItems(prev => {
+      const existingLabels = new Set((Array.isArray(prev) ? prev : []).map(i => (i.label || "").toLowerCase()))
+      const nowIso = new Date().toISOString()
+      const toAdd = legacyEntries
+        .filter(e => e.name && !existingLabels.has(String(e.name).toLowerCase()))
+        .map((e, idx) => ({
+          id: `migrated_${Date.now()}_${idx}`,
+          key: "muscleStatus",
+          location: e.region || e.name || "Unknown",
+          label: e.name || "Migrated injury",
+          currentScore: 0,
+          initialScore: Math.min(5, Math.round((Number(e.severity) || 0) / 2)),
+          startDate: nowIso,
+          halfLifeHours: 168,
+          episodeCount: 1,
+          lastResolvedDate: nowIso,
+          chronicity: "acute",
+          note: `Migrated from legacy injury log. Original severity: ${e.severity ?? "?"}, recovery days: ${e.recoveryDays ?? "?"}.`,
+          source: "migrated_legacy",
+        }))
+      if (toAdd.length === 0) return prev
+      const updated = [...(Array.isArray(prev) ? prev : []), ...toAdd]
+      localStorage.setItem("oc-items", JSON.stringify(updated))
+      store.set("oc-items", updated).catch(() => {})
+      return updated
+    })
+    localStorage.removeItem("injuries")
+  } catch (e) { /* migration best-effort */ }
+}, [])
 const [tendonStatus, setTendonStatus] = useState({ painScore: 0, stiffness: false, override: null })
 const [selectedTendonGroup, setSelectedTendonGroup] = useState("combined")
 const [overviewExplainOpen, setOverviewExplainOpen] = useState({})
@@ -20003,157 +20041,6 @@ return (
     schedLog={schedLog}
     biometricRecords={biometricRecords}
   />
-)}
-{tab === "_InjuryLegacy" && (
-  <div style={{ padding: "16px" }}>
-    <h3>Injury Log</h3>
-
-    <div style={{ display: "grid", gap: "10px", maxWidth: "500px" }}>
-
-      <input
-        placeholder="Injury name"
-        onChange={e => window.injuryName = e.target.value}
-      />
-
-      <input
-        placeholder="Body region"
-        onChange={e => window.injuryRegion = e.target.value}
-      />
-
-      <input
-        type="number"
-        placeholder="Severity 1-10"
-        onChange={e => window.injurySeverity = e.target.value}
-      />
-
-<input
-  type="number"
-  placeholder="Recovery days"
-  onChange={e => window.injuryRecovery = e.target.value}
-/>
-
-<label>
-  <input
-    type="checkbox"
-    onChange={e => window.injuryAffectsRunning = e.target.checked}
-  />
-  Affects running
-</label>
-
-<label>
-  <input
-    type="checkbox"
-    onChange={e => window.injuryAffectsSwimming = e.target.checked}
-  />
-  Affects swimming
-</label>
-
-<label>
-  <input
-    type="checkbox"
-    onChange={e => window.injuryAffectsCycling = e.target.checked}
-  />
-  Affects cycling
-</label>
-
-<label>
-  <input
-    type="checkbox"
-    onChange={e => window.injuryAffectsLifting = e.target.checked}
-  />
-  Affects lifting
-</label>
-
-      <label>
-        <input
-          type="checkbox"
-          onChange={e => window.injuryAffectsRunning = e.target.checked}
-        />
-        Affects running
-      </label>
-
-      <label>
-        <input
-          type="checkbox"
-          onChange={e => window.injuryAffectsSwimming = e.target.checked}
-        />
-        Affects swimming
-      </label>
-
-      <label>
-        <input
-          type="checkbox"
-          onChange={e => window.injuryAffectsCycling = e.target.checked}
-        />
-        Affects cycling
-      </label>
-
-      <label>
-        <input
-          type="checkbox"
-          onChange={e => window.injuryAffectsLifting = e.target.checked}
-        />
-        Affects lifting
-      </label>
-
-      <button
-        onClick={() => {
-
-          const entry = {
-            id: Date.now(),
-            name: window.injuryName || "",
-            region: window.injuryRegion || "",
-            severity: Number(window.injurySeverity || 0),
-            recoveryDays: Number(window.injuryRecovery || 0),
-            affectsRunning: !!window.injuryAffectsRunning,
-            affectsSwimming: !!window.injuryAffectsSwimming,
-            affectsCycling: !!window.injuryAffectsCycling,
-            affectsLifting: !!window.injuryAffectsLifting
-          }
-
-          const existing = JSON.parse(localStorage.getItem("injuries") || "[]")
-          existing.push(entry)
-          localStorage.setItem("injuries", JSON.stringify(existing))
-
-          alert("Injury saved")
-
-        }}
-      >
-        Save Injury
-      </button>
-
-    </div>
-
-    <div style={{ marginTop: "24px" }}>
-      <h4>Saved injuries</h4>
-
-      {(JSON.parse(localStorage.getItem("injuries") || "[]")).map(entry => (
-        <div
-          key={entry.id}
-          style={{
-            border: "1px solid #1a1b2e",
-            borderRadius: "8px",
-            padding: "10px",
-            marginBottom: "10px",
-            maxWidth: "500px"
-          }}
-        >
-          <div><strong>{entry.name}</strong></div>
-          <div>Region: {entry.region}</div>
-          <div>Severity: {entry.severity}</div>
-          <div>Recovery days: {entry.recoveryDays}</div>
-          <div>
-            Affects:
-            {entry.affectsRunning ? " running" : ""}
-            {entry.affectsSwimming ? " swimming" : ""}
-            {entry.affectsCycling ? " cycling" : ""}
-            {entry.affectsLifting ? " lifting" : ""}
-          </div>
-        </div>
-      ))}
-    </div>
-
-  </div>
 )}
 {tab === "Forecast" && (
   <div>
