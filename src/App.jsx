@@ -4425,17 +4425,34 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     const completedCardio = getCardioEntries(day).filter((_, i) => isChecked(day, "cardio", i))
     const currentLog = await loadScheduleLogForMutation(schedLog)
     const form_decay_alerts = [];
-    ([...filteredExercises, ...filteredCustomExs] || []).forEach(ex => {
+    // Find the most recent prior session for escalation lookback
+    const priorSession = [...(currentLog || [])]
+      .filter(s => String(s.date || "").slice(0, 10) < sessionDate)
+      .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))[0] || null;
+    const priorAlerts = priorSession?.form_decay_alerts || priorSession?.metadata?.form_decay_alerts || [];
+
+    ;([...filteredExercises, ...filteredCustomExs] || []).forEach(ex => {
       const libEntry = EXERCISE_LIBRARY.find(e => {
         const a = (e.name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
         const b = (ex.exercise_name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
         return a.includes(b) || b.includes(a);
       });
-      if (!libEntry || !libEntry.form_decay) return;
-      const fd = libEntry.form_decay;
+
+      // Compute execution modifier regardless of form_decay config
       const actualLoad = parseFloat(ex.actual?.load);
       const prescribedLoad = parseFloat(ex.prescribed?.load);
       const actualReps = parseInt(ex.actual?.reps);
+      const actualSets = parseInt(ex.actual?.sets);
+      let executionModifier = null;
+      if (!isNaN(actualLoad) && !isNaN(prescribedLoad) && prescribedLoad > 0
+          && !isNaN(actualSets) && !isNaN(actualReps)) {
+        const raw = (actualLoad / prescribedLoad) * (1 + (actualSets * actualReps) / 50);
+        executionModifier = Math.min(2.0, Math.max(0.5, raw));
+      }
+      ex.executionModifier = executionModifier;
+
+      if (!libEntry || !libEntry.form_decay) return;
+      const fd = libEntry.form_decay;
       const prescribedReps = parseInt(ex.prescribed?.reps);
       const threshold = fd.trigger_threshold || {};
       let triggered = false;
@@ -4455,13 +4472,24 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
         triggered = loadOk && repOk;
       }
       if (triggered) {
-        form_decay_alerts.push({
+        const exNameNorm = (ex.exercise_name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+        const priorFired = priorAlerts.some(a => {
+          const n = (a.exerciseName || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+          return n === exNameNorm || n.includes(exNameNorm) || exNameNorm.includes(n);
+        });
+        const alert = {
           exerciseId: ex.exercise_id,
           exerciseName: ex.exercise_name,
           trigger: fd.trigger,
           secondary_tissues: fd.secondary_tissues,
-          warning_text: fd.warning_text
-        });
+          warning_text: fd.warning_text,
+          executionModifier,
+        };
+        if (priorFired && executionModifier != null && executionModifier > 1.4) {
+          alert.escalated = true;
+          alert.warning_text = (fd.warning_text || "") + " Repeated overload pattern detected.";
+        }
+        form_decay_alerts.push(alert);
       }
     });
 
