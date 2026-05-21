@@ -424,10 +424,7 @@ function fmtShortDate(dateStr) {
 }
 
 function todayISO() {
-  const d = new Date()
-  return d.getFullYear() + '-' +
-    String(d.getMonth() + 1).padStart(2, '0') + '-' +
-    String(d.getDate()).padStart(2, '0')
+  return new Date().toISOString().slice(0, 10)
 }
 const SDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
@@ -19227,20 +19224,7 @@ return (
           </div>
 
           <div style={{ ...cardStyle(), maxWidth: "1000px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "12px", flexWrap: "wrap" }}>
-              <div style={{ fontWeight: "bold" }}>Meal Log</div>
-              <input
-                type="date"
-                value={mealDate}
-                max={todayISO()}
-                onChange={e => setMealDate(e.target.value)}
-                style={{ background: "#1a1b2e", border: "1px solid #2a2f3e", borderRadius: 6, color: "#d0e4f4", fontSize: 13, padding: "4px 8px", colorScheme: "dark" }}
-              />
-              <button
-                onClick={() => setMealDate(todayISO())}
-                style={{ fontSize: 11, padding: "4px 10px", background: "transparent", border: "1px solid #2a2f3e", borderRadius: 6, color: "#6b7290", cursor: "pointer" }}
-              >Today</button>
-            </div>
+            <div style={{ fontWeight: "bold", marginBottom: "12px" }}>Meal Log ({mealDate})</div>
             {!todayMeals.length ? (
               <div>No synced meal entries for this date.</div>
             ) : (
