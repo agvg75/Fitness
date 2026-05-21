@@ -746,6 +746,373 @@ export const EXERCISE_LIBRARY = [
   },
 ]
 
+const fd = (secondary_tissues, trigger, trigger_threshold, warning_text, common_injuries = []) => ({
+  secondary_tissues,
+  trigger,
+  trigger_threshold,
+  common_injuries,
+  warning_text,
+})
+
+const EXERCISE_LIBRARY_V2_METADATA = {
+  run: { running_chain: true, form_decay: null },
+  cycling_stationary: { running_chain: true, form_decay: null },
+  swim_freestyle: { running_chain: false, form_decay: null },
+  chest_press_machine: { running_chain: false, form_decay: fd(
+    [
+      { region: "Shoulder L", tissueType: "tendonStatus", score: 3 },
+      { region: "Shoulder R", tissueType: "tendonStatus", score: 3 },
+      { region: "Elbow L", tissueType: "tendonStatus", score: 1 },
+      { region: "Elbow R", tissueType: "tendonStatus", score: 1 },
+    ],
+    "load_ramp",
+    { load_increase_pct: 10, window_days: 7 },
+    "Load up this week. Under fatigue, elbows flare beyond 90 degrees, transferring load from the pec to the anterior shoulder capsule and supraspinatus. Elbows stay within 45 to 75 degrees of the torso throughout.",
+    ["Anterior shoulder capsule strain", "Supraspinatus impingement", "Triceps long head tendon irritation"]
+  ) },
+  incline_chest_press: { running_chain: false, form_decay: fd(
+    [
+      { region: "Shoulder L", tissueType: "tendonStatus", score: 3 },
+      { region: "Shoulder R", tissueType: "tendonStatus", score: 3 },
+    ],
+    "load_ramp",
+    { load_increase_pct: 10, window_days: 7 },
+    "Incline angle increases supraspinatus impingement risk. Under fatigue, the shoulder rolls forward at the top. Keep chest up and retract scapulae throughout.",
+    ["Supraspinatus impingement", "Long head biceps tendon irritation", "Acromioclavicular joint stress"]
+  ) },
+  machine_flys: { running_chain: false, form_decay: fd(
+    [
+      { region: "Shoulder L", tissueType: "tendonStatus", score: 3 },
+      { region: "Shoulder R", tissueType: "tendonStatus", score: 3 },
+      { region: "Elbow L", tissueType: "tendonStatus", score: 1 },
+      { region: "Elbow R", tissueType: "tendonStatus", score: 1 },
+    ],
+    "load_ramp",
+    { load_increase_pct: 10, window_days: 7 },
+    "Fly movements are high risk for pectoral tendon tears under load. Maintain a soft elbow bend throughout. Stop the range 10 to 15 degrees before the shoulder feels stretched, especially under fatigue.",
+    ["Pectoralis major tendon strain", "Anterior capsule stretch injury", "Bicipital tendon strain"]
+  ) },
+  lateral_raise: { running_chain: false, form_decay: null },
+  rear_delt_fly: { running_chain: false, form_decay: fd(
+    [
+      { region: "Shoulder L", tissueType: "tendonStatus", score: 1 },
+      { region: "Shoulder R", tissueType: "tendonStatus", score: 1 },
+    ],
+    "load_ramp",
+    { load_increase_pct: 15, window_days: 7 },
+    "Under fatigue, reverse fly produces internal rotation compensation at end range. Keep thumbs pointing up throughout to maintain external rotation.",
+    ["Posterior rotator cuff irritation", "Rhomboid strain"]
+  ) },
+  face_pull_er: { running_chain: false, form_decay: null },
+  triceps_pulldown: { running_chain: false, form_decay: fd(
+    [
+      { region: "Elbow L", tissueType: "tendonStatus", score: 2 },
+      { region: "Elbow R", tissueType: "tendonStatus", score: 2 },
+      { region: "Wrist L", tissueType: "tendonStatus", score: 1 },
+      { region: "Wrist R", tissueType: "tendonStatus", score: 1 },
+    ],
+    "load_ramp",
+    { load_increase_pct: 10, window_days: 7 },
+    "Load up this week. Under fatigue, cable pushdowns shift demand to elbow and wrist extensors. Keep the wrist neutral and stop before elbow flare appears.",
+    ["Distal triceps tendon irritation", "Lateral epicondyle stress"]
+  ) },
+  triceps_overhead: { running_chain: false, form_decay: fd(
+    [
+      { region: "Shoulder L", tissueType: "tendonStatus", score: 2 },
+      { region: "Shoulder R", tissueType: "tendonStatus", score: 2 },
+      { region: "Elbow L", tissueType: "tendonStatus", score: 2 },
+      { region: "Elbow R", tissueType: "tendonStatus", score: 2 },
+    ],
+    "load_ramp",
+    { load_increase_pct: 10, window_days: 7 },
+    "Overhead position places the triceps long head tendon under maximum stretch-under-load. Elbows must stay parallel and pointing forward. Any flare transfers load to the posterior capsule and lateral elbow.",
+    ["Triceps long head tendon irritation", "Posterior shoulder capsule strain", "Lateral epicondyle stress"]
+  ) },
+  pushup_plank_shoulder_touch: { running_chain: true, form_decay: null },
+  pallof_press: { running_chain: true, form_decay: fd(
+    [
+      { region: "Shoulder L", tissueType: "tendonStatus", score: 1 },
+      { region: "Shoulder R", tissueType: "tendonStatus", score: 1 },
+      { region: "Lower Back", tissueType: "muscleStatus", score: 1 },
+    ],
+    "load_ramp",
+    { load_increase_pct: 15, window_days: 7 },
+    "Pallof press is an anti-rotation exercise. Any rotation defeats the purpose and shifts load to lumbar rotators. If rotation appears under the current load, reduce weight, not reps.",
+    ["Anterior shoulder impingement", "Lumbar rotation strain"]
+  ) },
+  hip_thrust: { running_chain: true, form_decay: fd(
+    [
+      { region: "Lower Back", tissueType: "muscleStatus", score: 2 },
+      { region: "AnkleFoot L", tissueType: "tendonStatus", score: 1 },
+      { region: "AnkleFoot R", tissueType: "tendonStatus", score: 1 },
+    ],
+    "load_ramp",
+    { load_increase_pct: 10, window_days: 7 },
+    "Under fatigue, hip thrust produces lumbar hyperextension at the top. Drive through the heels, engage glutes before pushing, and stop at neutral spine, not maximum hip extension.",
+    ["Lumbar hyperextension injury", "Hamstring proximal strain", "Hamstring distal strain"]
+  ) },
+  leg_press_heel_drive: { running_chain: true, form_decay: fd(
+    [
+      { region: "Knee L", tissueType: "tendonStatus", score: 3 },
+      { region: "Knee R", tissueType: "tendonStatus", score: 3 },
+      { region: "Lower Back", tissueType: "muscleStatus", score: 3 },
+      { region: "AnkleFoot L", tissueType: "tendonStatus", score: 2 },
+      { region: "AnkleFoot R", tissueType: "tendonStatus", score: 2 },
+    ],
+    "load_ramp",
+    { load_increase_pct: 10, window_days: 7 },
+    "Load up this week and running volume also rising. Under fatigue, hips posteriorly tilt at depth, loading lumbar discs. Valgus knee collapse also appears. Keep heels flat and stop depth at 90 degrees hip flexion.",
+    ["Patellar tendinopathy", "Lumbar disc compression", "Medial knee ligament stress", "MTP dorsiflexion load"]
+  ) },
+  kb_rdl: { running_chain: true, form_decay: fd(
+    [
+      { region: "Lower Back", tissueType: "muscleStatus", score: 3 },
+      { region: "Knee L", tissueType: "tendonStatus", score: 1 },
+      { region: "Knee R", tissueType: "tendonStatus", score: 1 },
+    ],
+    "load_ramp",
+    { load_increase_pct: 10, window_days: 7 },
+    "Load up this week. RDL is the highest lumbar spine loading pattern in the library under fatigue. Neutral spine is non-negotiable. Stop the descent when the lower back rounds.",
+    ["Lumbar strain", "Proximal hamstring tendinopathy", "Sciatic nerve irritation"]
+  ) },
+  lateral_band_walk: { running_chain: true, form_decay: fd(
+    [
+      { region: "Knee L", tissueType: "tendonStatus", score: 1 },
+      { region: "Knee R", tissueType: "tendonStatus", score: 1 },
+      { region: "AnkleFoot L", tissueType: "tendonStatus", score: 1 },
+      { region: "AnkleFoot R", tissueType: "tendonStatus", score: 1 },
+    ],
+    "set_volume_ramp",
+    { set_increase: 1 },
+    "Under heavy band tension or high volume, lateral walks produce knee valgus and ankle eversion instead of true hip abduction. If you see knees tracking inward, reduce band resistance before adding volume.",
+    ["IT band friction at the lateral knee", "Peroneal tendon strain"]
+  ) },
+  hip_drive_marches: { running_chain: true, form_decay: null },
+  leg_extension: { running_chain: true, form_decay: fd(
+    [
+      { region: "Knee L", tissueType: "tendonStatus", score: 3 },
+      { region: "Knee R", tissueType: "tendonStatus", score: 3 },
+      { region: "AnkleFoot L", tissueType: "tendonStatus", score: 1 },
+      { region: "AnkleFoot R", tissueType: "tendonStatus", score: 1 },
+    ],
+    "combined",
+    { load_increase_pct: 10, rep_range_exceeded: 3 },
+    "Leg extension produces high patellar tendon force per rep, especially in the last 30 degrees of extension. Any anterior knee discomfort during or after this exercise is a direct signal to reduce load immediately.",
+    ["Patellar tendinopathy", "Patellofemoral pain syndrome", "Tibialis anterior tendon stress"]
+  ) },
+  plank: { running_chain: true, form_decay: null },
+  deadbugs: { running_chain: true, form_decay: fd(
+    [
+      { region: "Lower Back", tissueType: "muscleStatus", score: 2 },
+      { region: "Hip L", tissueType: "tendonStatus", score: 1 },
+      { region: "Hip R", tissueType: "tendonStatus", score: 1 },
+    ],
+    "rep_range_exceeded",
+    { excess_reps: 5 },
+    "Dead bugs are only safe if the lower back stays pressed to the floor throughout. The moment the back lifts, the hip flexors are doing the work instead of the deep anterior core. Stop the set.",
+    ["Lumbar strain", "Hip flexor tendon irritation"]
+  ) },
+  cable_row_single_arm: { running_chain: false, form_decay: fd(
+    [
+      { region: "Lower Back", tissueType: "muscleStatus", score: 2 },
+      { region: "Shoulder R", tissueType: "tendonStatus", score: 2 },
+      { region: "Shoulder L", tissueType: "tendonStatus", score: 2 },
+    ],
+    "load_ramp",
+    { load_increase_pct: 10, window_days: 7 },
+    "Load jumped more than 10% this week. Under fatigue, single-arm rows recruit lumbar rotation and bicipital structures as compensators. Confirm scapular retraction is leading the pull, not elbow drive.",
+    ["Lumbar strain", "Bicipital tendon irritation", "Rhomboid strain"]
+  ) },
+  lat_pulldown: { running_chain: false, form_decay: fd(
+    [
+      { region: "Shoulder L", tissueType: "tendonStatus", score: 2 },
+      { region: "Shoulder R", tissueType: "tendonStatus", score: 2 },
+      { region: "Lower Back", tissueType: "muscleStatus", score: 1 },
+    ],
+    "load_ramp",
+    { load_increase_pct: 10, window_days: 7 },
+    "Load increased this week. Under fatigue, lat pulldown recruits the supraspinatus and creates forward head drift. Confirm scapular depression before initiating the pull.",
+    ["Supraspinatus impingement", "Bicipital tendon irritation", "Lumbar hyperextension strain"]
+  ) },
+  straight_arm_pulldown: { running_chain: false, form_decay: fd(
+    [
+      { region: "Shoulder L", tissueType: "tendonStatus", score: 2 },
+      { region: "Shoulder R", tissueType: "tendonStatus", score: 2 },
+      { region: "Elbow L", tissueType: "tendonStatus", score: 1 },
+      { region: "Elbow R", tissueType: "tendonStatus", score: 1 },
+    ],
+    "load_ramp",
+    { load_increase_pct: 10, window_days: 7 },
+    "Load up this week. When fatigued, the elbows flex to compensate, shifting load from the lats to the anterior shoulder capsule and triceps long head. Keep arms locked.",
+    ["Anterior shoulder capsule strain", "Triceps long head tendon irritation", "Posterior rotator cuff irritation"]
+  ) },
+  inverted_row: { running_chain: false, form_decay: fd(
+    [
+      { region: "Lower Back", tissueType: "muscleStatus", score: 2 },
+      { region: "Shoulder L", tissueType: "tendonStatus", score: 1 },
+      { region: "Shoulder R", tissueType: "tendonStatus", score: 1 },
+    ],
+    "rep_range_exceeded",
+    { excess_reps: 3 },
+    "Reps exceeded prescription. Under fatigue, hips drop and the lower back takes compensatory load. Maintain rigid plank alignment throughout all reps.",
+    ["Lumbar sagging strain", "Bicipital tendon load"]
+  ) },
+  bicep_curl_heavy: { running_chain: false, form_decay: fd(
+    [
+      { region: "Elbow L", tissueType: "tendonStatus", score: 2 },
+      { region: "Elbow R", tissueType: "tendonStatus", score: 2 },
+      { region: "Shoulder L", tissueType: "tendonStatus", score: 1 },
+      { region: "Shoulder R", tissueType: "tendonStatus", score: 1 },
+    ],
+    "load_ramp",
+    { load_increase_pct: 10, window_days: 7 },
+    "Load up this week. Under fatigue, biceps curls recruit shoulder momentum and wrist flexors as substitutes, placing medial elbow tendon and anterior shoulder at risk. Full supination, no swing.",
+    ["Distal biceps tendon strain", "Medial epicondylitis", "Anterior shoulder impingement", "Bicipital groove irritation"]
+  ) },
+  bicep_curl_neutral: { running_chain: false, form_decay: fd(
+    [
+      { region: "Elbow L", tissueType: "tendonStatus", score: 2 },
+      { region: "Elbow R", tissueType: "tendonStatus", score: 2 },
+      { region: "Wrist L", tissueType: "tendonStatus", score: 1 },
+      { region: "Wrist R", tissueType: "tendonStatus", score: 1 },
+    ],
+    "load_ramp",
+    { load_increase_pct: 10, window_days: 7 },
+    "Load up this week. Hammer curls under fatigue shift demand to brachioradialis and wrist extensors. Lateral elbow is the primary at-risk structure. Strict neutral grip throughout.",
+    ["Radial tunnel syndrome", "Lateral epicondylitis", "Distal brachialis tendon irritation"]
+  ) },
+  cable_d2_flexion: { running_chain: false, form_decay: fd(
+    [
+      { region: "Shoulder L", tissueType: "tendonStatus", score: 2 },
+      { region: "Shoulder R", tissueType: "tendonStatus", score: 2 },
+      { region: "Elbow L", tissueType: "tendonStatus", score: 1 },
+      { region: "Elbow R", tissueType: "tendonStatus", score: 1 },
+    ],
+    "load_ramp",
+    { load_increase_pct: 10, window_days: 7 },
+    "D2 flexion requires precise diagonal path control. Under fatigue, the arc collapses inward and the rotator cuff substitutes for the prime movers. Reduce load before arc deviation appears.",
+    ["Anterior shoulder impingement", "Rotator cuff strain", "Bicipital tendon irritation"]
+  ) },
+  hammer_curl: { running_chain: false, form_decay: fd(
+    [
+      { region: "Elbow L", tissueType: "tendonStatus", score: 2 },
+      { region: "Elbow R", tissueType: "tendonStatus", score: 2 },
+      { region: "Wrist L", tissueType: "tendonStatus", score: 1 },
+      { region: "Wrist R", tissueType: "tendonStatus", score: 1 },
+    ],
+    "load_ramp",
+    { load_increase_pct: 10, window_days: 7 },
+    "Load up this week. Hammer curls under fatigue shift demand to brachioradialis and wrist extensors. Lateral elbow is the primary at-risk structure. Strict neutral grip throughout.",
+    ["Radial tunnel syndrome", "Lateral epicondylitis", "Distal brachialis tendon irritation"]
+  ) },
+  suitcase_carry: { running_chain: true, form_decay: fd(
+    [
+      { region: "Lower Back", tissueType: "muscleStatus", score: 2 },
+      { region: "AnkleFoot L", tissueType: "tendonStatus", score: 1 },
+      { region: "AnkleFoot R", tissueType: "tendonStatus", score: 1 },
+    ],
+    "load_ramp",
+    { load_increase_pct: 10, window_days: 7 },
+    "Unilateral suitcase carry at high load is meaningful core demand. Under fatigue, the torso laterally flexes toward the weight, defeating the exercise intent and loading the lumbar QL. Stop if you cannot maintain vertical torso.",
+    ["Lumbar QL strain", "Shoulder depression strain", "Ankle inversion sprain"]
+  ) },
+  cable_crossover: { running_chain: false, form_decay: fd(
+    [
+      { region: "Shoulder L", tissueType: "tendonStatus", score: 3 },
+      { region: "Shoulder R", tissueType: "tendonStatus", score: 3 },
+      { region: "Elbow L", tissueType: "tendonStatus", score: 1 },
+      { region: "Elbow R", tissueType: "tendonStatus", score: 1 },
+    ],
+    "load_ramp",
+    { load_increase_pct: 10, window_days: 7 },
+    "Fly movements are high risk for pectoral tendon tears under load. Maintain a soft elbow bend throughout. Stop the range 10 to 15 degrees before the shoulder feels stretched, especially under fatigue.",
+    ["Pectoralis major tendon strain", "Anterior capsule stretch injury", "Bicipital tendon strain"]
+  ) },
+  hip_abduction: { running_chain: true, form_decay: fd(
+    [
+      { region: "Lower Back", tissueType: "muscleStatus", score: 1 },
+      { region: "Knee L", tissueType: "tendonStatus", score: 1 },
+      { region: "Knee R", tissueType: "tendonStatus", score: 1 },
+    ],
+    "load_ramp",
+    { load_increase_pct: 15, window_days: 7 },
+    "Under fatigue, the torso laterally flexes toward the working leg, substituting trunk lateral flexion for true hip abduction. This pattern loads the IT band rather than gluteus medius. Keep torso vertical.",
+    ["IT band friction syndrome", "Lateral lumbar strain", "Greater trochanteric bursitis"]
+  ) },
+  hip_adduction: { running_chain: true, form_decay: null },
+  kb_swing: { running_chain: true, form_decay: fd(
+    [
+      { region: "Lower Back", tissueType: "muscleStatus", score: 3 },
+      { region: "AnkleFoot L", tissueType: "tendonStatus", score: 2 },
+      { region: "AnkleFoot R", tissueType: "tendonStatus", score: 2 },
+    ],
+    "load_ramp",
+    { load_increase_pct: 10, window_days: 7 },
+    "Under fatigue, kettlebell swings shift from hip snap to lumbar extension and forefoot drive. Keep the hinge crisp and stop the set when the bell path drops.",
+    ["Lumbar strain", "Hamstring strain", "Forefoot overload"]
+  ) },
+  hip_thrust_volume: { running_chain: true, form_decay: fd(
+    [
+      { region: "Lower Back", tissueType: "muscleStatus", score: 2 },
+      { region: "AnkleFoot L", tissueType: "tendonStatus", score: 1 },
+      { region: "AnkleFoot R", tissueType: "tendonStatus", score: 1 },
+    ],
+    "load_ramp",
+    { load_increase_pct: 10, window_days: 7 },
+    "Under fatigue, hip thrust produces lumbar hyperextension at the top. Drive through the heels, engage glutes before pushing, and stop at neutral spine, not maximum hip extension.",
+    ["Lumbar hyperextension injury", "Hamstring strain"]
+  ) },
+  romanian_deadlift: { running_chain: true, form_decay: fd(
+    [
+      { region: "Lower Back", tissueType: "muscleStatus", score: 3 },
+      { region: "Knee L", tissueType: "tendonStatus", score: 1 },
+      { region: "Knee R", tissueType: "tendonStatus", score: 1 },
+    ],
+    "load_ramp",
+    { load_increase_pct: 10, window_days: 7 },
+    "Load up this week. RDL is the highest lumbar spine loading exercise in the library under fatigue. Neutral spine is non-negotiable. Stop the descent when the lower back rounds.",
+    ["Lumbar strain", "Proximal hamstring tendinopathy", "Sciatic nerve irritation"]
+  ) },
+  hamstring_eccentric_curl: { running_chain: true, form_decay: fd(
+    [
+      { region: "Lower Back", tissueType: "muscleStatus", score: 1 },
+      { region: "Knee L", tissueType: "tendonStatus", score: 2 },
+      { region: "Knee R", tissueType: "tendonStatus", score: 2 },
+    ],
+    "set_volume_ramp",
+    { set_increase: 1 },
+    "Eccentric hamstring load is therapeutic but dose-sensitive. Adding a set without a deload creates rapid accumulation that exceeds tendon adaptation rate. Hamstring strains from eccentric curls are slow to resolve.",
+    ["Biceps femoris strain", "Popliteal pain", "Proximal hamstring tendon irritation"]
+  ) },
+  shoulder_clock_band: { running_chain: false, form_decay: null },
+  russian_twists: { running_chain: false, form_decay: fd(
+    [
+      { region: "Lower Back", tissueType: "muscleStatus", score: 2 },
+      { region: "Hip L", tissueType: "tendonStatus", score: 1 },
+      { region: "Hip R", tissueType: "tendonStatus", score: 1 },
+    ],
+    "load_ramp",
+    { load_increase_pct: 10, window_days: 7 },
+    "Under load or fatigue, Russian twists produce lumbar rotation at end range. This is a high-risk position for disc tissue. Control the rotation and do not allow momentum to carry past 45 degrees per side.",
+    ["Lumbar disc stress", "Hip flexor strain"]
+  ) },
+  eccentric_calf_raise: { running_chain: true, form_decay: null },
+  tibialis_raise: { running_chain: true, form_decay: null },
+  tke_patellar: { running_chain: true, form_decay: null },
+  mtp_balance: { running_chain: true, form_decay: null },
+  eccentric_lateral_raise: { running_chain: false, form_decay: null },
+  eccentric_bicep_curl: { running_chain: false, form_decay: null },
+  hip_flexor_isometric: { running_chain: true, form_decay: null },
+}
+
+for (const entry of EXERCISE_LIBRARY) {
+  const metadata = EXERCISE_LIBRARY_V2_METADATA[entry.id]
+  entry.running_chain = Boolean(metadata?.running_chain)
+  entry.form_decay = Array.isArray(entry.substitutes) && entry.substitutes.length === 0
+    ? null
+    : metadata?.form_decay ?? null
+}
+
 // REFERENCE_LOADS: default working load per exercise id from SCH_PLAN schMk defaults.
 // Used as denominator in modifier calculation. Update when baseline loads change.
 const REFERENCE_LOADS = {
@@ -863,6 +1230,129 @@ function getExerciseEntry(exerciseId) {
   return EXERCISE_LIBRARY_BY_KEY.get(exerciseId) || null
 }
 
+function parseFirstNumber(value) {
+  const match = String(value ?? "").replace(",", "").match(/-?\d+(\.\d+)?/)
+  return match ? Number(match[0]) : 0
+}
+
+function parseSetsValue(value, fallback = 0) {
+  const parsed = parseInt(String(value ?? "").match(/\d+/)?.[0] || "", 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
+function parseRepsValue(value) {
+  const nums = String(value ?? "").match(/\d+(\.\d+)?/g)
+  if (!nums?.length) return 0
+  return Math.max(...nums.map(Number).filter(Number.isFinite))
+}
+
+function parseLoadValue(value) {
+  const raw = String(value ?? "").trim().toUpperCase()
+  if (!raw || raw === "BW" || raw === "BODYWEIGHT") return 0
+  return parseFirstNumber(raw)
+}
+
+function toLoggedSets(actual = {}, prescribed = {}) {
+  const setCount = parseSetsValue(actual.sets, parseSetsValue(prescribed.sets, 1))
+  const reps = actual.reps ?? prescribed.reps ?? ""
+  const load = actual.load ?? prescribed.load ?? ""
+  return Array.from({ length: Math.max(1, setCount) }, () => ({ r: reps, w: load }))
+}
+
+function getExerciseMetric(loggedExercise) {
+  const actual = loggedExercise?.actual || {}
+  const prescribed = loggedExercise?.prescribed || {}
+  return {
+    sets: parseSetsValue(actual.sets, parseSetsValue(prescribed.sets, 0)),
+    reps: parseRepsValue(actual.reps),
+    prescribedReps: parseRepsValue(prescribed.reps),
+    load: parseLoadValue(actual.load),
+    prescribedLoad: parseLoadValue(prescribed.load),
+  }
+}
+
+function getExerciseDateMs(sessionEntry) {
+  const raw = sessionEntry?.logged_at || sessionEntry?.dateTime || sessionEntry?.date
+  const ms = raw ? new Date(raw).getTime() : NaN
+  return Number.isFinite(ms) ? ms : 0
+}
+
+function findPriorExerciseLogs(exerciseId, priorSessions = [], currentDateMs = Date.now(), windowDays = 14) {
+  const entry = getExerciseEntry(exerciseId)
+  const keys = new Set([exerciseId, entry?.id, ...(entry?.scheduleIds || [])].filter(Boolean).map(String))
+  const minMs = currentDateMs - (windowDays * 24 * 60 * 60 * 1000)
+
+  return (Array.isArray(priorSessions) ? priorSessions : [])
+    .filter(sessionEntry => {
+      const ms = getExerciseDateMs(sessionEntry)
+      return ms > 0 && ms < currentDateMs && ms >= minMs
+    })
+    .flatMap(sessionEntry =>
+      (Array.isArray(sessionEntry?.exercises) ? sessionEntry.exercises : [])
+        .filter(ex => keys.has(String(ex?.exercise_id)))
+        .map(ex => ({ ...ex, _sessionDateMs: getExerciseDateMs(sessionEntry), _sessionId: sessionEntry?.session_id || sessionEntry?.id || null }))
+    )
+    .sort((a, b) => b._sessionDateMs - a._sessionDateMs)
+}
+
+function hasConsecutiveHighExecutionModifier(exerciseId, loggedExercise, priorLogs) {
+  const current = computeExecutionModifier(exerciseId, toLoggedSets(loggedExercise?.actual, loggedExercise?.prescribed))
+  const previous = priorLogs?.[0]
+  if (!previous) return false
+  const prior = computeExecutionModifier(exerciseId, toLoggedSets(previous.actual, previous.prescribed))
+  return current > 1.4 && prior > 1.4
+}
+
+function didPrimaryFormDecayTriggerFire(formDecay, currentMetric, previousMetric) {
+  if (!formDecay) return false
+  const threshold = formDecay.trigger_threshold || {}
+  const loadThreshold = Number(threshold.load_increase_pct ?? 10)
+  const excessRepsThreshold = Number(threshold.excess_reps ?? threshold.rep_range_exceeded ?? 3)
+  const setIncreaseThreshold = Number(threshold.set_increase ?? 1)
+
+  const loadRamp = currentMetric.load > 0 && previousMetric?.load > 0
+    ? ((currentMetric.load - previousMetric.load) / previousMetric.load) * 100 > loadThreshold
+    : false
+  const repsExceeded = currentMetric.prescribedReps > 0
+    ? currentMetric.reps - currentMetric.prescribedReps >= excessRepsThreshold
+    : false
+  const setRamp = previousMetric?.sets > 0
+    ? currentMetric.sets - previousMetric.sets >= setIncreaseThreshold
+    : false
+
+  if (formDecay.trigger === "load_ramp") return loadRamp
+  if (formDecay.trigger === "rep_range_exceeded") return repsExceeded
+  if (formDecay.trigger === "set_volume_ramp") return setRamp
+  if (formDecay.trigger === "combined") return [loadRamp, repsExceeded, setRamp].filter(Boolean).length >= 2
+  return false
+}
+
+export function evaluateFormDecayAlert(loggedExercise, priorSessions = [], loggedAt = Date.now()) {
+  const entry = EXERCISE_LIBRARY.find(entry => loggedExercise?.exercise_name?.toLowerCase() === entry.name.toLowerCase())
+  const formDecay = entry?.form_decay
+  if (!entry || !formDecay) return null
+
+  const loggedAtMs = Number.isFinite(Number(loggedAt)) ? Number(loggedAt) : new Date(loggedAt).getTime()
+  const windowDays = Number(formDecay.trigger_threshold?.window_days || 14)
+  const priorLogs = findPriorExerciseLogs(entry.id, priorSessions, Number.isFinite(loggedAtMs) ? loggedAtMs : Date.now(), windowDays)
+  const currentMetric = getExerciseMetric(loggedExercise)
+  const previousMetric = priorLogs.length ? getExerciseMetric(priorLogs[0]) : null
+  const primaryFired = didPrimaryFormDecayTriggerFire(formDecay, currentMetric, previousMetric)
+  const modifierFired = hasConsecutiveHighExecutionModifier(entry.id, loggedExercise, priorLogs)
+
+  if (!primaryFired && !modifierFired) return null
+
+  return {
+    exerciseId: loggedExercise.exercise_id,
+    libraryExerciseId: entry.id,
+    exerciseName: loggedExercise.exercise_name || entry.name,
+    trigger: modifierFired && !primaryFired ? "execution_modifier" : formDecay.trigger,
+    secondary_tissues: formDecay.secondary_tissues,
+    warning_text: formDecay.warning_text,
+    common_injuries: formDecay.common_injuries || [],
+  }
+}
+
 export function flagExercisesForOcItems(dayExercises, activeOcItems, executionData = {}) {
   if (!activeOcItems?.length || !dayExercises?.length) return []
 
@@ -926,11 +1416,16 @@ export function isMtpSafe(exerciseId) {
   return entry.mtp_safe
 }
 
+export function isRunningChainExercise(exerciseId) {
+  const entry = getExerciseEntry(exerciseId)
+  return Boolean(entry?.running_chain)
+}
+
 /**
  * getExerciseProfile
  * Returns the full library entry for a given exercise id, or null if not found.
  * Used by the substitution UI to show load profile comparison.
  */
 export function getExerciseProfile(exerciseId) {
-  return EXERCISE_LIBRARY.find(e => e.id === exerciseId) || null
+  return getExerciseEntry(exerciseId)
 }

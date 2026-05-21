@@ -22,7 +22,7 @@ import {
   upsertHealthfitDaily,
   upsertSleepRecords
 } from "./lib/persistence.js"
-import { flagExercisesForOcItems, isMtpSafe, getExerciseProfile, EXERCISE_LIBRARY } from "./lib/exerciseLibrary.js"
+import { flagExercisesForOcItems, isMtpSafe, getExerciseProfile, isRunningChainExercise, evaluateFormDecayAlert, EXERCISE_LIBRARY } from "./lib/exerciseLibrary.js"
 import {
   LineChart,
   Line,
@@ -3672,6 +3672,37 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       </div>
     )
   }
+  const runningRampReasonPattern = /\b(run|running|mile|miles|pace)\b/i
+  const gateRunningRampSuggestion = (exerciseId, suggestion) => {
+    if (!suggestion || suggestion.modification === "As planned") return suggestion
+    if (isRunningChainExercise(exerciseId)) return suggestion
+    if (!runningRampReasonPattern.test(String(suggestion.reason || ""))) return suggestion
+    return {
+      ...suggestion,
+      modification: "As planned",
+      reason: "Running-load caution suppressed for non-running-chain exercise",
+    }
+  }
+  const tissueName = tissue => String(tissue?.region || "").replace(/\s+[LR]$/, "").trim()
+  const renderFormDecayAlerts = alerts => {
+    if (!Array.isArray(alerts) || alerts.length === 0) return null
+    return (
+      <div style={{ marginTop: 6, display: "grid", gap: 6 }}>
+        {alerts.map((alert, idx) => {
+          const tissues = [...new Set((alert.secondary_tissues || []).map(tissueName).filter(Boolean))]
+          return (
+            <div key={`${alert.exerciseId}_${alert.trigger}_${idx}`} style={{ padding: "7px 9px", border: "1px solid rgba(249,115,22,0.32)", borderRadius: 6, background: "rgba(249,115,22,0.08)", color: "#fdba74", fontSize: 11, lineHeight: 1.45 }}>
+              <div style={{ fontWeight: 700, marginBottom: 2 }}>Form decay alert</div>
+              <div>{alert.warning_text}</div>
+              {tissues.length > 0 && (
+                <div style={{ marginTop: 3, color: "#f59e0b" }}>Secondary load: {tissues.join(", ")}</div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
 
   const chooseTodayWorkout = (plannedWorkout, currentProgressionReadiness, currentTendonStatus) => {
     const normalizedTendonStatus = {
@@ -4245,6 +4276,10 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     const checkedWarmup = getProgDay(day).warmup?.map((item, i) => ({ ...item, done: isChecked(day, "warmup", i) }))
 
     const completedCardio = getCardioEntries(day).filter((_, i) => isChecked(day, "cardio", i))
+    const currentLog = await loadScheduleLogForMutation(schedLog)
+    const formDecayAlerts = [...filteredExercises, ...filteredCustomExs]
+      .map(ex => evaluateFormDecayAlert(ex, currentLog, ts))
+      .filter(Boolean)
 
     const entry = {
       id: Date.now(),
@@ -4256,11 +4291,15 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       program: "Kinesiology (primary)",
       rpe: sessionRPE[`${day}_${venue}`] ?? null,
       exercises: [...filteredExercises, ...filteredCustomExs],
+      form_decay_alerts: formDecayAlerts,
       tendon_work: completedTendonWork,
       cardio: completedCardio,
       stretch_completed: checkedStretch,
       warmup_completed: checkedWarmup,
       source: "LIFT Schedule Tab", apple_watch_sync_pending: true,
+      metadata: {
+        form_decay_alerts: formDecayAlerts,
+      },
       data: Object.fromEntries(filteredExercises.map(ex => {
         // If the program exercise has a full def array (_def), use it as the per-set record
         // so SchLogView can display each set. Fall back to a single {r,w} pair.
@@ -4279,7 +4318,6 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       })),
     }
 
-    const currentLog = await loadScheduleLogForMutation(schedLog)
     const newLog = [entry, ...currentLog.filter(e => e.id !== entry.id)]
     setSchedLog(newLog)
     setSavedEntries(prev => ({ ...prev, [day]: { ...(prev[day] || {}), [venue]: entry } }))
@@ -4620,11 +4658,12 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       : _isUpperBodyEx
         ? (ocConstraintState?.gate?.upperProgressionReadiness ?? progressionReadiness)
         : progressionReadiness
-    const workoutSuggestion = chooseTodayWorkout(
+    const rawWorkoutSuggestion = chooseTodayWorkout(
       { type: "strength", modality: "strength", name: ex.n },
       _exCompartmentReadiness,
       tendonStatus
     )
+    const workoutSuggestion = isCustom ? rawWorkoutSuggestion : gateRunningRampSuggestion(ex.id, rawWorkoutSuggestion)
     const structuredFlags = !isCustom ? getStructuredExerciseFlags(ex.id) : []
     const history = !isCustom ? getExerciseHistory(ex.n, schedLog) : []
     const historySparkline = !isCustom && history.length >= 3 ? (() => {
@@ -5195,6 +5234,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
                       Cardio: {entry.cardio.map(c => `${c.duration}min ${c.modality}`).join(" + ")}
                     </div>
                   )}
+                  {renderFormDecayAlerts(entry.form_decay_alerts || entry.metadata?.form_decay_alerts)}
                   {entry.rpe != null && (
                     <div style={{ fontSize: 10, color: "#667", marginTop: 3 }}>
                       RPE {entry.rpe}/10 — {entry.rpe <= 3 ? "Very easy" : entry.rpe <= 5 ? "Moderate" : entry.rpe <= 7 ? "Hard" : entry.rpe <= 9 ? "Very hard" : "Max effort"}
