@@ -39,7 +39,8 @@ import {
   Area,
   ComposedChart,
   ReferenceArea,
-  ReferenceLine
+  ReferenceLine,
+  ReferenceDot
 } from "recharts"
 import { createClient } from "@supabase/supabase-js"
 import { generateTrainerReport } from "./exportReport"
@@ -1847,7 +1848,7 @@ function computeOcRecoveryDate(item) {
 }
 
 // ─── TabOperationalCapacity ────────────────────────────────────────────────────
-function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapacityData, healthFitDaily, sleepRecords, tsbFallback = null, runSessions = [], canonicalSessions = [], schedLog = [], biometricRecords = [] }) {
+function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapacityData, healthFitDaily, sleepRecords, tsbFallback = null, runSessions = [], canonicalSessions = [], schedLog = [], biometricRecords = [], formDecayAccumulation = {} }) {
   const [selectedId, setSelectedId] = useState(null)
   const [addForm, setAddForm] = useState({
     key: "muscleStatus",
@@ -2333,6 +2334,36 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
             />
           )
         })}
+        {Object.entries(formDecayAccumulation)
+          .filter(([, info]) => (info.watchState === "watch" || info.watchState === "draft" || info.watchState === "escalated") && (() => {
+            const cutoff14 = new Date(); cutoff14.setDate(cutoff14.getDate() - 14); cutoff14.setHours(0,0,0,0)
+            return (info.sessions || []).some(s => new Date(s) >= cutoff14)
+          })())
+          .map(([region, info]) => {
+            const coords = OC_REGION_COORDS[region]?.[ck]
+            if (!coords) return null
+            const sz = info.watchState === "escalated" ? 14 : 11
+            const opacity = info.watchState === "escalated" ? 1 : 0.75
+            return (
+              <div
+                key={`fd-watch-${region}`}
+                title={`Watch zone — repeated compensatory load detected (${region}, ${info.count} sessions)`}
+                style={{
+                  position: "absolute", left: `${coords[0]}%`, top: `${coords[1] - 3}%`,
+                  width: 0, height: 0,
+                  borderLeft: `${sz/2}px solid transparent`,
+                  borderRight: `${sz/2}px solid transparent`,
+                  borderBottom: `${sz}px solid #fbbf24`,
+                  transform: "translate(-50%, -50%)",
+                  opacity,
+                  filter: "drop-shadow(0 0 3px #fbbf24)",
+                  background: "transparent",
+                  zIndex: 12, pointerEvents: "none",
+                }}
+              />
+            )
+          })
+        }
       </div>
     )
   }
@@ -3075,7 +3106,7 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
   )
 }
 
-function DailyReadinessPanel({ readinessScore, latestHealthFit, ocItems, computedTSB = null, tsbV2Panel = null, sleepRecords = [] }) {
+function DailyReadinessPanel({ readinessScore, latestHealthFit, ocItems, computedTSB = null, tsbV2Panel = null, sleepRecords = [], formDecayPenalty = null }) {
   const tsb = latestHealthFit?.tsb ?? tsbV2Panel?.currentOverallTsb ?? computedTSB?.global?.tsb ?? null
   const hasActiveIssue = (ocItems || []).some(i => i.currentScore >= 3)
   const recentSleep = (Array.isArray(sleepRecords) ? sleepRecords : [])
@@ -3092,21 +3123,23 @@ function DailyReadinessPanel({ readinessScore, latestHealthFit, ocItems, compute
       : sleepAverageHours < 7
         ? "#f59e0b"
         : "#4ade80"
+  const fdPenalty = formDecayPenalty?.totalPenalty ?? 0
+  const adjustedScore = Math.max(0, readinessScore - fdPenalty)
   let status, color, bg, rationale
-  if (readinessScore < 40 || hasActiveIssue) {
+  if (adjustedScore < 40 || hasActiveIssue) {
     status = "RED"; color = "#ff5252"; bg = "rgba(255,82,82,0.15)"
     rationale = hasActiveIssue
-      ? `OC ${readinessScore} · Active issue score ≥3 · Substitute exercises affecting flagged regions`
-      : `OC ${readinessScore} · TSB ${tsb != null ? tsb.toFixed(1) : "—"} · Substitute exercises affecting flagged regions`
-  } else if (readinessScore < 60 || (tsb != null && tsb < DEFAULT_TSB_THRESHOLDS.high)) {
+      ? `OC ${adjustedScore} · Active issue score ≥3 · Substitute exercises affecting flagged regions`
+      : `OC ${adjustedScore} · TSB ${tsb != null ? tsb.toFixed(1) : "—"} · Substitute exercises affecting flagged regions`
+  } else if (adjustedScore < 60 || (tsb != null && tsb < DEFAULT_TSB_THRESHOLDS.high)) {
     status = "ORANGE"; color = "#ff8c42"; bg = "rgba(255,140,66,0.15)"
-    rationale = `OC ${readinessScore} · TSB ${tsb != null ? tsb.toFixed(1) : "—"} · Reduce working weight 10–15%, cap at 2 sets on compounds`
-  } else if (readinessScore < 80 || (tsb != null && tsb < DEFAULT_TSB_THRESHOLDS.moderate)) {
+    rationale = `OC ${adjustedScore} · TSB ${tsb != null ? tsb.toFixed(1) : "—"} · Reduce working weight 10–15%, cap at 2 sets on compounds`
+  } else if (adjustedScore < 80 || (tsb != null && tsb < DEFAULT_TSB_THRESHOLDS.moderate)) {
     status = "YELLOW"; color = "#ffeb3b"; bg = "rgba(255,235,59,0.15)"
-    rationale = `OC ${readinessScore} · TSB ${tsb != null ? tsb.toFixed(1) : "—"} · Execute as written, no additions today`
+    rationale = `OC ${adjustedScore} · TSB ${tsb != null ? tsb.toFixed(1) : "—"} · Execute as written, no additions today`
   } else {
     status = "GREEN"; color = "#4caf50"; bg = "rgba(76,175,80,0.15)"
-    rationale = `OC ${readinessScore} · TSB ${tsb != null ? tsb.toFixed(1) : "—"} · Good to go — load up or add a set`
+    rationale = `OC ${adjustedScore} · TSB ${tsb != null ? tsb.toFixed(1) : "—"} · Good to go — load up or add a set`
   }
   return (
     <div style={{ padding: "10px 14px", borderRadius: 8, marginBottom: 12, border: `1px solid ${color}`, background: bg, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
@@ -3120,6 +3153,11 @@ function DailyReadinessPanel({ readinessScore, latestHealthFit, ocItems, compute
         {tsb == null && computedTSB == null && (
           <span style={{ fontSize: 11, color: "#555", marginLeft: 8 }}>· Import HealthFit CSV for TSB data</span>
         )}
+        {fdPenalty > 0 && (
+          <div style={{ fontSize: 11, color: "#fbbf24", marginTop: 4 }}>
+            Form decay load: -{Math.round(fdPenalty)} pts ({(formDecayPenalty.exerciseNames || []).join(", ")} showing compensatory patterns on running-chain tissues)
+          </div>
+        )}
         {recentSleep.length > 0 && (
           <div style={{ fontSize: 11, color: sleepColor, marginTop: 4 }}>
             3-night sleep avg {sleepAverageHours.toFixed(1)}h · {recentSleep.map(record => {
@@ -3131,7 +3169,7 @@ function DailyReadinessPanel({ readinessScore, latestHealthFit, ocItems, compute
         )}
       </div>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 12, background: "rgba(255,255,255,0.06)", color: "#aaa" }}>OC {readinessScore}</span>
+        <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 12, background: "rgba(255,255,255,0.06)", color: "#aaa" }}>OC {adjustedScore}</span>
         {tsb != null && <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 12, background: "rgba(255,255,255,0.06)", color: "#aaa" }}>TSB {tsb.toFixed(1)}</span>}
         {latestHealthFit?.ctl != null && <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 12, background: "rgba(255,255,255,0.06)", color: "#aaa" }}>CTL {latestHealthFit.ctl.toFixed(1)}</span>}
       </div>
@@ -3516,7 +3554,7 @@ function SubstituteDrawer({ flag, onSelectSubstitute, onClose }) {
   )
 }
 
-function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, setSchedLog, readinessScore, latestHealthFit = null, ocItems = [], computedTSB = null, tsbV2Panel = null, progressionReadiness = "progress", progressionReasons = [], tendonStatus = { painScore: 0, stiffness: false, override: null }, scheduleFeedback = [], sleepRecords = [], setSleepRecords = () => {}, scheduleTarget = null, clearScheduleTarget = () => {}, ocConstraintState = null, canonicalSessions = [] }) {
+function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, setSchedLog, readinessScore, latestHealthFit = null, ocItems = [], computedTSB = null, tsbV2Panel = null, progressionReadiness = "progress", progressionReasons = [], tendonStatus = { painScore: 0, stiffness: false, override: null }, scheduleFeedback = [], sleepRecords = [], setSleepRecords = () => {}, scheduleTarget = null, clearScheduleTarget = () => {}, ocConstraintState = null, canonicalSessions = [], formDecayPenalty = null, formDecayAccumulation = {} }) {
   const safeScheduleFeedback = Array.isArray(scheduleFeedback) ? scheduleFeedback : []
   const [activeDay, setActiveDay] = useState(todayDayKey())
   const [schedView, setSchedView] = useState("schedule")
@@ -5598,7 +5636,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
           ))}
         </div>
       )}
-      <DailyReadinessPanel readinessScore={readinessScore} latestHealthFit={latestHealthFit} ocItems={ocItems} computedTSB={computedTSB} tsbV2Panel={tsbV2Panel} sleepRecords={sleepRecords} />
+      <DailyReadinessPanel readinessScore={readinessScore} latestHealthFit={latestHealthFit} ocItems={ocItems} computedTSB={computedTSB} tsbV2Panel={tsbV2Panel} sleepRecords={sleepRecords} formDecayPenalty={formDecayPenalty} />
       <ScheduleMismatchDiagnostics
         report={scheduleMismatchReport}
         onOpenEntry={openDiagnosticEntry}
@@ -16328,6 +16366,83 @@ const readinessScore = useMemo(
   [ocItems, sleepRecords, healthFitDaily, computedTSBFromSessions]
 )
 
+const formDecayAccumulation = useMemo(() => {
+  const cutoff = new Date()
+  cutoff.setDate(cutoff.getDate() - 21)
+  cutoff.setHours(0, 0, 0, 0)
+  const regionSessions = {}
+  ;(Array.isArray(schedLog) ? schedLog : []).forEach(entry => {
+    const d = String(entry.date || "").slice(0, 10)
+    if (!d || new Date(d) < cutoff) return
+    const alerts = entry.form_decay_alerts || entry.metadata?.form_decay_alerts || []
+    ;(Array.isArray(alerts) ? alerts : []).forEach(alert => {
+      ;(Array.isArray(alert.secondary_tissues) ? alert.secondary_tissues : []).forEach(tissue => {
+        const region = tissue.region
+        if (!region) return
+        if (!regionSessions[region]) regionSessions[region] = new Set()
+        regionSessions[region].add(d)
+      })
+    })
+  })
+  const result = {}
+  Object.entries(regionSessions).forEach(([region, sessSet]) => {
+    const count = sessSet.size
+    const sessions = [...sessSet].sort()
+    const hasActiveOC = (Array.isArray(ocItems) ? ocItems : []).some(
+      i => i.location === region && Number(i.currentScore || 0) > 0
+    )
+    let watchState = count >= 4 && !hasActiveOC ? "escalated"
+      : count >= 3 ? "draft"
+      : count >= 2 ? "watch"
+      : "ok"
+    result[region] = { count, sessions, watchState }
+  })
+  return result
+}, [schedLog, ocItems])
+
+const formDecayReadinessPenalty = useMemo(() => {
+  const now = new Date()
+  const cutoff14 = new Date(now); cutoff14.setDate(cutoff14.getDate() - 14); cutoff14.setHours(0, 0, 0, 0)
+  const cutoff7  = new Date(now); cutoff7.setDate(cutoff7.getDate() - 7);   cutoff7.setHours(0, 0, 0, 0)
+  const exercisePenalties = {}
+  const penaltyByDate = {}
+  ;(Array.isArray(schedLog) ? schedLog : []).forEach(entry => {
+    const d = String(entry.date || "").slice(0, 10)
+    if (!d) return
+    const dDate = new Date(d)
+    if (dDate < cutoff14) return
+    const alerts = entry.form_decay_alerts || entry.metadata?.form_decay_alerts || []
+    ;(Array.isArray(alerts) ? alerts : []).forEach(alert => {
+      if (!isRunningChainExercise(alert.exerciseId)) return
+      const alertScore = Math.max(0, ...(Array.isArray(alert.secondary_tissues) ? alert.secondary_tissues : []).map(t => Number(t.score) || 0))
+      if (alertScore <= 0) return
+      const recencyWeight = dDate >= cutoff7 ? 1.0 : 0.5
+      const penalty = alertScore * recencyWeight
+      const exName = alert.exerciseName || alert.exerciseId || "unknown"
+      if (!exercisePenalties[exName] || penalty > exercisePenalties[exName]) exercisePenalties[exName] = penalty
+      penaltyByDate[d] = (penaltyByDate[d] || 0) + penalty
+    })
+  })
+  const totalPenalty = Math.min(15, Math.max(0, Object.values(exercisePenalties).reduce((s, v) => s + v, 0)))
+  return { totalPenalty, exerciseNames: Object.keys(exercisePenalties), penaltyByDate }
+}, [schedLog])
+
+const [formDecayDraftModal, setFormDecayDraftModal] = useState(null)
+const handledDraftRegionsRef = useRef(new Set())
+useEffect(() => {
+  const pending = Object.entries(formDecayAccumulation)
+    .filter(([region, info]) => {
+      if (info.watchState !== "draft" && info.watchState !== "escalated") return false
+      if (handledDraftRegionsRef.current.has(region)) return false
+      const alreadyActive = (Array.isArray(ocItems) ? ocItems : []).some(
+        i => i.location === region && Number(i.currentScore || 0) > 0 && i.source === "form_decay_accumulation"
+      )
+      return !alreadyActive
+    })
+    .map(([region, info]) => ({ region, count: info.count, score: info.watchState === "escalated" ? 2 : 1 }))
+  if (pending.length > 0) setFormDecayDraftModal(pending)
+}, [formDecayAccumulation, ocItems])
+
 const latestHealthFit = useMemo(() => {
   const arr = Array.isArray(healthFitDaily) ? healthFitDaily : []
   return arr.filter(r => r.tsb != null || r.ctl != null || r.atl != null)
@@ -18461,6 +18576,22 @@ return (
                 name="ACWR"
                 connectNulls
               />
+              {panel.rows.map(row => {
+                const penalty = formDecayReadinessPenalty?.penaltyByDate?.[row.date]
+                if (!penalty || penalty <= 5) return null
+                return (
+                  <ReferenceDot
+                    key={`fd-dot-${row.date}`}
+                    x={row.label}
+                    y={row.overallTsb ?? 0}
+                    r={5}
+                    fill="#fbbf24"
+                    stroke="#92400e"
+                    strokeWidth={1.5}
+                    label={{ value: "⚠", position: "top", fontSize: 9, fill: "#fbbf24" }}
+                  />
+                )
+              })}
             </ComposedChart>
           </ResponsiveContainer>
           <div style={{ display:"flex", gap:10, flexWrap:"wrap", fontSize:11, color:"#94a3b8", marginTop:8 }}>
@@ -20042,6 +20173,8 @@ return (
     scheduleTarget={scheduleTarget}
     clearScheduleTarget={() => setScheduleTarget(null)}
     canonicalSessions={unifiedCanonicalSessions}
+    formDecayPenalty={formDecayReadinessPenalty}
+    formDecayAccumulation={formDecayAccumulation}
   />
 )}
 
@@ -20068,6 +20201,7 @@ return (
     canonicalSessions={unifiedCanonicalSessions}
     schedLog={schedLog}
     biometricRecords={biometricRecords}
+    formDecayAccumulation={formDecayAccumulation}
   />
 )}
 {tab === "Forecast" && (
@@ -20493,6 +20627,71 @@ return (
 )}
     </div>
   </ErrorBoundary>
+
+  {formDecayDraftModal && formDecayDraftModal.length > 0 && (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ background: "#12131f", border: "1px solid #fbbf24", borderRadius: 12, padding: "24px 28px", maxWidth: 420, width: "90%", boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }}>
+        <div style={{ fontWeight: 700, fontSize: 15, color: "#fbbf24", marginBottom: 8 }}>Form Decay Watch Alert</div>
+        <div style={{ fontSize: 12, color: "#cbd5e1", marginBottom: 16, lineHeight: 1.6 }}>
+          Repeated compensatory load patterns detected in the following regions. Add these as OC watch items to track recovery?
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
+          {formDecayDraftModal.map(({ region, count, score }) => (
+            <div key={region} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.25)", borderRadius: 8 }}>
+              <span style={{ fontSize: 13, color: "#e2e8f0" }}>{region}</span>
+              <span style={{ fontSize: 11, color: "#fbbf24" }}>{count} sessions · score {score}</span>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <button
+            onClick={() => {
+              formDecayDraftModal.forEach(({ region }) => handledDraftRegionsRef.current.add(region))
+              setFormDecayDraftModal(null)
+            }}
+            style={{ fontSize: 12, padding: "7px 16px", background: "rgba(100,100,120,0.2)", border: "1px solid #334155", borderRadius: 7, color: "#94a3b8", cursor: "pointer" }}
+          >
+            Dismiss
+          </button>
+          <button
+            onClick={() => {
+              const nowIso = new Date().toISOString()
+              setOcItems(prev => {
+                const existingLocations = new Set((prev || []).map(i => (i.location || "").toLowerCase()))
+                const toAdd = formDecayDraftModal
+                  .filter(({ region }) => !existingLocations.has(region.toLowerCase()))
+                  .map(({ region, score }, idx) => ({
+                    id: `fd_draft_${Date.now()}_${idx}`,
+                    key: "muscleStatus",
+                    location: region,
+                    label: `Form decay watch — ${region}`,
+                    currentScore: score,
+                    initialScore: score,
+                    startDate: nowIso,
+                    halfLifeHours: 168,
+                    episodeCount: 1,
+                    lastResolvedDate: nowIso,
+                    chronicity: "acute",
+                    note: "Auto-generated from repeated compensatory load alerts in form decay accumulation.",
+                    source: "form_decay_accumulation",
+                  }))
+                if (toAdd.length === 0) return prev
+                const updated = [...(prev || []), ...toAdd]
+                localStorage.setItem("oc-items", JSON.stringify(updated))
+                return updated
+              })
+              formDecayDraftModal.forEach(({ region }) => handledDraftRegionsRef.current.add(region))
+              setFormDecayDraftModal(null)
+            }}
+            style={{ fontSize: 12, padding: "7px 16px", background: "rgba(251,191,36,0.18)", border: "1px solid #fbbf24", borderRadius: 7, color: "#fbbf24", cursor: "pointer", fontWeight: 600 }}
+          >
+            Add to OC
+          </button>
+        </div>
+      </div>
+    </div>
+  )}
+
   <TrainerPanel
     sessions60={trainerSessions60}
     ocItems={ocItems}
