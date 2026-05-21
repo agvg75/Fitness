@@ -10517,7 +10517,7 @@ function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily,
         schedLog:          merge(lsSchedLog,   schedLog || []),
         liftConfig:        liftConfig || {},
         tsbV2Panel:        tsbV2Panel || null,
-        snapshotDate:      new Date().toISOString().slice(0, 10)
+        snapshotDate:      (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` })()
       })
     } catch (err) {
       console.error("[Export] failed:", err)

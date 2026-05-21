@@ -71,7 +71,13 @@ export function generateTrainerReport({
     .sort((a, b) => String(a.start_date || a.date || a.dateTime || "").localeCompare(String(b.start_date || b.date || b.dateTime || "")))
     .slice(-40)
     .map(s => {
-      const dist = Number(s.distance_mi ?? s.distance ?? s.preferred_metrics?.distance_mi ?? 0)
+      // distance field in ufd-workouts is meters; distance_mi and preferred_metrics are already miles
+      const rawDist = Number(s.distance || 0)
+      const dist = Number(
+        s.distance_mi ||
+        s.preferred_metrics?.distance_mi ||
+        (rawDist > 200 ? rawDist / 1609.34 : rawDist > 0 ? rawDist : 0)
+      )
       const dur = Number(s.duration_min ?? s.dur_min ??
         (s.duration_sec ? s.duration_sec / 60 : null) ??
         (s.preferred_metrics?.duration_min) ?? 0)
@@ -155,14 +161,59 @@ export function generateTrainerReport({
     { date:"2026-09-19", name:"St. Jude 10K / Half", city:"Bloomington", dist:"13.1 mi", goal: true },
     { date:"2026-10-18", name:"Naperville Half Marathon", city:"Naperville", dist:"13.1 mi" },
   ].filter(r => r.date >= date)
-  const baselines = [
-    ["Chest press", 130],
-    ["Seated cable row", 80],
-    ["Bicep curl", 30],
-    ["Leg press", 320],
-    ["Leg curl", 100],
-    ["Leg extension", 100],
-  ]
+  // ── Strength baselines from wt-log (live, most recent max per exercise) ─
+  // Key mapping: wt-log uses coded keys tied to KNR program slots
+  const EX_KEY_LABELS = {
+    chest_press: "Chest press", chest_press_sel: "Chest press (sel)", chest_press_machine: "Chest press (machine)",
+    incline_press: "Incline press", incline_chest_press: "Incline press",
+    low_row_sel: "Low row (sel)", cable_row: "Cable row", pull_down_pure: "Lat pulldown",
+    pulldown_pure: "Lat pulldown", lat_pull: "Lat pulldown",
+    arm_curl: "Bicep curl", bicep_db: "Bicep curl (DB)", bicep_rope: "Bicep curl (rope)",
+    leg_press: "Leg press", leg_curl: "Leg curl", leg_extension: "Leg extension", leg_ext: "Leg extension",
+    hip_abduction: "Hip abduction", hip_adduction: "Hip adduction",
+    glute_bridge: "Glute bridge", hip_thrust_smith: "Hip thrust (Smith)",
+    calf_raise: "Calf raise",
+    th1: "Single arm low row (KNR)", th2: "Leg press (KNR)", th3: "Bicep curl (KNR)",
+    th4: "Chin/dip assist (KNR)", th5: "Shoulder press (KNR)", th6: "Tricep pulldown (KNR)",
+    th8: "Cable row (KNR)",
+    f1: "Chest press (KNR-F)", f2: "Seated row (KNR-F)", f3: "Bicep curl (KNR-F)",
+    m1: "Leg press (KNR-M)", m2: "Leg curl/ext (KNR-M)",
+    push_down: "Tricep pushdown", face_pull: "Face pull",
+    shoulder_press_artis: "Shoulder press (Artis)",
+    easy_chin_dip: "Chin/dip assist", pull_down_cable: "Lat pulldown (cable)",
+  }
+  // Parse wt-log to find most recent numeric max per exercise key
+  const exMaxByKey = {}
+  ;(Array.isArray(schedLog) ? schedLog : []).forEach(entry => {
+    const entryDate = (entry.date || "").slice(0, 10)
+    const raw = entry.data || {}
+    Object.entries(raw).forEach(([key, sets]) => {
+      if (!Array.isArray(sets)) return
+      sets.forEach(s => {
+        const wStr = String(s.w || s.weight || "").replace(/lb|kg/gi, "").trim()
+        const w = parseFloat(wStr)
+        if (!Number.isFinite(w) || w <= 0) return
+        if (!exMaxByKey[key] || w > exMaxByKey[key].lb ||
+            (w === exMaxByKey[key].lb && entryDate > exMaxByKey[key].date)) {
+          exMaxByKey[key] = { lb: w, date: entryDate }
+        }
+      })
+    })
+  })
+  // Build display list — labeled exercises only, sorted by weight descending
+  const strength_baselines = Object.entries(exMaxByKey)
+    .filter(([key]) => EX_KEY_LABELS[key])
+    .map(([key, info]) => ({ ex: EX_KEY_LABELS[key], lb: info.lb, date: info.date }))
+    .sort((a, b) => b.lb - a.lb)
+    .slice(0, 16)  // top 16 by load
+  // Fallback if wt-log empty
+  if (!strength_baselines.length) {
+    strength_baselines.push(
+      { ex: "Chest press",      lb: 130, date: "Feb 2026 (KNR baseline)" },
+      { ex: "Seated cable row", lb: 80,  date: "Feb 2026 (KNR baseline)" },
+      { ex: "Leg press",        lb: 320, date: "Feb 2026 (KNR baseline)" }
+    )
+  }
   const schedule = [
     ["Monday", "Chest + Arms", "YMCA", ["Chest press", "Lat pulldown", "Bicep curl", "Cable row", "Long bike or treadmill cardio"], "Upper"],
     ["Tuesday", "Legs", "KNR", ["Leg press", "Leg curl", "Leg extension", "Hip thrust", "Hip abduction/adduction", "Calf raise if MTP-safe"], "Lower"],
@@ -257,7 +308,7 @@ export function generateTrainerReport({
 
 <div id="tab-strength" class="tab-panel">
   <div class="note-box"><b>KNR e1RM baselines.</b> Upper TSB: ${tsbNow.upperStrength != null ? tsbNow.upperStrength.toFixed(1) : "—"} | Lower TSB: ${tsbNow.lowerStrength != null ? tsbNow.lowerStrength.toFixed(1) : "—"}.</div>
-  <div class="grid-2"><div class="card"><div class="card-title">e1RM Baselines — KNR</div><table><thead><tr><th>Exercise</th><th>e1RM</th></tr></thead><tbody>${baselines.map(([ex, lb]) => `<tr><td>${esc(ex)}</td><td class="td-r td-good">${lb} lb</td></tr>`).join("")}</tbody></table></div><div class="card"><div class="card-title">Strength TSB</div><table><tbody>${[["Overall Strength", tsbNow.strength], ["Upper", tsbNow.upperStrength], ["Lower", tsbNow.lowerStrength]].map(([label, val]) => `<tr><td>${label}</td><td class="td-r ${tsbClass(val) ? `td-${tsbClass(val)}` : ""}">${val != null ? val.toFixed(1) : "—"}</td><td>${statusForTsb(val)}</td></tr>`).join("")}</tbody></table></div></div>
+  <div class="grid-2"><div class="card"><div class="card-title">Strength — recent max loads from training log</div><table><thead><tr><th>Exercise</th><th>Max load (lb)</th><th>Last logged</th></tr></thead><tbody>${strength_baselines.map(b => `<tr><td>${esc(b.ex)}</td><td class="td-r td-good">${b.lb}</td><td style="color:var(--muted);font-size:10px">${esc(b.date || "")}</td></tr>`).join("")}</tbody></table></div><div class="card"><div class="card-title">Strength TSB</div><table><tbody>${[["Overall Strength", tsbNow.strength], ["Upper", tsbNow.upperStrength], ["Lower", tsbNow.lowerStrength]].map(([label, val]) => `<tr><td>${label}</td><td class="td-r ${tsbClass(val) ? `td-${tsbClass(val)}` : ""}">${val != null ? val.toFixed(1) : "—"}</td><td>${statusForTsb(val)}</td></tr>`).join("")}</tbody></table></div></div>
   <div class="card"><div class="card-title">Recent Strength Sessions</div><table><thead><tr><th>Date</th><th>Venue</th><th>Duration</th><th>Exercises logged</th></tr></thead><tbody>${strengthSessions.slice(-15).reverse().map(s => `<tr><td>${esc(s.date)}</td><td>${esc(s.venue)}</td><td class="td-r">${s.dur > 0 ? `${s.dur} min` : "—"}</td><td>${s.exercises.length ? s.exercises.map(e => esc(e.exercise_name || e.name || "")).filter(Boolean).join(", ") : "—"}</td></tr>`).join("")}</tbody></table></div>
 </div>
 
