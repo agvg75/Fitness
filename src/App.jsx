@@ -10490,12 +10490,12 @@ function ImportTab({ canonicalSessions, setCanonicalSessions, setHealthFitDaily,
       const safeRead = (key, fallback = []) => {
         try { return JSON.parse(localStorage.getItem(key) || "null") || fallback } catch { return fallback }
       }
-      const lsHealthFit    = safeRead("healthfit-daily")
+      const lsHealthFit    = safeRead("healthfit-daily") || []
       const lsBiometrics   = safeRead("lift_biometric_records")
-      const lsSleep        = safeRead("lift_sleep_records")
+      const lsSleep        = safeRead("lift_sleep_records", null) || safeRead("sleep-log") || []
       const lsMeals        = safeRead("lift_meal_records")
       const lsSchedLog     = safeRead("wt-log")
-      const lsSessions     = safeRead("lift_canonical_sessions")
+      const lsSessions     = safeRead("lift_canonical_sessions", null) || safeRead("ufd-workouts") || []
 
       // Merge prop data (may have fresher Supabase records) with localStorage
       const merge = (ls, prop) => {

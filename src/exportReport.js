@@ -193,10 +193,24 @@ export function generateTrainerReport({
 </nav>
 <main>
 <div id="tab-overview" class="tab-panel active">
-  <div class="note-box"><b>Trainer reference snapshot.</b> Body composition anchored to ${esc(latestDexa.label || "latest")} DEXA. Weight from most recent scale reading. MTP ceiling: ${esc(mtpCeiling)} miles.</div>
+  <div class="note-box"><b>Trainer reference snapshot.</b> Body composition anchored to ${esc(latestDexa.label || "latest")} DEXA. Weight from most recent scale reading. TSB from personalized Banister model (τ₁=${cfg.tau1||27}d, τ₂=${cfg.tau2||18}d).${fitSeries.length === 0 || runSessions.length === 0 ? ' <b style="color:var(--warn)">⚠ Some charts empty — generate this report after the app fully loads and syncs (wait for session count to appear in the app).</b>' : ''}</div>
   <div class="stat-grid">
     <div class="stat-box"><div class="stat-label">Current Weight</div><div class="stat-value">${latestWeight ? latestWeight.toFixed(1) : n((latestDexa.fatLb || 0) + (latestDexa.leanLb || 0))}</div><div class="stat-sub">lb | scale reading</div></div>
     <div class="stat-box"><div class="stat-label">Body Fat</div><div class="stat-value warn">${n(latestDexa.fatPct)}%</div><div class="stat-sub">${n(latestDexa.fatLb)} lb fat · target 21%</div></div>
+    <div class="stat-box">
+      <div class="stat-label">To Phase 1 (21%)</div>
+      <div class="stat-value">${(() => {
+        // Use DEXA fat lb and lean lb directly — most accurate ground truth
+        const fatLb = latestDexa.fatLb
+        const leanLb = latestDexa.leanLb
+        if (!fatLb || !leanLb) return "—"
+        // At 21% BF: fat / (fat + lean) = 0.21 → fat = 0.21 × (fat + lean) / 0.79
+        const targetFatLb = (leanLb * 0.21) / 0.79
+        const tolose = fatLb - targetFatLb
+        return tolose > 0 ? tolose.toFixed(1) : "0"
+      })()}</div>
+      <div class="stat-sub">lb fat to lose · target 21% · ~1.7 lb/mo</div>
+    </div>
     <div class="stat-box"><div class="stat-label">Lean Mass</div><div class="stat-value good">${n(latestDexa.leanLb)}</div><div class="stat-sub">lb lean · ${esc(latestDexa.label)}</div></div>
     <div class="stat-box"><div class="stat-label">BMD</div><div class="stat-value good">${n(latestDexa.bmd, 3)}</div><div class="stat-sub">g/cm²</div></div>
     <div class="stat-box"><div class="stat-label">TSB Overall</div><div class="stat-value ${tsbClass(tsbNow.overall)}">${tsbNow.overall != null ? tsbNow.overall.toFixed(1) : "—"}</div><div class="stat-sub">threshold −7</div></div>
