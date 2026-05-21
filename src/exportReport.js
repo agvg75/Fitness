@@ -71,13 +71,17 @@ export function generateTrainerReport({
     .sort((a, b) => String(a.start_date || a.date || a.dateTime || "").localeCompare(String(b.start_date || b.date || b.dateTime || "")))
     .slice(-40)
     .map(s => {
-      // distance field in ufd-workouts is meters; distance_mi and preferred_metrics are already miles
+      // Explicit distance resolution — canonical sessions may store meters in .distance
       const rawDist = Number(s.distance || 0)
-      const dist = Number(
-        s.distance_mi ||
-        s.preferred_metrics?.distance_mi ||
-        (rawDist > 200 ? rawDist / 1609.34 : rawDist > 0 ? rawDist : 0)
-      )
+      const dist = (() => {
+        // Prefer explicit miles fields
+        const explicitMi = Number(s.distance_mi) || Number(s.preferred_metrics?.distance_mi)
+        if (explicitMi > 0) return explicitMi
+        // Fall back to .distance — convert if clearly meters (>200), otherwise treat as miles
+        if (rawDist > 200) return rawDist / 1609.34
+        if (rawDist > 0) return rawDist
+        return 0
+      })()
       const dur = Number(s.duration_min ?? s.dur_min ??
         (s.duration_sec ? s.duration_sec / 60 : null) ??
         (s.preferred_metrics?.duration_min) ?? 0)
