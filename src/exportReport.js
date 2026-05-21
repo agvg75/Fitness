@@ -71,17 +71,14 @@ export function generateTrainerReport({
     .sort((a, b) => String(a.start_date || a.date || a.dateTime || "").localeCompare(String(b.start_date || b.date || b.dateTime || "")))
     .slice(-40)
     .map(s => {
-      // Explicit distance resolution — canonical sessions may store meters in .distance
+      // Distance resolution — ufd-workouts stores meters in .distance
       const rawDist = Number(s.distance || 0)
-      const dist = (() => {
-        // Prefer explicit miles fields
-        const explicitMi = Number(s.distance_mi) || Number(s.preferred_metrics?.distance_mi)
-        if (explicitMi > 0) return explicitMi
-        // Fall back to .distance — convert if clearly meters (>200), otherwise treat as miles
-        if (rawDist > 200) return rawDist / 1609.34
-        if (rawDist > 0) return rawDist
-        return 0
-      })()
+      const explicitMi = parseFloat(s.distance_mi) || parseFloat(s.preferred_metrics?.distance_mi) || 0
+      const dist = explicitMi > 0
+        ? explicitMi
+        : rawDist > 200
+          ? rawDist / 1609.34
+          : rawDist
       const dur = Number(s.duration_min ?? s.dur_min ??
         (s.duration_sec ? s.duration_sec / 60 : null) ??
         (s.preferred_metrics?.duration_min) ?? 0)
@@ -361,9 +358,9 @@ const ad = d.filter(r=>r.acwr!=null);
 chart('acwrChart',{type:'line',data:{labels:ad.map(r=>r.date),datasets:[{label:'ACWR',data:ad.map(r=>r.acwr),borderColor:'#e8b84a',backgroundColor:'rgba(232,184,74,0.08)',borderWidth:2,pointRadius:0,fill:true,tension:0.3},{label:'1.3 upper',data:ad.map(()=>1.3),borderColor:'rgba(217,95,95,0.5)',borderDash:[4,4],borderWidth:1,pointRadius:0},{label:'0.8 lower',data:ad.map(()=>0.8),borderColor:'rgba(76,175,125,0.5)',borderDash:[4,4],borderWidth:1,pointRadius:0}]},options:{...baseOpts,scales:{x:baseOpts.scales.x,y:{...baseOpts.scales.y,min:0,max:2.5}}}});
 chart('weightChart',{type:'line',data:{labels:weightData.map(r=>r.date),datasets:[{label:'Weight (lb)',data:weightData.map(r=>r.weight),borderColor:'#3a7bd5',backgroundColor:'rgba(58,123,213,0.06)',borderWidth:1.5,pointRadius:0,fill:true,tension:0.2}]},options:baseOpts});
 chart('bfChart',{type:'line',data:{labels:dexaData.map(r=>r.label),datasets:[{label:'Body Fat %',data:dexaData.map(r=>r.fatPct),borderColor:'#e8b84a',backgroundColor:'rgba(232,184,74,0.1)',borderWidth:2.5,pointRadius:6,fill:true,tension:0.2},{label:'Target (21%)',data:dexaData.map(()=>21),borderColor:'rgba(76,175,125,0.6)',borderDash:[6,4],borderWidth:1.5,pointRadius:0}]},options:baseOpts});
-chart('compChart',{type:'bar',data:{labels:dexaData.map(r=>r.label),datasets:[{label:'Fat (lb)',data:dexaData.map(r=>r.fatLb),backgroundColor:'rgba(217,95,95,0.6)'},{label:'Lean (lb)',data:dexaData.map(r=>r.leanLb),backgroundColor:'rgba(76,175,125,0.6)'}]},options:baseOpts});
+chart('compChart',{type:'bar',data:{labels:dexaData.map(r=>r.label),datasets:[{label:'Fat (lb)',data:dexaData.map(r=>r.fatLb),backgroundColor:'rgba(217,95,95,0.6)'},{label:'Lean (lb)',data:dexaData.map(r=>r.leanLb),backgroundColor:'rgba(76,175,125,0.6)'}]},options:{...baseOpts,scales:{x:baseOpts.scales.x,y:{...baseOpts.scales.y,min:0,max:140}}}});
 chart('runChart',{type:'bar',data:{labels:runData.map(r=>r.date),datasets:[{label:'Distance (mi)',data:runData.map(r=>r.dist),backgroundColor:runData.map(r=>r.mtp>=2?'rgba(217,95,95,0.7)':r.mtp===1?'rgba(232,184,74,0.6)':'rgba(58,123,213,0.6)'),borderWidth:0},{label:'Ceiling',data:runData.map(()=>mtpCeiling),borderColor:'rgba(232,140,42,0.6)',borderDash:[4,4],borderWidth:1.5,pointRadius:0,type:'line'}]},options:baseOpts});
-chart('sleepChart',{type:'bar',data:{labels:sleepData.map(r=>r.date),datasets:[{label:'Sleep (hrs)',data:sleepData.map(r=>r.hours),backgroundColor:sleepData.map(r=>r.hours>=7.5?'rgba(76,175,125,0.6)':r.hours>=6.5?'rgba(232,184,74,0.5)':'rgba(217,95,95,0.6)'),borderWidth:0},{label:'Target (7.5h)',data:sleepData.map(()=>7.5),borderColor:'rgba(76,175,125,0.5)',borderDash:[4,4],borderWidth:1.5,pointRadius:0,type:'line'}]},options:{...baseOpts,scales:{x:baseOpts.scales.x,y:{...baseOpts.scales.y,min:0,max:10}}}});
+chart('sleepChart',{type:'bar',data:{labels:sleepData.map(r=>r.date),datasets:[{label:'Sleep (hrs)',data:sleepData.map(r=>r.hours),backgroundColor:sleepData.map(r=>r.hours>=7.5?'rgba(76,175,125,0.6)':r.hours>=6.5?'rgba(232,184,74,0.5)':'rgba(217,95,95,0.6)'),borderWidth:0},{label:'Target (7.5h)',data:sleepData.map(()=>7.5),borderColor:'rgba(76,175,125,0.5)',borderDash:[4,4],borderWidth:1.5,pointRadius:0,type:'line'}]},options:{...baseOpts,scales:{x:baseOpts.scales.x,y:{...baseOpts.scales.y,min:0,max:110}}}});
 <\/script>
 </body>
 </html>`
