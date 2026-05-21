@@ -3,7 +3,7 @@ import xlsx from "xlsx"
 import { createClient } from "@supabase/supabase-js"
 
 // ---------------------------------------------------------------------------
-// Supabase credentials — read from .env.local first, then .env
+// Supabase credentials — process.env first (Vercel), then .env.local fallback
 // ---------------------------------------------------------------------------
 function readEnvFile(path) {
   try {
@@ -14,6 +14,7 @@ function readEnvFile(path) {
 }
 
 function getEnvVar(key) {
+  if (process.env[key]) return process.env[key]
   for (const file of [".env.local", ".env"]) {
     const content = readEnvFile(file)
     const match = content.match(new RegExp(`^${key}=(.+)`, "m"))
