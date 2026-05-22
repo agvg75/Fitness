@@ -3788,6 +3788,8 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const [sessionDate, setSessionDate] = useState(todayISO())
   const [pendingVenue, setPendingVenue] = useState(null)   // venue awaiting exercise selection
   const [pendingChecked, setPendingChecked] = useState({}) // { [exercise_id]: bool }
+  const [isCommitting, setIsCommitting] = useState(false)
+  const [logCommitError, setLogCommitError] = useState("")
   const [sessionRPE, setSessionRPE] = useState({})         // { day_venue: 1-10 }
   const [inlineItemForm, setInlineItemForm] = useState(null) // { day, section } | null
   const [inlineItemName, setInlineItemName] = useState("")
@@ -4631,14 +4633,18 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
 
   // ── Log session ────────────────────────────────────────────────────────
   const logSession = async (venue, checkedIds = null) => {
-    const day = activeDay
-    const dateDay = dayKeyFromScheduleDate(sessionDate)
-    if (dateDay && dateDay !== day) {
-      showToast(`Session date is ${dateDay}; switch from ${day} before saving`)
-      return
-    }
-    const prog = getProgDay(day)
-    const ts = new Date(`${sessionDate}T${VENUE_TIMES[venue] || "12:00"}:00`).toISOString()
+    if (isCommitting) return false
+    setIsCommitting(true)
+    setLogCommitError("")
+    try {
+      const day = activeDay
+      const dateDay = dayKeyFromScheduleDate(sessionDate)
+      if (dateDay && dateDay !== day) {
+        showToast(`Session date is ${dateDay}; switch from ${day} before saving`)
+        return false
+      }
+      const prog = getProgDay(day)
+      const ts = new Date(`${sessionDate}T${VENUE_TIMES[venue] || "12:00"}:00`).toISOString()
 
     const exercises = (prog.exercises || []).map(ex => {
       const vk = getVariant(ex.id)
@@ -4816,7 +4822,19 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       if (Array.isArray(savedWorkouts?.value ?? savedWorkouts)) setStoredWorkouts(savedWorkouts?.value ?? savedWorkouts)
     }
 
-    try { localStorage.removeItem(SESSION_DRAFT_KEY) } catch {}
+      try { localStorage.removeItem(SESSION_DRAFT_KEY) } catch {}
+      setPendingVenue(null)
+      setPendingChecked({})
+      setQuickLog(false)
+      return true
+    } catch (error) {
+      console.warn("[Schedule] Session save failed", error)
+      setLogCommitError("Save failed, tap to retry")
+      showToast("Save failed, tap to retry", 5000)
+      return false
+    } finally {
+      setIsCommitting(false)
+    }
   }
 
   const undoSession = async (venue) => {
@@ -5791,15 +5809,21 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
                     style={{ flex: 1, padding: 10, background: "transparent", color: "#888", border: "0.5px solid #333", borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
                     Cancel
                   </button>
-                  <button onClick={() => {
+                  <button
+                    disabled={isCommitting}
+                    onClick={async () => {
                     const checkedIds = new Set(Object.keys(pendingChecked).filter(id => pendingChecked[id]))
-                    logSession(venue, checkedIds)
-                    setPendingVenue(null)
+                    await logSession(venue, checkedIds)
                   }}
-                    style={{ flex: 1, padding: 10, background: venue === "knr" ? "#0F6E56" : "#185FA5", color: "#fff", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
-                    Confirm log
+                    style={{ flex: 1, padding: 10, background: venue === "knr" ? "#0F6E56" : "#185FA5", color: "#fff", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: isCommitting ? "wait" : "pointer", fontFamily: "inherit", opacity: isCommitting ? 0.7 : 1 }}>
+                    {isCommitting ? "Saving..." : logCommitError || "Confirm log"}
                   </button>
                 </div>
+                {logCommitError && (
+                  <div style={{ marginTop: 8, color: "#f87171", fontSize: 11, lineHeight: 1.4 }}>
+                    {logCommitError}
+                  </div>
+                )}
               </div>
             )
           }
@@ -5820,7 +5844,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
               setPendingVenue(venue)
             }}
               style={{ width: "100%", padding: 13, background: venue === "knr" ? "#0F6E56" : "#185FA5", color: "#fff", border: "none", borderRadius: 7, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", marginBottom: 8 }}>
-              Log {label}{timeLabel}
+              {isSplitDay ? `Log ${label}${timeLabel}` : label}
             </button>
           )
         })}
