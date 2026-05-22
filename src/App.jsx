@@ -12735,12 +12735,13 @@ Respond with exactly one paragraph (4 to 6 sentences) covering: (1) what today's
 
 Current session data, active injuries, training load metrics, and upcoming races are provided below in the user context for each message. Use them. Do not make up values that are not provided.
 
-WRITE CAPABILITIES — you have five direct write actions available:
+WRITE CAPABILITIES — you have six direct write actions available:
 1. MTP score log: when the user reports a toe/MTP score (0–3), say "Logging MTP score X — confirm with Y." Do not say you cannot log data.
 2. Body weight log: when the user reports a scale weight (e.g. "158.2 this morning"), say "Logging X lb — confirm with Y." Do not say you cannot log data.
 3. Exercise log: when the user says "add X to today" or asks to log an exercise, say "Adding X to today's schedule — confirm with Y." Do not say you cannot log data.
 4. Run log: when the user reports completing a run (distance, duration, MTP score, notes), acknowledge all the details and say "Logging your run — confirm with Y." If an MTP score is included, it will also be logged as a check-in. Do not say you cannot log data.
 5. Meal log: when the user describes what they ate for any meal (breakfast, lunch, snack, or dinner — including past meals like "last night's dinner" or "Tuesday's dinner"), respond with exactly one sentence acknowledging the meal type and say "Type Y and I will calculate the nutrition and log it." Do NOT write out a nutrition breakdown yourself. Do NOT say you cannot log meals. The nutrition calculation happens automatically after Y is confirmed — your job is only to prompt for confirmation. If the user says "log the meal I described", "log what I entered", "yes log it", or similar, treat that as Y and proceed. Do not say you cannot log data.
+6. Sleep log: when the user reports how many hours they slept (e.g. "slept 6.6 hrs", "got 7 hours last night", "7h 30m"), respond with one sentence confirming the duration and say "Type Y to log it." Do NOT say you cannot log sleep.
 
 SUBSTITUTION PROTOCOL — when the user reports MTP score 2+ or describes a physical limitation during a session:
 - Immediately propose a specific substitute exercise or modality that avoids the affected region.
@@ -12837,7 +12838,7 @@ const FingerprintIcon = ({ size = 38 }) => {
   )
 }
 
-function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, onLogMtp, onLogWeight, onLogExercise, onLogRun, onLogMeal, biometricRecords, sleepRecords, mealRecords }) {
+function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, onLogMtp, onLogWeight, onLogExercise, onLogRun, onLogMeal, biometricRecords, sleepRecords, setSleepRecords, mealRecords }) {
   const [isOpen, setIsOpen] = React.useState(false)
   const [messages, setMessages] = React.useState(() => {
     try { return JSON.parse(localStorage.getItem(TRAINER_STORAGE_KEY) || "[]") } catch { return [] }
@@ -13095,6 +13096,39 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
       }
     }
 
+    // Sleep detection — "slept 6.6 hrs", "got 7 hours", "slept 7h 30m"
+    const sleepHrMatch = userText.match(
+      /\b(?:slept|got|had|logged?|tracked?)\b.{0,20}?\b(\d+(?:\.\d+)?)\s*(?:hours?|hrs?|h)\b/i
+    )
+    const sleepMinMatch = userText.match(
+      /\b(\d+)\s*(?:hours?|hrs?|h)\s*(?:and\s*)?(\d+)\s*(?:min(?:utes?)?|m)\b/i
+    )
+    const sleepKeyword = /\b(?:slept|sleep|sleeping)\b/i.test(userText)
+
+    if (sleepKeyword || sleepHrMatch || sleepMinMatch) {
+      let totalMinutes = null
+      if (sleepMinMatch) {
+        totalMinutes = parseInt(sleepMinMatch[1]) * 60 + parseInt(sleepMinMatch[2])
+      } else if (sleepHrMatch) {
+        totalMinutes = Math.round(parseFloat(sleepHrMatch[1]) * 60)
+      }
+      if (totalMinutes != null && totalMinutes >= 60 && totalMinutes <= 720) {
+        const hrs = (totalMinutes / 60).toFixed(1)
+        const today = new Date().toISOString().slice(0, 10)
+        return {
+          type: "sleep",
+          payload: {
+            sleep_id: `sleep_trainer_${Date.now()}`,
+            date: today,
+            duration_min: totalMinutes,
+            source: "trainer",
+            notes: "Trainer-logged sleep duration"
+          },
+          preview: `Log sleep: ${hrs} hours for last night (${today}). Type Y to confirm or anything else to cancel.`
+        }
+      }
+    }
+
     return null
   }
 
@@ -13237,6 +13271,38 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
         const p = pendingAction.payload
         const confirmMsg = { role: "assistant", content: `${p.meal.charAt(0).toUpperCase() + p.meal.slice(1)} logged: ${p.total_calories} cal, ${p.total_protein_g}g protein, ${p.total_carbs_g}g carbs, ${p.total_fat_g}g fat.`, ts: Date.now() }
         saveMessages([...messages, confirmMsg])
+      } else if (pendingAction.type === "sleep") {
+        const newRecord = { ...pendingAction.payload }
+        const existing = (() => {
+          try { return JSON.parse(localStorage.getItem("lift_sleep_records") || "[]") } catch { return [] }
+        })()
+        // Deduplicate: remove any existing trainer-logged record for the same date
+        const filtered = existing.filter(r =>
+          !(r.date === newRecord.date && r.source === "trainer")
+        )
+        const merged = [...filtered, newRecord]
+          .sort((a, b) => (a.date || "").localeCompare(b.date || ""))
+        localStorage.setItem("lift_sleep_records", JSON.stringify(merged))
+        if (setSleepRecords) setSleepRecords(merged)
+        // Fire-and-forget Supabase sync
+        if (supabase && STORE_USER_ID) {
+          upsertSleepRecords(supabase, STORE_USER_ID, merged).catch(e =>
+            console.warn("[LIFT] Trainer sleep sync failed, saved locally", e)
+          )
+        }
+        const confirmMsg = {
+          role: "assistant",
+          content: `Sleep logged: ${(newRecord.duration_min / 60).toFixed(1)} hours for ${newRecord.date}. This will update your readiness score on the next refresh.`,
+          ts: Date.now()
+        }
+        setMessages(prev => {
+          const updated = [...prev, confirmMsg]
+          try { localStorage.setItem(TRAINER_STORAGE_KEY, JSON.stringify(updated.slice(-60))) } catch {}
+          return updated
+        })
+        setPendingAction(null)
+        setInputValue("")
+        return
       } else if (pendingAction.type === "meal_lookup") {
         // Nutrition lookup — fetch then confirm
         setIsLoading(true)
@@ -21481,6 +21547,7 @@ return (
     onLogMeal={trainerLogMeal}
     biometricRecords={biometricRecords}
     sleepRecords={sleepRecords}
+    setSleepRecords={setSleepRecords}
     mealRecords={mealRecords}
   />
   </>
