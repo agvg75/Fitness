@@ -44,6 +44,8 @@ import {
 } from "recharts"
 import { createClient } from "@supabase/supabase-js"
 import { generateTrainerReport } from "./exportReport"
+import MetricValue from './components/MetricValue'
+import { useMetricSnapshot } from './lib/useMetricSnapshot'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -17069,6 +17071,44 @@ const adaptiveTrainingState = useMemo(() => {
   })
 }, [schedLog, operationalWorkouts, acwrSeries, tsbV2Panel, ocItems, readinessScore, weeklyTrainingBuckets])
 
+const currentMetricValues = {
+  weight: bodyForecast?.currentWeight ?? null,
+  vo2Apple: vo2SourceSummary?.apple?.value ?? null,
+  vo2Proxy: vo2ProxySummary?.latestSmoothed ?? null,
+  ctl: (() => {
+    const last = fitnessData?.[fitnessData.length - 1]
+    return last ? Number(last['Fitness (CTL)']) || null : null
+  })(),
+  atl: (() => {
+    const last = fitnessData?.[fitnessData.length - 1]
+    return last ? Number(last['Fatigue (ATL)']) || null : null
+  })(),
+  tsb: (() => {
+    const last = fitnessData?.[fitnessData.length - 1]
+    return last ? Number(last['Form (TSB)']) || null : null
+  })(),
+  restingHR: (() => {
+    const last = dailyWithBiometrics?.[dailyWithBiometrics.length - 1]
+    return last?.rhr ? Number(last.rhr) : null
+  })(),
+  hrv: (() => {
+    const last = dailyWithBiometrics?.[dailyWithBiometrics.length - 1]
+    return last?.hrv ? Number(last.hrv) : null
+  })(),
+  sleepHours: (() => {
+    const recs = Array.isArray(sleepRecords) ? sleepRecords : []
+    const last = recs[recs.length - 1]
+    if (!last) return null
+    const mins = last.duration_min ?? last.duration ?? null
+    return mins ? Number((mins / 60).toFixed(1)) : null
+  })(),
+  operationalReadiness: readinessScore ?? null,
+  tendonRisk: adaptiveTrainingState?.latestWeek?.tendon?.[selectedTendonGroup]?.risk ?? null,
+  runCeiling: 4.0
+}
+
+const prevMetricValues = useMetricSnapshot(currentMetricValues)
+
 const operationalCapacityData = useMemo(() => {
   const items = Array.isArray(ocItems) ? ocItems : []
 
@@ -18589,9 +18629,11 @@ return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(180px, 1fr))", gap: "16px", marginBottom: "20px" }}>
       <div style={{ ...cardStyle(), minWidth: 0 }}>
         <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "8px" }}>Current Weight</div>
-        <div style={{ fontSize: "30px", fontWeight: "bold" }}>
-          {bodyForecast?.currentWeight != null ? `${f1(bodyForecast.currentWeight)} lb` : "NA"}
-        </div>
+        <MetricValue
+          metricKey="weight"
+          value={bodyForecast?.currentWeight != null ? f1(bodyForecast.currentWeight) : null}
+          prev={prevMetricValues?.weight != null ? f1(prevMetricValues.weight) : null}
+        />
         <div style={{ fontSize: "12px", opacity: 0.7, marginTop: "8px" }}>
           latest body-weight state
         </div>
@@ -18599,15 +18641,14 @@ return (
 
       <div style={{ ...cardStyle(), minWidth: 0 }}>
         <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "8px" }}>Tendon Risk Today</div>
-        <div style={{ fontSize: "30px", fontWeight: "bold", color: (() => {
-          const risk = adaptiveTrainingState?.latestWeek?.tendon?.[selectedTendonGroup]?.risk || 0
-          const meta = TENDON_GROUP_META[selectedTendonGroup]
-          return risk >= meta.overload ? "#ef4444" : risk >= meta.caution ? "#f59e0b" : "#4ade80"
-        })() }}>
-          {adaptiveTrainingState?.latestWeek?.tendon?.[selectedTendonGroup]?.risk != null
-            ? `${adaptiveTrainingState.latestWeek.tendon[selectedTendonGroup].risk.toFixed(2)}x`
-            : "NA"}
-        </div>
+        <MetricValue
+          metricKey="tendonRisk"
+          value={adaptiveTrainingState?.latestWeek?.tendon?.[selectedTendonGroup]?.risk != null
+            ? adaptiveTrainingState.latestWeek.tendon[selectedTendonGroup].risk.toFixed(2)
+            : null}
+          prev={prevMetricValues?.tendonRisk ?? null}
+          unit="x"
+        />
         <div style={{ fontSize: "12px", opacity: 0.7, marginTop: "8px" }}>
           {TENDON_GROUP_META[selectedTendonGroup]?.label || "Selected tendon group"} · capacity {adaptiveTrainingState?.latestWeek?.tendon?.[selectedTendonGroup]?.capacity?.toFixed?.(1) ?? "NA"}
         </div>
@@ -18665,7 +18706,12 @@ return (
         }}
       >
         <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "8px" }}>Operational</div>
-        <div style={{ fontSize: "30px", fontWeight: "bold" }}>{readinessScore}%</div>
+        <MetricValue
+          metricKey="operationalReadiness"
+          value={readinessScore}
+          prev={prevMetricValues?.operationalReadiness ?? null}
+          unit="%"
+        />
         <div style={{ fontSize: "12px", opacity: 0.7, marginTop: "8px" }}>
           readiness score from OC tab
         </div>
