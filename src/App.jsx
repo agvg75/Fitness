@@ -13517,7 +13517,7 @@ export default function App() {
     bmr: 1520,
     tdee: 2100,
     fat_loss_target: 1700,
-    fat_loss_rate_monthly: 1.7,  // lb/month — no-KNR period Apr-Sep 2026; revert to 1.9 when KNR resumes
+    fat_loss_rate_monthly: 1.7,  // lb/month — no-KNR period Apr-Sep 2026; reassess when KNR resumes
     mtp_ceiling_miles: 4.0,  // current MTP protocol ceiling — update when ceiling advances
     mtp_next_milestone_miles: 4.4,  // next planned distance advance
 
