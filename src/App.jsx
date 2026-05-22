@@ -14676,6 +14676,7 @@ useEffect(() => {
 }, [isRecoveryMode])
 
   const [mealEntries, setMealEntries] = useState([])
+  const pendingMealSyncRef = useRef({ entries: null, userId: null, promise: null })
   const [mealPresets, setMealPresets] = useState(defaultMealPresets)
   const [dailyTemplate, setDailyTemplate] = useState(() => {
   try {
@@ -15947,6 +15948,50 @@ async function syncMealsToSupabase(entries, currentUserId) {
     throw upsertError
   }
 }
+
+async function flushPendingMealSync() {
+  const pending = pendingMealSyncRef.current
+  if (!pending.entries || !pending.userId) return
+  if (pending.promise) return pending.promise
+
+  const promise = syncMealsToSupabase(pending.entries, pending.userId)
+    .then(() => {
+      if (pendingMealSyncRef.current === pending) {
+        pendingMealSyncRef.current = { entries: null, userId: null, promise: null }
+      }
+    })
+    .catch(err => {
+      if (pendingMealSyncRef.current === pending) {
+        pendingMealSyncRef.current = { ...pending, promise: null }
+      }
+      throw err
+    })
+
+  pending.promise = promise
+  return promise
+}
+
+useEffect(() => {
+  const flushForBackgrounding = () => {
+    const pending = pendingMealSyncRef.current
+    if (!pending.entries || !pending.userId) return
+    flushPendingMealSync().catch(err => {
+      if (process.env.NODE_ENV === "development") console.error("Meal visibility sync failed:", err)
+    })
+  }
+
+  const handleVisibilityChange = () => {
+    if (document.visibilityState === "hidden") flushForBackgrounding()
+  }
+
+  document.addEventListener("visibilitychange", handleVisibilityChange)
+  window.addEventListener("pagehide", flushForBackgrounding)
+  return () => {
+    document.removeEventListener("visibilitychange", handleVisibilityChange)
+    window.removeEventListener("pagehide", flushForBackgrounding)
+  }
+}, [supabase])
+
 async function loadMealsFromSupabase(userId) {
   if (!supabase || !userId) return
 
@@ -15988,8 +16033,10 @@ async function persistMealEntries(nextEntries, currentUserId) {
     return
   }
 
+  pendingMealSyncRef.current = { entries: nextEntries, userId: currentUserId, promise: null }
+
   try {
-    await syncMealsToSupabase(nextEntries, currentUserId)
+    await flushPendingMealSync()
   } catch (err) {
     const msg = err?.message || "Unknown sync error"
     if (process.env.NODE_ENV === "development") console.error("Meal sync failed:", err)
