@@ -2445,6 +2445,8 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
           )
         })()}
         {mapItems.map(item => {
+          const hasActiveIssue = active.some(activeItem => activeItem.location === item.location && activeItem.currentScore > 0)
+          if (!hasActiveIssue) return null
           const coords = OC_REGION_COORDS[item.location]?.[ck]
           if (!coords) return null
           const meta = OC_KEY_META[item.key] || OC_KEY_META.muscleStatus
