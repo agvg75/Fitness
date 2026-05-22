@@ -13359,7 +13359,7 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
   }
 
   const iconBtn = {
-    position: "fixed", top: 20, right: 16, zIndex: 9999,
+    position: "fixed", top: 20, left: 148, zIndex: 9999,
     width: 44, height: 44, borderRadius: "50%",
     background: "rgba(5, 10, 30, 0.35)",
     border: "1px solid rgba(56, 189, 248, 0.35)",
@@ -13372,7 +13372,7 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
   }
 
   const panelStyle = {
-    position: "fixed", top: 66, right: 8, left: 8, zIndex: 9998,
+    position: "fixed", top: 66, left: 8, zIndex: 9998,
     width: "calc(100vw - 16px)",
     maxWidth: 400,
     margin: "0",
