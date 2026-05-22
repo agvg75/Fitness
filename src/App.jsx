@@ -168,7 +168,8 @@ const SYNC_KEYS = new Set([
   "wt-tendon-work",
   "wt-checked-items",
   "ufd-workouts",
-  "oc-items"
+  "oc-items",
+  "lift_meal_records"
 ])
 
 const store = {
@@ -14868,7 +14869,7 @@ useEffect(() => {
         const { data } = await supabase
           .from("user_kv")
           .select("key, value, updated_at")
-          .in("key", ["ufd-workouts", "wt-log", "oc-items", "healthfit-daily", "wt-sessions"])
+          .in("key", ["ufd-workouts", "wt-log", "oc-items", "healthfit-daily", "wt-sessions", "lift_meal_records"])
         if (data) {
           const sbWo = data.find(r => r.key === "ufd-workouts")?.value
           if (process.env.NODE_ENV === "development") console.log("Supabase user_kv fetch:", { sbWo_count: Array.isArray(sbWo)?sbWo.length:0 })
@@ -14968,6 +14969,20 @@ useEffect(() => {
             setHealthFitDaily(merged)
             await store.set("healthfit-daily", merged)
             localStorage.setItem("lift_healthfit_daily", JSON.stringify(merged))
+          }
+          // lift_meal_records — union by meal_id||id, Supabase wins on conflict
+          const sbMr = data.find(r => r.key === "lift_meal_records")?.value
+          if (Array.isArray(sbMr)) {
+            const local = Array.isArray(mealRecords) ? mealRecords : []
+            const merged = Object.values(
+              [...local, ...sbMr].reduce((acc, r) => {
+                const key = r.meal_id || r.id
+                if (key) acc[key] = r
+                return acc
+              }, {})
+            ).sort((a, b) => String(a.date).localeCompare(String(b.date)))
+            localStorage.setItem("lift_meal_records", JSON.stringify(merged))
+            setMealRecords(merged)
           }
         }
       } catch (err) {
