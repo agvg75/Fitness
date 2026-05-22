@@ -6456,7 +6456,7 @@ function projectWeightTrend(weights, nutritionSeries, weeks = 12) {
   return out
 }
 
-function TrainingDashboard({ workouts, recentNutrition, healthFitDaily = [], schedLog = [], ocItems = [], biometricRecords = [], tsbV2Panel = null }) {
+function TrainingDashboard({ workouts, recentNutrition, healthFitDaily = [], schedLog = [], ocItems = [], biometricRecords = [], tsbV2Panel = null, prevMetricValues = {} }) {
   const fmt0 = n => Number.isFinite(Number(n)) ? Math.round(Number(n)).toLocaleString() : "0"
   const fmt1 = n => Number.isFinite(Number(n)) ? Number(n).toFixed(1) : "0.0"
 
@@ -6734,6 +6734,7 @@ if (w.category === "Strength") {
       }))
       .sort((a, b) => a.date.localeCompare(b.date))
   }, [healthFitDaily, tsbV2Panel])
+  const latestPmfRow = pmfChartData.length ? pmfChartData[pmfChartData.length - 1] : null
 
   const showLiveStateDebug = useMemo(() => {
     try {
@@ -6846,6 +6847,50 @@ if (w.category === "Strength") {
 <div style={cardStyle}>
   <div style={labelStyle}>Calories (7d avg)</div>
   <div style={valueStyle}>{fmt0(recentNutrition.avgCalories)}</div>
+</div>
+
+<div style={cardStyle}>
+  <div style={labelStyle}>Fitness (CTL)</div>
+  <MetricValue
+    metricKey="ctl"
+    value={latestPmfRow?.ctl != null ? fmt1(latestPmfRow.ctl) : null}
+    prev={prevMetricValues?.ctl ?? null}
+    fontSize="22px"
+    style={{ color: "#ced2f0", marginTop: "4px" }}
+  />
+</div>
+
+<div style={cardStyle}>
+  <div style={labelStyle}>Fatigue (ATL)</div>
+  <MetricValue
+    metricKey="atl"
+    value={latestPmfRow?.atl != null ? fmt1(latestPmfRow.atl) : null}
+    prev={prevMetricValues?.atl ?? null}
+    fontSize="22px"
+    style={{ color: "#ced2f0", marginTop: "4px" }}
+  />
+</div>
+
+<div style={cardStyle}>
+  <div style={labelStyle}>Form (TSB)</div>
+  <MetricValue
+    metricKey="tsb"
+    value={latestPmfRow?.tsb != null ? fmt1(latestPmfRow.tsb) : null}
+    prev={prevMetricValues?.tsb ?? null}
+    fontSize="22px"
+    style={{ color: "#ced2f0", marginTop: "4px" }}
+  />
+</div>
+
+<div style={cardStyle}>
+  <div style={labelStyle}>ACWR</div>
+  <MetricValue
+    metricKey="acwr"
+    value={latestPmfRow?.acwr != null ? fmt1(latestPmfRow.acwr) : null}
+    prev={prevMetricValues?.acwr ?? null}
+    fontSize="22px"
+    style={{ color: "#ced2f0", marginTop: "4px" }}
+  />
 </div>
 
 <div style={cardStyle}>
@@ -17076,16 +17121,20 @@ const currentMetricValues = {
   vo2Apple: vo2SourceSummary?.apple?.value ?? null,
   vo2Proxy: vo2ProxySummary?.latestSmoothed ?? null,
   ctl: (() => {
-    const last = fitnessData?.[fitnessData.length - 1]
-    return last ? Number(last['Fitness (CTL)']) || null : null
+    const val = latestHealthFit?.ctl ?? tsbV2Panel?.currentRow?.overallCtl
+    return Number.isFinite(Number(val)) ? Number(val) : null
   })(),
   atl: (() => {
-    const last = fitnessData?.[fitnessData.length - 1]
-    return last ? Number(last['Fatigue (ATL)']) || null : null
+    const val = latestHealthFit?.atl ?? tsbV2Panel?.currentRow?.overallAtl
+    return Number.isFinite(Number(val)) ? Number(val) : null
   })(),
   tsb: (() => {
-    const last = fitnessData?.[fitnessData.length - 1]
-    return last ? Number(last['Form (TSB)']) || null : null
+    const val = latestHealthFit?.tsb ?? tsbV2Panel?.currentRow?.overallTsb
+    return Number.isFinite(Number(val)) ? Number(val) : null
+  })(),
+  acwr: (() => {
+    const val = latestHealthFit?.acwr ?? tsbV2Panel?.currentRow?.acwr
+    return Number.isFinite(Number(val)) ? Number(val) : null
   })(),
   restingHR: (() => {
     const last = dailyWithBiometrics?.[dailyWithBiometrics.length - 1]
@@ -17104,6 +17153,9 @@ const currentMetricValues = {
   })(),
   operationalReadiness: readinessScore ?? null,
   tendonRisk: adaptiveTrainingState?.latestWeek?.tendon?.[selectedTendonGroup]?.risk ?? null,
+  fatMass: latestDexa?.fat_lb ?? null,
+  leanMass: latestLeanAnchor ?? null,
+  bodyFat: estimatedCurrentBF ?? latestDexa?.pct_fat ?? null,
   runCeiling: 4.0
 }
 
@@ -18672,13 +18724,23 @@ return (
   ) : (
     <>
       <div style={{ display: "flex", alignItems: "baseline", gap: "6px", flexWrap: "wrap" }}>
-        <div style={{ fontSize: "28px", fontWeight: "bold", color: "#4a9ee8" }}>
-          {vo2SourceSummary?.apple?.value != null ? f1(vo2SourceSummary.apple.value) : "NA"}
-        </div>
+        <MetricValue
+          metricKey="vo2Apple"
+          value={vo2SourceSummary?.apple?.value != null ? f1(vo2SourceSummary.apple.value) : null}
+          prev={prevMetricValues?.vo2Apple != null ? f1(prevMetricValues.vo2Apple) : null}
+          unit=""
+          fontSize="28px"
+          style={{ color: "#4a9ee8" }}
+        />
         <div style={{ fontSize: "20px", color: "#444", fontWeight: "300" }}>/</div>
-        <div style={{ fontSize: "22px", fontWeight: "bold", color: "#94a3b8" }}>
-          {vo2ProxySummary?.latestSmoothed != null ? f1(vo2ProxySummary.latestSmoothed) : "NA"}
-        </div>
+        <MetricValue
+          metricKey="vo2Proxy"
+          value={vo2ProxySummary?.latestSmoothed != null ? f1(vo2ProxySummary.latestSmoothed) : null}
+          prev={prevMetricValues?.vo2Proxy != null ? f1(prevMetricValues.vo2Proxy) : null}
+          unit=""
+          fontSize="22px"
+          style={{ color: "#94a3b8" }}
+        />
       </div>
       <div style={{ display: "flex", gap: "14px", marginTop: "6px", fontSize: "10px" }}>
         <span style={{ color: "#4a9ee8" }}>Apple max</span>
@@ -19798,18 +19860,42 @@ return (
 
             <div style={cardStyle()}>
               <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "8px" }}>Latest DEXA Body Fat</div>
-              <div style={{ fontSize: "30px", fontWeight: "bold" }}>{latestDexa?.pct_fat != null ? `${f1(latestDexa.pct_fat)}%` : "NA"}</div>
+              <MetricValue
+                metricKey="bodyFat"
+                value={latestDexa?.pct_fat != null ? f1(latestDexa.pct_fat) : null}
+                prev={prevMetricValues?.bodyFat != null ? f1(prevMetricValues.bodyFat) : null}
+                unit="%"
+              />
+            </div>
+
+            <div style={cardStyle()}>
+              <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "8px" }}>Fat Mass</div>
+              <MetricValue
+                metricKey="fatMass"
+                value={latestDexa?.fat_lb != null ? f1(latestDexa.fat_lb) : null}
+                prev={prevMetricValues?.fatMass != null ? f1(prevMetricValues.fatMass) : null}
+              />
+              <div style={{ fontSize: "12px", opacity: 0.7, marginTop: "8px" }}>latest DEXA fat mass</div>
             </div>
 
             <div style={cardStyle()}>
               <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "8px" }}>Lean Mass Anchor</div>
-              <div style={{ fontSize: "30px", fontWeight: "bold" }}>{latestLeanAnchor != null ? `${f1(latestLeanAnchor)} lb` : "NA"}</div>
+              <MetricValue
+                metricKey="leanMass"
+                value={latestLeanAnchor != null ? f1(latestLeanAnchor) : null}
+                prev={prevMetricValues?.leanMass != null ? f1(prevMetricValues.leanMass) : null}
+              />
               <div style={{ fontSize: "12px", opacity: 0.7, marginTop: "8px" }}>latest DEXA lean mass</div>
             </div>
 
             <div style={cardStyle()}>
               <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "8px" }}>Estimated Current BF%</div>
-              <div style={{ fontSize: "30px", fontWeight: "bold" }}>{estimatedCurrentBF != null ? `${f1(estimatedCurrentBF)}%` : "NA"}</div>
+              <MetricValue
+                metricKey="bodyFat"
+                value={estimatedCurrentBF != null ? f1(estimatedCurrentBF) : null}
+                prev={prevMetricValues?.bodyFat != null ? f1(prevMetricValues.bodyFat) : null}
+                unit="%"
+              />
               <div style={{ fontSize: "12px", opacity: 0.7, marginTop: "8px" }}>from current weight and latest lean anchor</div>
             </div>
 
@@ -20635,6 +20721,7 @@ return (
     ocItems={ocItems}
     biometricRecords={biometricRecords}
     tsbV2Panel={tsbV2Panel}
+    prevMetricValues={prevMetricValues}
   />
 )}
 {tab === "Capacity" && (
