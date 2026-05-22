@@ -22,7 +22,7 @@ export default function MetricValue({
   return (
     <div style={{ position: 'relative' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: '4px' }}>
-        <div style={{ fontSize, fontWeight: 'bold', color: valueColor,
+        <div style={{ fontSize, fontWeight: 'bold', 
           transition: 'color 0.3s', ...style, color: valueColor }}>
           {value != null ? `${value}${displayUnit ? ' ' + displayUnit : ''}` : 'NA'}
         </div>
