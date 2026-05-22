@@ -16505,19 +16505,54 @@ const formDecayAccumulation = useMemo(() => {
 }, [schedLog, ocItems])
 
 const tissueLoadIndex = useMemo(() => {
+  // Maps fine-grained library regions to the 14 canonical spec output regions.
+  // Any string not present here (including modality labels like "Run", "Strength")
+  // is silently dropped, which eliminates the category-key bug.
+  const REGION_CANONICAL = {
+    "Toe L": "AnkleFoot L", "Ankle L": "AnkleFoot L", "AnkleFoot L": "AnkleFoot L",
+    "Calf L": "AnkleFoot L", "Shin L": "AnkleFoot L",
+    "Toe R": "AnkleFoot R", "Ankle R": "AnkleFoot R", "AnkleFoot R": "AnkleFoot R",
+    "Calf R": "AnkleFoot R", "Shin R": "AnkleFoot R",
+    "Knee L": "Knee L", "Quad L": "Knee L", "IT Band L": "Knee L",
+    "Knee R": "Knee R", "Quad R": "Knee R", "IT Band R": "Knee R",
+    "Hip L": "Hip L", "Glute L": "Hip L", "Hamstring L": "Hip L",
+    "Hip R": "Hip R", "Glute R": "Hip R", "Hamstring R": "Hip R",
+    "Lower Back": "Lower Back",
+    "Shoulder L": "Shoulder L", "Shoulder R": "Shoulder R",
+    "Elbow L": "Elbow L", "Forearm L": "Elbow L",
+    "Elbow R": "Elbow R", "Forearm R": "Elbow R",
+    "Wrist L": "Wrist L", "Wrist R": "Wrist R",
+    "Cervical": "Cervical",
+    // Upper Back, Core/Abs, Chest intentionally omitted (not in spec output regions)
+  }
+
+  // Thresholds: accumulated load that corresponds to 100% saturation.
+  // Based on ~3 sessions/week of score-3 exercise at each tissue tau.
+  const TISSUE_LOAD_THRESHOLDS = {
+    muscleStatus: 8,
+    tendonStatus: 20,
+    jointStatus:  12,
+  }
+
   const today = new Date()
   today.setHours(0, 0, 0, 0)
 
+  // acc keyed by canonical region name; values are tissue type accumulators
   const acc = {}
-  function applyLoad(region, tissueType, score, daysAgo) {
+
+  function applyLoad(rawRegion, tissueType, score, daysAgo) {
+    const canonical = REGION_CANONICAL[rawRegion]
+    if (!canonical) return                        // drop unknown/modality strings
     const tau = TISSUE_DECAY_CONSTANTS[tissueType]?.tau
-    if (!tau || score <= 0) return
-    const decayed = score * Math.exp(-daysAgo / tau)
-    if (!acc[region]) acc[region] = { muscleStatus: 0, tendonStatus: 0, jointStatus: 0 }
-    acc[region][tissueType] = (acc[region][tissueType] || 0) + decayed
+    if (!tau) return
+    const s = Number(score)
+    if (!Number.isFinite(s) || s <= 0) return    // guard against NaN/negative scores
+    const decayed = s * Math.exp(-Math.max(0, daysAgo) / tau)
+    if (!acc[canonical]) acc[canonical] = { muscleStatus: 0, tendonStatus: 0, jointStatus: 0 }
+    acc[canonical][tissueType] = Math.max(0, (acc[canonical][tissueType] || 0) + decayed)
   }
 
-  // schedLog — strength/schedule sessions
+  // ── schedLog: strength/schedule sessions ──────────────────────────────────
   ;(Array.isArray(schedLog) ? schedLog : []).forEach(entry => {
     const dateStr = String(entry.date || "").slice(0, 10)
     if (!dateStr) return
@@ -16525,7 +16560,7 @@ const tissueLoadIndex = useMemo(() => {
     if (isNaN(entryDate.getTime())) return
     const daysAgo = Math.max(0, (today.getTime() - entryDate.getTime()) / 86400000)
 
-    // Primary loads from exercises in this session
+    // Primary loads from each exercise
     ;(Array.isArray(entry.exercises) ? entry.exercises : []).forEach(ex => {
       const libEntry = getExerciseProfile(ex.exercise_id || ex.id)
         || EXERCISE_LIBRARY.find(e =>
@@ -16541,39 +16576,48 @@ const tissueLoadIndex = useMemo(() => {
       }
     })
 
-    // Logged form_decay_alerts — secondary tissues at 50%
+    // Logged form_decay_alerts secondary tissues at 50%
     const alerts = entry.form_decay_alerts || entry.metadata?.form_decay_alerts || []
     ;(Array.isArray(alerts) ? alerts : []).forEach(alert => {
       ;(Array.isArray(alert.secondary_tissues) ? alert.secondary_tissues : []).forEach(t =>
-        applyLoad(t.region, t.tissueType, t.score * 0.5, daysAgo)
+        applyLoad(t.region, t.tissueType, Number(t.score) * 0.5, daysAgo)
       )
     })
   })
 
-  // unifiedCanonicalSessions — cardio + imported sessions (includes schedule seeds)
+  // ── unifiedCanonicalSessions: cardio + imported sessions ──────────────────
   ;(Array.isArray(unifiedCanonicalSessions) ? unifiedCanonicalSessions : []).forEach(sess => {
-    const rawDate = sess.logged_at || sess.dateTime || sess.date
+    const rawDate = sess.start_date || sess.logged_at || sess.dateTime || sess.date
     const dateStr = rawDate ? String(rawDate).slice(0, 10) : null
     if (!dateStr) return
     const sessDate = new Date(dateStr + "T12:00:00")
     if (isNaN(sessDate.getTime())) return
     const daysAgo = Math.max(0, (today.getTime() - sessDate.getTime()) / 86400000)
 
-    const cat = String(sess.category || sess.type || "").toLowerCase()
+    // Normalise category — canonical sessions use canonical_type, others use category/type
+    const cat = String(
+      sess.canonical_type || sess.category || sess.type || ""
+    ).toLowerCase()
     const isRun   = cat.includes("run")
     const isSwim  = cat.includes("swim")
     const isCycle = cat.includes("cycl") || cat.includes("bike") || cat.includes("spin")
 
     if (isRun || isSwim || isCycle) {
-      // Running-chain cardio: apply the matching aerobic exercise's tissue loads
+      // Apply loads for the matching aerobic exercise from the library
       const cardioId = isSwim ? "swim_freestyle" : isCycle ? "cycling_stationary" : "run"
       const libEntry = getExerciseProfile(cardioId)
       if (libEntry) {
         libEntry.loads.forEach(load => applyLoad(load.region, load.tissueType, load.score, daysAgo))
       }
     } else {
-      // Strength/other: process individual exercises
-      ;(Array.isArray(sess.exercises) ? sess.exercises : []).forEach(ex => {
+      // Strength/other: process individual exercises.
+      // Schedule-seed canonicals store exercises under sources.schedule.exercises.
+      const exercises = Array.isArray(sess.exercises)
+        ? sess.exercises
+        : Array.isArray(sess.sources?.schedule?.exercises)
+          ? sess.sources.schedule.exercises
+          : []
+      exercises.forEach(ex => {
         const libEntry = getExerciseProfile(ex.exercise_id || ex.id)
           || EXERCISE_LIBRARY.find(e =>
               e.name.toLowerCase() === String(ex.exercise_name || ex.name || "").toLowerCase()
@@ -16584,24 +16628,28 @@ const tissueLoadIndex = useMemo(() => {
     }
   })
 
-  // Normalize to [0, 1]: reference = steady-state daily score-3 at each tau
-  const TISSUE_REF_MAX = {
-    muscleStatus: 3 / (1 - Math.exp(-1 / TISSUE_DECAY_CONSTANTS.muscleStatus.tau)),
-    tendonStatus: 3 / (1 - Math.exp(-1 / TISSUE_DECAY_CONSTANTS.tendonStatus.tau)),
-    jointStatus:  3 / (1 - Math.exp(-1 / TISSUE_DECAY_CONSTANTS.jointStatus.tau)),
-  }
-
+  // ── Normalise: (raw / threshold) × 100, clamped to 150 ───────────────────
   const result = {}
   for (const [region, loads] of Object.entries(acc)) {
-    const pcts = Object.entries(loads).map(([tt, v]) => v / (TISSUE_REF_MAX[tt] || 1))
-    result[region] = { ...loads, maxPct: Math.min(1, Math.max(0, ...pcts)) }
+    const musclePct = Math.min(150, Math.max(0, (loads.muscleStatus / TISSUE_LOAD_THRESHOLDS.muscleStatus) * 100))
+    const tendonPct = Math.min(150, Math.max(0, (loads.tendonStatus / TISSUE_LOAD_THRESHOLDS.tendonStatus) * 100))
+    const jointPct  = Math.min(150, Math.max(0, (loads.jointStatus  / TISSUE_LOAD_THRESHOLDS.jointStatus)  * 100))
+    result[region] = {
+      muscleStatus: loads.muscleStatus,
+      tendonStatus: loads.tendonStatus,
+      jointStatus:  loads.jointStatus,
+      musclePct,
+      tendonPct,
+      jointPct,
+      maxPct: Math.max(musclePct, tendonPct, jointPct),
+    }
   }
 
   const top3 = Object.entries(result)
     .sort((a, b) => b[1].maxPct - a[1].maxPct)
     .slice(0, 3)
-    .map(([r, v]) => `${r}: ${(v.maxPct * 100).toFixed(0)}%`)
-  console.log("[TLI] top 3 regions by maxPct:", top3.join(", ") || "none")
+    .map(([r, v]) => `${r} ${v.maxPct.toFixed(0)}%`)
+  console.log("[TLI] top 3:", top3.join(", ") || "none")
 
   return result
 }, [schedLog, unifiedCanonicalSessions, ocItems])
