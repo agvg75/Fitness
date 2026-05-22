@@ -17978,7 +17978,7 @@ const complianceValueFontSize = useMemo(() => {
   ]).map(value => String(value))
   const longestValueLength = values.reduce((max, value) => Math.max(max, value.length), 1)
   const isCompactViewport = typeof window !== "undefined" ? window.innerWidth < 768 : true
-  const maxFont = isCompactViewport ? 18 : 22
+  const maxFont = isCompactViewport ? 18 : 20
   const minFont = isCompactViewport ? 11 : 13
   const penaltyPerChar = isCompactViewport ? 1.25 : 1.5
 
@@ -18728,13 +18728,26 @@ return (
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: "6px", marginBottom: "20px", flexWrap: "wrap" }}>
+      <style>{`.lift-tab-bar::-webkit-scrollbar { display: none; }`}</style>
+      <div
+        className="lift-tab-bar"
+        style={{
+          display: "flex",
+          gap: "6px",
+          marginBottom: "20px",
+          flexWrap: "nowrap",
+          overflowX: "auto",
+          WebkitOverflowScrolling: "touch",
+          scrollbarWidth: "none"
+        }}
+      >
         {tabs.map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
             style={{
               flex: "1 1 auto",
+              flexShrink: 0,
               minWidth: "70px",
               padding: "10px 8px",
               background: tab === t ? "#252640" : "#0d0e1c",
@@ -18743,6 +18756,7 @@ return (
               color: tab === t ? "#ffffff" : "#ced2f0",
               cursor: "pointer",
               textAlign: "center",
+              whiteSpace: "nowrap",
               fontSize: "13px",
               fontWeight: tab === t ? "600" : "400"
             }}
@@ -19012,9 +19026,9 @@ return (
               <div style={{ fontSize: "10px", color: "#555" }}>pts penalty</div>
             </div>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: "6px" }}>
+          <div style={{ display: "flex", gap: "6px", overflowX: "auto", WebkitOverflowScrolling: "touch", flexWrap: "nowrap" }}>
             {nights.map(night => (
-              <div key={night.iso} style={{ display: "grid", gap: "4px" }}>
+              <div key={night.iso} style={{ display: "grid", gap: "4px", minWidth: "44px", flex: "0 0 auto" }}>
                 <div
                   title={night.hours != null ? `${fmtShortDate(night.iso)}: ${night.hours.toFixed(1)}h` : `${fmtShortDate(night.iso)}: no entry`}
                   style={{
@@ -19316,7 +19330,7 @@ return (
               action: "Use this to decide whether strength support is being maintained. If bars disappear or stay tiny, add or restore purposeful strength sessions."
             })
           ) : (
-            <ResponsiveContainer width="100%" height={72}>
+            <ResponsiveContainer width="100%" height={120}>
               <BarChart data={panel.rows} margin={{ top:0, right:4, left:2, bottom:0 }} barCategoryGap="2%" barGap={1}>
                 <XAxis dataKey="label" hide />
                 <YAxis hide domain={[0, 100]} />
@@ -19540,7 +19554,7 @@ return (
             <div style={{ display:"grid", gap:6, alignContent:"stretch" }}>
               {complianceOverviewRows.map(row => (
                 <div key={row.domain} style={{ display:"grid", gridTemplateColumns: window.innerWidth < 768 ? "60px repeat(4, minmax(0, 1fr))" : "72px repeat(4, minmax(0, 1fr))", gap:6, alignItems:"stretch" }}>
-                  <div style={{ display:"flex", alignItems:"center", justifyContent:"flex-start", fontSize:11, fontWeight:800, color:"#cbd5e1", padding:"0 2px", textTransform:"uppercase", letterSpacing:"0.05em" }}>
+                  <div style={{ display:"flex", alignItems:"center", justifyContent:"flex-start", fontSize:11, fontWeight:"bold", color:"#cbd5e1", padding:"0 2px", textTransform:"uppercase", letterSpacing:"0.1em" }}>
                     {row.domain === "running" ? "Running" : row.domain === "tendon" ? "Tendon" : row.domain === "strength" ? "Strength" : "Cardio"}
                   </div>
                   {[
@@ -19549,7 +19563,7 @@ return (
                     row.absorbed,
                     `${row.compliancePct} / ${row.absorptionPct}`
                   ].map((value, idx) => (
-                    <div key={`${row.domain}_${idx}`} style={{ background:"#07080e", border:"1px solid #1a1b2e", borderRadius:6, padding:"8px 6px", minHeight:56, display:"flex", alignItems:"center", justifyContent:"center", textAlign:"center" }}>
+                    <div key={`${row.domain}_${idx}`} style={{ background:"#07080e", border:"1px solid #1a1b2e", borderRadius:6, padding:"6px 12px", minHeight:"auto", display:"flex", alignItems:"center", justifyContent:"center", textAlign:"center" }}>
                       <div style={{ fontSize: complianceValueFontSize, fontWeight:700, lineHeight:0.95, width:"100%", whiteSpace:"nowrap" }}>{value}</div>
                     </div>
                   ))}
