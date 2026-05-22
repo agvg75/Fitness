@@ -1884,6 +1884,15 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
     note: "",
   })
   const [capacityInfoOpen, setCapacityInfoOpen] = useState({ tendonPain: false })
+  const [calibState, setCalibState] = React.useState(() => {
+    const init = {}
+    Object.entries(OC_REGION_COORDS).forEach(([key, val]) => {
+      init[key] = { f: val.f ? [...val.f] : null, b: val.b ? [...val.b] : null }
+    })
+    return init
+  })
+  const [calibOutput, setCalibOutput] = React.useState('')
+  const [dragInfo, setDragInfo] = React.useState(null)
   const MTP_LOCATION = "Toe L"
   const MTP_KEY = "jointStatus"
 
@@ -2327,41 +2336,62 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
             handleBodyMapClick(x, y)
           }}
         />
-        {CALIBRATE_BODY_MAP && (() => {
-          const regions = side === "front"
-            ? Object.entries(OC_REGION_COORDS).filter(([, v]) => v.f)
-            : Object.entries(OC_REGION_COORDS).filter(([, v]) => v.b)
-
-          return regions.map(([key, coords]) => {
-            const [cx, cy] = side === "front" ? coords.f : coords.b
+        {CALIBRATE_BODY_MAP && Object.entries(calibState)
+          .filter(([, coords]) => side === 'front' ? coords.f != null : coords.b != null)
+          .map(([key, coords]) => {
+            const pos = side === 'front' ? coords.f : coords.b
             return (
               <div
                 key={`cal-${key}`}
+                onPointerDown={e => {
+                  e.preventDefault()
+                  e.currentTarget.setPointerCapture(e.pointerId)
+                  setDragInfo({ key, side })
+                }}
+                onPointerMove={e => {
+                  if (!dragInfo || dragInfo.key !== key || dragInfo.side !== side) return
+                  const container = e.currentTarget.parentElement
+                  const rect = container.getBoundingClientRect()
+                  const x = Math.min(100, Math.max(0, ((e.clientX - rect.left) / rect.width * 100)))
+                  const y = Math.min(100, Math.max(0, ((e.clientY - rect.top) / rect.height * 100)))
+                  setCalibState(prev => {
+                    const next = { ...prev, [key]: { ...prev[key] } }
+                    if (side === 'front') next[key].f = [parseFloat(x.toFixed(1)), parseFloat(y.toFixed(1))]
+                    else next[key].b = [parseFloat(x.toFixed(1)), parseFloat(y.toFixed(1))]
+                    return next
+                  })
+                }}
+                onPointerUp={() => setDragInfo(null)}
                 style={{
-                  position: "absolute",
-                  left: `${cx}%`,
-                  top: `${cy}%`,
-                  transform: "translate(-50%, -50%)",
-                  zIndex: 50,
-                  pointerEvents: "none"
+                  position: 'absolute',
+                  left: `${pos[0]}%`,
+                  top: `${pos[1]}%`,
+                  transform: 'translate(-50%, -50%)',
+                  zIndex: 60,
+                  cursor: 'grab',
+                  touchAction: 'none',
+                  userSelect: 'none'
                 }}
               >
                 <div style={{
-                  width: 8, height: 8, borderRadius: "50%",
-                  background: "#facc15", border: "1px solid #000"
+                  width: 12, height: 12, borderRadius: '50%',
+                  background: dragInfo?.key === key ? '#f97316' : '#facc15',
+                  border: '2px solid #000',
+                  boxShadow: '0 0 0 1px rgba(255,255,255,0.4)'
                 }} />
                 <div style={{
-                  position: "absolute", left: 10, top: -4,
-                  background: "rgba(0,0,0,0.85)", color: "#facc15",
-                  fontSize: 8, padding: "1px 4px", borderRadius: 3,
-                  whiteSpace: "nowrap", lineHeight: 1.3
+                  position: 'absolute', left: 14, top: -4,
+                  background: 'rgba(0,0,0,0.85)', color: '#facc15',
+                  fontSize: 8, padding: '1px 4px', borderRadius: 3,
+                  whiteSpace: 'nowrap', lineHeight: 1.4, pointerEvents: 'none'
                 }}>
-                  {key}
+                  {key}<br/>
+                  <span style={{ color: '#94a3b8' }}>{pos[0]}, {pos[1]}</span>
                 </div>
               </div>
             )
           })
-        })()}
+        }
         {/* Tissue load rings — behind OC dots and form decay triangles */}
         {(() => {
           // Maps TLI canonical region names → OC_REGION_COORDS keys.
@@ -3014,21 +3044,54 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
           </div>
           {CALIBRATE_BODY_MAP && (
             <div style={{
-              marginTop: 12, padding: "8px 12px",
-              background: "#0a0a14", border: "1px solid #facc15",
-              borderRadius: 6, fontSize: 11, color: "#facc15",
-              fontFamily: "monospace"
+              marginTop: 12, padding: '12px',
+              background: '#0a0a14', border: '1px solid #facc15',
+              borderRadius: 6, fontSize: 11, color: '#facc15', fontFamily: 'monospace'
             }}>
-              <div style={{ fontWeight: "bold", marginBottom: 4 }}>
-                CALIBRATION MODE - click any point on a silhouette to read its coordinates
+              <div style={{ fontWeight: 'bold', marginBottom: 6 }}>
+                CALIBRATION MODE — drag yellow dots to correct anatomical positions
               </div>
-              <div id="cal-readout" style={{ color: "#94a3b8" }}>
-                Click on the body image above to read coordinates.
+              <div style={{ color: '#94a3b8', marginBottom: 10, fontSize: 10 }}>
+                Orange dot = currently dragging. Labels show key and current coordinates.
+                Drag dots on front view, then scroll to back view and drag those dots.
+                Click Apply when done to generate the updated coordinate block.
               </div>
-              <div style={{ marginTop: 6, color: "#555", fontSize: 10 }}>
-                Yellow dots show current region positions. Click near each anatomical landmark,
-                read the x/y values from the readout, and update OC_REGION_COORDS accordingly.
-                Set CALIBRATE_BODY_MAP = false when done.
+              <button
+                onClick={() => {
+                  const lines = ['const OC_REGION_COORDS = {']
+                  Object.entries(calibState).forEach(([key, val]) => {
+                    const f = val.f ? `[${val.f[0]}, ${val.f[1]}]` : 'null'
+                    const b = val.b ? `[${val.b[0]}, ${val.b[1]}]` : 'null'
+                    lines.push(`  "${key}": { f: ${f}, b: ${b} },`)
+                  })
+                  lines.push('}')
+                  const output = lines.join('\n')
+                  setCalibOutput(output)
+                  navigator.clipboard?.writeText(output).catch(() => {})
+                }}
+                style={{
+                  background: '#facc15', color: '#000', border: 'none',
+                  borderRadius: 4, padding: '6px 16px', fontWeight: 'bold',
+                  cursor: 'pointer', fontSize: 12, marginBottom: 10
+                }}
+              >
+                Apply — copy new OC_REGION_COORDS to clipboard
+              </button>
+              {calibOutput && (
+                <textarea
+                  readOnly
+                  value={calibOutput}
+                  style={{
+                    width: '100%', height: 200, background: '#0d0f1e',
+                    color: '#4ade80', border: '1px solid #1a1b2e',
+                    borderRadius: 4, padding: 8, fontSize: 9,
+                    fontFamily: 'monospace', resize: 'vertical'
+                  }}
+                />
+              )}
+              <div style={{ marginTop: 6, color: '#555', fontSize: 10 }}>
+                After copying, paste the block into App.jsx replacing the existing OC_REGION_COORDS,
+                then set CALIBRATE_BODY_MAP = false and commit.
               </div>
             </div>
           )}
