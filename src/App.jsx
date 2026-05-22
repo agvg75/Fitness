@@ -9237,6 +9237,7 @@ self.onmessage = async function(event) {
       overlaps: overlapBundle.summary
     };
     built.appleSleep = apple.sleep || [];
+    built.appleBiometrics = apple.biometrics || [];
 
     self.postMessage({ type: 'done', result: built });
   } catch (error) {
@@ -9320,6 +9321,7 @@ function parseAppleHealthFile(file) {
   let lineCount = 0;
 
   const workouts = [];
+  const biometrics = [];
   const rejected = [];
   const dedupe = new Set();
   const statDistance = new Map();
@@ -9367,6 +9369,22 @@ function parseAppleHealthFile(file) {
       if (startDate && Number.isFinite(value)) {
         const day = String(startDate).slice(0, 10);
         swimLaps.set(day, (swimLaps.get(day) || 0) + value);
+      }
+      return;
+    }
+
+    if (line.includes('<Record ') && line.includes('HKQuantityTypeIdentifierVO2Max')) {
+      const startDate = getAttr(line, 'startDate');
+      const value = num(getAttr(line, 'value'));
+      const date = String(startDate || '').slice(0, 10);
+      if (Number.isFinite(value) && value > 0 && date) {
+        biometrics.push({
+          date,
+          source: 'apple',
+          vo2_max: value,
+          unit: getAttr(line, 'unit') || 'mL/min/kg',
+          measured_at: startDate || date
+        });
       }
       return;
     }
@@ -9451,13 +9469,15 @@ function parseAppleHealthFile(file) {
       return copy;
     }),
     sleep,
+    biometrics,
     rejected,
     diagnostics: {
       parsed_lines: lineCount,
       deduplicated_workouts: dedupe.size,
       distance_stats_found: statDistance.size,
       swim_days_found: swimLaps.size,
-      sleep_days_found: sleepSegments.size
+      sleep_days_found: sleepSegments.size,
+      vo2_records_found: biometrics.length
     }
   };
 }
@@ -11252,10 +11272,24 @@ Return ONLY a JSON object with this exact structure, no explanation:
           return Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date))
         })
       }
+      if (Array.isArray(next?.appleBiometrics) && next.appleBiometrics.length) {
+        setBiometricResult(prev => {
+          const byKey = {}
+          ;(Array.isArray(prev) ? prev : []).forEach(r => {
+            const key = `${r.date || r.measured_date || ""}|${r.source || ""}|${r.vo2_max ?? r.vo2 ?? ""}`
+            byKey[key] = r
+          })
+          next.appleBiometrics.forEach(r => {
+            const key = `${r.date || r.measured_date || ""}|${r.source || ""}|${r.vo2_max ?? r.vo2 ?? ""}`
+            byKey[key] = r
+          })
+          return Object.values(byKey).sort((a, b) => String(a.date || a.measured_date || "").localeCompare(String(b.date || b.measured_date || "")))
+        })
+      }
       setStatus("Import analysis complete")
       setImporting(false)
     }
-  }, [setSleepResult])
+  }, [setBiometricResult, setSleepResult])
   useEffect(() => { worker.onmessage = onWorkerMessage }, [worker, onWorkerMessage])
 
   const processFiles = useCallback(async () => {
@@ -20802,7 +20836,7 @@ return (
             <YAxis
               yAxisId="proxy"
               orientation="right"
-              domain={[18, 35]}
+              domain={['dataMin - 2', 'dataMax + 2']}
               tick={{ fontSize: 10 }}
               label={{ value: "Economy", angle: 90, position: "insideRight", offset: 15, fill: "#94a3b8", style: { textAnchor: "middle" }, fontSize: 10 }}
             />
