@@ -22,11 +22,16 @@ export function generateTrainerReport({
   const iso = v => String(v || "").slice(0, 10)
   const J = v => JSON.stringify(v).replaceAll("</", "<\\/")
 
-  const weightSeries = [...biometricRecords]
-    .filter(r => (r.date || r.timestamp) && Number(r.weight_lb ?? r.weight) > 100)
-    .sort((a, b) => String(a.timestamp || a.date || "").localeCompare(String(b.timestamp || b.date || "")))
+  const weightLog = biometricRecords
+  const weightSeries = (Array.isArray(weightLog) ? weightLog : [])
+    .filter(r => (r.date || r.measured_date || r.timestamp || r.measured_at) && (r.weight_lb ?? r.weight))
+    .map(r => ({
+      date: iso(r.date || r.measured_date || r.timestamp || r.measured_at),
+      weight: Number(r.weight_lb ?? r.weight)
+    }))
+    .filter(r => r.date && r.weight > 100)
+    .sort((a, b) => a.date.localeCompare(b.date))
     .slice(-90)
-    .map(r => ({ date: iso(r.date || r.timestamp), weight: Number(r.weight_lb ?? r.weight) }))
   const latestWeight = weightSeries.length ? weightSeries[weightSeries.length - 1].weight : null
 
   const dexaSeries = [...dexa]
@@ -50,18 +55,19 @@ export function generateTrainerReport({
   const dexaData = dexaSeries.length >= 2 ? dexaSeries : dexaFallback
   const latestDexa = dexaData[dexaData.length - 1] || {}
 
-  const fitSeries = [...healthFitDaily]
-    .filter(r => r.date)
-    .sort((a, b) => String(a.date).localeCompare(String(b.date)))
+  const fitSeries = (Array.isArray(healthFitDaily) ? healthFitDaily : [])
+    .filter(r => r.date && (r.ctl != null || r.atl != null || r.tsb != null))
     .map(r => ({
-      date: iso(r.date),
-      ctl: Number(r.ctl) || null,
-      atl: Number(r.atl) || null,
-      tsb: Number(r.tsb) || null,
-      trimp: Number(r.trimp) || null,
-      acwr: Number(r.acwr) || null,
+      date: r.date,
+      ctl: r.ctl != null ? Number(Number(r.ctl).toFixed(1)) : null,
+      atl: r.atl != null ? Number(Number(r.atl).toFixed(1)) : null,
+      tsb: r.tsb != null ? Number(Number(r.tsb).toFixed(1)) : null,
+      trimp: r.trimp != null ? Number(Number(r.trimp).toFixed(1)) : null,
+      acwr: r.acwr != null ? Number(Number(r.acwr).toFixed(2)) : null,
     }))
-  const latestFit = fitSeries[fitSeries.length - 1] || {}
+    .sort((a, b) => a.date.localeCompare(b.date))
+  const lastFit = fitSeries[fitSeries.length - 1]
+  const latestFit = lastFit || {}
 
   const runSessions = [...canonicalSessions]
     .filter(s => {
@@ -71,22 +77,26 @@ export function generateTrainerReport({
     .sort((a, b) => String(a.start_date || a.date || a.dateTime || "").localeCompare(String(b.start_date || b.date || b.dateTime || "")))
     .slice(-40)
     .map(s => {
-      // Distance resolution — ufd-workouts stores meters in .distance
-      const rawDist = Number(s.distance || 0)
-      const explicitMi = parseFloat(s.distance_mi) || parseFloat(s.preferred_metrics?.distance_mi) || 0
-      const dist = explicitMi > 0
-        ? explicitMi
-        : rawDist > 200
-          ? rawDist / 1609.34
-          : rawDist
+      const METERS_PER_MILE = 1609.34
+      const explicitMi = parseFloat(s.distance_mi) || parseFloat(s.preferred_metrics?.distance_mi) || null
+      const rawDist = Number(s.dist ?? s.distance ?? explicitMi ?? 0)
+      const distMi = explicitMi != null && explicitMi > 0
+        ? Number(explicitMi.toFixed(2))
+        : rawDist > 100
+          ? Number((rawDist / METERS_PER_MILE).toFixed(2))
+          : Number(rawDist.toFixed(2))
       const dur = Number(s.duration_min ?? s.dur_min ??
         (s.duration_sec ? s.duration_sec / 60 : null) ??
         (s.preferred_metrics?.duration_min) ?? 0)
+      const paceMin = distMi > 0 && dur > 0 ? dur / distMi : null
+      const pace = paceMin != null
+        ? `${Math.floor(paceMin)}:${String(Math.round((paceMin % 1) * 60)).padStart(2, "0")}`
+        : "—"
       return {
         date: iso(s.start_date || s.date || s.dateTime),
-        dist,
+        dist: distMi,
         dur,
-        pace: dist > 0 && dur > 0 ? (dur / dist).toFixed(1) : null,
+        pace,
         mtp: s.mtp_score ?? s.mtpScore ?? null,
       }
     })
@@ -99,12 +109,22 @@ export function generateTrainerReport({
     })
     .sort((a, b) => String(a.start_date || a.date || "").localeCompare(String(b.start_date || b.date || "")))
     .slice(-20)
-    .map(s => ({
-      date: iso(s.start_date || s.date),
-      dur: Math.round(Number(s.duration_min ?? s.dur_min ?? s.dur ?? 0)),
-      venue: s.venue_label || s.venue || "—",
-      exercises: Array.isArray(s.exercises) ? s.exercises.slice(0, 6) : [],
-    }))
+    .map(s => {
+      const venue = s.venue || s.location || s.gym ||
+        (s.source === "AppleHealth" ? "YMCA" :
+          s.source === "KNR" || /knr/i.test(s.source || "") ? "KNR" : "—")
+      const exList = Array.isArray(s.exercises)
+        ? s.exercises.map(e => e.name || e.exercise || e.exercise_name || e).filter(Boolean).slice(0, 4).join(", ")
+        : Array.isArray(s.strength_exercises)
+          ? s.strength_exercises.map(e => e.name || e).filter(Boolean).slice(0, 4).join(", ")
+          : "—"
+      return {
+        date: iso(s.start_date || s.date),
+        dur: Math.round(Number(s.duration_min ?? s.dur_min ?? s.dur ?? 0)),
+        venue,
+        exercises: exList,
+      }
+    })
 
   const sleepSeries = [...sleepRecords]
     .filter(r => r.sleep_date || r.date || r.start_at)
@@ -289,7 +309,7 @@ export function generateTrainerReport({
 
 <div id="tab-load" class="tab-panel">
   <div class="note-box"><b>Source:</b> HealthFit daily export. Real CTL/ATL/TSB/TRIMP/ACWR values are embedded from loaded app state.</div>
-  <div class="stat-grid"><div class="stat-box"><div class="stat-label">CTL</div><div class="stat-value">${latestFit.ctl != null ? latestFit.ctl.toFixed(1) : "—"}</div></div><div class="stat-box"><div class="stat-label">ATL</div><div class="stat-value warn">${latestFit.atl != null ? latestFit.atl.toFixed(1) : "—"}</div></div><div class="stat-box"><div class="stat-label">TSB</div><div class="stat-value ${tsbClass(latestFit.tsb)}">${latestFit.tsb != null ? latestFit.tsb.toFixed(1) : "—"}</div></div><div class="stat-box"><div class="stat-label">ACWR</div><div class="stat-value">${latestFit.acwr != null ? latestFit.acwr.toFixed(2) : "—"}</div></div></div>
+  <div class="stat-grid"><div class="stat-box"><div class="stat-label">CTL</div><div class="stat-value">${lastFit?.ctl ?? "—"}</div></div><div class="stat-box"><div class="stat-label">ATL</div><div class="stat-value warn">${lastFit?.atl ?? "—"}</div></div><div class="stat-box"><div class="stat-label">TSB</div><div class="stat-value ${tsbClass(lastFit?.tsb)}">${lastFit?.tsb ?? "—"}</div></div><div class="stat-box"><div class="stat-label">ACWR</div><div class="stat-value">${lastFit?.acwr ?? "—"}</div></div></div>
   <div class="card"><div class="card-title">CTL / ATL / TSB — ${fitSeries.length} days loaded</div><div class="chart-wrap tall"><canvas id="loadChart"></canvas></div></div>
   <div class="grid-2"><div class="card"><div class="card-title">Daily TRIMP</div><div class="chart-wrap"><canvas id="trimpChart"></canvas></div></div><div class="card"><div class="card-title">ACWR</div><div class="chart-wrap"><canvas id="acwrChart"></canvas></div></div></div>
 </div>
@@ -310,7 +330,7 @@ export function generateTrainerReport({
 <div id="tab-strength" class="tab-panel">
   <div class="note-box"><b>KNR e1RM baselines.</b> Upper TSB: ${tsbNow.upperStrength != null ? tsbNow.upperStrength.toFixed(1) : "—"} | Lower TSB: ${tsbNow.lowerStrength != null ? tsbNow.lowerStrength.toFixed(1) : "—"}.</div>
   <div class="grid-2"><div class="card"><div class="card-title">Strength — recent max loads from training log</div><table><thead><tr><th>Exercise</th><th>Max load (lb)</th><th>Last logged</th></tr></thead><tbody>${strength_baselines.map(b => `<tr><td>${esc(b.ex)}</td><td class="td-r td-good">${b.lb}</td><td style="color:var(--muted);font-size:10px">${esc(b.date || "")}</td></tr>`).join("")}</tbody></table></div><div class="card"><div class="card-title">Strength TSB</div><table><tbody>${[["Overall Strength", tsbNow.strength], ["Upper", tsbNow.upperStrength], ["Lower", tsbNow.lowerStrength]].map(([label, val]) => `<tr><td>${label}</td><td class="td-r ${tsbClass(val) ? `td-${tsbClass(val)}` : ""}">${val != null ? val.toFixed(1) : "—"}</td><td>${statusForTsb(val)}</td></tr>`).join("")}</tbody></table></div></div>
-  <div class="card"><div class="card-title">Recent Strength Sessions</div><table><thead><tr><th>Date</th><th>Venue</th><th>Duration</th><th>Exercises logged</th></tr></thead><tbody>${strengthSessions.slice(-15).reverse().map(s => `<tr><td>${esc(s.date)}</td><td>${esc(s.venue)}</td><td class="td-r">${s.dur > 0 ? `${s.dur} min` : "—"}</td><td>${s.exercises.length ? s.exercises.map(e => esc(e.exercise_name || e.name || "")).filter(Boolean).join(", ") : "—"}</td></tr>`).join("")}</tbody></table></div>
+  <div class="card"><div class="card-title">Recent Strength Sessions</div><table><thead><tr><th>Date</th><th>Venue</th><th>Duration</th><th>Exercises logged</th></tr></thead><tbody>${strengthSessions.slice(-15).reverse().map(s => `<tr><td>${esc(s.date)}</td><td>${esc(s.venue)}</td><td class="td-r">${s.dur > 0 ? `${s.dur} min` : "—"}</td><td>${esc(s.exercises)}</td></tr>`).join("")}</tbody></table></div>
 </div>
 
 <div id="tab-schedule" class="tab-panel">
@@ -358,9 +378,9 @@ const ad = d.filter(r=>r.acwr!=null);
 chart('acwrChart',{type:'line',data:{labels:ad.map(r=>r.date),datasets:[{label:'ACWR',data:ad.map(r=>r.acwr),borderColor:'#e8b84a',backgroundColor:'rgba(232,184,74,0.08)',borderWidth:2,pointRadius:0,fill:true,tension:0.3},{label:'1.3 upper',data:ad.map(()=>1.3),borderColor:'rgba(217,95,95,0.5)',borderDash:[4,4],borderWidth:1,pointRadius:0},{label:'0.8 lower',data:ad.map(()=>0.8),borderColor:'rgba(76,175,125,0.5)',borderDash:[4,4],borderWidth:1,pointRadius:0}]},options:{...baseOpts,scales:{x:baseOpts.scales.x,y:{...baseOpts.scales.y,min:0,max:2.5}}}});
 chart('weightChart',{type:'line',data:{labels:weightData.map(r=>r.date),datasets:[{label:'Weight (lb)',data:weightData.map(r=>r.weight),borderColor:'#3a7bd5',backgroundColor:'rgba(58,123,213,0.06)',borderWidth:1.5,pointRadius:0,fill:true,tension:0.2}]},options:baseOpts});
 chart('bfChart',{type:'line',data:{labels:dexaData.map(r=>r.label),datasets:[{label:'Body Fat %',data:dexaData.map(r=>r.fatPct),borderColor:'#e8b84a',backgroundColor:'rgba(232,184,74,0.1)',borderWidth:2.5,pointRadius:6,fill:true,tension:0.2},{label:'Target (21%)',data:dexaData.map(()=>21),borderColor:'rgba(76,175,125,0.6)',borderDash:[6,4],borderWidth:1.5,pointRadius:0}]},options:baseOpts});
-chart('compChart',{type:'bar',data:{labels:dexaData.map(r=>r.label),datasets:[{label:'Fat (lb)',data:dexaData.map(r=>r.fatLb),backgroundColor:'rgba(217,95,95,0.6)'},{label:'Lean (lb)',data:dexaData.map(r=>r.leanLb),backgroundColor:'rgba(76,175,125,0.6)'}]},options:{...baseOpts,scales:{x:baseOpts.scales.x,y:{...baseOpts.scales.y,min:0,max:10}}}});
+chart('compChart',{type:'bar',data:{labels:dexaData.map(r=>r.label),datasets:[{label:'Fat (lb)',data:dexaData.map(r=>r.fatLb),backgroundColor:'rgba(217,95,95,0.6)'},{label:'Lean (lb)',data:dexaData.map(r=>r.leanLb),backgroundColor:'rgba(76,175,125,0.6)'}]},options:{...baseOpts,scales:{x:baseOpts.scales.x,y:{...baseOpts.scales.y,min:0,max:180}}}});
 chart('runChart',{type:'bar',data:{labels:runData.map(r=>r.date),datasets:[{label:'Distance (mi)',data:runData.map(r=>r.dist),backgroundColor:runData.map(r=>r.mtp>=2?'rgba(217,95,95,0.7)':r.mtp===1?'rgba(232,184,74,0.6)':'rgba(58,123,213,0.6)'),borderWidth:0},{label:'Ceiling',data:runData.map(()=>mtpCeiling),borderColor:'rgba(232,140,42,0.6)',borderDash:[4,4],borderWidth:1.5,pointRadius:0,type:'line'}]},options:baseOpts});
-chart('sleepChart',{type:'bar',data:{labels:sleepData.map(r=>r.date),datasets:[{label:'Sleep (hrs)',data:sleepData.map(r=>r.hours),backgroundColor:sleepData.map(r=>r.hours>=7.5?'rgba(76,175,125,0.6)':r.hours>=6.5?'rgba(232,184,74,0.5)':'rgba(217,95,95,0.6)'),borderWidth:0},{label:'Target (7.5h)',data:sleepData.map(()=>7.5),borderColor:'rgba(76,175,125,0.5)',borderDash:[4,4],borderWidth:1.5,pointRadius:0,type:'line'}]},options:{...baseOpts,scales:{x:baseOpts.scales.x,y:{...baseOpts.scales.y,min:0,max:110}}}});
+chart('sleepChart',{type:'bar',data:{labels:sleepData.map(r=>r.date),datasets:[{label:'Sleep (hrs)',data:sleepData.map(r=>r.hours),backgroundColor:sleepData.map(r=>r.hours>=7.5?'rgba(76,175,125,0.6)':r.hours>=6.5?'rgba(232,184,74,0.5)':'rgba(217,95,95,0.6)'),borderWidth:0},{label:'Target (7.5h)',data:sleepData.map(()=>7.5),borderColor:'rgba(76,175,125,0.5)',borderDash:[4,4],borderWidth:1.5,pointRadius:0,type:'line'}]},options:{...baseOpts,scales:{x:baseOpts.scales.x,y:{...baseOpts.scales.y,min:0,max:10}}}});
 <\/script>
 </body>
 </html>`
