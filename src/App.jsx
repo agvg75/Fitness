@@ -2423,6 +2423,12 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
               if (maxPct > 100)     { stroke = "#ef4444"; strokeWidth = 4; opacity = 1.0 }
               else if (maxPct > 80) { stroke = "#f97316"; strokeWidth = 3; opacity = 0.9 }
               else if (maxPct > 60) { stroke = "#fbbf24"; strokeWidth = 2; opacity = 0.7 }
+              if (stroke === "#ef4444") {
+                const regionKey = coordKey
+                const hasActive = (active || ocItems || [])
+                  .some(item => item.location === regionKey && (item.currentScore || 0) > 0)
+                if (!hasActive) return null
+              }
               return (
                 <circle
                   key={tliRegion}
