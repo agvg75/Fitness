@@ -17978,7 +17978,7 @@ const complianceValueFontSize = useMemo(() => {
   ]).map(value => String(value))
   const longestValueLength = values.reduce((max, value) => Math.max(max, value.length), 1)
   const isCompactViewport = typeof window !== "undefined" ? window.innerWidth < 768 : true
-  const maxFont = isCompactViewport ? 18 : 20
+  const maxFont = 18
   const minFont = isCompactViewport ? 11 : 13
   const penaltyPerChar = isCompactViewport ? 1.25 : 1.5
 
@@ -19330,7 +19330,7 @@ return (
               action: "Use this to decide whether strength support is being maintained. If bars disappear or stay tiny, add or restore purposeful strength sessions."
             })
           ) : (
-            <ResponsiveContainer width="100%" height={120}>
+            <ResponsiveContainer width="100%" height={130}>
               <BarChart data={panel.rows} margin={{ top:0, right:4, left:2, bottom:0 }} barCategoryGap="2%" barGap={1}>
                 <XAxis dataKey="label" hide />
                 <YAxis hide domain={[0, 100]} />
@@ -19554,7 +19554,7 @@ return (
             <div style={{ display:"grid", gap:6, alignContent:"stretch" }}>
               {complianceOverviewRows.map(row => (
                 <div key={row.domain} style={{ display:"grid", gridTemplateColumns: window.innerWidth < 768 ? "60px repeat(4, minmax(0, 1fr))" : "72px repeat(4, minmax(0, 1fr))", gap:6, alignItems:"stretch" }}>
-                  <div style={{ display:"flex", alignItems:"center", justifyContent:"flex-start", fontSize:11, fontWeight:"bold", color:"#cbd5e1", padding:"0 2px", textTransform:"uppercase", letterSpacing:"0.1em" }}>
+                  <div style={{ display:"flex", alignItems:"center", justifyContent:"flex-start", fontSize:11, fontWeight:"bold", color:"#cbd5e1", padding:"0 2px", textTransform:"uppercase", letterSpacing:"0.12em" }}>
                     {row.domain === "running" ? "Running" : row.domain === "tendon" ? "Tendon" : row.domain === "strength" ? "Strength" : "Cardio"}
                   </div>
                   {[
@@ -19563,8 +19563,8 @@ return (
                     row.absorbed,
                     `${row.compliancePct} / ${row.absorptionPct}`
                   ].map((value, idx) => (
-                    <div key={`${row.domain}_${idx}`} style={{ background:"#07080e", border:"1px solid #1a1b2e", borderRadius:6, padding:"6px 12px", minHeight:"auto", display:"flex", alignItems:"center", justifyContent:"center", textAlign:"center" }}>
-                      <div style={{ fontSize: complianceValueFontSize, fontWeight:700, lineHeight:0.95, width:"100%", whiteSpace:"nowrap" }}>{value}</div>
+                    <div key={`${row.domain}_${idx}`} style={{ background:"#07080e", border:"1px solid #1a1b2e", borderRadius:6, padding:"6px 10px", display:"flex", alignItems:"center", justifyContent:"center", textAlign:"center" }}>
+                      <div style={{ fontSize: Math.min(complianceValueFontSize, 18), fontWeight:700, lineHeight:0.95, width:"100%", whiteSpace:"nowrap" }}>{value}</div>
                     </div>
                   ))}
                 </div>
@@ -20936,8 +20936,8 @@ return (
       <ResponsiveContainer width="100%" height={280}>
         <ComposedChart data={bodyWeightForecastChart} margin={{ top: 10, right: 20, left: 55, bottom: 20 }}>
           <CartesianGrid stroke="#1a1b2e" />
-          <XAxis dataKey="label" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
-          <YAxis domain={forecastYDomain} label={{ value: "Weight (lb)", angle: -90, position: "insideLeft", offset: 15, fill: "#ced2f0", style: { textAnchor: "middle" } }} />
+          <XAxis dataKey="label" interval="preserveStartEnd" tick={{ fontSize: 10 }} />
+          <YAxis domain={[148, 'dataMax + 2']} label={{ value: "Weight (lb)", angle: -90, position: "insideLeft", offset: 15, fill: "#ced2f0", style: { textAnchor: "middle" } }} />
           <Tooltip formatter={(v, n) => [v != null ? `${v} lb` : "—", n === "actual" ? "Actual (7d avg)" : "Projected"]} />
           <Legend verticalAlign="top" height={28} />
           <Line type="monotone" dataKey="actual"   name="Actual (7d avg)" stroke="#4a9ee8" strokeWidth={2} dot={false} connectNulls={false} />
@@ -21109,11 +21109,11 @@ return (
         </div>
       )}
       {readinessChartsReady ? (
-      <ResponsiveContainer width="100%" height={240}>
+      <ResponsiveContainer width="100%" height={220}>
         <LineChart data={readinessProjectionData} margin={{ top: 10, right: 20, left: 55, bottom: 20 }}>
           <CartesianGrid stroke="#1a1b2e" />
           <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-          <YAxis domain={[0, 100]} label={{ value: "Readiness score", angle: -90, position: "insideLeft", offset: 15, fill: "#ced2f0", style: { textAnchor: "middle" } }} />
+          <YAxis domain={[55, 105]} tickFormatter={v => v + '%'} label={{ value: "Readiness score", angle: -90, position: "insideLeft", offset: 15, fill: "#ced2f0", style: { textAnchor: "middle" } }} />
           <Tooltip />
           <Legend verticalAlign="top" height={28} />
           <Line type="monotone" dataKey="baseReadiness" name="Readiness"      stroke="#4a9ee8" strokeWidth={2} dot={{ r: 3 }} isAnimationActive={false} />
