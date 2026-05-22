@@ -2314,6 +2314,52 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
             handleBodyMapClick(x, y)
           }}
         />
+        {/* Tissue load rings — behind OC dots and form decay triangles */}
+        {(() => {
+          const TLI_TO_COORD = {
+            "AnkleFoot L": "Ankle L", "AnkleFoot R": "Ankle R",
+            "Knee L": "Knee L",       "Knee R": "Knee R",
+            "Hip L": "Hip L",         "Hip R": "Hip R",
+            "Lower Back": "Lower Back",
+            "Shoulder L": "Shoulder L", "Shoulder R": "Shoulder R",
+            "Elbow L": "Elbow L",     "Elbow R": "Elbow R",
+            "Wrist L": "Wrist L",     "Wrist R": "Wrist R",
+            "Cervical": "Neck",
+          }
+          const rings = Object.entries(tissueLoadIndex)
+            .filter(([, tli]) => (tli?.maxPct ?? 0) > 40)
+            .map(([tliRegion, tli]) => {
+              const coordKey = TLI_TO_COORD[tliRegion]
+              const coords = OC_REGION_COORDS[coordKey]?.[ck]
+              if (!coords) return null
+              const maxPct = tli.maxPct
+              const ringSize = Math.min(24, Math.max(12, 12 + ((maxPct - 40) / 110) * 12))
+              const r = ringSize / 2
+              let stroke = "#6b7280", strokeWidth = 1, opacity = 0.5
+              if (maxPct > 100)     { stroke = "#ef4444"; strokeWidth = 4; opacity = 1.0 }
+              else if (maxPct > 80) { stroke = "#f97316"; strokeWidth = 3; opacity = 0.9 }
+              else if (maxPct > 60) { stroke = "#fbbf24"; strokeWidth = 2; opacity = 0.7 }
+              return (
+                <circle
+                  key={tliRegion}
+                  cx={`${coords[0]}%`}
+                  cy={`${coords[1]}%`}
+                  r={r}
+                  fill="none"
+                  stroke={stroke}
+                  strokeWidth={strokeWidth}
+                  opacity={opacity}
+                />
+              )
+            })
+            .filter(Boolean)
+          if (!rings.length) return null
+          return (
+            <svg style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", overflow: "visible", pointerEvents: "none", zIndex: 5 }}>
+              {rings}
+            </svg>
+          )
+        })()}
         {mapItems.map(item => {
           const coords = OC_REGION_COORDS[item.location]?.[ck]
           if (!coords) return null
@@ -2914,6 +2960,20 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
           </div>
           <div style={{ fontSize: "9px", color: "#444", textAlign: "center", marginTop: "8px" }}>
             ● acute &nbsp; ○ chronic
+          </div>
+          <div style={{ display: "flex", gap: "14px", justifyContent: "center", marginTop: "6px", fontSize: "9px", color: "#556", flexWrap: "wrap" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+              <svg width="12" height="12" style={{ flexShrink: 0 }}><circle cx="6" cy="6" r="4" fill="none" stroke="#fbbf24" strokeWidth="1.5" /></svg>
+              Tissue load
+            </span>
+            <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+              <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: "#ef4444", flexShrink: 0 }} />
+              OC symptom
+            </span>
+            <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+              <span style={{ fontSize: "10px", color: "#fbbf24", lineHeight: 1 }}>▲</span>
+              Form decay
+            </span>
           </div>
         </div>
 
