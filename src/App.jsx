@@ -1487,6 +1487,7 @@ const OC_BODY_REGIONS = [
 // [x%, y%] for front (f) and back (b) silhouette images.
 // Anatomical convention: patient's LEFT appears on viewer's RIGHT (x > 50) in front view.
 // Back view keeps the same L→right / R→left orientation (transparent-body convention).
+const CALIBRATE_BODY_MAP = true  // set false after calibration is complete
 const OC_REGION_COORDS = {
   "Head":        { f: [50, 4.5], b: [50, 4.5] },
   "Neck":        { f: [50, 10],  b: [50, 10]  },
@@ -2306,16 +2307,61 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
       setSelectedId(null)
     }
     return (
-      <div style={{ position: "relative" }}>
+      <div
+        onClick={CALIBRATE_BODY_MAP ? (e) => {
+          const rect = e.currentTarget.getBoundingClientRect()
+          const xPct = ((e.clientX - rect.left) / rect.width * 100).toFixed(1)
+          const yPct = ((e.clientY - rect.top) / rect.height * 100).toFixed(1)
+          console.log(`${side} click: [${xPct}, ${yPct}]`)
+          const el = document.getElementById('cal-readout')
+          if (el) el.textContent = `${side}  x:${xPct}%  y:${yPct}%  ->  copy to OC_REGION_COORDS`
+        } : undefined}
+        style={{ position: "relative", cursor: CALIBRATE_BODY_MAP ? "crosshair" : "default" }}
+      >
         <BodySilhouetteImg
           side={side}
-          onClick={(e) => {
+          onClick={CALIBRATE_BODY_MAP ? null : (e) => {
             const rect = e.currentTarget.getBoundingClientRect()
             const x = (e.clientX - rect.left) / rect.width
             const y = (e.clientY - rect.top) / rect.height
             handleBodyMapClick(x, y)
           }}
         />
+        {CALIBRATE_BODY_MAP && (() => {
+          const regions = side === "front"
+            ? Object.entries(OC_REGION_COORDS).filter(([, v]) => v.f)
+            : Object.entries(OC_REGION_COORDS).filter(([, v]) => v.b)
+
+          return regions.map(([key, coords]) => {
+            const [cx, cy] = side === "front" ? coords.f : coords.b
+            return (
+              <div
+                key={`cal-${key}`}
+                style={{
+                  position: "absolute",
+                  left: `${cx}%`,
+                  top: `${cy}%`,
+                  transform: "translate(-50%, -50%)",
+                  zIndex: 50,
+                  pointerEvents: "none"
+                }}
+              >
+                <div style={{
+                  width: 8, height: 8, borderRadius: "50%",
+                  background: "#facc15", border: "1px solid #000"
+                }} />
+                <div style={{
+                  position: "absolute", left: 10, top: -4,
+                  background: "rgba(0,0,0,0.85)", color: "#facc15",
+                  fontSize: 8, padding: "1px 4px", borderRadius: 3,
+                  whiteSpace: "nowrap", lineHeight: 1.3
+                }}>
+                  {key}
+                </div>
+              </div>
+            )
+          })
+        })()}
         {/* Tissue load rings — behind OC dots and form decay triangles */}
         {(() => {
           // Maps TLI canonical region names → OC_REGION_COORDS keys.
@@ -2966,6 +3012,26 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
               </div>
             ))}
           </div>
+          {CALIBRATE_BODY_MAP && (
+            <div style={{
+              marginTop: 12, padding: "8px 12px",
+              background: "#0a0a14", border: "1px solid #facc15",
+              borderRadius: 6, fontSize: 11, color: "#facc15",
+              fontFamily: "monospace"
+            }}>
+              <div style={{ fontWeight: "bold", marginBottom: 4 }}>
+                CALIBRATION MODE - click any point on a silhouette to read its coordinates
+              </div>
+              <div id="cal-readout" style={{ color: "#94a3b8" }}>
+                Click on the body image above to read coordinates.
+              </div>
+              <div style={{ marginTop: 6, color: "#555", fontSize: 10 }}>
+                Yellow dots show current region positions. Click near each anatomical landmark,
+                read the x/y values from the readout, and update OC_REGION_COORDS accordingly.
+                Set CALIBRATE_BODY_MAP = false when done.
+              </div>
+            </div>
+          )}
           <div style={{ fontSize: "9px", color: "#444", textAlign: "center", marginTop: "8px" }}>
             ● acute &nbsp; ○ chronic
           </div>
@@ -9237,7 +9303,7 @@ self.onmessage = async function(event) {
       overlaps: overlapBundle.summary
     };
     built.appleSleep = apple.sleep || [];
-    built.appleBiometrics = apple.biometrics || [];
+    built.appleVo2 = apple.biometrics || [];
 
     self.postMessage({ type: 'done', result: built });
   } catch (error) {
@@ -9321,8 +9387,8 @@ function parseAppleHealthFile(file) {
   let lineCount = 0;
 
   const workouts = [];
-  const biometrics = [];
   const rejected = [];
+  const biometrics = [];
   const dedupe = new Set();
   const statDistance = new Map();
   const swimLaps = new Map();
@@ -9374,16 +9440,15 @@ function parseAppleHealthFile(file) {
     }
 
     if (line.includes('<Record ') && line.includes('HKQuantityTypeIdentifierVO2Max')) {
+      const val = num(getAttr(line, 'value'));
       const startDate = getAttr(line, 'startDate');
-      const value = num(getAttr(line, 'value'));
-      const date = String(startDate || '').slice(0, 10);
-      if (Number.isFinite(value) && value > 0 && date) {
+      if (Number.isFinite(val) && val > 0 && startDate) {
         biometrics.push({
-          date,
-          source: 'apple',
-          vo2_max: value,
-          unit: getAttr(line, 'unit') || 'mL/min/kg',
-          measured_at: startDate || date
+          source: 'AppleHealth',
+          date: String(startDate).slice(0, 10),
+          vo2_max: val,
+          unit: 'mL/min/kg',
+          measured_at: startDate
         });
       }
       return;
@@ -11272,19 +11337,11 @@ Return ONLY a JSON object with this exact structure, no explanation:
           return Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date))
         })
       }
-      if (Array.isArray(next?.appleBiometrics) && next.appleBiometrics.length) {
-        setBiometricResult(prev => {
-          const byKey = {}
-          ;(Array.isArray(prev) ? prev : []).forEach(r => {
-            const key = `${r.date || r.measured_date || ""}|${r.source || ""}|${r.vo2_max ?? r.vo2 ?? ""}`
-            byKey[key] = r
-          })
-          next.appleBiometrics.forEach(r => {
-            const key = `${r.date || r.measured_date || ""}|${r.source || ""}|${r.vo2_max ?? r.vo2 ?? ""}`
-            byKey[key] = r
-          })
-          return Object.values(byKey).sort((a, b) => String(a.date || a.measured_date || "").localeCompare(String(b.date || b.measured_date || "")))
-        })
+      if (Array.isArray(next?.appleVo2) && next.appleVo2.length) {
+        setBiometricResult(prev => [
+          ...(Array.isArray(prev) ? prev : []),
+          ...next.appleVo2
+        ])
       }
       setStatus("Import analysis complete")
       setImporting(false)
