@@ -2332,7 +2332,7 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
           // maxPct is in 0-150 range (useMemo multiplies by 100 before returning).
           // If maxPct were a 0-1 decimal the filter below (> 40) would exclude everything.
           const rings = Object.entries(tissueLoadIndex)
-            .filter(([, tli]) => Number(tli?.maxPct) > 40)
+            .filter(([, tli]) => Number(tli?.maxPct) > 50)
             .map(([tliRegion, tli]) => {
               const coordKey = TLI_TO_COORD[tliRegion]
               if (!coordKey) return null                 // TLI region not in display mapping → skip
@@ -16610,9 +16610,9 @@ const tissueLoadIndex = useMemo(() => {
   // Thresholds: accumulated load that corresponds to 100% saturation.
   // Based on ~3 sessions/week of score-3 exercise at each tissue tau.
   const TISSUE_LOAD_THRESHOLDS = {
-    muscleStatus: 8,
-    tendonStatus: 20,
-    jointStatus:  12,
+    muscleStatus: 25,
+    tendonStatus: 15,
+    jointStatus:  18,
   }
 
   const today = new Date()
