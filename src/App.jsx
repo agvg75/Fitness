@@ -1436,6 +1436,12 @@ const DEFAULT_TSB_THRESHOLDS = {
   high: -9,
 }
 
+const TISSUE_DECAY_CONSTANTS = {
+  muscleStatus: { tau: 7 },
+  tendonStatus: { tau: 21 },
+  jointStatus:  { tau: 14 },
+}
+
 const OC_KEY_META = {
   tendonStatus: { label: "Tendon",     halfLifeHours: 168, scope: "regional", color: "#f59e0b" },
   muscleStatus: { label: "Muscle",     halfLifeHours: 72,  scope: "regional", color: "#ef4444" },
@@ -1848,7 +1854,7 @@ function computeOcRecoveryDate(item) {
 }
 
 // ─── TabOperationalCapacity ────────────────────────────────────────────────────
-function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapacityData, healthFitDaily, sleepRecords, tsbFallback = null, runSessions = [], canonicalSessions = [], schedLog = [], biometricRecords = [], formDecayAccumulation = {} }) {
+function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapacityData, healthFitDaily, sleepRecords, tsbFallback = null, runSessions = [], canonicalSessions = [], schedLog = [], biometricRecords = [], formDecayAccumulation = {}, tissueLoadIndex = {} }) {
   const [selectedId, setSelectedId] = useState(null)
   const [addForm, setAddForm] = useState({
     key: "muscleStatus",
@@ -3106,7 +3112,7 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
   )
 }
 
-function DailyReadinessPanel({ readinessScore, latestHealthFit, ocItems, computedTSB = null, tsbV2Panel = null, sleepRecords = [], formDecayPenalty = null }) {
+function DailyReadinessPanel({ readinessScore, latestHealthFit, ocItems, computedTSB = null, tsbV2Panel = null, sleepRecords = [], formDecayPenalty = null, tissueLoadIndex = {} }) {
   const tsb = latestHealthFit?.tsb ?? tsbV2Panel?.currentOverallTsb ?? computedTSB?.global?.tsb ?? null
   const hasActiveIssue = (ocItems || []).some(i => i.currentScore >= 3)
   const recentSleep = (Array.isArray(sleepRecords) ? sleepRecords : [])
@@ -3554,7 +3560,7 @@ function SubstituteDrawer({ flag, onSelectSubstitute, onClose }) {
   )
 }
 
-function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, setSchedLog, readinessScore, latestHealthFit = null, ocItems = [], computedTSB = null, tsbV2Panel = null, progressionReadiness = "progress", progressionReasons = [], tendonStatus = { painScore: 0, stiffness: false, override: null }, scheduleFeedback = [], sleepRecords = [], setSleepRecords = () => {}, scheduleTarget = null, clearScheduleTarget = () => {}, ocConstraintState = null, canonicalSessions = [], formDecayPenalty = null, formDecayAccumulation = {} }) {
+function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, setSchedLog, readinessScore, latestHealthFit = null, ocItems = [], computedTSB = null, tsbV2Panel = null, progressionReadiness = "progress", progressionReasons = [], tendonStatus = { painScore: 0, stiffness: false, override: null }, scheduleFeedback = [], sleepRecords = [], setSleepRecords = () => {}, scheduleTarget = null, clearScheduleTarget = () => {}, ocConstraintState = null, canonicalSessions = [], formDecayPenalty = null, formDecayAccumulation = {}, tissueLoadIndex = {} }) {
   const safeScheduleFeedback = Array.isArray(scheduleFeedback) ? scheduleFeedback : []
   const [activeDay, setActiveDay] = useState(todayDayKey())
   const [schedView, setSchedView] = useState("schedule")
@@ -5636,7 +5642,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
           ))}
         </div>
       )}
-      <DailyReadinessPanel readinessScore={readinessScore} latestHealthFit={latestHealthFit} ocItems={ocItems} computedTSB={computedTSB} tsbV2Panel={tsbV2Panel} sleepRecords={sleepRecords} formDecayPenalty={formDecayPenalty} />
+      <DailyReadinessPanel readinessScore={readinessScore} latestHealthFit={latestHealthFit} ocItems={ocItems} computedTSB={computedTSB} tsbV2Panel={tsbV2Panel} sleepRecords={sleepRecords} formDecayPenalty={formDecayPenalty} tissueLoadIndex={tissueLoadIndex} />
       <ScheduleMismatchDiagnostics
         report={scheduleMismatchReport}
         onOpenEntry={openDiagnosticEntry}
@@ -16498,6 +16504,108 @@ const formDecayAccumulation = useMemo(() => {
   return result
 }, [schedLog, ocItems])
 
+const tissueLoadIndex = useMemo(() => {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  const acc = {}
+  function applyLoad(region, tissueType, score, daysAgo) {
+    const tau = TISSUE_DECAY_CONSTANTS[tissueType]?.tau
+    if (!tau || score <= 0) return
+    const decayed = score * Math.exp(-daysAgo / tau)
+    if (!acc[region]) acc[region] = { muscleStatus: 0, tendonStatus: 0, jointStatus: 0 }
+    acc[region][tissueType] = (acc[region][tissueType] || 0) + decayed
+  }
+
+  // schedLog — strength/schedule sessions
+  ;(Array.isArray(schedLog) ? schedLog : []).forEach(entry => {
+    const dateStr = String(entry.date || "").slice(0, 10)
+    if (!dateStr) return
+    const entryDate = new Date(dateStr + "T12:00:00")
+    if (isNaN(entryDate.getTime())) return
+    const daysAgo = Math.max(0, (today.getTime() - entryDate.getTime()) / 86400000)
+
+    // Primary loads from exercises in this session
+    ;(Array.isArray(entry.exercises) ? entry.exercises : []).forEach(ex => {
+      const libEntry = getExerciseProfile(ex.exercise_id || ex.id)
+        || EXERCISE_LIBRARY.find(e =>
+            e.name.toLowerCase() === String(ex.exercise_name || ex.name || "").toLowerCase()
+          )
+      if (!libEntry) return
+      libEntry.loads.forEach(load => applyLoad(load.region, load.tissueType, load.score, daysAgo))
+      // Form decay secondary tissues at 50% weight
+      if (Array.isArray(libEntry.form_decay?.secondary_tissues)) {
+        libEntry.form_decay.secondary_tissues.forEach(t =>
+          applyLoad(t.region, t.tissueType, t.score * 0.5, daysAgo)
+        )
+      }
+    })
+
+    // Logged form_decay_alerts — secondary tissues at 50%
+    const alerts = entry.form_decay_alerts || entry.metadata?.form_decay_alerts || []
+    ;(Array.isArray(alerts) ? alerts : []).forEach(alert => {
+      ;(Array.isArray(alert.secondary_tissues) ? alert.secondary_tissues : []).forEach(t =>
+        applyLoad(t.region, t.tissueType, t.score * 0.5, daysAgo)
+      )
+    })
+  })
+
+  // unifiedCanonicalSessions — cardio + imported sessions (includes schedule seeds)
+  ;(Array.isArray(unifiedCanonicalSessions) ? unifiedCanonicalSessions : []).forEach(sess => {
+    const rawDate = sess.logged_at || sess.dateTime || sess.date
+    const dateStr = rawDate ? String(rawDate).slice(0, 10) : null
+    if (!dateStr) return
+    const sessDate = new Date(dateStr + "T12:00:00")
+    if (isNaN(sessDate.getTime())) return
+    const daysAgo = Math.max(0, (today.getTime() - sessDate.getTime()) / 86400000)
+
+    const cat = String(sess.category || sess.type || "").toLowerCase()
+    const isRun   = cat.includes("run")
+    const isSwim  = cat.includes("swim")
+    const isCycle = cat.includes("cycl") || cat.includes("bike") || cat.includes("spin")
+
+    if (isRun || isSwim || isCycle) {
+      // Running-chain cardio: apply the matching aerobic exercise's tissue loads
+      const cardioId = isSwim ? "swim_freestyle" : isCycle ? "cycling_stationary" : "run"
+      const libEntry = getExerciseProfile(cardioId)
+      if (libEntry) {
+        libEntry.loads.forEach(load => applyLoad(load.region, load.tissueType, load.score, daysAgo))
+      }
+    } else {
+      // Strength/other: process individual exercises
+      ;(Array.isArray(sess.exercises) ? sess.exercises : []).forEach(ex => {
+        const libEntry = getExerciseProfile(ex.exercise_id || ex.id)
+          || EXERCISE_LIBRARY.find(e =>
+              e.name.toLowerCase() === String(ex.exercise_name || ex.name || "").toLowerCase()
+            )
+        if (!libEntry) return
+        libEntry.loads.forEach(load => applyLoad(load.region, load.tissueType, load.score, daysAgo))
+      })
+    }
+  })
+
+  // Normalize to [0, 1]: reference = steady-state daily score-3 at each tau
+  const TISSUE_REF_MAX = {
+    muscleStatus: 3 / (1 - Math.exp(-1 / TISSUE_DECAY_CONSTANTS.muscleStatus.tau)),
+    tendonStatus: 3 / (1 - Math.exp(-1 / TISSUE_DECAY_CONSTANTS.tendonStatus.tau)),
+    jointStatus:  3 / (1 - Math.exp(-1 / TISSUE_DECAY_CONSTANTS.jointStatus.tau)),
+  }
+
+  const result = {}
+  for (const [region, loads] of Object.entries(acc)) {
+    const pcts = Object.entries(loads).map(([tt, v]) => v / (TISSUE_REF_MAX[tt] || 1))
+    result[region] = { ...loads, maxPct: Math.min(1, Math.max(0, ...pcts)) }
+  }
+
+  const top3 = Object.entries(result)
+    .sort((a, b) => b[1].maxPct - a[1].maxPct)
+    .slice(0, 3)
+    .map(([r, v]) => `${r}: ${(v.maxPct * 100).toFixed(0)}%`)
+  console.log("[TLI] top 3 regions by maxPct:", top3.join(", ") || "none")
+
+  return result
+}, [schedLog, unifiedCanonicalSessions, ocItems])
+
 const formDecayReadinessPenalty = useMemo(() => {
   const now = new Date()
   const cutoff14 = new Date(now); cutoff14.setDate(cutoff14.getDate() - 14); cutoff14.setHours(0, 0, 0, 0)
@@ -20307,6 +20415,7 @@ return (
     canonicalSessions={unifiedCanonicalSessions}
     formDecayPenalty={formDecayReadinessPenalty}
     formDecayAccumulation={formDecayAccumulation}
+    tissueLoadIndex={tissueLoadIndex}
   />
 )}
 
@@ -20335,6 +20444,7 @@ return (
     schedLog={schedLog}
     biometricRecords={biometricRecords}
     formDecayAccumulation={formDecayAccumulation}
+    tissueLoadIndex={tissueLoadIndex}
   />
 )}
 {tab === "Forecast" && (
