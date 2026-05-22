@@ -2316,23 +2316,29 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
         />
         {/* Tissue load rings — behind OC dots and form decay triangles */}
         {(() => {
+          // Maps TLI canonical region names → OC_REGION_COORDS keys.
+          // "Lower Back" has f=null → ring skipped on front silhouette (back-only region).
           const TLI_TO_COORD = {
-            "AnkleFoot L": "Ankle L", "AnkleFoot R": "Ankle R",
-            "Knee L": "Knee L",       "Knee R": "Knee R",
-            "Hip L": "Hip L",         "Hip R": "Hip R",
-            "Lower Back": "Lower Back",
-            "Shoulder L": "Shoulder L", "Shoulder R": "Shoulder R",
-            "Elbow L": "Elbow L",     "Elbow R": "Elbow R",
-            "Wrist L": "Wrist L",     "Wrist R": "Wrist R",
-            "Cervical": "Neck",
+            "AnkleFoot L": "Ankle L",    "AnkleFoot R": "Ankle R",
+            "Knee L":      "Knee L",     "Knee R":      "Knee R",
+            "Hip L":       "Hip L",      "Hip R":       "Hip R",
+            "Lower Back":  "Lower Back",
+            "Shoulder L":  "Shoulder L", "Shoulder R":  "Shoulder R",
+            "Elbow L":     "Elbow L",    "Elbow R":     "Elbow R",
+            "Wrist L":     "Wrist L",    "Wrist R":     "Wrist R",
+            "Cervical":    "Neck",
           }
+          // tissueLoadIndex is keyed by TLI canonical region names only — NOT OC_REGION_COORDS.
+          // maxPct is in 0-150 range (useMemo multiplies by 100 before returning).
+          // If maxPct were a 0-1 decimal the filter below (> 40) would exclude everything.
           const rings = Object.entries(tissueLoadIndex)
-            .filter(([, tli]) => (tli?.maxPct ?? 0) > 40)
+            .filter(([, tli]) => Number(tli?.maxPct) > 40)
             .map(([tliRegion, tli]) => {
               const coordKey = TLI_TO_COORD[tliRegion]
+              if (!coordKey) return null                 // TLI region not in display mapping → skip
               const coords = OC_REGION_COORDS[coordKey]?.[ck]
-              if (!coords) return null
-              const maxPct = tli.maxPct
+              if (!coords) return null                   // back-only region on front view → skip
+              const maxPct = Number(tli.maxPct)          // 0-150 scale
               const ringSize = Math.min(24, Math.max(12, 12 + ((maxPct - 40) / 110) * 12))
               const r = ringSize / 2
               let stroke = "#6b7280", strokeWidth = 1, opacity = 0.5
@@ -16720,11 +16726,11 @@ const tissueLoadIndex = useMemo(() => {
     }
   }
 
-  const top3 = Object.entries(result)
-    .sort((a, b) => b[1].maxPct - a[1].maxPct)
-    .slice(0, 3)
-    .map(([r, v]) => `${r} ${v.maxPct.toFixed(0)}%`)
+  const sorted = Object.entries(result).sort((a, b) => b[1].maxPct - a[1].maxPct)
+  const top3 = sorted.slice(0, 3).map(([r, v]) => `${r} ${v.maxPct.toFixed(0)}%`)
+  const allAbove40 = sorted.filter(([, v]) => v.maxPct > 40).map(([r, v]) => `${r}=${v.maxPct.toFixed(0)}%`)
   console.log("[TLI] top 3:", top3.join(", ") || "none")
+  console.log("[TLI] regions >40%:", allAbove40.join(", ") || "none")
 
   return result
 }, [schedLog, unifiedCanonicalSessions, ocItems])
