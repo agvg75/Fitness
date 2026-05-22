@@ -55,19 +55,40 @@ export function generateTrainerReport({
   const dexaData = dexaSeries.length >= 2 ? dexaSeries : dexaFallback
   const latestDexa = dexaData[dexaData.length - 1] || {}
 
-  const fitSeries = (Array.isArray(healthFitDaily) ? healthFitDaily : [])
-    .filter(r => r.date && (r.ctl != null || r.atl != null || r.tsb != null))
+  const METERS_PER_MILE = 1609.34
+
+  const fitData = (Array.isArray(healthFitDaily) ? healthFitDaily : [])
+    .filter(r => r && r.date && (
+      Number.isFinite(Number(r.ctl)) ||
+      Number.isFinite(Number(r.atl)) ||
+      Number.isFinite(Number(r.trimp))
+    ))
     .map(r => ({
-      date: r.date,
-      ctl: r.ctl != null ? Number(Number(r.ctl).toFixed(1)) : null,
-      atl: r.atl != null ? Number(Number(r.atl).toFixed(1)) : null,
-      tsb: r.tsb != null ? Number(Number(r.tsb).toFixed(1)) : null,
-      trimp: r.trimp != null ? Number(Number(r.trimp).toFixed(1)) : null,
-      acwr: r.acwr != null ? Number(Number(r.acwr).toFixed(2)) : null,
+      date: String(r.date).slice(0, 10),
+      ctl: Number.isFinite(Number(r.ctl)) ? Number(Number(r.ctl).toFixed(1)) : null,
+      atl: Number.isFinite(Number(r.atl)) ? Number(Number(r.atl).toFixed(1)) : null,
+      tsb: Number.isFinite(Number(r.tsb)) ? Number(Number(r.tsb).toFixed(1)) : null,
+      trimp: Number.isFinite(Number(r.trimp)) ? Number(Number(r.trimp).toFixed(1)) : null,
+      acwr: Number.isFinite(Number(r.acwr)) ? Number(Number(r.acwr).toFixed(2)) : null,
     }))
     .sort((a, b) => a.date.localeCompare(b.date))
-  const lastFit = fitSeries[fitSeries.length - 1]
+  const lastFit = fitData.length ? fitData[fitData.length - 1] : null
   const latestFit = lastFit || {}
+
+  const toMiles = dist => {
+    const n = Number(dist)
+    if (!Number.isFinite(n) || n <= 0) return null
+    // If already plausibly in miles (under 50), keep it. If in meters (over 100), convert.
+    return n > 100 ? Number((n / METERS_PER_MILE).toFixed(2)) : Number(n.toFixed(2))
+  }
+
+  const toPace = (distMi, durMin) => {
+    if (!distMi || !durMin || distMi <= 0 || durMin <= 0) return "—"
+    const paceDecimal = durMin / distMi
+    const mins = Math.floor(paceDecimal)
+    const secs = String(Math.round((paceDecimal - mins) * 60)).padStart(2, "0")
+    return `${mins}:${secs}`
+  }
 
   const runSessions = [...canonicalSessions]
     .filter(s => {
@@ -77,21 +98,11 @@ export function generateTrainerReport({
     .sort((a, b) => String(a.start_date || a.date || a.dateTime || "").localeCompare(String(b.start_date || b.date || b.dateTime || "")))
     .slice(-40)
     .map(s => {
-      const METERS_PER_MILE = 1609.34
-      const explicitMi = parseFloat(s.distance_mi) || parseFloat(s.preferred_metrics?.distance_mi) || null
-      const rawDist = Number(s.dist ?? s.distance ?? explicitMi ?? 0)
-      const distMi = explicitMi != null && explicitMi > 0
-        ? Number(explicitMi.toFixed(2))
-        : rawDist > 100
-          ? Number((rawDist / METERS_PER_MILE).toFixed(2))
-          : Number(rawDist.toFixed(2))
-      const dur = Number(s.duration_min ?? s.dur_min ??
-        (s.duration_sec ? s.duration_sec / 60 : null) ??
-        (s.preferred_metrics?.duration_min) ?? 0)
-      const paceMin = distMi > 0 && dur > 0 ? dur / distMi : null
-      const pace = paceMin != null
-        ? `${Math.floor(paceMin)}:${String(Math.round((paceMin % 1) * 60)).padStart(2, "0")}`
-        : "—"
+      const distMi = toMiles(s.distance || s.dist || s.distanceMiles || s.distance_mi || s.preferred_metrics?.distance_mi || 0)
+      const dur = Number(s.duration_min || s.dur || s.durationMin || s.dur_min ||
+        (s.duration_sec ? s.duration_sec / 60 : null) ||
+        (s.preferred_metrics?.duration_min) || 0) || null
+      const pace = toPace(distMi, dur)
       return {
         date: iso(s.start_date || s.date || s.dateTime),
         dist: distMi,
@@ -110,14 +121,25 @@ export function generateTrainerReport({
     .sort((a, b) => String(a.start_date || a.date || "").localeCompare(String(b.start_date || b.date || "")))
     .slice(-20)
     .map(s => {
-      const venue = s.venue || s.location || s.gym ||
-        (s.source === "AppleHealth" ? "YMCA" :
-          s.source === "KNR" || /knr/i.test(s.source || "") ? "KNR" : "—")
-      const exList = Array.isArray(s.exercises)
-        ? s.exercises.map(e => e.name || e.exercise || e.exercise_name || e).filter(Boolean).slice(0, 4).join(", ")
-        : Array.isArray(s.strength_exercises)
-          ? s.strength_exercises.map(e => e.name || e).filter(Boolean).slice(0, 4).join(", ")
-          : "—"
+      const venue = (() => {
+        const src = String(s.source || s.canonical_source || "")
+        const loc = String(s.location || s.venue || s.gym || "")
+        if (/knr/i.test(src) || /knr/i.test(loc)) return "KNR"
+        if (/ymca/i.test(src) || /ymca/i.test(loc)) return "YMCA"
+        if (/apple/i.test(src)) {
+          const dow = new Date(s.start_date || s.date || "").getDay()
+          return [2, 4, 5].includes(dow) ? "KNR" : "YMCA"
+        }
+        return "—"
+      })()
+      const exList = (() => {
+        const arr = s.exercises || s.strength_exercises || s.exercise_log || []
+        if (Array.isArray(arr) && arr.length) {
+          return arr.map(e => e.name || e.exercise || e.label || e).filter(Boolean).slice(0, 4).join(", ")
+        }
+        const t = String(s.type || s.canonical_type || s.activityType || "")
+        return t && t !== "Traditional Strength Training" && t !== "Functional Strength Training" ? t : "—"
+      })()
       return {
         date: iso(s.start_date || s.date),
         dur: Math.round(Number(s.duration_min ?? s.dur_min ?? s.dur ?? 0)),
@@ -273,7 +295,7 @@ export function generateTrainerReport({
 </nav>
 <main>
 <div id="tab-overview" class="tab-panel active">
-  <div class="note-box"><b>Trainer reference snapshot.</b> Body composition anchored to ${esc(latestDexa.label || "latest")} DEXA. Weight from most recent scale reading. TSB from personalized Banister model (τ₁=${cfg.tau1||27}d, τ₂=${cfg.tau2||18}d).${fitSeries.length === 0 || runSessions.length === 0 ? ' <b style="color:var(--warn)">⚠ Some charts empty — generate this report after the app fully loads and syncs (wait for session count to appear in the app).</b>' : ''}</div>
+  <div class="note-box"><b>Trainer reference snapshot.</b> Body composition anchored to ${esc(latestDexa.label || "latest")} DEXA. Weight from most recent scale reading. TSB from personalized Banister model (τ₁=${cfg.tau1||27}d, τ₂=${cfg.tau2||18}d).${fitData.length === 0 || runSessions.length === 0 ? ' <b style="color:var(--warn)">⚠ Some charts empty — generate this report after the app fully loads and syncs (wait for session count to appear in the app).</b>' : ''}</div>
   <div class="stat-grid">
     <div class="stat-box"><div class="stat-label">Current Weight</div><div class="stat-value">${latestWeight ? latestWeight.toFixed(1) : n((latestDexa.fatLb || 0) + (latestDexa.leanLb || 0))}</div><div class="stat-sub">lb | scale reading</div></div>
     <div class="stat-box"><div class="stat-label">Body Fat</div><div class="stat-value warn">${n(latestDexa.fatPct)}%</div><div class="stat-sub">${n(latestDexa.fatLb)} lb fat · target 21%</div></div>
@@ -294,7 +316,7 @@ export function generateTrainerReport({
     <div class="stat-box"><div class="stat-label">Lean Mass</div><div class="stat-value good">${n(latestDexa.leanLb)}</div><div class="stat-sub">lb lean · ${esc(latestDexa.label)}</div></div>
     <div class="stat-box"><div class="stat-label">BMD</div><div class="stat-value good">${n(latestDexa.bmd, 3)}</div><div class="stat-sub">g/cm²</div></div>
     <div class="stat-box"><div class="stat-label">TSB Overall</div><div class="stat-value ${tsbClass(tsbNow.overall)}">${tsbNow.overall != null ? tsbNow.overall.toFixed(1) : "—"}</div><div class="stat-sub">threshold −7</div></div>
-    <div class="stat-box"><div class="stat-label">CTL / ATL</div><div class="stat-value" style="font-size:18px">${latestFit.ctl != null ? latestFit.ctl.toFixed(0) : "—"} / ${latestFit.atl != null ? latestFit.atl.toFixed(0) : "—"}</div><div class="stat-sub">fitness / fatigue</div></div>
+    <div class="stat-box"><div class="stat-label">CTL / ATL</div><div class="stat-value" style="font-size:18px">${lastFit?.ctl ?? "—"} / ${lastFit?.atl ?? "—"}</div><div class="stat-sub">fitness / fatigue</div></div>
     <div class="stat-box"><div class="stat-label">Active OC Issues</div><div class="stat-value ${activeOC.length ? "warn" : "good"}">${activeOC.length}</div><div class="stat-sub">${activeOC.length ? activeOC.map(i => esc(i.location || i.label || "issue")).join(", ") : "All clear"}</div></div>
     <div class="stat-box"><div class="stat-label">Avg Sleep (30d)</div><div class="stat-value ${avgSleep != null ? (avgSleep >= 7.5 ? "good" : avgSleep >= 6.5 ? "warn" : "danger") : ""}">${avgSleep != null ? avgSleep.toFixed(1) : "—"}</div><div class="stat-sub">hrs · target 7.5h</div></div>
   </div>
@@ -310,7 +332,7 @@ export function generateTrainerReport({
 <div id="tab-load" class="tab-panel">
   <div class="note-box"><b>Source:</b> HealthFit daily export. Real CTL/ATL/TSB/TRIMP/ACWR values are embedded from loaded app state.</div>
   <div class="stat-grid"><div class="stat-box"><div class="stat-label">CTL</div><div class="stat-value">${lastFit?.ctl ?? "—"}</div></div><div class="stat-box"><div class="stat-label">ATL</div><div class="stat-value warn">${lastFit?.atl ?? "—"}</div></div><div class="stat-box"><div class="stat-label">TSB</div><div class="stat-value ${tsbClass(lastFit?.tsb)}">${lastFit?.tsb ?? "—"}</div></div><div class="stat-box"><div class="stat-label">ACWR</div><div class="stat-value">${lastFit?.acwr ?? "—"}</div></div></div>
-  <div class="card"><div class="card-title">CTL / ATL / TSB — ${fitSeries.length} days loaded</div><div class="chart-wrap tall"><canvas id="loadChart"></canvas></div></div>
+  <div class="card"><div class="card-title">CTL / ATL / TSB — ${fitData.length} days loaded</div><div class="chart-wrap tall"><canvas id="loadChart"></canvas></div></div>
   <div class="grid-2"><div class="card"><div class="card-title">Daily TRIMP</div><div class="chart-wrap"><canvas id="trimpChart"></canvas></div></div><div class="card"><div class="card-title">ACWR</div><div class="chart-wrap"><canvas id="acwrChart"></canvas></div></div></div>
 </div>
 
@@ -324,7 +346,7 @@ export function generateTrainerReport({
   <div class="note-box"><b>MTP Protocol:</b> Current ceiling <b>${esc(mtpCeiling)} miles</b>. Running view shows actual session history, not a projection.</div>
   <div class="stat-grid"><div class="stat-box"><div class="stat-label">Run Sessions</div><div class="stat-value">${runSessions.length}</div></div><div class="stat-box"><div class="stat-label">Longest Recent Run</div><div class="stat-value">${runSessions.length ? Math.max(...runSessions.map(s => s.dist)).toFixed(1) : "—"}</div><div class="stat-sub">miles</div></div><div class="stat-box"><div class="stat-label">Run TSB</div><div class="stat-value ${tsbClass(tsbNow.run)}">${tsbNow.run != null ? tsbNow.run.toFixed(1) : "—"}</div></div></div>
   <div class="card"><div class="card-title">Run Distance History</div><div class="chart-wrap"><canvas id="runChart"></canvas></div></div>
-  <div class="card"><div class="card-title">Run Log</div><table><thead><tr><th>Date</th><th>Distance</th><th>Duration</th><th>Pace</th><th>MTP</th></tr></thead><tbody>${runSessions.slice(-20).reverse().map(s => `<tr><td>${esc(s.date)}</td><td class="td-r">${s.dist.toFixed(2)}</td><td class="td-r">${s.dur > 0 ? s.dur.toFixed(0) : "—"}</td><td class="td-r">${s.pace || "—"}</td><td class="td-r">${s.mtp ?? "—"}</td></tr>`).join("")}</tbody></table></div>
+  <div class="card"><div class="card-title">Run Log</div><table><thead><tr><th>Date</th><th>Distance (mi)</th><th>Duration</th><th>Pace</th><th>MTP</th></tr></thead><tbody>${runSessions.slice(-20).reverse().map(s => `<tr><td>${esc(s.date)}</td><td class="td-r">${s.dist.toFixed(2)}</td><td class="td-r">${s.dur > 0 ? s.dur.toFixed(0) : "—"}</td><td class="td-r">${s.pace || "—"}</td><td class="td-r">${s.mtp ?? "—"}</td></tr>`).join("")}</tbody></table></div>
 </div>
 
 <div id="tab-strength" class="tab-panel">
@@ -358,7 +380,7 @@ ${mealSeries.length ? `<div id="tab-nutrition" class="tab-panel">
 </div>` : ""}
 </main>
 <script>
-const fitData = ${J(fitSeries)};
+const fitData = ${J(fitData)};
 const weightData = ${J(weightSeries)};
 const dexaData = ${J(dexaData)};
 const runData = ${J(runSessions)};
