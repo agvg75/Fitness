@@ -16344,6 +16344,29 @@ const vo2OverviewDomain = useMemo(() => {
     Math.ceil(Math.max(...vals)) + 2
   ]
 }, [vo2ProxySmoothed])
+const vo2TrendChartData = useMemo(() => {
+  const appleRows = (Array.isArray(biometricRecords) ? biometricRecords : [])
+    .filter(row => /apple/i.test(String(row?.source || "")))
+    .map(row => {
+      const val = Number(row?.vo2_max ?? row?.vo2 ?? row?.value)
+      const date = String(row?.date || row?.measured_date || row?.measured_at || row?.timestamp || "").slice(0, 10)
+      if (!date || !Number.isFinite(val) || val <= 0) return null
+      return { date, apple: Number(val.toFixed(1)) }
+    })
+    .filter(Boolean)
+
+  const proxyRows = (Array.isArray(vo2ProxySmoothed) ? vo2ProxySmoothed : [])
+    .filter(row => row?.date && Number.isFinite(Number(row?.vo2_5pt)) && Number(row.vo2_5pt) > 0)
+    .map(row => ({ date: String(row.date).slice(0, 10), proxy: Number(Number(row.vo2_5pt).toFixed(1)) }))
+
+  const byDate = {}
+  appleRows.forEach(r => { byDate[r.date] = { ...byDate[r.date], date: r.date, apple: r.apple } })
+  proxyRows.forEach(r => { byDate[r.date] = { ...byDate[r.date], date: r.date, proxy: r.proxy } })
+
+  return Object.values(byDate)
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)))
+    .map(r => ({ ...r, label: fmtShortDate(r.date) }))
+}, [biometricRecords, vo2ProxySmoothed])
 const trainingLoadDistanceMax = useMemo(() => {
   if (!trainingLoadChartData?.length) return 12
 
@@ -20625,6 +20648,45 @@ return (
         </div>
       )}
     </div>
+
+    {vo2TrendChartData.length > 1 && (
+      <div style={{ ...cardStyle(), marginBottom: "20px" }}>
+        <div style={{ fontWeight: "bold", marginBottom: "12px" }}>Aerobic Capacity Trend</div>
+        <div style={{ fontSize: "11px", opacity: 0.65, marginBottom: "12px" }}>
+          Apple VO2max estimate (left axis, mL/kg/min) vs LIFT running economy proxy (right axis, mL/kg/min at zone 2 pace). Diverging trends signal improving economy. Converging trends may indicate fatigue or declining economy.
+        </div>
+        <ResponsiveContainer width="100%" height={260}>
+          <ComposedChart data={vo2TrendChartData} margin={{ top: 10, right: 50, left: 30, bottom: 20 }}>
+            <CartesianGrid stroke="#1a1b2e" />
+            <XAxis dataKey="label" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
+            <YAxis
+              yAxisId="apple"
+              orientation="left"
+              domain={[35, 50]}
+              tick={{ fontSize: 10 }}
+              label={{ value: "Max (mL/kg/min)", angle: -90, position: "insideLeft", offset: 15, fill: "#4a9ee8", style: { textAnchor: "middle" }, fontSize: 10 }}
+            />
+            <YAxis
+              yAxisId="proxy"
+              orientation="right"
+              domain={[18, 35]}
+              tick={{ fontSize: 10 }}
+              label={{ value: "Economy", angle: 90, position: "insideRight", offset: 15, fill: "#94a3b8", style: { textAnchor: "middle" }, fontSize: 10 }}
+            />
+            <Tooltip
+              formatter={(v, n) => [v != null ? `${v} mL/kg/min` : "NA", n === "apple" ? "Apple VO2max" : "LIFT economy"]}
+              contentStyle={{ background: "#0a0a14", border: "1px solid #1a1b2e", fontSize: 11 }}
+            />
+            <Line yAxisId="apple" dataKey="apple" name="apple" stroke="#4a9ee8" strokeWidth={2} dot={{ r: 3, fill: "#4a9ee8" }} connectNulls={false} />
+            <Line yAxisId="proxy" dataKey="proxy" name="proxy" stroke="#94a3b8" strokeWidth={1.5} dot={{ r: 2, fill: "#94a3b8" }} connectNulls={false} />
+          </ComposedChart>
+        </ResponsiveContainer>
+        <div style={{ display: "flex", gap: "20px", marginTop: "8px", fontSize: "10px" }}>
+          <span style={{ color: "#4a9ee8" }}>Apple VO2max (left axis)</span>
+          <span style={{ color: "#94a3b8" }}>LIFT economy proxy (right axis)</span>
+        </div>
+      </div>
+    )}
 
     {/* ── Endurance Readiness ─────────────────────────────────── */}
     <div style={{ ...cardStyle(), marginBottom: "20px" }}>
