@@ -18607,15 +18607,24 @@ return (
     })
   ) : (
     <>
-      <div style={{ fontSize: "30px", fontWeight: "bold" }}>
-        {vo2ProxySummary?.latestSmoothed != null ? f1(vo2ProxySummary.latestSmoothed) : "NA"}
+      <div style={{ display: "flex", alignItems: "baseline", gap: "6px", flexWrap: "wrap" }}>
+        <div style={{ fontSize: "28px", fontWeight: "bold", color: "#4a9ee8" }}>
+          {vo2SourceSummary?.apple?.value != null ? f1(vo2SourceSummary.apple.value) : "NA"}
+        </div>
+        <div style={{ fontSize: "20px", color: "#444", fontWeight: "300" }}>/</div>
+        <div style={{ fontSize: "22px", fontWeight: "bold", color: "#94a3b8" }}>
+          {vo2ProxySummary?.latestSmoothed != null ? f1(vo2ProxySummary.latestSmoothed) : "NA"}
+        </div>
       </div>
-      <div style={{ fontSize: "12px", opacity: 0.7, marginTop: "8px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-        LIFT aerobic proxy from recent run pace and duration.
+      <div style={{ display: "flex", gap: "14px", marginTop: "6px", fontSize: "10px" }}>
+        <span style={{ color: "#4a9ee8" }}>Apple max</span>
+        <span style={{ color: "#94a3b8" }}>LIFT economy</span>
       </div>
-      <div style={{ fontSize: 11, color: "#cbd5e1", marginTop: 8, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-        {`KNR ${vo2SourceSummary?.labLike?.value != null ? f1(vo2SourceSummary.labLike.value) : "NA"} | Apple ${vo2SourceSummary?.apple?.value != null ? f1(vo2SourceSummary.apple.value) : "NA"} | Proxy ${vo2SourceSummary?.proxy?.value != null ? f1(vo2SourceSummary.proxy.value) : "NA"}`}
-      </div>
+      {vo2SourceSummary?.labLike?.value != null && (
+        <div style={{ fontSize: 10, color: "#556", marginTop: 5 }}>
+          {`KNR ${f1(vo2SourceSummary.labLike.value)}`}
+        </div>
+      )}
     </>
   )}
 </div>
