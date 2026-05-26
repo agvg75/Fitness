@@ -45,6 +45,7 @@ import {
 import { createClient } from "@supabase/supabase-js"
 import { generateTrainerReport } from "./exportReport"
 import MetricValue from './components/MetricValue'
+import CoachEntry from './components/CoachEntry'
 import { useMetricSnapshot } from './lib/useMetricSnapshot'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
@@ -347,6 +348,7 @@ const tabs = [
   "Calories",
   "Composition",
   "Import",
+  "Coach",
 ]
 
 const rangeOptions = [
@@ -21507,8 +21509,12 @@ return (
   />
 )}
 
+{tab === "Coach" && (
+  <CoachEntry supabase={supabase} />
+)}
+
       
-{tab !== "Overview" && tab !== "Composition" && tab !== "Calories" && tab !== "Capacity" && tab !== "Forecast" && tab !== "Schedule" && tab !== "Training" && tab !== "Import" && tab !== "Log" && (
+{tab !== "Overview" && tab !== "Composition" && tab !== "Calories" && tab !== "Capacity" && tab !== "Forecast" && tab !== "Schedule" && tab !== "Training" && tab !== "Import" && tab !== "Coach" && tab !== "Log" && (
   <div>
     <h3>{tab}</h3>
     <div>This tab is next.</div>
