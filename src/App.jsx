@@ -13361,7 +13361,7 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
   }
 
   const iconBtn = {
-    position: "fixed", top: 20, left: 172, zIndex: 9999,
+    position: "fixed", top: 20, left: 272, zIndex: 9999,
     width: 44, height: 44, borderRadius: "50%",
     background: "rgba(5, 10, 30, 0.35)",
     border: "1px solid rgba(56, 189, 248, 0.35)",
