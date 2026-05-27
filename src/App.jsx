@@ -15214,8 +15214,23 @@ useEffect(() => {
 
     ;(async () => {
       const storedMeals = await store.get("ufd-meal-entries")
+      const localMeals = (() => { try { return JSON.parse(localStorage.getItem("ufd-meal-entries") || "[]") } catch { return [] } })()
+      const mergedMeals = (() => {
+        const base = Array.isArray(storedMeals) ? storedMeals : []
+        const local = Array.isArray(localMeals) ? localMeals : []
+        const byId = new Map()
+        base.forEach(e => { if (e?.id) byId.set(String(e.id), e) })
+        local.forEach(e => { if (e?.id) byId.set(String(e.id), e) }) // local wins on conflict
+        return [...byId.values()].sort((a, b) => String(a.date).localeCompare(String(b.date)))
+      })()
+      if (mergedMeals.length > 0) {
+        setMealEntries(mergedMeals)
+        // Write merged back to both stores so Supabase catches up
+        try { await store.set("ufd-meal-entries", mergedMeals) } catch {}
+      } else if (Array.isArray(storedMeals) && storedMeals.length > 0) {
+        setMealEntries(storedMeals)
+      }
       const storedPresets = await store.get("ufd-meal-presets")
-      if (Array.isArray(storedMeals)) setMealEntries(storedMeals)
       if (storedPresets && typeof storedPresets === "object") {
         setMealPresets({ ...defaultMealPresets, ...storedPresets })
       }
