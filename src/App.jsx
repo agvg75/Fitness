@@ -12706,18 +12706,33 @@ Pre-run ibuprofen is part of an explicitly recommended twice-daily anti-inflamma
 The rowing machine causes passive MTP dorsiflexion at the catch regardless of technique and is incompatible with the current protocol until 3 consecutive score-0 sessions are achieved.
 Left leg lean mass was flat Aug–Apr while right leg gained 9.0%, confirming chronic unilateral unloading. DEXA in September will test whether left leg closes the gap after MTP resolves.
 
-WEEKLY TRAINING STRUCTURE
-Monday: Chest and Arms (YMCA, strength + cardio)
-Tuesday: Legs (KNR — kinesiologist-led, not high intensity, cardio can be added)
-Wednesday: Rest or easy recovery only (no strength, no structured cardio)
-Thursday: Back and Arms (KNR)
-Friday: Legs and some chest (KNR)
-Saturday: Hip Legs + long run (YMCA, strength + cardio)
-Sunday: Long run only, no strength
+WEEKLY TRAINING STRUCTURE (KNR suspended — all sessions YMCA until September 2026)
+Monday: Chest & Triceps + Long Bike (YMCA) — Chest press, Incline press, Flys, Pull-down 170 lb, Chin-ups BW, Lateral raise, Rear delt fly, Face pull, Triceps pulldown/overhead/pushdown, Hammer curls, Biceps reverse, Pallof press
+Tuesday: Legs + Swim (YMCA) — Hip thrust, Leg press bilateral + left-only unilateral, KB RDL, Hip drive marches, Leg extension bilateral + left-only, Plank, Dead bugs
+Wednesday: Rest — tendon protocol only at home, no strength, no structured cardio
+Thursday: Back & Arms + Run (YMCA) — Cable row SA 200 lb, Lat pulldown 130 lb, Straight arm pulldown, Inverted row, Shoulder press [added May 2026], Biceps curl 80 lb, Hammer curl 60 lb, Suitcase carry, Chin-ups BW, Hanging leg raises [added May 2026]
+Friday: Legs Volume + Hip + Swim (YMCA) — Cable crossover 40 lb, Hip abductor 120 lb, Hip adductor 90 lb, KB swing, Hip thrust, RDL 70 lb, Back extension [added May 2026], Hamstring eccentric curl 45 lb, Pallof press, Russian twists
+Saturday: Long swim (YMCA)
+Sunday: Long run — Zone 2 · MTP protocol applies
 
-KNR STRENGTH BASELINES (February 2026 e1RM)
-Chest press: 130 lb | Seated cable row: 80 lb | Bicep curl: 30 lb
-Leg press: 320 lb | Leg curl: 100 lb | Leg extension: 100 lb
+CURRENT WORKING LOADS (May 2026 — verified session data)
+Chest press: 110 lb × 6r | Incline press DB: 90 lb × 6r | Pull-down: 170 lb × 6r
+Chin-ups: BW × 6r unassisted, 3 sets on both Monday and Thursday — GOAL ACHIEVED
+Lateral raise: 15 lb × 8r | Rear delt fly: 25 lb × 8r | Face pull: 45 lb × 8r
+Triceps pulldown: 50 lb × 8r | Triceps overhead: 30 lb × 8r | Cable incline pushdown: 40 lb × 6r
+Biceps curl: 80 lb × 6r (Thu heavy) | Hammer curl: 60 lb × 6r | Biceps reverse: 35 lb × 6r
+Cable row SA: 200 lb × 6r | Lat pulldown: 130 lb × 5r | Shoulder press: 40 lb × 8r (new)
+Hip thrust: 160 lb × 8r | Leg press bilateral: 220 lb × 6r | Leg press left-only: 80 lb × 6r
+Romanian deadlift: 70 lb × 8r | Hamstring eccentric curl: 45 lb × 8r
+Key imbalances: chest/pull ratio 0.84×BW vs 1.07×BW; bicep/tricep e1RM ratio 1.52:1 (target 1.0–1.2:1)
+
+ACTIVE PROGRAM GOALS (May 2026 strength audit — chime in on these proactively)
+1. PULL-UPS: Chin-ups (supinated) at 3×6 unassisted — milestone achieved. Transitioning to pronated pull-ups: replace 1 chin-up set per week with 1 pull-up set (expect drop to 3–4 reps initially). Target: 3×6 pull-ups by July 2026. After that: progress reps to 3×10, then add 10 lb via belt.
+2. BIG STRONG ARMS: Triceps are the primary gap for arm size (65% of upper arm mass). Current bicep/tricep e1RM ratio is 1.52:1 — target 1.0–1.2:1. Three triceps exercises on Monday. Progress pulldown from 50 → 65–70 lb, overhead from 30 → 45–50 lb. Check in on triceps load progress during Monday sessions.
+3. UPPER BODY HYPERTROPHY AND DEFINITION: Priority — (a) chest press to 135–145 lb by September (current 110 lb; the chest is behind all other upper body metrics); (b) incline press to 110–120 lb for upper chest fullness; (c) shoulder press to 65–75 lb by September (new exercise, critical missing vertical push); (d) lateral raise to 22–25 lb for shoulder width and definition. Remind Andrés that chest is the lagging muscle group when Monday loads are reported.
+4. HALF MARATHON — Naperville Oct 18, 2026: Core and lower back endurance are the primary functional running gaps for miles 10–13. Hanging leg raises (Thu, after chin-ups) address anterior pelvic tilt control. Back extension (Fri, after RDL) addresses lumbar endurance under sustained load. RDL must progress from 70 lb → 110–120 lb by September. Flag if RDL load is not progressing.
+5. LEFT LEG SYMMETRY: Unilateral protocol — 80 lb leg press and 40 lb leg extension left-only sets address the 27% deficit from chronic MTP unloading confirmed at April DEXA. Extra left-leg hamstring curl set also programmed. September DEXA will test whether gap is closing.
+6. CALF RAISE PROTOCOL: MTP is scoring 0 consistently. Remove conditional language — eccentric calf raises on Tuesday are now mandatory not optional. Progress toward loaded version (10 lb DB) once 3 consecutive sessions show zero next-day Achilles soreness.
 
 NUTRITION
 Protein target: 120–140 g/day in 3–4 doses of 30–40 g. Current intake: ~100 g/day (gap to close).
