@@ -489,7 +489,7 @@ const PLAN = {
       ]},
       { h: "B — PULL (LAT + BICEP BASE)", ex: [
         { id:"pull_down_cable", name:"Pull Down", sub:"Cable straight-arm or heavy lat pulldown", def:[mk(8,160),mk(8,160),mk(8,160)], note:"Lat primary · Monday back volume · arms straight for straight-arm variant" },
-        { id:"chinups", name:"Chin-ups", sub:"Bodyweight · full ROM", def:[mk(5,"BW"),mk(5,"BW"),mk(5,"BW")], note:"Controlled descent · 3 sec lowering" },
+        { id:"chinups", name:"Chin-ups", sub:"Bodyweight · full ROM", def:[mk(6,"BW"),mk(6,"BW"),mk(6,"BW")], note:"Controlled descent · 3 sec lowering · currently 3×6 · transition: replace 1 set per week with pronated pull-up grip" },
       ]},
       { h: "C — SHOULDER (HYPERTROPHY · replaces Wed volume)", ex: [
         { id:"lateral_raise", name:"Lateral Raise", sub:"Cable or DB · 3×12–15", def:[mk(12,15),mk(12,15),mk(12,15)], note:"Controlled arc · no shrug" },
@@ -600,19 +600,23 @@ const PLAN = {
     ],
     sections: [
       { h: "Back Primary", ex: [
-        { id:"th1", name:"Cable Row (mid) — Single Arm", sub:"Cable · mid-height · SA",   def:[mk(6,67),mk(6,67),mk(6,67)],              note:"Single-arm · scapula retraction · don't round" },
+        { id:"th1", name:"Cable Row (mid) — Single Arm", sub:"Cable · mid-height · SA",   def:[mk(6,200),mk(6,200),mk(6,200)],           note:"Single-arm · scapula retraction · don't round · actual working load" },
         { id:"th2", name:"Lat Pulldown",                 sub:"Machine or cable",           def:[mk("6-8",120),mk("6-8",120),mk("6-8",120)], note:"Chest up · elbows to ribs · 2-1-2" },
         { id:"th3", name:"Straight Arm Pulldowns",       sub:"Cable · Wolverines · 40 lb", def:[mk(8,40),mk(8,40),mk(8,40)],               note:"Arms straight · lat isolation" },
         { id:"th4", name:"Inverted Row",                 sub:"TRX or bar · 3–4 sets",      def:[mk(8,"BW"),mk(8,"BW"),mk(8,"BW")],         note:"Full ROM · chest to bar" },
       ]},
+      { h: "Overhead Push", ex: [
+        { id:"th_sp", name:"Shoulder Press", sub:"Technogym machine or DB seated", def:[mk(8,40),mk(8,40),mk(8,40)], note:"Neutral grip · full ROM · 2-0-2 tempo · the only vertical push in the program · progress +5 lb every 2–3 weeks when all 3×8 complete cleanly · target 65–75 lb by September" },
+      ]},
       { h: "Biceps", ex: [
-        { id:"th5", name:"Biceps Curl",                      sub:"DB or barbell · palms up", def:[mk(5,75),mk(5,75),mk(5,75)],              note:"No sway · full elbow extension · heavy day" },
+        { id:"th5", name:"Biceps Curl",                      sub:"DB or barbell · palms up", def:[mk(6,80),mk(6,80),mk(6,80)],              note:"No sway · full elbow extension · heavy day" },
         { id:"th6", name:"Cable D2 Flexion",                sub:"Cable · unsheathing sword", def:[mk(8,"—"),mk(8,"—"),mk(8,"—")],           note:"Full diagonal ROM · controlled" },
-        { id:"th8", name:"Hammer Curl",                     sub:"DB alternating",             def:[mk("10-12","—"),mk("10-12","—")],          note:"Neutral grip · full ROM" },
+        { id:"th8", name:"Hammer Curl",                     sub:"DB alternating",             def:[mk(6,60),mk(6,60),mk(6,60)],              note:"Neutral grip · full ROM" },
       ]},
       { h: "Core", ex: [
         { id:"th9", name:"Suitcase Carry", sub:"DB 60 lb · 2 laps each arm (~30 ft/lap)", def:[mk("2 laps",60),mk("2 laps",60)], note:"Upright · no lateral lean · core braced" },
-        { id:"th10", name:"Chin-ups", sub:"bodyweight · full ROM",  def:[mk(5,"BW"),mk(5,"BW"),mk(5,"BW")], note:"Dead hang start. Add weight via belt once 3×8 BW is consistent." },
+        { id:"th10", name:"Chin-ups", sub:"bodyweight · full ROM",  def:[mk(6,"BW"),mk(6,"BW"),mk(6,"BW")], note:"Dead hang start · currently 3×6 unassisted · transition: replace 1 set per week with pronated pull-up grip · target 3×6 pull-ups by July · add weight via belt once 3×10 BW consistent" },
+        { id:"th11", name:"Hanging Leg Raises", sub:"Pull-up bar · stay on bar immediately after chin-ups", def:[mk(10,"BW"),mk(10,"BW"),mk(10,"BW")], note:"Posterior pelvic tilt at top · no swing · 2-sec hold at top · zero equipment transition from chin-ups · direct rectus abdominis work for pelvic tilt control miles 10–13 · progress: 10 → 15 reps → add 2.5 lb ankle weight" },
       ]},
     ],
   },
@@ -634,17 +638,18 @@ const PLAN = {
     ],
     sections: [
       { h: "Chest (Volume Day · 2nd Frequency)", ex: [
-        { id:"f0", name:"Cable Crossover",    sub:"Low-to-high or mid · 3×12–15",   def:[mk("12-15","—"),mk("12-15","—"),mk("12-15","—")], note:"Full stretch at start · squeeze at top · volume not load · second chest frequency" },
+        { id:"f0", name:"Cable Crossover",    sub:"Low-to-high or mid",              def:[mk(8,40),mk(8,40),mk(8,40)],                 note:"Full stretch at start · squeeze at top · 2nd chest frequency · current 40 lb" },
       ]},
       { h: "Hip", ex: [
         { id:"f1", name:"Hip Abduction",           sub:"Abductor machine",             def:[mk(8,120),mk(8,120),mk(8,120)],              note:"Full ROM · controlled return" },
-        { id:"f2", name:"Hip Adduction",           sub:"Adductor machine",             def:[mk(8,80),mk(8,80),mk(8,80)],                 note:"Pelvic control throughout" },
+        { id:"f2", name:"Hip Adduction",           sub:"Adductor machine",             def:[mk(8,90),mk(8,90),mk(8,90)],                 note:"Pelvic control throughout" },
         { id:"f3", name:"KB Swing",                sub:"Kettlebell · hip hinge drive", def:[mk(10,25),mk(10,25),mk(10,25)],              note:"Power from glutes · not arms" },
         { id:"f4", name:"Hip Thrust",              sub:"Smith machine · volume load",  def:[mk("10-12","—"),mk("10-12","—"),mk("10-12","—")], note:"Lighter than Tuesday · can sub glute bridge" },
       ]},
       { h: "Posterior Chain", ex: [
-        { id:"f5", name:"Romanian Deadlift",       sub:"DB or barbell",                def:[mk("10-12","—"),mk("10-12","—"),mk("10-12","—")], note:"Hinge · flat back · 3-1-2 tempo" },
-        { id:"f6", name:"Hamstring Eccentric Curl",sub:"Leg curl · 4s eccentric",      def:[mk("8-10","—"),mk("8-10","—"),mk("8-10","—")], note:"4-second lowering · slow control" },
+        { id:"f5", name:"Romanian Deadlift",       sub:"DB or barbell",                def:[mk(8,70),mk(8,70),mk(8,70)],                 note:"Hinge · flat back · 3-1-2 tempo · current 70 lb · progress +5 lb weekly · target 110–120 lb by September for HM posterior chain endurance" },
+        { id:"f5b", name:"Back Extension",         sub:"45° hyperextension bench",     def:[mk(12,"BW"),mk(12,"BW")],                    note:"3-sec hold at top · neutral spine throughout · lumbar endurance target for HM miles 10–13 · start BW 2×12 · progress to 3×15 BW then add 10 lb plate held at chest · NEW exercise added May 2026" },
+        { id:"f6", name:"Hamstring Eccentric Curl",sub:"Leg curl · 4-sec eccentric · extra set left leg", def:[mk(8,45),mk(8,45),mk(8,45)], note:"4-second lowering · slow control · add extra set for left leg only (MTP asymmetry protocol) · current 45 lb" },
       ]},
       { h: "Anti-Rotation Core", ex: [
         { id:"f7", name:"Pallof Press",            sub:"Cable · split stance",          def:[mk("8e",30),mk("8e",30),mk("8e",30)],        note:"Brace · press slowly · zero rotation" },
