@@ -4647,8 +4647,10 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       const day = activeDay
       const dateDay = dayKeyFromScheduleDate(sessionDate)
       if (dateDay && dateDay !== day) {
-        showToast(`Session date is ${dateDay}; switch from ${day} before saving`)
-        return false
+        // Allow saving: auto-align the active day to the session date rather than blocking.
+        // This lets the user load any day's exercises and log them on a different date
+        // (e.g. doing Tuesday legs on Wednesday after missing a session).
+        // The session is recorded against sessionDate which is authoritative.
       }
       const prog = getProgDay(day)
       const ts = new Date(`${sessionDate}T${VENUE_TIMES[venue] || "12:00"}:00`).toISOString()
