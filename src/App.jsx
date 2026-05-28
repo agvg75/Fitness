@@ -18786,30 +18786,65 @@ const overviewExplainButton = (key) => (
     } catch (e) { console.warn("[Trainer] Meal save error", e) }
   }, [setMealRecords, session, supabase])
 
-  const trainerLogExercise = React.useCallback(async (exerciseName, day) => {
-    const newEx = {
-      id: `custom_${Date.now()}`,
+  const trainerLogExercise = React.useCallback(async (exerciseName, day, sets = "3", reps = "10", load = "") => {
+    const today = new Date()
+    const dateStr = today.toISOString().slice(0, 10)
+    const resolvedDay = day || DAY_KEYS_BY_JS_DAY[today.getDay()]
+
+    const exerciseEntry = {
+      id: `trainer_ex_${Date.now()}`,
       n: exerciseName.trim(),
-      sets: "3",
-      reps: "10",
-      load: "",
-      notes: "Added by LIFT Trainer"
+      sets,
+      reps,
+      load,
+      notes: "Logged via LIFT Trainer"
     }
+
+    const logEntry = {
+      id: `trainer_strength_${Date.now()}`,
+      session_id: `trainer_${Date.now()}`,
+      logged_at: today.toISOString(),
+      date: dateStr,
+      day: resolvedDay,
+      dayLabel: resolvedDay,
+      venue: "trainer",
+      venue_label: "Logged via Trainer",
+      program: "Trainer",
+      rpe: null,
+      exercises: [exerciseEntry],
+      tendon_work: [],
+      cardio: [],
+      stretch_completed: false,
+      warmup_completed: false,
+      source: "LIFT Trainer"
+    }
+
     try {
-      const existing = await store.get("wt-custom-exercises") || {}
-      const dayExercises = Array.isArray(existing[day]) ? existing[day] : []
-      const updated = { ...existing, [day]: [...dayExercises, newEx] }
-      await store.set("wt-custom-exercises", updated)
-      if (supabase && session?.user?.id) {
-        await supabase.from("user_kv").upsert(
-          { user_id: session.user.id, key: "wt-custom-exercises", value: updated, updated_at: new Date().toISOString() },
-          { onConflict: "user_id,key" }
+      const existing = await store.get("wt-log") || []
+      const safeExisting = Array.isArray(existing) ? existing : []
+
+      // Merge with any existing trainer entry for today rather than creating duplicate sessions
+      const todayTrainerIdx = safeExisting.findIndex(e =>
+        e.date === dateStr && e.source === "LIFT Trainer"
+      )
+      let updated
+      if (todayTrainerIdx >= 0) {
+        // Append exercise to existing today's trainer session
+        const existing_session = safeExisting[todayTrainerIdx]
+        const merged_exercises = [...(existing_session.exercises || []), exerciseEntry]
+        updated = safeExisting.map((e, i) =>
+          i === todayTrainerIdx ? { ...e, exercises: merged_exercises } : e
         )
+      } else {
+        updated = [...safeExisting, logEntry]
       }
+
+      await saveScheduleKey("wt-log", updated)
+      setSchedLog(updated)
     } catch (e) {
       console.warn("[Trainer] Exercise log error", e)
     }
-  }, [session, supabase])
+  }, [session, supabase, saveScheduleKey, setSchedLog])
 
   const trainerLogRun = React.useCallback(async ({ dist, dur, score, notes }) => {
     const today = new Date()
