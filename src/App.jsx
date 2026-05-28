@@ -12799,63 +12799,190 @@ SUBSTITUTION PROTOCOL — when the user reports MTP score 2+ or describes a phys
 
 For all other data writes, tell the user you cannot do that yet.`
 
-function assembleTrainerContext({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, mealRecords }) {
+function assembleTrainerContext({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, mealRecords, sleepRecords, biometricRecords, schedLog, readinessScore }) {
   const today = new Date().toISOString().slice(0, 10)
-  const tsbLine = tsbData
-    ? `TSB: ${tsbData.currentOverallTsb != null ? Number(tsbData.currentOverallTsb).toFixed(1) : "?"}, 14-day load: ${tsbData.currentLoad14 != null ? Number(tsbData.currentLoad14).toFixed(0) : "?"}`
-    : "TSB: unavailable"
+  const dayName = new Date().toLocaleDateString('en-US', { weekday: 'long' })
+
+  // ── Readiness and TSB ──────────────────────────────────────────────────────
+  const tsbNow = tsbData?.currentOverallTsb != null ? Number(tsbData.currentOverallTsb).toFixed(1) : "?"
+  const load14 = tsbData?.currentLoad14 != null ? Number(tsbData.currentLoad14).toFixed(0) : "?"
+  const readiness = readinessScore != null ? `${Math.round(readinessScore)}%` : "?"
+  const tsbLine = `TSB: ${tsbNow} | 14d load: ${load14} | Readiness: ${readiness}`
+  const riskFlag = (tsbData?.currentOverallTsb < -7 && tsbData?.currentLoad14 > 700)
+    ? "⚠ RISK ZONE: TSB below -7 and 14d load above 700 — reduce intensity"
+    : "Risk zone: clear"
+
+  // ── OC issues ─────────────────────────────────────────────────────────────
   const ocLines = (ocItems || []).filter(i => i.currentScore > 0)
     .map(i => `  ${i.location || i.label || "Unknown"}: score ${i.currentScore}/5, ${i.episodeCount || 0} episode(s)`)
     .join("\n") || "  None active"
-  const sessionLines = (sessions60 || []).slice(0, 80).map(s => {
+
+  // ── Last logged session ────────────────────────────────────────────────────
+  const sortedLog = (schedLog || [])
+    .filter(e => e.date || e.session_date)
+    .sort((a, b) => (b.date || b.session_date || "").localeCompare(a.date || a.session_date || ""))
+  const lastEntry = sortedLog[0]
+  const lastSessionLine = lastEntry
+    ? (() => {
+        const d = lastEntry.date || lastEntry.session_date || "?"
+        const dayLabel = lastEntry.day || lastEntry.dayKey || "?"
+        const exercises = lastEntry.exercises || lastEntry.log || []
+        const exSummary = Array.isArray(exercises) && exercises.length
+          ? exercises.slice(0, 5).map(e => {
+              const name = e.exercise_name || e.name || e.n || e.exercise_id || "?"
+              const reps = e.actual?.reps || e.reps || e.r || "?"
+              const load = e.actual?.load || e.load || e.w || "?"
+              return `${name} ${reps}@${load}`
+            }).join(", ")
+          : lastEntry.data && typeof lastEntry.data === "object"
+            ? Object.entries(lastEntry.data).slice(0, 5).map(([name, sets]) => {
+                const first = Array.isArray(sets) ? sets[0] : sets
+                return `${name} ${first?.r || "?"}@${first?.w || "?"}`
+              }).join(", ")
+            : "exercises not detailed"
+        return `  ${d} (${dayLabel}): ${exSummary}`
+      })()
+    : "  No logged sessions found in schedLog"
+
+  // ── Recent sessions (canonical) ────────────────────────────────────────────
+  const sessionLines = (sessions60 || []).slice(0, 30).map(s => {
     const d = s.start_date?.slice(0, 10) || s.date || "?"
     const type = s.canonical_type || s.type || "?"
-    const dur = s.duration_min != null ? `${Math.round(s.duration_min)} min` : "? min"
-    const dist = s.distance_mi != null ? ` ${Number(s.distance_mi).toFixed(2)} mi` : ""
+    const dur = s.duration_min != null ? `${Math.round(s.duration_min)}min` : "?min"
+    const dist = s.distance_mi != null ? ` ${Number(s.distance_mi).toFixed(1)}mi` : ""
     const load = s.load != null ? ` load:${Number(s.load).toFixed(0)}` : ""
-    return `  ${d} | ${type} |${dur}${dist}${load}`
+    return `  ${d} | ${type} | ${dur}${dist}${load}`
   }).join("\n") || "  No sessions loaded"
+
+  // ── Current week load summary ──────────────────────────────────────────────
+  const weekStart = new Date(); weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1); weekStart.setHours(0,0,0,0)
+  const weekSessions = (sessions60 || []).filter(s => {
+    const d = new Date(s.start_date || s.date || ""); return !isNaN(d) && d >= weekStart
+  })
+  const weekRunMi = weekSessions.filter(s => (s.canonical_type||s.type||"").toLowerCase().includes("run"))
+    .reduce((sum, s) => sum + (s.distance_mi || 0), 0)
+  const weekStrCount = weekSessions.filter(s => (s.canonical_type||s.type||"").toLowerCase().includes("strength")).length
+  const weekSwimMin = weekSessions.filter(s => (s.canonical_type||s.type||"").toLowerCase().includes("swim"))
+    .reduce((sum, s) => sum + (s.duration_min || 0), 0)
+  const weekLine = `  Running: ${weekRunMi.toFixed(1)} mi | Strength: ${weekStrCount} sessions | Swim: ${Math.round(weekSwimMin)} min`
+
+  // ── Sleep summary ──────────────────────────────────────────────────────────
+  const recentSleep = (sleepRecords || [])
+    .filter(r => r.date || r.start_at)
+    .sort((a, b) => (b.date || b.start_at || "").localeCompare(a.date || a.start_at || ""))
+    .slice(0, 7)
+  const sleepHrs = recentSleep.map(r => {
+    const min = r.duration_min || r.total_sleep_min || 0
+    return min > 0 ? (min / 60).toFixed(1) : null
+  }).filter(Boolean)
+  const sleepAvg = sleepHrs.length ? (sleepHrs.reduce((s, h) => s + parseFloat(h), 0) / sleepHrs.length).toFixed(1) : "?"
+  const last3Sleep = sleepHrs.slice(0, 3).join(", ") || "not logged"
+  const sleepLine = `  7-night avg: ${sleepAvg}h | Last 3 nights: ${last3Sleep}h | Target: 7.5h`
+  const sleepFlag = parseFloat(sleepAvg) < 6.5 ? "  ⚠ Sleep below 6.5h avg — recovery and VO2 estimate both affected" : ""
+
+  // ── Weight trend ───────────────────────────────────────────────────────────
+  const recentWeight = (biometricRecords || [])
+    .filter(r => r.weight_lb || r.value)
+    .sort((a, b) => (b.date || b.recorded_at || "").localeCompare(a.date || a.recorded_at || ""))
+    .slice(0, 7)
+  const latestWeight = recentWeight[0]
+  const weightLine = latestWeight
+    ? `  Latest: ${latestWeight.weight_lb || latestWeight.value} lb (${latestWeight.date || latestWeight.recorded_at?.slice(0,10) || "?"}) | Target: 150 lb | Phase 1 cut to 21% BF`
+    : "  No recent weight logged"
+
+  // ── Today's schedule ───────────────────────────────────────────────────────
+  const DAY_MAP = { 0:"Sun", 1:"Mon", 2:"Tue", 3:"Wed", 4:"Thu", 5:"Fri", 6:"Sat" }
+  const todayKey = DAY_MAP[new Date().getDay()]
+  const PLAN_THEMES = {
+    Mon: "Chest & Triceps + Long Bike — Chest press, Incline press, Flys, Chin-ups (first), Pull-down, Lateral raise, Rear delt, Face pull, Triceps pulldown/overhead/pushdown, Hammer curls, Biceps reverse, Pallof press",
+    Tue: "Legs + Swim — Hip thrust 160lb, Leg press 220lb bilateral + 80lb left-only, KB RDL 70lb, Hip drive marches, Leg extension bilateral + left-only, Plank 60s, Dead bugs",
+    Wed: "Rest / Recovery — Tendon protocol only at home. Optional easy run at lunch (Zone 2, 1.5–2 miles max).",
+    Thu: "Back & Arms + Run — Chin-ups BW (first, 3×7 PR), Hanging leg raises, Cable row SA 200lb, Lat pulldown 180lb, Shoulder press 90lb (NEW), Inverted row, Straight arm pulldown, Biceps curl 80lb, Hammer curl 60lb, Suitcase carry 70lb",
+    Fri: "Legs Volume + Hip + Swim — Hip thrust 120lb, RDL 70lb, Back extension BW, Hamstring eccentric curl 45lb + extra left, Hip abduction 120lb, Hip adduction 90lb, KB swing, Pallof press, Russian twists, Cable crossover 40lb (last)",
+    Sat: "Long Swim — 50–60 min, 800–1200 yards, Zone 2",
+    Sun: "Long Run — Zone 2, current ceiling 4.4 miles (MTP protocol), no strength"
+  }
+  const todayPlan = PLAN_THEMES[todayKey] || "Rest"
+
+  // ── Today's nutrition ──────────────────────────────────────────────────────
+  const todayMeals = (mealRecords || []).filter(m => (m.date || "").slice(0, 10) === today)
+  const totalCal  = todayMeals.reduce((s, m) => s + (Number(m.calories) || m.total_calories || 0), 0)
+  const totalProt = todayMeals.reduce((s, m) => s + (Number(m.protein_g) || m.total_protein_g || 0), 0)
+  const mealLines = todayMeals.length
+    ? todayMeals.map(m => {
+        const name = m.preset_name || m.meal_type || m.meal || "meal"
+        const cal = Number(m.calories) || m.total_calories || 0
+        const prot = Number(m.protein_g) || m.total_protein_g || 0
+        return `  ${name}: ${cal} cal, ${prot}g protein`
+      }).join("\n")
+    : "  Nothing logged yet today"
+  const protRemaining = Math.max(0, (liftConfig?.protein_target_g ?? 140) - totalProt)
+  const calRemaining = Math.max(0, (liftConfig?.fat_loss_target ?? 1700) - totalCal)
+  const nutritionSummary = todayMeals.length
+    ? `  Total: ${totalCal} cal (${calRemaining} remaining) | ${Math.round(totalProt)}g protein (${Math.round(protRemaining)}g remaining)`
+    : "  No meals logged yet today — log breakfast, lunch, dinner for Apple Watch calibration"
+
+  // ── Upcoming races ─────────────────────────────────────────────────────────
   const upcomingRaces = (raceCalendar || [])
     .filter(r => r.date >= today)
-    .slice(0, 6)
-    .map(r => `  ${r.date}: ${r.name} (${r.dist_mi} mi, ${r.city}) — ${r.note}`)
-    .join("\n") || "  None"
-  // Build today's nutrition summary from meal records
-  const todayMeals = (mealRecords || []).filter(m => (m.date || "").slice(0, 10) === today)
-  const totalCal  = todayMeals.reduce((s, m) => s + (m.total_calories  || 0), 0)
-  const totalProt = todayMeals.reduce((s, m) => s + (m.total_protein_g || 0), 0)
-  const totalCarb = todayMeals.reduce((s, m) => s + (m.total_carbs_g   || 0), 0)
-  const totalFat  = todayMeals.reduce((s, m) => s + (m.total_fat_g     || 0), 0)
-  const mealLines = todayMeals.length
-    ? todayMeals.map(m => `  ${m.meal}: ${m.total_calories} cal, ${m.total_protein_g}g prot — ${(m.items||[]).join(", ")}`).join("\n")
-    : "  Nothing logged yet today"
-  const nutritionSummary = todayMeals.length
-    ? `Total: ${totalCal} cal | ${totalProt}g protein | ${totalCarb}g carbs | ${totalFat}g fat`
-    : "No meals logged yet today"
+    .slice(0, 4)
+    .map(r => {
+      const daysOut = Math.round((new Date(r.date) - new Date(today)) / 86400000)
+      return `  ${r.date} (${daysOut}d): ${r.name} — ${r.dist_mi} mi`
+    })
+    .join("\n") || "  None upcoming"
 
-  return `=== CURRENT STATE (${today}) ===
+  const activeGoals = [
+    "  Pull-ups: transition from 3×7 chin-ups to pronated pull-ups; target 3×6 pull-ups by July 2026",
+    "  Chest: chest press 135–145 lb and incline press 110–120 lb by September",
+    "  Shoulder press: progress 90 lb plate-loaded toward 130–140 lb by September",
+    "  Posterior chain: RDL toward 110–120 lb by September for half marathon miles 10–13",
+    "  Cut: Phase 1 target 21% body fat while preserving lean mass and protein compliance"
+  ].join("\n")
+
+  return `=== LIVE STATE SNAPSHOT — ${dayName} ${today} ===
+
+READINESS
 ${tsbLine}
-Risk zone: TSB < -7 AND 14d load > 700
+${riskFlag}
 
-=== ACTIVE OC ISSUES ===
+TODAY'S SCHEDULE (${dayName})
+  ${todayPlan}
+
+LAST LOGGED SESSION
+${lastSessionLine}
+
+THIS WEEK'S LOAD
+${weekLine}
+
+SLEEP
+${sleepLine}
+${sleepFlag}
+
+WEIGHT
+${weightLine}
+
+ACTIVE OC ISSUES
 ${ocLines}
 
-=== RECENT SESSIONS (last 60 days, newest first) ===
-${sessionLines}
-
-=== UPCOMING RACES ===
+UPCOMING RACES
 ${upcomingRaces}
 
-=== TODAY'S NUTRITION ===
+ACTIVE PROGRAM GOALS
+${activeGoals}
+
+TODAY'S NUTRITION
 ${mealLines}
 ${nutritionSummary}
-Targets: ${liftConfig?.fat_loss_target ?? 1700} cal/day | ${liftConfig?.protein_target_g ?? 140}g protein/day
+  Targets: ${liftConfig?.fat_loss_target ?? 1700} cal | ${liftConfig?.protein_target_g ?? 140}g protein
 
-=== LIFT CONFIG ===
-tau1: ${liftConfig?.tau1 ?? 27}d  tau2: ${liftConfig?.tau2 ?? 18}d
-BF%: ${liftConfig?.pct_fat ?? 25.4}% (DEXA ${liftConfig?.dexa_anchor_date ?? "2026-04-27"})
-Phase 1 target: 21% BF
-Protein target: ${liftConfig?.protein_target_g ?? 140} g/day`
+RECENT SESSIONS (last 30, newest first)
+${sessionLines}
+
+LIFT CONFIG
+  tau1: ${liftConfig?.tau1 ?? 27}d | tau2: ${liftConfig?.tau2 ?? 18}d
+  BF: ${liftConfig?.pct_fat ?? 25.4}% (DEXA 2026-04-27) | Phase 1 target: 21%
+  Run ceiling: 4.4 mi (MTP protocol) | Next race: St. Jude 10K 2026-09-19`
 }
 
 const FingerprintIcon = ({ size = 38 }) => {
@@ -12886,7 +13013,7 @@ const FingerprintIcon = ({ size = 38 }) => {
   )
 }
 
-function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, onLogMtp, onLogWeight, onLogExercise, onLogRun, onLogMeal, biometricRecords, sleepRecords, setSleepRecords, mealRecords }) {
+function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, onLogMtp, onLogWeight, onLogExercise, onLogRun, onLogMeal, biometricRecords, sleepRecords, setSleepRecords, mealRecords, readinessScore, schedLog }) {
   const [isOpen, setIsOpen] = React.useState(false)
   const [messages, setMessages] = React.useState(() => {
     try { return JSON.parse(localStorage.getItem(TRAINER_STORAGE_KEY) || "[]") } catch { return [] }
@@ -13217,7 +13344,7 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
       setInputValue("")
       return
     }
-    const context = assembleTrainerContext({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, mealRecords })
+    const context = assembleTrainerContext({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, mealRecords, sleepRecords, biometricRecords, schedLog, readinessScore })
     const userMsg = { role: "user", content: text, ts: Date.now() }
     const updatedMsgs = [...messages, userMsg]
     saveMessages(updatedMsgs)
@@ -21680,6 +21807,8 @@ return (
     sleepRecords={sleepRecords}
     setSleepRecords={setSleepRecords}
     mealRecords={mealRecords}
+    readinessScore={readinessScore}
+    schedLog={schedLog}
   />
   </>
   )
