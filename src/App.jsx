@@ -18880,12 +18880,18 @@ const overviewExplainButton = (key) => (
         updated = [...safeExisting, logEntry]
       }
 
-      await saveScheduleKey("wt-log", updated)
-      setSchedLog(updated)
+      // saveScheduleKey is scoped to TabSchedule — use store.set directly here
+      try { localStorage.setItem("wt-log", JSON.stringify(updated)) } catch {}
+      if (supabase && session?.user?.id) {
+        supabase.from("user_kv").upsert(
+          { user_id: session.user.id, key: "wt-log", value: updated, updated_at: new Date().toISOString() },
+          { onConflict: "user_id,key" }
+        ).catch(err => console.warn("[LIFT] trainerLogExercise wt-log sync failed:", err?.message))
+      }
     } catch (e) {
       console.warn("[Trainer] Exercise log error", e)
     }
-  }, [session, supabase, saveScheduleKey, setSchedLog])
+  }, [session, supabase])
 
   const trainerLogRun = React.useCallback(async ({ dist, dur, score, notes }) => {
     const today = new Date()
