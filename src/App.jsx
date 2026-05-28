@@ -484,30 +484,32 @@ const PLAN = {
     ],
     sections: [
       { h: "A — CHEST (HEAVY)", ex: [
-        { id:"chest_press_machine", name:"Chest Press", sub:"Technogym / machine", def:[mk(6,110),mk(6,110),mk(6,110)], note:"2-0-2 tempo · full ROM · 4–8 rep range" },
-        { id:"incline_chest_press", name:"Incline Chest Press", sub:"Smith machine · low angle", def:[mk(6,90),mk(6,90),mk(6,90)], note:"Low incline · shoulder-safe · heavy day" },
-        { id:"machine_flys", name:"Machine Flys", sub:"Cable or pec deck", def:[mk(8,30),mk(8,30),mk(8,30)], note:"Full stretch · controlled return · chest isolation" },
+        { id:"chest_press_machine", name:"Chest Press", sub:"Technogym / machine", def:[mk(6,110),mk(6,110),mk(6,110)], note:"2-0-2 tempo · full ROM · 4–8 rep range · primary chest metric: target 135–145 lb by September" },
+        { id:"incline_chest_press", name:"Incline Chest Press", sub:"Smith machine · low angle", def:[mk(6,90),mk(6,90),mk(6,90)], note:"Low incline · shoulder-safe · upper chest fullness · target 110–120 lb by September" },
+        { id:"machine_flys", name:"Machine Flys", sub:"Cable or pec deck", def:[mk(8,30),mk(8,30),mk(8,30)], note:"Full stretch · controlled return · chest isolation · go last in chest section" },
       ]},
-      { h: "B — PULL (LAT + BICEP BASE)", ex: [
+      { h: "B — PULL (CHIN-UPS FIRST WHILE FRESH)", ex: [
+        { id:"chinups", name:"Chin-ups", sub:"Bodyweight · full ROM · do before pulldown", def:[mk(7,"BW"),mk(7,"BW"),mk(7,"BW")], note:"Dead hang start · 3×7 PR confirmed 2026-05-27 · MUST be first in pull section · transition: replace 1 set/week with pronated pull-up grip · target 3×6 pull-ups by July" },
         { id:"pull_down_cable", name:"Pull Down", sub:"Cable straight-arm or heavy lat pulldown", def:[mk(8,160),mk(8,160),mk(8,160)], note:"Lat primary · Monday back volume · arms straight for straight-arm variant" },
-        { id:"chinups", name:"Chin-ups", sub:"Bodyweight · full ROM", def:[mk(6,"BW"),mk(6,"BW"),mk(6,"BW")], note:"Controlled descent · 3 sec lowering · currently 3×6 · transition: replace 1 set per week with pronated pull-up grip" },
       ]},
-      { h: "C — SHOULDER (HYPERTROPHY · replaces Wed volume)", ex: [
-        { id:"lateral_raise", name:"Lateral Raise", sub:"Cable or DB · 3×12–15", def:[mk(12,15),mk(12,15),mk(12,15)], note:"Controlled arc · no shrug" },
-        { id:"rear_delt_fly", name:"Rear Delt Fly", sub:"Reverse pec deck or incline DB", def:[mk(12,25),mk(12,25),mk(12,25)], note:"Squeeze at top" },
-        { id:"face_pull_er", name:"Face Pull / ER", sub:"Cable rope · neutral grip", def:[mk(15,45),mk(15,45)], note:"External rotation emphasis · shoulder health" },
+      { h: "C — SHOULDER (HYPERTROPHY)", ex: [
+        { id:"lateral_raise", name:"Lateral Raise", sub:"Cable or DB", def:[mk(12,15),mk(12,15),mk(12,15)], note:"Controlled arc · no shrug · shoulder width · target 22–25 lb by September" },
+        { id:"rear_delt_fly", name:"Rear Delt Fly", sub:"Reverse pec deck or incline DB", def:[mk(12,25),mk(12,25),mk(12,25)], note:"Squeeze at top · posterior cuff health" },
+        { id:"face_pull_er", name:"Face Pull / ER", sub:"Cable rope · neutral grip", def:[mk(15,45),mk(15,45)], note:"External rotation emphasis · shoulder health · maintain indefinitely" },
       ]},
-      { h: "D — ARMS", ex: [
-        { id:"triceps_pulldown", name:"Triceps Pulldown", sub:"Cable rope or bar", def:[mk(6,45),mk(6,25),mk(6,25)], note:"Elbows fixed · full extension" },
-        { id:"triceps_overhead", name:"Triceps Overhead", sub:"Cable or DB · long head stretch", def:[mk(8,30),mk(6,30)], note:"Full overhead extension · 4 sec eccentric" },
-        { id:"hammer_curl", name:"Hammer Curls", sub:"DB alternating · brachialis emphasis", def:[mk(5,55),mk(5,55),mk(5,55)], note:"Neutral grip · controlled" },
-        { id:"bicep_curl_heavy", name:"Biceps Curl", sub:"DB or BB · supinated", def:[mk(5,40),mk(5,40),mk(5,40)], note:"Full supination at top" },
-        { id:"bicep_curl_reverse", name:"Biceps Curl — Reverse", sub:"DB or cable · pronated grip", def:[mk(6,35),mk(6,35),mk(6,35)], note:"Brachioradialis and forearm extensor emphasis" },
-        { id:"cable_incline_pushdown", name:"Cable Incline Pushdown", sub:"Standing at angle · high-to-low cable", def:[mk(6,40),mk(6,40),mk(6,40)], note:"Hits sternal head · different angle from machine flys" },
+      { h: "D — TRICEPS (do before biceps — 65% of arm mass)", ex: [
+        { id:"triceps_pulldown", name:"Triceps Pulldown", sub:"Cable rope or bar", def:[mk(8,50),mk(8,50),mk(8,50)], note:"Elbows fixed · full extension · target 65–70 lb by September · primary arm size driver" },
+        { id:"triceps_overhead", name:"Triceps Overhead", sub:"Cable or DB · long head stretch", def:[mk(8,30),mk(8,30)], note:"Full overhead extension · 4 sec eccentric · long head stretch is the stimulus · target 45–50 lb" },
+        { id:"cable_incline_pushdown", name:"Cable Incline Pushdown", sub:"Standing at angle · high-to-low cable", def:[mk(6,40),mk(6,40),mk(6,40)], note:"Sternal head · 3rd triceps angle" },
       ]},
-      { h: "E — CORE + STABILITY", ex: [
+      { h: "E — BICEPS", ex: [
+        { id:"hammer_curl", name:"Hammer Curls", sub:"DB alternating · brachialis emphasis", def:[mk(6,55),mk(6,55),mk(6,55)], note:"Neutral grip · controlled · brachialis and brachioradialis" },
+        { id:"bicep_curl_heavy", name:"Biceps Curl", sub:"DB or BB · supinated", def:[mk(6,55),mk(6,55),mk(6,55)], note:"Full supination at top · Monday is lighter volume day vs Thursday heavy · keep at 55 lb" },
+        { id:"bicep_curl_reverse", name:"Biceps Curl — Reverse", sub:"DB or cable · pronated grip", def:[mk(6,35),mk(6,35),mk(6,35)], note:"Brachioradialis and forearm extensor emphasis · reduce or skip if wrist discomfort" },
+      ]},
+      { h: "F — CORE + STABILITY", ex: [
         { id:"pushup_plank_shoulder_touch", name:"Pushup Plank w/ Shoulder Touch", sub:"Bodyweight · anti-rotation", def:[mk("10e","BW"),mk("10e","BW")], note:"Hips level · touch opposite shoulder" },
-        { id:"pallof_press", name:"Pallof Press", sub:"Cable · split stance", def:[mk("10e",40),mk("10e",48)], note:"Anti-rotation isometric · exhale on press" },
+        { id:"pallof_press", name:"Pallof Press", sub:"Cable · split stance", def:[mk("10e",40),mk("10e",48)], note:"Anti-rotation isometric · exhale on press · 2× per week with Friday" },
       ]},
     ],
   },
