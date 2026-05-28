@@ -535,22 +535,24 @@ const PLAN = {
     ],
     sections: [
       { h: "Glutes / Hips", ex: [
-        { id:"t1", name:"Hip Thrust",              sub:"Smith machine",                def:[mk(10,115),mk(8,135),mk(8,165)],             note:"Full hip ext · pause at top · ribs down" },
+        { id:"t1", name:"Hip Thrust",              sub:"Smith machine",                def:[mk(8,160),mk(8,160),mk(8,160)],              note:"Full hip ext · pause at top · ribs down · 160 lb confirmed working load 2026-05-27" },
       ]},
       { h: "Posterior Chain", ex: [
-        { id:"t2", name:"Leg Press — Heel Drive",  sub:"Machine · endurance protocol", def:[mk(15,160),mk(15,160),mk(15,160)],           note:"Heels high · controlled · endurance mode" },
-        { id:"t3", name:"TB DL / KB RDL",          sub:"KB 50 lb interim",             def:[mk(10,50),mk(10,50),mk(10,50)],              note:"Hinge not squat · flat back" },
+        { id:"t2a", name:"Leg Press — Bilateral",  sub:"Machine · strength protocol",  def:[mk(6,220),mk(6,220),mk(6,220)],              note:"220 lb bilateral confirmed 2026-05-27 · full ROM · controlled descent" },
+        { id:"t2b", name:"Leg Press — Left Only",  sub:"Machine · MTP asymmetry protocol", def:[mk(6,80),mk(6,80)],                     note:"80 lb left leg only · 2 extra sets · closes 27% left leg deficit from DEXA · keep separate from bilateral sets" },
+        { id:"t3", name:"KB RDL",                  sub:"Kettlebell · hip hinge",       def:[mk(8,70),mk(8,70),mk(8,70)],                note:"70 lb confirmed 2026-05-27 · hinge not squat · flat back · progress toward 110–120 lb by September for HM posterior chain" },
       ]},
       { h: "Hip Stability", ex: [
-        { id:"t4", name:"Lateral Band Walk",       sub:"Green band · 2 laps (~60 ft)", def:[mk("2 laps","green"),mk("2 laps","green")],   note:"Maintain tension throughout" },
-        { id:"t5", name:"Hip Drive Marches",       sub:"Band · replaces leg curl",     def:[mk("10e","band"),mk("10e","band"),mk("10e","band")], note:"Pelvic neutral · don't let hip drop" },
+        { id:"t4", name:"Lateral Band Walk",       sub:"Green band · 2 laps (~60 ft)", def:[mk("2 laps","green"),mk("2 laps","green")],   note:"Maintain tension throughout · glute med activation" },
+        { id:"t5", name:"Hip Drive Marches",       sub:"Elastic band",                 def:[mk("10e","band"),mk("10e","band"),mk("10e","band")], note:"Pelvic neutral · don't let hip drop" },
       ]},
       { h: "Quads", ex: [
-        { id:"t6", name:"Leg Extension",           sub:"Machine",                      def:[mk(12,80),mk(12,80),mk(12,80)],              note:"Full extension · controlled" },
+        { id:"t6a", name:"Leg Extension — Bilateral", sub:"Machine",                   def:[mk(6,80),mk(6,80),mk(6,80)],                note:"Full extension · controlled · 80 lb bilateral confirmed" },
+        { id:"t6b", name:"Leg Extension — Left Only", sub:"Machine · MTP asymmetry protocol", def:[mk(6,40),mk(6,40)],                  note:"40 lb left leg only · 2 extra sets · MTP protocol asymmetry correction" },
       ]},
       { h: "Core", ex: [
         { id:"t7", name:"Plank",                   sub:"3×60 sec",                     def:[mk("60s","BW"),mk("60s","BW"),mk("60s","BW")], note:"Neutral spine · breathe" },
-        { id:"t8", name:"90/90 Deadbugs",          sub:"2×15 each side",               def:[mk("15e","BW"),mk("15e","BW")],               note:"Back flat · slow · controlled" },
+        { id:"t8", name:"90/90 Deadbugs",          sub:"3×30 reps",                    def:[mk(30,"BW"),mk(30,"BW"),mk(30,"BW")],         note:"Back flat · slow · controlled · 30 reps confirmed 2026-05-27" },
       ]},
     ],
   },
