@@ -600,24 +600,29 @@ const PLAN = {
       "Pre-Run Ankle Primer · 2×10 each side · Simple calf raise, bodyweight, flat floor · Activation only before the run · Do not use eccentric protocol here — save that for Tuesday · Skip if calf is acutely tight",
     ],
     sections: [
-      { h: "Back Primary", ex: [
-        { id:"th1", name:"Cable Row (mid) — Single Arm", sub:"Cable · mid-height · SA",   def:[mk(8,200),mk(8,200),mk(8,200)],           note:"Single-arm · scapula retraction · don't round · 8 reps confirmed 2026-05-27 · grip limit not back limit · use straps" },
-        { id:"th2", name:"Lat Pulldown",                 sub:"Machine or cable",           def:[mk(8,180),mk(8,180),mk(8,180)],           note:"Chest up · elbows to ribs · 2-1-2 · confirmed 180 lb session 2026-05-27" },
-        { id:"th3", name:"Straight Arm Pulldowns",       sub:"Cable · Wolverines · 40 lb", def:[mk(8,40),mk(8,40),mk(8,40)],               note:"Arms straight · lat isolation" },
-        { id:"th4", name:"Inverted Row",                 sub:"TRX or bar · 3–4 sets",      def:[mk(8,"BW"),mk(8,"BW"),mk(8,"BW")],         note:"Full ROM · chest to bar" },
+      { h: "Compound Pull — Fresh", ex: [
+        { id:"th10", name:"Chin-ups",                        sub:"Bodyweight · full ROM · do first while fresh", def:[mk(7,"BW"),mk(7,"BW"),mk(7,"BW")], note:"Dead hang start · 3×7 PR confirmed 2026-05-27 · transition: replace 1 set/week with pronated pull-up grip · target 3×6 pull-ups by July · add weight via belt once 3×10 BW consistent" },
+        { id:"th11", name:"Hanging Leg Raises",              sub:"Pull-up bar · stay on bar immediately after chin-ups", def:[mk(10,"BW"),mk(10,"BW"),mk(10,"BW")], note:"Posterior pelvic tilt at top · no swing · 2-sec hold · direct rectus abdominis work for pelvic tilt control miles 10–13 · progress: 10 → 15 reps → add 2.5 lb ankle weight" },
       ]},
-      { h: "Overhead Push", ex: [
-        { id:"th_sp", name:"Shoulder Press", sub:"PureStrength plate-loaded machine · 45 lb plate each side", def:[mk(8,90),mk(8,90),mk(8,90)], note:"90 lb total (45 per side) confirmed first session 2026-05-27 · neutral grip · full ROM · 2-0-2 tempo · progress +5 lb per side every 2–3 weeks when 3×8 clean · target 130–140 lb by September" },
+      { h: "Back Primary", ex: [
+        { id:"th1", name:"Cable Row (mid) — Single Arm",     sub:"Cable · mid-height · SA · use straps",   def:[mk(8,200),mk(8,200),mk(8,200)],           note:"Single-arm · scapula retraction · don't round · grip limit not back limit · use wrist straps" },
+        { id:"th2", name:"Lat Pulldown",                     sub:"Machine or cable",                       def:[mk(8,180),mk(8,180),mk(8,180)],           note:"Chest up · elbows to ribs · 2-1-2 · 180 lb confirmed 2026-05-27" },
+      ]},
+      { h: "Overhead Push — Pull Break", ex: [
+        { id:"th_sp", name:"Shoulder Press",                 sub:"PureStrength plate-loaded · 45 lb plate each side", def:[mk(8,90),mk(8,90),mk(8,90)], note:"90 lb total confirmed first session 2026-05-27 · push break lets lats recover · progress +5 lb/side every 2–3 weeks · target 130–140 lb by September" },
+      ]},
+      { h: "Back Auxiliary", ex: [
+        { id:"th4", name:"Inverted Row",                     sub:"TRX or bar · 3–4 sets",                  def:[mk(8,"BW"),mk(8,"BW"),mk(8,"BW")],        note:"Full ROM · chest to bar" },
+        { id:"th3", name:"Straight Arm Pulldowns",           sub:"Cable · Wolverines · 40 lb",             def:[mk(8,40),mk(8,40),mk(8,40)],              note:"Arms straight · lat isolation" },
       ]},
       { h: "Biceps", ex: [
-        { id:"th5", name:"Biceps Curl",                      sub:"DB or barbell · palms up", def:[mk(6,80),mk(6,80),mk(6,80)],              note:"No sway · full elbow extension · heavy day" },
-        { id:"th6", name:"Cable D2 Flexion",                sub:"Cable · unsheathing sword", def:[mk(8,"—"),mk(8,"—"),mk(8,"—")],           note:"Full diagonal ROM · controlled" },
-        { id:"th8", name:"Hammer Curl",                     sub:"DB alternating",             def:[mk(6,60),mk(6,60),mk(6,60)],              note:"Neutral grip · full ROM" },
+        { id:"th5", name:"Biceps Curl",                      sub:"DB or barbell · palms up",               def:[mk(6,80),mk(6,80),mk(6,80)],              note:"No sway · full elbow extension · heavy day · 80 lb confirmed 2026-05-27" },
+        { id:"th8", name:"Hammer Curl",                      sub:"DB alternating",                         def:[mk(6,60),mk(6,60),mk(6,60)],              note:"Neutral grip · full ROM · 60 lb confirmed 2026-05-27" },
+        { id:"th6", name:"Cable D2 Flexion",                 sub:"Cable · unsheathing sword",              def:[mk(6,10),mk(6,10),mk(6,10)],              note:"Full diagonal ROM · controlled · 10 lb first session" },
+        { id:"th_rbc", name:"Reverse Bicep Curl",            sub:"Cable · palms down",                     def:[mk(6,40),mk(6,40),mk(6,40)],              note:"Forearm and brachioradialis · 40 lb" },
       ]},
       { h: "Core", ex: [
-        { id:"th9", name:"Suitcase Carry", sub:"DB · 2 laps each arm (~30 ft/lap)", def:[mk("2 laps",70),mk("2 laps",70)], note:"Upright · no lateral lean · core braced · 70 lb confirmed 2026-05-27" },
-        { id:"th10", name:"Chin-ups", sub:"bodyweight · full ROM",  def:[mk(7,"BW"),mk(7,"BW"),mk(7,"BW")], note:"Dead hang start · 3×7 PR confirmed 2026-05-27 when moved to first exercise · transition: replace 1 set per week with pronated pull-up grip · target 3×6 pull-ups by July · add weight via belt once 3×10 BW consistent" },
-        { id:"th11", name:"Hanging Leg Raises", sub:"Pull-up bar · stay on bar immediately after chin-ups", def:[mk(10,"BW"),mk(10,"BW"),mk(10,"BW")], note:"Posterior pelvic tilt at top · no swing · 2-sec hold at top · zero equipment transition from chin-ups · direct rectus abdominis work for pelvic tilt control miles 10–13 · progress: 10 → 15 reps → add 2.5 lb ankle weight" },
+        { id:"th9", name:"Suitcase Carry",                   sub:"DB · 2 laps each arm (~30 ft/lap)",      def:[mk("2 laps",70),mk("2 laps",70)],         note:"Upright · no lateral lean · core braced · 70 lb confirmed 2026-05-27" },
       ]},
     ],
   },
