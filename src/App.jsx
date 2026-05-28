@@ -13414,6 +13414,19 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
     const updatedMsgs = [...messages, userMsg]
     saveMessages(updatedMsgs)
     setInputValue("")
+
+    // Pre-detect session log intent immediately — before API call
+    // This ensures pendingAction is set before user can type Y
+    const earlyIntent = detectWriteIntent(text, "")
+    if (earlyIntent && earlyIntent.type === "full_session") {
+      setPendingAction(earlyIntent)
+      // Show the confirmation prompt without hitting the API
+      const previewMsg = { role: "assistant", content: earlyIntent.preview, ts: Date.now() }
+      saveMessages([...updatedMsgs, previewMsg])
+      setIsLoading(false)
+      return
+    }
+
     setIsLoading(true)
     const apiMessages = updatedMsgs.map(m => ({
       role: m.role === "user" ? "user" : "assistant",
