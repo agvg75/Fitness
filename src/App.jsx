@@ -13361,7 +13361,15 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
       }
       if (totalMinutes != null && totalMinutes >= 60 && totalMinutes <= 720) {
         const hrs = (totalMinutes / 60).toFixed(1)
-        const today = new Date().toISOString().slice(0, 10)
+        // Try to extract an explicit date from the message first
+        const explicitDateMatch = userText.match(/(\d{4}-\d{2}-\d{2})/)
+        const yesterdayStr = new Date(Date.now() - 86400000).toISOString().slice(0, 10)
+        const dayBeforeStr = new Date(Date.now() - 172800000).toISOString().slice(0, 10)
+        const hasLastNight = /\b(last night|yesterday|tuesday night|monday night|wednesday night|thursday night|friday night|saturday night|sunday night)\b/i.test(userText)
+        const today = explicitDateMatch
+          ? explicitDateMatch[1]
+          : hasLastNight ? yesterdayStr : new Date().toISOString().slice(0, 10)
+        const day = DAY_KEYS_BY_JS_DAY[new Date(today + 'T12:00:00').getDay()]
         return {
           type: "sleep",
           payload: {
