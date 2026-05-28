@@ -15585,6 +15585,27 @@ useEffect(() => {
     // Load from localStorage first
     const wo = await store.get("ufd-workouts")
     const lg = await store.get("wt-log")
+    // Merge remote wt-log with local — keep whichever has more entries
+    // This prevents Supabase from overwriting locally-written trainer sessions
+    const localLg = (() => { try { return JSON.parse(localStorage.getItem("wt-log") || "[]") } catch { return [] } })()
+    const remoteLg = Array.isArray(lg) ? lg : []
+    const mergedLg = (() => {
+      const byId = new Map()
+      remoteLg.forEach(e => { if (e?.id) byId.set(String(e.id), e) })
+      localLg.forEach(e => { if (e?.id) byId.set(String(e.id), e) }) // local wins on conflict
+      return [...byId.values()].sort((a,b) => String(a.date||"").localeCompare(String(b.date||"")))
+    })()
+    const lgToUse = mergedLg.length >= remoteLg.length ? mergedLg : remoteLg
+    // Write merged back to localStorage and Supabase if we gained entries
+    if (lgToUse.length > remoteLg.length) {
+      try { localStorage.setItem("wt-log", JSON.stringify(lgToUse)) } catch {}
+      if (supabase && session?.user?.id) {
+        supabase.from("user_kv").upsert(
+          { user_id: session.user.id, key: "wt-log", value: lgToUse, updated_at: new Date().toISOString() },
+          { onConflict: "user_id,key" }
+        ).catch(err => console.warn("[LIFT] wt-log merge sync failed:", err?.message))
+      }
+    }
     const ocLocal = await store.get("oc-items")
     const hfLocal = await store.get("lift_healthfit_daily") || await store.get("healthfit-daily")
     const dedupedWorkouts = dedupeUfdWorkouts(wo)
@@ -15646,7 +15667,7 @@ useEffect(() => {
           }
           const sbLg = data.find(r => r.key === "wt-log")?.value
           if (Array.isArray(sbLg)) {
-            const local = Array.isArray(lg) ? lg : []
+            const local = Array.isArray(lgToUse) ? lgToUse : []
             const merged = Object.values(
               [...local, ...sbLg].reduce((acc, e) => { acc[e.id] = e; return acc }, {})
             ).sort((a, b) => b.id - a.id)
@@ -15658,14 +15679,14 @@ useEffect(() => {
             console.log("Readiness workout source update", operationalWorkoutUpdateRef.current)
             setSchedLog(merged)
             await store.set("wt-log", merged)
-          } else if (Array.isArray(lg)) {
+          } else if (Array.isArray(lgToUse)) {
             operationalWorkoutUpdateRef.current = {
               source: "local:wt-log",
-              newestDate: getNewestWorkoutLikeDate(buildScheduleCardioWorkoutsFromLog(lg)),
-              count: lg.length
+              newestDate: getNewestWorkoutLikeDate(buildScheduleCardioWorkoutsFromLog(lgToUse)),
+              count: lgToUse.length
             }
             console.log("Readiness workout source update", operationalWorkoutUpdateRef.current)
-            setSchedLog(lg)
+            setSchedLog(lgToUse)
           }
           // Merge oc-items
           const sbOc = data.find(r => r.key === "oc-items")?.value
