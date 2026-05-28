@@ -13206,6 +13206,59 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
       }
     }
 
+    // Full session log detection — multi-exercise strength session summary
+    const isFullSessionLog = userText.includes("SESSION LOG") ||
+      (userText.includes("session") && /\d+×\d+\s*@/.test(userText)) ||
+      (/\b(chin.ups|cable row|lat pull|hip thrust|leg press|chest press)\b/i.test(userText) &&
+       /\d+\s*×\s*\d+/.test(userText) && userText.length > 150)
+
+    if (isFullSessionLog) {
+      // Extract date from the session log text
+      const dateMatch = userText.match(/Date:\s*(\d{4}-\d{2}-\d{2})/)
+      const dayMatch = userText.match(/\b(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b/i)
+      const typeMatch = userText.match(/Type:\s*([^\n]+)/)
+
+      const sessionDate = dateMatch ? dateMatch[1] : new Date().toISOString().slice(0, 10)
+      const dayKey = dayMatch ? dayMatch[1].slice(0, 3).toUpperCase() : DAY_KEYS_BY_JS_DAY[new Date().getDay()]
+      const sessionType = typeMatch ? typeMatch[1].trim() : "Strength"
+
+      // Parse exercises: lines matching "Name: SxR @ L" or "Name: S×R @ L"
+      const exerciseLines = userText.match(/^(.+?):\s*(\d+)[×x](\d+)\s*@\s*([\w.]+)/gmi) || []
+      const exercises = exerciseLines.map((line, i) => {
+        const m = line.match(/^(.+?):\s*(\d+)[×x](\d+)\s*@\s*([\w.]+)/i)
+        if (!m) return null
+        return {
+          id: `trainer_ex_${Date.now()}_${i}`,
+          n: m[1].trim(),
+          sets: m[2],
+          reps: m[3],
+          load: m[4],
+          notes: "Logged via LIFT Trainer"
+        }
+      }).filter(Boolean)
+
+      // Parse cardio entries
+      const cardioLines = []
+      const swimMatch = userText.match(/Pool Swim[^\n]*(\d+)\s*yards?.*?(\d+:\d+)/i)
+      if (swimMatch) cardioLines.push({ modality: "swim", distance: swimMatch[1] + "yd", duration: swimMatch[2] })
+      const runMatch = userText.match(/Run[^\n]*?([\d.]+)\s*miles?/i)
+      if (runMatch) cardioLines.push({ modality: "run", distance: runMatch[1] })
+
+      if (exercises.length > 0 || cardioLines.length > 0) {
+        return {
+          type: "full_session",
+          payload: {
+            date: sessionDate,
+            day: dayKey,
+            sessionType,
+            exercises,
+            cardio: cardioLines
+          },
+          preview: `Log ${sessionType} session (${exercises.length} exercises${cardioLines.length ? " + " + cardioLines.length + " cardio" : ""}) for ${sessionDate}. Confirm with Y.`
+        }
+      }
+    }
+
     // Meal detection — preset phrases and dinner/custom descriptions
     // Guard: skip meal detection entirely for session logs and data queries
     const isSessionLog = userText.includes("SESSION LOG") ||
@@ -13451,6 +13504,60 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
           ts: Date.now()
         }
         saveMessages([...messages, confirmMsg])
+      } else if (pendingAction.type === "full_session") {
+        const { date, day, sessionType, exercises, cardio } = pendingAction.payload
+        const logEntry = {
+          id: `trainer_session_${Date.now()}`,
+          session_id: `trainer_${Date.now()}`,
+          logged_at: new Date().toISOString(),
+          date,
+          day,
+          dayLabel: day,
+          venue: "trainer",
+          venue_label: "Logged via Trainer",
+          program: sessionType,
+          rpe: null,
+          exercises,
+          tendon_work: [],
+          cardio,
+          stretch_completed: false,
+          warmup_completed: false,
+          source: "LIFT Trainer"
+        }
+        try {
+          const existing = JSON.parse(localStorage.getItem("wt-log") || "[]")
+          const safeExisting = Array.isArray(existing) ? existing : []
+          // Merge with any existing trainer entry for same date
+          const existingIdx = safeExisting.findIndex(e =>
+            (e.date||"").slice(0,10) === date && e.source === "LIFT Trainer" && e.day === day
+          )
+          let updated
+          if (existingIdx >= 0) {
+            const prev = safeExisting[existingIdx]
+            updated = safeExisting.map((e, i) => i === existingIdx ? {
+              ...e,
+              exercises: [...(prev.exercises||[]), ...exercises],
+              cardio: [...(prev.cardio||[]), ...cardio]
+            } : e)
+          } else {
+            updated = [...safeExisting, logEntry]
+          }
+          localStorage.setItem("wt-log", JSON.stringify(updated))
+          if (supabase && session?.user?.id) {
+            supabase.from("user_kv").upsert(
+              { user_id: session.user.id, key: "wt-log", value: updated, updated_at: new Date().toISOString() },
+              { onConflict: "user_id,key" }
+            ).catch(err => console.warn("[LIFT] full_session wt-log sync failed:", err?.message))
+          }
+          const confirmMsg = {
+            role: "assistant",
+            content: `Session logged: ${exercises.length} exercises for ${date} (${day}). Log count updated.${cardio.length ? ` Cardio: ${cardio.map(c=>c.modality+' '+c.distance).join(", ")}.` : ""}`,
+            ts: Date.now()
+          }
+          saveMessages([...messages, confirmMsg])
+        } catch (e) {
+          console.warn("[LIFT] full_session log error", e)
+        }
       } else if (pendingAction.type === "exercise" && onLogExercise) {
         await onLogExercise(pendingAction.payload.name, pendingAction.payload.day)
         const confirmMsg = { role: "assistant", content: `"${pendingAction.payload.name}" added to today's (${pendingAction.payload.day}) schedule.
