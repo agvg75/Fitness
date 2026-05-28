@@ -13207,6 +13207,12 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
     }
 
     // Meal detection — preset phrases and dinner/custom descriptions
+    // Guard: skip meal detection entirely for session logs and data queries
+    const isSessionLog = userText.includes("SESSION LOG") ||
+      userText.includes("session log") ||
+      /\b(sets|reps|BW|lbs? @|lb @|\d+×\d+|TRIMP|yards|SWOLF)\b/i.test(userText)
+    const isStatsQuery = /\b(how much|how many|what is my|what are my|tell me my|show me my)\b/i.test(userText) &&
+      /\b(protein|calories|cal|sleep|tsb|readiness|weight|miles|steps|load|session|workout|run)\b/i.test(userText)
     const WORKOUT_MARKERS = ["sets", "reps", "BW", "yards", "TRIMP", "session log", "SESSION LOG", "lb @", "×"]
     const FOOD_MARKERS = ["breakfast", "lunch", "dinner", "snack", "ate", "eating", "calories", "protein", "carbs", "grams", "kcal"]
     const lowerUserText = userText.toLowerCase()
@@ -13214,7 +13220,7 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
       userText.includes(marker) || lowerUserText.includes(marker.toLowerCase())
     )
     const hasFoodContext = FOOD_MARKERS.some(marker => lowerUserText.includes(marker))
-    if (!hasWorkoutContext && hasFoodContext) {
+    if (!isSessionLog && !isStatsQuery && !hasWorkoutContext && hasFoodContext) {
       const presets = liftConfig?.MEAL_PRESETS || {}
       // Preset detection — "usual breakfast", "my usual lunch", etc.
       for (const [key, preset] of Object.entries(presets)) {
