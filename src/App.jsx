@@ -15376,22 +15376,38 @@ useEffect(() => {
     setStoreUser(session?.user?.id || null)
 
     ;(async () => {
-      const storedMeals = await store.get("ufd-meal-entries")
+      // Load from Supabase user_kv first (most authoritative cross-device source)
+      const supabaseMeals = await store.get("ufd-meal-entries")
+      // Load from localStorage (most recent writes from this device)
       const localMeals = (() => { try { return JSON.parse(localStorage.getItem("ufd-meal-entries") || "[]") } catch { return [] } })()
+
       const mergedMeals = (() => {
-        const base = Array.isArray(storedMeals) ? storedMeals : []
+        const remote = Array.isArray(supabaseMeals) ? supabaseMeals : []
         const local = Array.isArray(localMeals) ? localMeals : []
         const byId = new Map()
-        base.forEach(e => { if (e?.id) byId.set(String(e.id), e) })
-        local.forEach(e => { if (e?.id) byId.set(String(e.id), e) }) // local wins on conflict
+        // Remote first (Supabase has cross-device writes)
+        remote.forEach(e => { if (e?.id) byId.set(String(e.id), e) })
+        // Local overwrites remote on conflict (most recent device write wins)
+        local.forEach(e => { if (e?.id) byId.set(String(e.id), e) })
         return [...byId.values()].sort((a, b) => String(a.date).localeCompare(String(b.date)))
       })()
+
       if (mergedMeals.length > 0) {
         setMealEntries(mergedMeals)
-        // Write merged back to both stores so Supabase catches up
-        try { await store.set("ufd-meal-entries", mergedMeals) } catch {}
-      } else if (Array.isArray(storedMeals) && storedMeals.length > 0) {
-        setMealEntries(storedMeals)
+        // Write merged set back to localStorage so this device has everything
+        try { localStorage.setItem("ufd-meal-entries", JSON.stringify(mergedMeals)) } catch {}
+        // Write merged set back to Supabase user_kv if we have a session
+        if (session?.user?.id && supabase) {
+          supabase.from("user_kv").upsert(
+            { user_id: session.user.id, key: "ufd-meal-entries", value: mergedMeals, updated_at: new Date().toISOString() },
+            { onConflict: "user_id,key" }
+          ).then(({ error }) => {
+            if (error) console.warn("[LIFT] Load-time meal merge sync failed:", error.message)
+            else if (process.env.NODE_ENV === "development") console.log("[LIFT] Load-time meal merge synced:", mergedMeals.length, "entries")
+          })
+        }
+      } else if (Array.isArray(supabaseMeals) && supabaseMeals.length > 0) {
+        setMealEntries(supabaseMeals)
       }
       const storedPresets = await store.get("ufd-meal-presets")
       if (storedPresets && typeof storedPresets === "object") {
@@ -16222,38 +16238,57 @@ async function loadMealsFromSupabase(userId) {
   setMealEntries(rows)
 }
 async function persistMealEntries(nextEntries, currentUserId) {
+  // Step 1: write to localStorage immediately — always succeeds, zero latency
   try {
     localStorage.setItem("ufd-meal-entries", JSON.stringify(nextEntries))
   } catch (lsErr) {
-    if (process.env.NODE_ENV === "development") console.error("[LIFT] localStorage meal write failed:", lsErr)
+    console.warn("[LIFT] localStorage meal write failed:", lsErr)
   }
 
+  // Step 2: update React state
   setMealEntries(nextEntries)
 
+  // Step 3: sync to Supabase user_kv using the passed-in userId
+  // Uses currentUserId directly — bypasses STORE_USER_ID race condition
   if (!currentUserId) {
-    if (process.env.NODE_ENV === "development") console.log("[LIFT] No active session, meals saved locally only.")
+    showToast("Meal saved locally (not signed in)")
+    return
+  }
+
+  if (!supabase) {
+    showToast("Meal saved locally (no Supabase connection)")
     return
   }
 
   try {
-    const { error } = await supabase.from("user_kv").upsert(
-      { user_id: currentUserId, key: "ufd-meal-entries", value: nextEntries, updated_at: new Date().toISOString() },
-      { onConflict: "user_id,key" }
-    )
+    const { error } = await supabase
+      .from("user_kv")
+      .upsert(
+        {
+          user_id: currentUserId,
+          key: "ufd-meal-entries",
+          value: nextEntries,
+          updated_at: new Date().toISOString()
+        },
+        { onConflict: "user_id,key" }
+      )
+
     if (error) {
-      if (process.env.NODE_ENV === "development") console.warn("[LIFT] Meal user_kv sync failed:", error.message)
-      showToast("Meal saved locally. Cloud sync pending.")
+      console.warn("[LIFT] Meal user_kv sync failed:", error.message, error.code)
+      showToast("Meal saved locally — cloud sync failed: " + (error.message || "unknown error"))
     } else {
+      showToast("Meal saved and synced ✓")
       if (process.env.NODE_ENV === "development") console.log("[LIFT] Meal user_kv sync OK, entries:", nextEntries.length)
     }
   } catch (networkErr) {
-    if (process.env.NODE_ENV === "development") console.warn("[LIFT] Meal sync network error:", networkErr.message)
-    showToast("Meal saved locally. Cloud sync pending.")
+    console.warn("[LIFT] Meal sync network error:", networkErr?.message)
+    showToast("Meal saved locally — cloud sync pending (network error)")
   }
 
+  // Step 4: also attempt the meals table sync for secondary storage (non-blocking)
   pendingMealSyncRef.current = { entries: nextEntries, userId: currentUserId, promise: null }
   flushPendingMealSync().catch(err => {
-    if (process.env.NODE_ENV === "development") console.error("[LIFT] meals table sync failed:", err)
+    if (process.env.NODE_ENV === "development") console.warn("[LIFT] meals table sync failed:", err?.message)
   })
 }
   async function persistMealPresets(nextPresets) {
