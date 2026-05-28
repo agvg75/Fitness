@@ -15335,8 +15335,24 @@ useEffect(() => {
           const local = Array.isArray(localSleep) ? localSleep : []
           const byId = new Map()
           remote.forEach(e => { if (e?.sleep_id) byId.set(String(e.sleep_id), e) })
-          local.forEach(e => { if (e?.sleep_id) byId.set(String(e.sleep_id), e) }) // local wins
-          return [...byId.values()].sort((a,b) => String(a.date||"").localeCompare(String(b.date||"")))
+          local.forEach(e => { if (e?.sleep_id) byId.set(String(e.sleep_id), e) }) // local wins by id
+          // Additionally deduplicate by date — keep the local/most recent entry per date
+          const byDate = new Map()
+          // Remote entries first (lower priority)
+          remote.forEach(e => { const d = (e.date||e.start_at||'').slice(0,10); if (d) byDate.set(d + '_' + (e.source||''), e) })
+          // Local entries override by date+source
+          local.forEach(e => { const d = (e.date||e.start_at||'').slice(0,10); if (d) byDate.set(d + '_' + (e.source||''), e) })
+          // Merge: use byDate for trainer entries (deduplicated per day), byId for Apple Health (may have multiple per day legitimately)
+          const trainerDates = new Set([...byDate.values()].filter(e => e.source === 'trainer').map(e => (e.date||e.start_at||'').slice(0,10)))
+          const deduped = [...byId.values()].filter(e => {
+            const d = (e.date||e.start_at||'').slice(0,10)
+            if (e.source === 'trainer' && trainerDates.has(d)) {
+              // Only keep the byDate winner for trainer entries
+              return byDate.get(d + '_trainer') === e
+            }
+            return true
+          })
+          return deduped.sort((a,b) => String(a.date||"").localeCompare(String(b.date||"")))
         })()
         if (mergedSleep.length > 0) {
           try { localStorage.setItem("lift_sleep_records", JSON.stringify(mergedSleep)) } catch {}
