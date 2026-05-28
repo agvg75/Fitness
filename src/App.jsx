@@ -13030,6 +13030,7 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
   const inputRef = React.useRef(null)
   const imageInputRef = React.useRef(null)
   const [pendingAction, setPendingAction] = React.useState(null)
+  const pendingActionRef = React.useRef(null)
   // pendingAction shape: { type: "mtp"|"weight"|"exercise"|"run"|"meal", payload: object, preview: string } | null
   const apiKey = typeof ANTHROPIC_API_KEY !== "undefined"
     ? ANTHROPIC_API_KEY
@@ -13416,13 +13417,14 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
     setInputValue("")
 
     // Pre-detect session log intent immediately — before API call
-    // This ensures pendingAction is set before user can type Y
     const earlyIntent = detectWriteIntent(text, "")
     if (earlyIntent && earlyIntent.type === "full_session") {
+      // Store intent in a ref so handleConfirmAction always sees current value
+      pendingActionRef.current = earlyIntent
       setPendingAction(earlyIntent)
-      // Show the confirmation prompt without hitting the API
       const previewMsg = { role: "assistant", content: earlyIntent.preview, ts: Date.now() }
       saveMessages([...updatedMsgs, previewMsg])
+      setInputValue("")
       setIsLoading(false)
       return
     }
@@ -13484,7 +13486,10 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
       saveMessages(finalMsgs)
       // Detect write intent from user message + assistant response
       const intent = detectWriteIntent(text, assistantText)
-      if (intent) setPendingAction(intent)
+      if (intent) {
+        pendingActionRef.current = intent
+        setPendingAction(intent)
+      }
     } catch (err) {
       saveMessages([...updatedMsgs, { role: "assistant", content: `Network error: ${err.message}`, ts: Date.now() }])
     } finally {
@@ -13493,20 +13498,21 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
   }
 
   const handleConfirmAction = async (userInput) => {
-    if (!pendingAction) return
+    const action = pendingAction || pendingActionRef.current
+    if (!action) return
     const confirmed = userInput.trim().toUpperCase() === "Y"
     if (confirmed) {
-      if (pendingAction.type === "mtp" && onLogMtp) {
-        await onLogMtp(pendingAction.payload.score)
-        const confirmMsg = { role: "assistant", content: `MTP score ${pendingAction.payload.score} logged.`, ts: Date.now() }
+      if (action.type === "mtp" && onLogMtp) {
+        await onLogMtp(action.payload.score)
+        const confirmMsg = { role: "assistant", content: `MTP score ${action.payload.score} logged.`, ts: Date.now() }
         saveMessages([...messages, confirmMsg])
-      } else if (pendingAction.type === "weight" && onLogWeight) {
-        await onLogWeight(pendingAction.payload.weight_lb)
-        const confirmMsg = { role: "assistant", content: `Body weight ${pendingAction.payload.weight_lb} lb logged.`, ts: Date.now() }
+      } else if (action.type === "weight" && onLogWeight) {
+        await onLogWeight(action.payload.weight_lb)
+        const confirmMsg = { role: "assistant", content: `Body weight ${action.payload.weight_lb} lb logged.`, ts: Date.now() }
         saveMessages([...messages, confirmMsg])
-      } else if (pendingAction.type === "run" && onLogRun) {
-        await onLogRun(pendingAction.payload)
-        const { dist, dur, score } = pendingAction.payload
+      } else if (action.type === "run" && onLogRun) {
+        await onLogRun(action.payload)
+        const { dist, dur, score } = action.payload
         const parts = []
         if (dist != null) parts.push(`${dist} mi`)
         if (dur  != null) parts.push(`${dur} min`)
@@ -13517,8 +13523,8 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
           ts: Date.now()
         }
         saveMessages([...messages, confirmMsg])
-      } else if (pendingAction.type === "full_session") {
-        const { date, day, sessionType, exercises, cardio } = pendingAction.payload
+      } else if (action.type === "full_session") {
+        const { date, day, sessionType, exercises, cardio } = action.payload
         const logEntry = {
           id: `trainer_session_${Date.now()}`,
           session_id: `trainer_${Date.now()}`,
@@ -13571,19 +13577,19 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
         } catch (e) {
           console.warn("[LIFT] full_session log error", e)
         }
-      } else if (pendingAction.type === "exercise" && onLogExercise) {
-        await onLogExercise(pendingAction.payload.name, pendingAction.payload.day)
-        const confirmMsg = { role: "assistant", content: `"${pendingAction.payload.name}" added to today's (${pendingAction.payload.day}) schedule.
+      } else if (action.type === "exercise" && onLogExercise) {
+        await onLogExercise(action.payload.name, action.payload.day)
+        const confirmMsg = { role: "assistant", content: `"${action.payload.name}" added to today's (${action.payload.day}) schedule.
 
 ── A) add sets/reps detail  R) suggest a similar exercise ──`, ts: Date.now() }
         saveMessages([...messages, confirmMsg])
-      } else if (pendingAction.type === "meal" && onLogMeal) {
-        await onLogMeal(pendingAction.payload)
-        const p = pendingAction.payload
+      } else if (action.type === "meal" && onLogMeal) {
+        await onLogMeal(action.payload)
+        const p = action.payload
         const confirmMsg = { role: "assistant", content: `${p.meal.charAt(0).toUpperCase() + p.meal.slice(1)} logged: ${p.total_calories} cal, ${p.total_protein_g}g protein, ${p.total_carbs_g}g carbs, ${p.total_fat_g}g fat.`, ts: Date.now() }
         saveMessages([...messages, confirmMsg])
-      } else if (pendingAction.type === "sleep") {
-        const newRecord = { ...pendingAction.payload }
+      } else if (action.type === "sleep") {
+        const newRecord = { ...action.payload }
         const existing = (() => {
           try { return JSON.parse(localStorage.getItem("lift_sleep_records") || "[]") } catch { return [] }
         })()
@@ -13611,16 +13617,18 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
           try { localStorage.setItem(TRAINER_STORAGE_KEY, JSON.stringify(updated.slice(-60))) } catch {}
           return updated
         })
+        pendingActionRef.current = null
         setPendingAction(null)
         setInputValue("")
         return
-      } else if (pendingAction.type === "meal_lookup") {
+      } else if (action.type === "meal_lookup") {
         // Nutrition lookup — fetch then confirm
         setIsLoading(true)
-        const items = await fetchMealNutrition(pendingAction.payload.description)
+        const items = await fetchMealNutrition(action.payload.description)
         setIsLoading(false)
         if (!items.length) {
           saveMessages([...messages, { role: "assistant", content: "Could not look up nutrition for that description. Try being more specific.", ts: Date.now() }])
+          pendingActionRef.current = null
           setPendingAction(null)
           return
         }
@@ -13633,7 +13641,7 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
         const mealRecord = {
           meal_id: `meal_${Date.now()}`, id: `meal_${Date.now()}`,
           date: today, timestamp: new Date().toISOString(),
-          meal: pendingAction.payload.mealType,
+          meal: action.payload.mealType,
           items, total_calories, total_protein_g, total_carbs_g, total_fat_g, total_fiber_g,
           source: "trainer"
         }
@@ -13641,8 +13649,9 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
         const lookupAction = {
           type: "meal",
           payload: mealRecord,
-          preview: `Log ${pendingAction.payload.mealType}:\n${itemLines}\nTotal: ${total_calories} cal, ${total_protein_g}g protein. Type Y to confirm or anything else to cancel.`
+          preview: `Log ${action.payload.mealType}:\n${itemLines}\nTotal: ${total_calories} cal, ${total_protein_g}g protein. Type Y to confirm or anything else to cancel.`
         }
+        pendingActionRef.current = lookupAction
         setPendingAction(lookupAction)
         return
       }
@@ -13650,13 +13659,14 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
       const cancelMsg = { role: "assistant", content: "Cancelled. Nothing was written.", ts: Date.now() }
       saveMessages([...messages, cancelMsg])
     }
+    pendingActionRef.current = null
     setPendingAction(null)
   }
 
   const handleKey = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
-      if (pendingAction) {
+      if (pendingAction || pendingActionRef.current) {
         handleConfirmAction(inputValue)
         setInputValue("")
       } else {
@@ -13854,7 +13864,7 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
               }}
             />
             <button
-              onClick={() => { if (pendingAction) { handleConfirmAction(inputValue); setInputValue("") } else { sendMessage() } }}
+              onClick={() => { if (pendingAction || pendingActionRef.current) { handleConfirmAction(inputValue); setInputValue("") } else { sendMessage() } }}
               disabled={isLoading || !inputValue.trim()}
               style={{
                 width: 34, height: 34, borderRadius: "50%", border: "none", cursor: isLoading || !inputValue.trim() ? "default" : "pointer",
