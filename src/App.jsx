@@ -13020,7 +13020,7 @@ const FingerprintIcon = ({ size = 38 }) => {
   )
 }
 
-function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, onLogMtp, onLogWeight, onLogExercise, onLogRun, onLogMeal, biometricRecords, sleepRecords, setSleepRecords, mealRecords, readinessScore, schedLog }) {
+function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, onLogMtp, onLogWeight, onLogExercise, onLogRun, onLogMeal, biometricRecords, sleepRecords, setSleepRecords, mealRecords, readinessScore, schedLog, setSchedLog }) {
   const [isOpen, setIsOpen] = React.useState(false)
   const [messages, setMessages] = React.useState(() => {
     try { return JSON.parse(localStorage.getItem(TRAINER_STORAGE_KEY) || "[]") } catch { return [] }
@@ -13513,8 +13513,8 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
         } catch(e) {
           console.warn("[LIFT] inline session log failed:", e)
         }
-        // Trigger app to re-read wt-log from localStorage without full page reload
-        window.dispatchEvent(new StorageEvent('storage', { key: 'wt-log', newValue: localStorage.getItem('wt-log') }))
+        // Update React state directly so Schedule tab count updates immediately
+        if (typeof setSchedLog === "function") setSchedLog(updated)
         setPendingAction(null)
       }
     } catch (err) {
@@ -22054,6 +22054,7 @@ return (
     mealRecords={mealRecords}
     readinessScore={readinessScore}
     schedLog={schedLog}
+    setSchedLog={setSchedLog}
   />
   </>
   )
