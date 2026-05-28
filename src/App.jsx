@@ -12905,7 +12905,13 @@ function assembleTrainerContext({ sessions60, ocItems, tsbData, raceCalendar, li
   const todayPlan = PLAN_THEMES[todayKey] || "Rest"
 
   // ── Today's nutrition ──────────────────────────────────────────────────────
-  const todayMeals = (mealRecords || []).filter(m => (m.date || "").slice(0, 10) === today)
+  // mealRecords uses the lift_meal_records schema; ufd-meal-entries is the primary source
+  // Read directly from localStorage to get the correct entries
+  const ufdEntries = (() => { try { return JSON.parse(localStorage.getItem("ufd-meal-entries") || "[]") } catch { return [] } })()
+  const todayMeals = [
+    ...ufdEntries.filter(m => (m.date || "").slice(0, 10) === today),
+    ...(mealRecords || []).filter(m => (m.date || "").slice(0, 10) === today)
+  ].filter((m, i, arr) => arr.findIndex(x => x.id === m.id) === i) // deduplicate by id
   const totalCal  = todayMeals.reduce((s, m) => s + (Number(m.calories) || m.total_calories || 0), 0)
   const totalProt = todayMeals.reduce((s, m) => s + (Number(m.protein_g) || m.total_protein_g || 0), 0)
   const mealLines = todayMeals.length
