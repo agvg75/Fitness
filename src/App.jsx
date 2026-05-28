@@ -601,13 +601,13 @@ const PLAN = {
     ],
     sections: [
       { h: "Back Primary", ex: [
-        { id:"th1", name:"Cable Row (mid) — Single Arm", sub:"Cable · mid-height · SA",   def:[mk(6,200),mk(6,200),mk(6,200)],           note:"Single-arm · scapula retraction · don't round · actual working load" },
-        { id:"th2", name:"Lat Pulldown",                 sub:"Machine or cable",           def:[mk("6-8",120),mk("6-8",120),mk("6-8",120)], note:"Chest up · elbows to ribs · 2-1-2" },
+        { id:"th1", name:"Cable Row (mid) — Single Arm", sub:"Cable · mid-height · SA",   def:[mk(8,200),mk(8,200),mk(8,200)],           note:"Single-arm · scapula retraction · don't round · 8 reps confirmed 2026-05-27 · grip limit not back limit · use straps" },
+        { id:"th2", name:"Lat Pulldown",                 sub:"Machine or cable",           def:[mk(8,180),mk(8,180),mk(8,180)],           note:"Chest up · elbows to ribs · 2-1-2 · confirmed 180 lb session 2026-05-27" },
         { id:"th3", name:"Straight Arm Pulldowns",       sub:"Cable · Wolverines · 40 lb", def:[mk(8,40),mk(8,40),mk(8,40)],               note:"Arms straight · lat isolation" },
         { id:"th4", name:"Inverted Row",                 sub:"TRX or bar · 3–4 sets",      def:[mk(8,"BW"),mk(8,"BW"),mk(8,"BW")],         note:"Full ROM · chest to bar" },
       ]},
       { h: "Overhead Push", ex: [
-        { id:"th_sp", name:"Shoulder Press", sub:"Technogym machine or DB seated", def:[mk(8,40),mk(8,40),mk(8,40)], note:"Neutral grip · full ROM · 2-0-2 tempo · the only vertical push in the program · progress +5 lb every 2–3 weeks when all 3×8 complete cleanly · target 65–75 lb by September" },
+        { id:"th_sp", name:"Shoulder Press", sub:"PureStrength plate-loaded machine · 45 lb plate each side", def:[mk(8,90),mk(8,90),mk(8,90)], note:"90 lb total (45 per side) confirmed first session 2026-05-27 · neutral grip · full ROM · 2-0-2 tempo · progress +5 lb per side every 2–3 weeks when 3×8 clean · target 130–140 lb by September" },
       ]},
       { h: "Biceps", ex: [
         { id:"th5", name:"Biceps Curl",                      sub:"DB or barbell · palms up", def:[mk(6,80),mk(6,80),mk(6,80)],              note:"No sway · full elbow extension · heavy day" },
@@ -615,8 +615,8 @@ const PLAN = {
         { id:"th8", name:"Hammer Curl",                     sub:"DB alternating",             def:[mk(6,60),mk(6,60),mk(6,60)],              note:"Neutral grip · full ROM" },
       ]},
       { h: "Core", ex: [
-        { id:"th9", name:"Suitcase Carry", sub:"DB 60 lb · 2 laps each arm (~30 ft/lap)", def:[mk("2 laps",60),mk("2 laps",60)], note:"Upright · no lateral lean · core braced" },
-        { id:"th10", name:"Chin-ups", sub:"bodyweight · full ROM",  def:[mk(6,"BW"),mk(6,"BW"),mk(6,"BW")], note:"Dead hang start · currently 3×6 unassisted · transition: replace 1 set per week with pronated pull-up grip · target 3×6 pull-ups by July · add weight via belt once 3×10 BW consistent" },
+        { id:"th9", name:"Suitcase Carry", sub:"DB · 2 laps each arm (~30 ft/lap)", def:[mk("2 laps",70),mk("2 laps",70)], note:"Upright · no lateral lean · core braced · 70 lb confirmed 2026-05-27" },
+        { id:"th10", name:"Chin-ups", sub:"bodyweight · full ROM",  def:[mk(7,"BW"),mk(7,"BW"),mk(7,"BW")], note:"Dead hang start · 3×7 PR confirmed 2026-05-27 when moved to first exercise · transition: replace 1 set per week with pronated pull-up grip · target 3×6 pull-ups by July · add weight via belt once 3×10 BW consistent" },
         { id:"th11", name:"Hanging Leg Raises", sub:"Pull-up bar · stay on bar immediately after chin-ups", def:[mk(10,"BW"),mk(10,"BW"),mk(10,"BW")], note:"Posterior pelvic tilt at top · no swing · 2-sec hold at top · zero equipment transition from chin-ups · direct rectus abdominis work for pelvic tilt control miles 10–13 · progress: 10 → 15 reps → add 2.5 lb ankle weight" },
       ]},
     ],
@@ -12728,7 +12728,7 @@ WEEKLY TRAINING STRUCTURE (KNR suspended — all sessions YMCA until September 2
 Monday: Chest & Triceps + Long Bike (YMCA) — Chest press, Incline press, Flys, Pull-down 170 lb, Chin-ups BW, Lateral raise, Rear delt fly, Face pull, Triceps pulldown/overhead/pushdown, Hammer curls, Biceps reverse, Pallof press
 Tuesday: Legs + Swim (YMCA) — Hip thrust, Leg press bilateral + left-only unilateral, KB RDL, Hip drive marches, Leg extension bilateral + left-only, Plank, Dead bugs
 Wednesday: Rest — tendon protocol only at home, no strength, no structured cardio
-Thursday: Back & Arms + Run (YMCA) — Cable row SA 200 lb, Lat pulldown 130 lb, Straight arm pulldown, Inverted row, Shoulder press [added May 2026], Biceps curl 80 lb, Hammer curl 60 lb, Suitcase carry, Chin-ups BW, Hanging leg raises [added May 2026]
+Thursday: Back & Arms + Run (YMCA) — Cable row SA 200 lb × 8r, Lat pulldown 180 lb × 8r, Straight arm pulldown, Inverted row, Shoulder press 90 lb plate-loaded, Biceps curl 80 lb, Hammer curl 60 lb, Suitcase carry 70 lb, Chin-ups BW × 7r, Hanging leg raises [added May 2026]
 Friday: Legs Volume + Hip + Swim (YMCA) — Cable crossover 40 lb, Hip abductor 120 lb, Hip adductor 90 lb, KB swing, Hip thrust, RDL 70 lb, Back extension [added May 2026], Hamstring eccentric curl 45 lb, Pallof press, Russian twists
 Saturday: Long swim (YMCA)
 Sunday: Long run — Zone 2 · MTP protocol applies
@@ -12739,7 +12739,8 @@ Chin-ups: BW × 6r unassisted, 3 sets on both Monday and Thursday — GOAL ACHIE
 Lateral raise: 15 lb × 8r | Rear delt fly: 25 lb × 8r | Face pull: 45 lb × 8r
 Triceps pulldown: 50 lb × 8r | Triceps overhead: 30 lb × 8r | Cable incline pushdown: 40 lb × 6r
 Biceps curl: 80 lb × 6r (Thu heavy) | Hammer curl: 60 lb × 6r | Biceps reverse: 35 lb × 6r
-Cable row SA: 200 lb × 6r | Lat pulldown: 130 lb × 5r | Shoulder press: 40 lb × 8r (new)
+Cable row SA: 200 lb × 8r | Lat pulldown: 180 lb × 8r | Shoulder press: 90 lb × 8r (plate-loaded, 45 lb per side, first session 2026-05-27)
+Chin-ups: BW × 7r (PR 2026-05-27, 3 sets) | Suitcase carry: 70 lb
 Hip thrust: 160 lb × 8r | Leg press bilateral: 220 lb × 6r | Leg press left-only: 80 lb × 6r
 Romanian deadlift: 70 lb × 8r | Hamstring eccentric curl: 45 lb × 8r
 Key imbalances: chest/pull ratio 0.84×BW vs 1.07×BW; bicep/tricep e1RM ratio 1.52:1 (target 1.0–1.2:1)
