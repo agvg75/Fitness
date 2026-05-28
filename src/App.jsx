@@ -13416,19 +13416,6 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
     saveMessages(updatedMsgs)
     setInputValue("")
 
-    // Pre-detect session log intent immediately — before API call
-    const earlyIntent = detectWriteIntent(text, "")
-    if (earlyIntent && earlyIntent.type === "full_session") {
-      // Store intent in a ref so handleConfirmAction always sees current value
-      pendingActionRef.current = earlyIntent
-      setPendingAction(earlyIntent)
-      const previewMsg = { role: "assistant", content: earlyIntent.preview, ts: Date.now() }
-      saveMessages([...updatedMsgs, previewMsg])
-      setInputValue("")
-      setIsLoading(false)
-      return
-    }
-
     setIsLoading(true)
     const apiMessages = updatedMsgs.map(m => ({
       role: m.role === "user" ? "user" : "assistant",
@@ -13486,9 +13473,46 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
       saveMessages(finalMsgs)
       // Detect write intent from user message + assistant response
       const intent = detectWriteIntent(text, assistantText)
-      if (intent) {
-        pendingActionRef.current = intent
-        setPendingAction(intent)
+      if (intent) setPendingAction(intent)
+      // Immediately handle full_session confirmation without waiting for next render
+      if (intent && intent.type === "full_session") {
+        const { date, day, sessionType, exercises, cardio } = intent.payload
+        const logEntry = {
+          id: `trainer_session_${Date.now()}`,
+          session_id: `trainer_${Date.now()}`,
+          logged_at: new Date().toISOString(),
+          date, day, dayLabel: day,
+          venue: "trainer", venue_label: "Logged via Trainer",
+          program: sessionType, rpe: null,
+          exercises, tendon_work: [], cardio,
+          stretch_completed: false, warmup_completed: false,
+          source: "LIFT Trainer"
+        }
+        try {
+          const existing = JSON.parse(localStorage.getItem("wt-log") || "[]")
+          const safe = Array.isArray(existing) ? existing : []
+          const dupIdx = safe.findIndex(e => (e.date||"").slice(0,10) === date && e.source === "LIFT Trainer" && e.day === day)
+          const updated = dupIdx >= 0
+            ? safe.map((e,i) => i === dupIdx ? { ...e, exercises: [...(e.exercises||[]), ...exercises], cardio: [...(e.cardio||[]), ...cardio] } : e)
+            : [...safe, logEntry]
+          localStorage.setItem("wt-log", JSON.stringify(updated))
+          if (supabase && session?.user?.id) {
+            supabase.from("user_kv").upsert(
+              { user_id: session.user.id, key: "wt-log", value: updated, updated_at: new Date().toISOString() },
+              { onConflict: "user_id,key" }
+            ).catch(err => console.warn("[LIFT] session log sync failed:", err?.message))
+          }
+          // Replace the assistant's last message with a confirmed log message
+          const logConfirmMsg = {
+            role: "assistant",
+            content: `Session logged: ${exercises.length} exercises for ${date} (${day}). Log count: ${updated.length}. ${cardio.length ? `Cardio: ${cardio.map(c=>c.modality+" "+c.distance).join(", ")}.` : ""}`,
+            ts: Date.now()
+          }
+          saveMessages([...finalMsgs.slice(0,-1), logConfirmMsg])
+        } catch(e) {
+          console.warn("[LIFT] inline session log failed:", e)
+        }
+        setPendingAction(null)
       }
     } catch (err) {
       saveMessages([...updatedMsgs, { role: "assistant", content: `Network error: ${err.message}`, ts: Date.now() }])
