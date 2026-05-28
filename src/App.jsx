@@ -647,28 +647,26 @@ const PLAN = {
       "Hip Flexor Isometric Hold · L1: 2×20s each side · Stand upright, lift one knee to 90°, hold completely still · No load · Feel deep sustained effort at front of hip (not a cramp) · If cramping reduce to 12 sec · L3 target: 3×30s + light ankle weight · Advance: 3 sessions zero hip flexor next-day soreness · Search: hip flexor isometric hold running prehab",
     ],
     sections: [
-      { h: "Chest (Volume Day · 2nd Frequency)", ex: [
-        { id:"f0", name:"Cable Crossover",    sub:"Low-to-high or mid",              def:[mk(8,40),mk(8,40),mk(8,40)],                 note:"Full stretch at start · squeeze at top · 2nd chest frequency · current 40 lb" },
-      ]},
-      { h: "Hip", ex: [
-        { id:"f1", name:"Hip Abduction",           sub:"Abductor machine",             def:[mk(8,120),mk(8,120),mk(8,120)],              note:"Full ROM · controlled return" },
-        { id:"f2", name:"Hip Adduction",           sub:"Adductor machine",             def:[mk(8,90),mk(8,90),mk(8,90)],                 note:"Pelvic control throughout" },
-        { id:"f3", name:"KB Swing",                sub:"Kettlebell · hip hinge drive", def:[mk(10,25),mk(10,25),mk(10,25)],              note:"Power from glutes · not arms" },
-        { id:"f4", name:"Hip Thrust",              sub:"Smith machine · volume load",  def:[mk("10-12","—"),mk("10-12","—"),mk("10-12","—")], note:"Lighter than Tuesday · can sub glute bridge" },
+      { h: "Hip Compound — Heaviest First", ex: [
+        { id:"f4", name:"Hip Thrust",              sub:"Smith machine · volume load",  def:[mk(10,120),mk(10,120),mk(10,120)],           note:"Lighter than Tuesday (160 lb) · can sub glute bridge · Friday volume day" },
       ]},
       { h: "Posterior Chain", ex: [
-        { id:"f5", name:"Romanian Deadlift",       sub:"DB or barbell",                def:[mk(8,70),mk(8,70),mk(8,70)],                 note:"Hinge · flat back · 3-1-2 tempo · current 70 lb · progress +5 lb weekly · target 110–120 lb by September for HM posterior chain endurance" },
-        { id:"f5b", name:"Back Extension",         sub:"45° hyperextension bench",     def:[mk(12,"BW"),mk(12,"BW")],                    note:"3-sec hold at top · neutral spine throughout · lumbar endurance target for HM miles 10–13 · start BW 2×12 · progress to 3×15 BW then add 10 lb plate held at chest · NEW exercise added May 2026" },
-        { id:"f6", name:"Hamstring Eccentric Curl",sub:"Leg curl · 4-sec eccentric · extra set left leg", def:[mk(8,45),mk(8,45),mk(8,45)], note:"4-second lowering · slow control · add extra set for left leg only (MTP asymmetry protocol) · current 45 lb" },
+        { id:"f5", name:"Romanian Deadlift",       sub:"DB or barbell",                def:[mk(8,70),mk(8,70),mk(8,70)],                 note:"70 lb confirmed 2026-05-27 · hinge · flat back · 3-1-2 tempo · progress +5 lb weekly · target 110–120 lb by September for HM posterior chain endurance" },
+        { id:"f5b", name:"Back Extension",         sub:"45° hyperextension bench",     def:[mk(12,"BW"),mk(12,"BW")],                    note:"3-sec hold at top · neutral spine · lumbar endurance for HM miles 10–13 · start BW 2×12 · progress to 3×15 BW then add 10 lb plate" },
+        { id:"f6", name:"Hamstring Eccentric Curl",sub:"Leg curl · 4-sec eccentric · extra set left leg", def:[mk(8,45),mk(8,45),mk(8,45)], note:"45 lb confirmed 2026-05-27 · 4-second lowering · slow control · add extra set for left leg only (MTP asymmetry protocol)" },
       ]},
-      { h: "Anti-Rotation Core", ex: [
-        { id:"f7", name:"Pallof Press",            sub:"Cable · split stance",          def:[mk("8e",30),mk("8e",30),mk("8e",30)],        note:"Brace · press slowly · zero rotation" },
+      { h: "Hip Isolation", ex: [
+        { id:"f1", name:"Hip Abduction",           sub:"Abductor machine",             def:[mk(8,120),mk(8,120),mk(8,120)],              note:"Full ROM · controlled return · 120 lb confirmed" },
+        { id:"f2", name:"Hip Adduction",           sub:"Adductor machine",             def:[mk(8,90),mk(8,90),mk(8,90)],                 note:"Pelvic control throughout · 90 lb confirmed 2026-05-27" },
+        { id:"f3", name:"KB Swing",                sub:"Kettlebell · hip hinge drive", def:[mk(10,25),mk(10,25),mk(10,25)],              note:"Power from glutes · not arms · progress to 35 lb when 3×10 easy" },
       ]},
-      { h: "Shoulder Health", ex: [
-        { id:"f8", name:"Shoulder Clock w/ Band",  sub:"Resistance band",              def:[mk("5e","band"),mk("5e","band"),mk("5e","band")], note:"Full range · light load only" },
+      { h: "Core + Shoulder Health", ex: [
+        { id:"f7", name:"Pallof Press",            sub:"Cable · split stance",          def:[mk("8e",30),mk("8e",30),mk("8e",30)],        note:"Anti-rotation · brace · press slowly · 2× per week with Monday" },
+        { id:"f9", name:"Russian Twists",          sub:"15 lb ball · 3×30 reps",       def:[mk(30,15),mk(30,15),mk(30,15)],              note:"Feet elevated optional · controlled · 15 lb ball confirmed 2026-05-27" },
+        { id:"f8", name:"Shoulder Clock w/ Band",  sub:"Resistance band",              def:[mk("5e","band"),mk("5e","band"),mk("5e","band")], note:"Full range · light load only · rotator cuff health" },
       ]},
-      { h: "Core", ex: [
-        { id:"f9", name:"Russian Twists",          sub:"3×30 sec",                     def:[mk("30s","BW"),mk("30s","BW"),mk("30s","BW")], note:"Feet elevated optional · controlled" },
+      { h: "Chest Finisher — 2nd Frequency", ex: [
+        { id:"f0", name:"Cable Crossover",         sub:"Low-to-high or mid",           def:[mk(8,40),mk(8,40),mk(8,40)],                 note:"40 lb confirmed 2026-05-27 · full stretch at start · squeeze at top · second chest frequency · do last — isolation finisher only" },
       ]},
     ],
   },
