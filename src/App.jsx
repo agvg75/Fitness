@@ -13513,6 +13513,8 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
         } catch(e) {
           console.warn("[LIFT] inline session log failed:", e)
         }
+        // Trigger app to re-read wt-log from localStorage without full page reload
+        window.dispatchEvent(new StorageEvent('storage', { key: 'wt-log', newValue: localStorage.getItem('wt-log') }))
         setPendingAction(null)
       }
     } catch (err) {
