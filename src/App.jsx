@@ -13489,11 +13489,12 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
           stretch_completed: false, warmup_completed: false,
           source: "LIFT Trainer"
         }
+        let updated = []
         try {
           const existing = JSON.parse(localStorage.getItem("wt-log") || "[]")
           const safe = Array.isArray(existing) ? existing : []
           const dupIdx = safe.findIndex(e => (e.date||"").slice(0,10) === date && e.source === "LIFT Trainer" && e.day === day)
-          const updated = dupIdx >= 0
+          updated = dupIdx >= 0
             ? safe.map((e,i) => i === dupIdx ? { ...e, exercises: [...(e.exercises||[]), ...exercises], cardio: [...(e.cardio||[]), ...cardio] } : e)
             : [...safe, logEntry]
           localStorage.setItem("wt-log", JSON.stringify(updated))
