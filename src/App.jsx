@@ -13066,10 +13066,14 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
     }
 
     // Meal detection — preset phrases and dinner/custom descriptions
-    const mealKeywords = combined.includes("breakfast") || combined.includes("lunch") ||
-      combined.includes("dinner") || combined.includes("supper") ||
-      combined.includes("snack") || combined.includes("ate") || combined.includes("had for")
-    if (mealKeywords) {
+    const WORKOUT_MARKERS = ["sets", "reps", "BW", "yards", "TRIMP", "session log", "SESSION LOG", "lb @", "×"]
+    const FOOD_MARKERS = ["breakfast", "lunch", "dinner", "snack", "ate", "eating", "calories", "protein", "carbs", "grams", "kcal"]
+    const lowerUserText = userText.toLowerCase()
+    const hasWorkoutContext = WORKOUT_MARKERS.some(marker =>
+      userText.includes(marker) || lowerUserText.includes(marker.toLowerCase())
+    )
+    const hasFoodContext = FOOD_MARKERS.some(marker => lowerUserText.includes(marker))
+    if (!hasWorkoutContext && hasFoodContext) {
       const presets = liftConfig?.MEAL_PRESETS || {}
       // Preset detection — "usual breakfast", "my usual lunch", etc.
       for (const [key, preset] of Object.entries(presets)) {
@@ -13229,7 +13233,7 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
         body: JSON.stringify({
           model: "claude-sonnet-4-20250514",
           max_tokens: 1024,
-          system: TRAINER_SYSTEM_PROMPT,
+          system: `Today is ${new Date().toLocaleDateString('en-CA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}. The current time is ${new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}.\n\n${TRAINER_SYSTEM_PROMPT}`,
           messages: apiMessages,
           stream: true
         })
