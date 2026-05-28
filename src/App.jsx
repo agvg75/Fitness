@@ -172,7 +172,8 @@ const SYNC_KEYS = new Set([
   "wt-checked-items",
   "ufd-workouts",
   "oc-items",
-  "lift_meal_records"
+  "lift_meal_records",
+  "lift_sleep_records"
 ])
 
 const store = {
@@ -4560,6 +4561,14 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     ].sort((a, b) => String(getSleepRecordDate(a) || "").localeCompare(String(getSleepRecordDate(b) || "")))
     setSleepRecords(next)
     localStorage.setItem("lift_sleep_records", JSON.stringify(next))
+    if (supabase && session?.user?.id) {
+      supabase.from("user_kv").upsert(
+        { user_id: session.user.id, key: "lift_sleep_records", value: next, updated_at: new Date().toISOString() },
+        { onConflict: "user_id,key" }
+      ).then(({ error }) => {
+        if (error && process.env.NODE_ENV === "development") console.warn("[LIFT] Sleep sync failed:", error.message)
+      })
+    }
     try {
       if (supabase && session?.user?.id) {
         await upsertSleepRecords(supabase, session.user.id, [record])
@@ -4577,6 +4586,14 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     })
     setSleepRecords(next)
     localStorage.setItem('lift_sleep_records', JSON.stringify(next))
+    if (supabase && session?.user?.id) {
+      supabase.from("user_kv").upsert(
+        { user_id: session.user.id, key: "lift_sleep_records", value: next, updated_at: new Date().toISOString() },
+        { onConflict: "user_id,key" }
+      ).then(({ error }) => {
+        if (error && process.env.NODE_ENV === "development") console.warn("[LIFT] Sleep sync failed:", error.message)
+      })
+    }
     try {
       if (supabase && session?.user?.id) {
         await supabase.from('sleep_records').delete().eq('user_id', session.user.id).eq('sleep_date', dateStr)
@@ -4800,14 +4817,13 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     setSavedEntries(prev => ({ ...prev, [day]: { ...(prev[day] || {}), [venue]: entry } }))
 
     const logResult = await saveScheduleKey("wt-log", newLog)
+    if (logResult?.synced) {
+      showToast("Session saved and synced.")
+    } else {
+      showToast("Session saved locally. Cloud sync pending — check connection.")
+    }
     if (Array.isArray(logResult?.value)) setSchedLog(logResult.value)
     await saveScheduleKey("wt-sessions", buildSessionsStore())
-
-    if (logResult?.synced) {
-      showToast("Session saved and synced ✓")
-    } else {
-      showToast("Saved on this device — sync pending. Tap Sync when on wifi.", 5000)
-    }
 
     const allCardio = completedCardio
     if (allCardio.some(c => c.duration)) {
@@ -16061,26 +16077,39 @@ async function loadMealsFromSupabase(userId) {
   setMealEntries(rows)
 }
 async function persistMealEntries(nextEntries, currentUserId) {
+  try {
+    localStorage.setItem("ufd-meal-entries", JSON.stringify(nextEntries))
+  } catch (lsErr) {
+    if (process.env.NODE_ENV === "development") console.error("[LIFT] localStorage meal write failed:", lsErr)
+  }
+
   setMealEntries(nextEntries)
 
-  await store.set("ufd-meal-entries", nextEntries)
-
-  // currentUserId passed as parameter
-  if (process.env.NODE_ENV === "development") console.log("persistMealEntries called, userId:", currentUserId)
   if (!currentUserId) {
-    if (process.env.NODE_ENV === "development") console.log("No active session, meals saved locally only.")
+    if (process.env.NODE_ENV === "development") console.log("[LIFT] No active session, meals saved locally only.")
     return
   }
 
-  pendingMealSyncRef.current = { entries: nextEntries, userId: currentUserId, promise: null }
-
   try {
-    await flushPendingMealSync()
-  } catch (err) {
-    const msg = err?.message || "Unknown sync error"
-    if (process.env.NODE_ENV === "development") console.error("Meal sync failed:", err)
-    // load error, no user message needed
+    const { error } = await supabase.from("user_kv").upsert(
+      { user_id: currentUserId, key: "ufd-meal-entries", value: nextEntries, updated_at: new Date().toISOString() },
+      { onConflict: "user_id,key" }
+    )
+    if (error) {
+      if (process.env.NODE_ENV === "development") console.warn("[LIFT] Meal user_kv sync failed:", error.message)
+      showToast("Meal saved locally. Cloud sync pending.")
+    } else {
+      if (process.env.NODE_ENV === "development") console.log("[LIFT] Meal user_kv sync OK, entries:", nextEntries.length)
+    }
+  } catch (networkErr) {
+    if (process.env.NODE_ENV === "development") console.warn("[LIFT] Meal sync network error:", networkErr.message)
+    showToast("Meal saved locally. Cloud sync pending.")
   }
+
+  pendingMealSyncRef.current = { entries: nextEntries, userId: currentUserId, promise: null }
+  flushPendingMealSync().catch(err => {
+    if (process.env.NODE_ENV === "development") console.error("[LIFT] meals table sync failed:", err)
+  })
 }
   async function persistMealPresets(nextPresets) {
     setMealPresets(nextPresets)
