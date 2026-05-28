@@ -15327,15 +15327,27 @@ useEffect(() => {
           return merged
         })
       }
-      if (remoteSleepRecords.length) {
-        setSleepRecords(prev => {
-          const combined = [
-            ...(Array.isArray(prev) ? prev : []).map(r => ({ ...r, date: getSleepRecordDate(r) || r.date })),
-            ...remoteSleepRecords.map(r => ({ ...r, date: getSleepRecordDate(r) || r.date }))
-          ].filter(r => r.date)
-          return deduplicateSleepRecords(combined)
-            .sort((a, b) => (a.start_at || a.date || '').localeCompare(b.start_at || b.date || ''))
-        })
+      {
+        const remoteSleep = remoteSleepRecords
+        const localSleep = (() => { try { return JSON.parse(localStorage.getItem("lift_sleep_records") || "[]") } catch { return [] } })()
+        const mergedSleep = (() => {
+          const remote = Array.isArray(remoteSleep) ? remoteSleep : []
+          const local = Array.isArray(localSleep) ? localSleep : []
+          const byId = new Map()
+          remote.forEach(e => { if (e?.sleep_id) byId.set(String(e.sleep_id), e) })
+          local.forEach(e => { if (e?.sleep_id) byId.set(String(e.sleep_id), e) }) // local wins
+          return [...byId.values()].sort((a,b) => String(a.date||"").localeCompare(String(b.date||"")))
+        })()
+        if (mergedSleep.length > 0) {
+          try { localStorage.setItem("lift_sleep_records", JSON.stringify(mergedSleep)) } catch {}
+          if (mergedSleep.length > (Array.isArray(remoteSleep) ? remoteSleep : []).length && supabase && session?.user?.id) {
+            supabase.from("user_kv").upsert(
+              { user_id: session.user.id, key: "lift_sleep_records", value: mergedSleep, updated_at: new Date().toISOString() },
+              { onConflict: "user_id,key" }
+            ).catch(err => console.warn("[LIFT] sleep merge sync failed:", err?.message))
+          }
+          setSleepRecords(mergedSleep)
+        }
       }
       if (remoteHealthFitDaily.length) {
         setHealthFitDaily(prev => {
