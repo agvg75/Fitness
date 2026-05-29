@@ -3908,12 +3908,21 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     writeLocalScheduleKey(key, value)
     if (!supabase || !session?.user?.id) return { value, synced: false, reason: "no-auth" }
 
+    const SAVE_TIMEOUT_MS = 5000
     try {
-      const { data, error } = await supabase.from("user_kv").upsert(
+      const upsertPromise = supabase.from("user_kv").upsert(
         { user_id: session.user.id, key, value, updated_at: new Date().toISOString() },
         { onConflict: "user_id,key" }
       ).select("value").maybeSingle()
 
+      const result = await Promise.race([
+        upsertPromise,
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("supabase-timeout")), SAVE_TIMEOUT_MS)
+        )
+      ])
+
+      const { data, error } = result
       if (error) {
         console.warn(`[LIFT] Supabase sync failed for ${key}:`, error.message)
         return { value, synced: false, reason: error.message }
@@ -4821,9 +4830,9 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
 
     const newLog = [entry, ...currentLog.filter(e => e.id !== entry.id)]
     setSchedLog(newLog)
-    setSavedEntries(prev => ({ ...prev, [day]: { ...(prev[day] || {}), [venue]: entry } }))
 
     const logResult = await saveScheduleKey("wt-log", newLog)
+    setSavedEntries(prev => ({ ...prev, [day]: { ...(prev[day] || {}), [venue]: entry } }))
     if (logResult?.synced) {
       showToast("Session saved and synced.")
     } else {
