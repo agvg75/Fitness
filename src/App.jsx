@@ -1649,6 +1649,70 @@ function getSleepRecordDate(record) {
   return null
 }
 
+// Deterministic per-night canonicalization. Pure function of the full record
+// union: same input always yields same output regardless of order or device.
+// Buckets each record into a "sleep night" and picks ONE winner per night.
+// Never sums records from different sources for the same night.
+function canonicalizeSleepRecords(records) {
+  const list = Array.isArray(records) ? records : []
+
+  // Source priority: higher wins for a given night.
+  const sourceRank = src => {
+    const s = String(src?.source || src || "").toLowerCase()
+    if (s === "trainer" || s === "manual") return 3
+    if (s === "sleepcycle") return 2
+    if (s === "apple health" || s === "applehealth" || s === "healthkit") return 1
+    return 0
+  }
+
+  // Assign a record to a night key (YYYY-MM-DD).
+  // For records with an end timestamp, use end time with a 15:00 boundary:
+  // sleep ending at/after 15:00 belongs to the NEXT calendar day's night.
+  // For records with only a date (manual/trainer), trust the date field.
+  const nightKeyFor = record => {
+    const endInfo = getSleepRecordEndInfo(record)
+    if (Number.isFinite(endInfo.ms)) {
+      const d = new Date(endInfo.ms)
+      const boundary = new Date(d)
+      boundary.setHours(15, 0, 0, 0)
+      const nightDate = d.getTime() >= boundary.getTime()
+        ? new Date(d.getTime() + 24 * 3600000)
+        : d
+      const y = nightDate.getFullYear()
+      const m = String(nightDate.getMonth() + 1).padStart(2, "0")
+      const day = String(nightDate.getDate()).padStart(2, "0")
+      return `${y}-${m}-${day}`
+    }
+    return getSleepRecordDate(record)
+  }
+
+  const byNight = new Map()
+  list.forEach(record => {
+    const key = nightKeyFor(record)
+    if (!key) return
+    const existing = byNight.get(key)
+    if (!existing) { byNight.set(key, record); return }
+    const a = sourceRank(record)
+    const b = sourceRank(existing)
+    if (a > b) { byNight.set(key, record); return }
+    if (a === b) {
+      // Same source, same night: keep the longer-duration record (no summing).
+      const da = sleepMinutesForReadiness(record)
+      const db = sleepMinutesForReadiness(existing)
+      if (da > db) byNight.set(key, record)
+    }
+    // else keep existing
+  })
+
+  return [...byNight.entries()]
+    .map(([nightKey, record]) => ({
+      ...record,
+      date: nightKey,
+      sleep_date: nightKey,
+    }))
+    .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))
+}
+
 function mergeAdjacentSleepSegments(records, gapMinutes = 90) {
   const gapMs = gapMinutes * 60000
   const normalized = (Array.isArray(records) ? records : [])
@@ -1766,7 +1830,7 @@ function deduplicateSleepRecords(records) {
 
 function getRecentSleepRecords(records, limit = 7) {
   const sevenDaysAgo = Date.now() - 7 * 24 * 3600000
-  return mergeAdjacentSleepSegments(records)
+  return canonicalizeSleepRecords(records)
     .filter(record => {
       const sleepDate = getSleepRecordDate(record)
       if (!sleepDate) return false
@@ -1778,7 +1842,7 @@ function getRecentSleepRecords(records, limit = 7) {
 }
 
 function buildSleepOverviewModel(records, targetHours = 7.5) {
-  const mergedEpisodes = mergeAdjacentSleepSegments(records, 90)
+  const mergedEpisodes = canonicalizeSleepRecords(records)
     .slice()
     .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))
 
@@ -11830,8 +11894,7 @@ Return ONLY a JSON object with this exact structure, no explanation:
           ...(Array.isArray(existing) ? existing : []),
           ...sleepResult.map(r => ({ ...r, date: getSleepRecordDate(r) || r.date })).filter(r => r.date)
         ]
-        const merged = deduplicateSleepRecords(combined)
-          .sort((a, b) => (a.start_at || a.date || '').localeCompare(b.start_at || b.date || ''))
+        const merged = canonicalizeSleepRecords(combined)
         localStorage.setItem("lift_sleep_records", JSON.stringify(merged))
         if (setSleepRecords) setSleepRecords(merged)
         committed += sleepResult.length
@@ -11844,8 +11907,9 @@ Return ONLY a JSON object with this exact structure, no explanation:
                 try {
                   const remoteSleep = await loadSleepRecords(supabase, STORE_USER_ID)
                   if (Array.isArray(remoteSleep) && remoteSleep.length >= merged.length) {
-                    localStorage.setItem("lift_sleep_records", JSON.stringify(remoteSleep))
-                    if (setSleepRecords) setSleepRecords(remoteSleep)
+                    const canonicalRemoteSleep = canonicalizeSleepRecords(remoteSleep)
+                    localStorage.setItem("lift_sleep_records", JSON.stringify(canonicalRemoteSleep))
+                    if (setSleepRecords) setSleepRecords(canonicalRemoteSleep)
                   }
                 } catch (readBackErr) {
                   console.warn("[LIFT] Sleep read-back after commit failed, using local merge", readBackErr)
@@ -13639,12 +13703,10 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
         const existing = (() => {
           try { return JSON.parse(localStorage.getItem("lift_sleep_records") || "[]") } catch { return [] }
         })()
-        // Deduplicate: remove any existing trainer-logged record for the same date
-        const filtered = existing.filter(r =>
-          !(r.date === newRecord.date && r.source === "trainer")
-        )
-        const merged = [...filtered, newRecord]
-          .sort((a, b) => (a.date || "").localeCompare(b.date || ""))
+        const merged = canonicalizeSleepRecords([
+          ...(Array.isArray(existing) ? existing : []),
+          newRecord,
+        ])
         localStorage.setItem("lift_sleep_records", JSON.stringify(merged))
         if (setSleepRecords) setSleepRecords(merged)
         // Fire-and-forget Supabase sync
@@ -14237,7 +14299,7 @@ const unifiedCanonicalSessions = useMemo(() => {
 }, [canonicalSessions, scheduleStrengthCanonicalSeeds])
 
 const mergedSleepEpisodes = useMemo(() => {
-  return mergeAdjacentSleepSegments(sleepRecords, 90)
+  return canonicalizeSleepRecords(sleepRecords)
 }, [sleepRecords])
 
 useEffect(() => {
@@ -15339,30 +15401,10 @@ useEffect(() => {
       {
         const remoteSleep = remoteSleepRecords
         const localSleep = (() => { try { return JSON.parse(localStorage.getItem("lift_sleep_records") || "[]") } catch { return [] } })()
-        const mergedSleep = (() => {
-          const remote = Array.isArray(remoteSleep) ? remoteSleep : []
-          const local = Array.isArray(localSleep) ? localSleep : []
-          const byId = new Map()
-          remote.forEach(e => { if (e?.sleep_id) byId.set(String(e.sleep_id), e) })
-          local.forEach(e => { if (e?.sleep_id) byId.set(String(e.sleep_id), e) }) // local wins by id
-          // Additionally deduplicate by date — keep the local/most recent entry per date
-          const byDate = new Map()
-          // Remote entries first (lower priority)
-          remote.forEach(e => { const d = (e.date||e.start_at||'').slice(0,10); if (d) byDate.set(d + '_' + (e.source||''), e) })
-          // Local entries override by date+source
-          local.forEach(e => { const d = (e.date||e.start_at||'').slice(0,10); if (d) byDate.set(d + '_' + (e.source||''), e) })
-          // Merge: use byDate for trainer entries (deduplicated per day), byId for Apple Health (may have multiple per day legitimately)
-          const trainerDates = new Set([...byDate.values()].filter(e => e.source === 'trainer').map(e => (e.date||e.start_at||'').slice(0,10)))
-          const deduped = [...byId.values()].filter(e => {
-            const d = (e.date||e.start_at||'').slice(0,10)
-            if (e.source === 'trainer' && trainerDates.has(d)) {
-              // Only keep the byDate winner for trainer entries
-              return byDate.get(d + '_trainer') === e
-            }
-            return true
-          })
-          return deduped.sort((a,b) => String(a.date||"").localeCompare(String(b.date||"")))
-        })()
+        const mergedSleep = canonicalizeSleepRecords([
+          ...(Array.isArray(remoteSleep) ? remoteSleep : []),
+          ...(Array.isArray(localSleep) ? localSleep : []),
+        ])
         if (mergedSleep.length > 0) {
           try { localStorage.setItem("lift_sleep_records", JSON.stringify(mergedSleep)) } catch {}
           if (mergedSleep.length > (Array.isArray(remoteSleep) ? remoteSleep : []).length && supabase && session?.user?.id) {
