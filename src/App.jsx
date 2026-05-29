@@ -303,20 +303,26 @@ if (typeof window !== "undefined") {
 function getExerciseHistory(exerciseName, wtSessions, canonicalSessions = []) {
   if (!exerciseName) return []
   const lower = exerciseName.toLowerCase()
-  const matchName = n => n.includes(lower) || lower.includes(n.split(" ")[0])
+  const matchName = n => Boolean(n) && (n.includes(lower) || lower.includes(n.split(" ")[0]))
   const maxWeightFromMatch = match => {
     let maxW = null
-    const sets = match.sets || (match.actual ? [match.actual] : [])
-    for (const s of sets) {
-      const w = parseFloat(s.weight ?? s.load ?? s.w ?? 0)
-      if (Number.isFinite(w) && w > 0 && (maxW === null || w > maxW)) maxW = w
+    const direct = parseFloat(match.load)
+    if (Number.isFinite(direct) && direct > 0) maxW = direct
+    if (Array.isArray(match.sets)) {
+      for (const s of match.sets) {
+        const w = parseFloat(s.weight ?? s.load ?? s.w ?? 0)
+        if (Number.isFinite(w) && w > 0 && (maxW === null || w > maxW)) maxW = w
+      }
     }
     return maxW
   }
 
   const byDate = {}
   for (const sess of (Array.isArray(wtSessions) ? wtSessions : [])) {
-    const match = (sess.exercises || []).find(e => matchName((e.exercise_name || e.name || "").toLowerCase()))
+    const match = (sess.exercises || [])
+      .map(normalizeLoggedExercise)
+      .filter(Boolean)
+      .find(e => matchName((e.name || "").toLowerCase()))
     if (!match) continue
     const maxW = maxWeightFromMatch(match)
     if (maxW !== null) {
@@ -325,8 +331,12 @@ function getExerciseHistory(exerciseName, wtSessions, canonicalSessions = []) {
     }
   }
   for (const sess of (Array.isArray(canonicalSessions) ? canonicalSessions : [])) {
-    const schedExs = sess?.sources?.schedule?.exercises || []
-    const match = schedExs.find(e => matchName((e.exercise_name || e.name || "").toLowerCase()))
+    const canonicalExs = Array.isArray(sess?.exercises) ? sess.exercises : []
+    const schedExs = Array.isArray(sess?.sources?.schedule?.exercises) ? sess.sources.schedule.exercises : []
+    const match = [...canonicalExs, ...schedExs]
+      .map(normalizeLoggedExercise)
+      .filter(Boolean)
+      .find(e => matchName((e.name || "").toLowerCase()))
     if (!match) continue
     const maxW = maxWeightFromMatch(match)
     if (maxW !== null) {
@@ -7985,6 +7995,11 @@ if (w.category === "Strength") {
           const log = Array.isArray(schedLog) ? schedLog : []
           // Also pull from canonical sessions as a fallback source
           const allSessions = [...log]
+          const sessionHasExerciseMatch = (sess, match) =>
+            (sess.exercises || [])
+              .map(normalizeLoggedExercise)
+              .filter(Boolean)
+              .some(e => (e.name || "").toLowerCase().includes(match.toLowerCase()))
 
           const renderGroup = ({ group, color, exercises }) => {
             const charts = exercises.map(({ name, match, baseline }) => {
@@ -7992,15 +8007,18 @@ if (w.category === "Strength") {
               for (const sess of allSessions) {
                 // Collect ALL sets for this exercise (not just the first) so the
                 // max e1RM across the session is used, not a warmup set.
-                const matches = (sess.exercises || []).filter(e =>
-                  (e.exercise_name || "").toLowerCase().includes(match.toLowerCase())
+                const normalized = (sess.exercises || [])
+                  .map(normalizeLoggedExercise)
+                  .filter(Boolean)
+                const matches = normalized.filter(e =>
+                  (e.name || "").toLowerCase().includes(match.toLowerCase())
                 )
                 if (!matches.length) continue
                 let bestE1rm = 0
                 for (const ex of matches) {
-                  const w = parseFloat(ex.actual?.load ?? ex.load)
+                  const w = parseFloat(ex.load)
                   if (!Number.isFinite(w) || w <= 0) continue
-                  const r = parseFloat(ex.actual?.reps ?? ex.reps)
+                  const r = parseFloat(ex.reps)
                   // Epley: w × (1 + r/30), capped at 15 reps to avoid extrapolation
                   const e1rm = Number.isFinite(r) && r > 0 && r <= 15
                     ? Math.round(w * (1 + r / 30))
@@ -8055,11 +8073,7 @@ if (w.category === "Strength") {
 
           const anyData = EXERCISE_GROUPS.some(g =>
             g.exercises.some(({ match }) =>
-              allSessions.some(sess =>
-                (sess.exercises || []).some(e =>
-                  (e.exercise_name || "").toLowerCase().includes(match.toLowerCase())
-                )
-              )
+              allSessions.some(sess => sessionHasExerciseMatch(sess, match))
             )
           )
 
