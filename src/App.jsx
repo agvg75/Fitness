@@ -1256,7 +1256,13 @@ function ScheduleLogView({ log, expanded, setExpanded, onDelete, onEdit, highlig
   )
 }
 
-function ConflictCompareView({ date, entries, onBack = null }) {
+function ConflictCompareView({ date, entries, onBack = null, onDeleteEntry, onMergeEntries, onUpdateEntry, onConflictResolved }) {
+  const [deleteConfirmId, setDeleteConfirmId] = useState(null)
+  const [editingId, setEditingId] = useState(null)
+  const [editDrafts, setEditDrafts] = useState({})
+  const [mergeOpenKey, setMergeOpenKey] = useState(null)
+  const [mergeChoices, setMergeChoices] = useState({})
+  const [mergeFields, setMergeFields] = useState({})
   const clusters = useMemo(() => {
     const safeEntries = Array.isArray(entries) ? entries : []
     return buildScheduleDayDateMismatchReport(safeEntries)
@@ -1272,11 +1278,144 @@ function ConflictCompareView({ date, entries, onBack = null }) {
 
   const fmtValue = value => value == null || value === "" ? "—" : String(value)
   const fmtExercise = ex => `${fmtValue(ex.sets)} x ${fmtValue(ex.reps)} @ ${fmtValue(ex.load)}`
+  const entryKey = entry => String(entry?.id ?? entry?.session_id ?? "")
+  const isMoreRecent = (a, b) => String(a?.logged_at || "").localeCompare(String(b?.logged_at || "")) >= 0
+  const moreRecentEntry = groupEntries => groupEntries.slice().sort((a, b) => String(b?.logged_at || "").localeCompare(String(a?.logged_at || "")))[0] || groupEntries[0]
   const fmtLoggedAt = value => {
     if (!value) return "NA"
     const parsed = new Date(value)
     if (Number.isNaN(parsed.getTime())) return String(value)
     return parsed.toLocaleString()
+  }
+  const writeExerciseValuesForExistingSchema = (raw, values) => {
+    if (raw?.exercise_name != null || raw?.actual != null) {
+      return {
+        ...raw,
+        actual: {
+          ...(raw.actual || {}),
+          sets: values.sets,
+          reps: values.reps,
+          load: values.load
+        }
+      }
+    }
+    return {
+      ...raw,
+      sets: values.sets,
+      reps: values.reps,
+      load: values.load
+    }
+  }
+  const toScheduleExercise = ex => ({
+    exercise_id: ex.id,
+    exercise_name: ex.name,
+    actual: { sets: ex.sets, reps: ex.reps, load: ex.load },
+    notes: ex.notes || ""
+  })
+  const buildMergePlan = groupEntries => {
+    const recent = moreRecentEntry(groupEntries)
+    const items = groupEntries.flatMap(entry =>
+      (Array.isArray(entry.exercises) ? entry.exercises : [])
+        .map((raw, idx) => ({ entry, raw, idx, normalized: normalizeLoggedExercise(raw) }))
+        .filter(item => item.normalized && item.normalized.key)
+    )
+    const byKey = items.reduce((acc, item) => {
+      if (!acc[item.normalized.key]) acc[item.normalized.key] = []
+      acc[item.normalized.key].push(item)
+      return acc
+    }, {})
+    return Object.entries(byKey).map(([key, keyItems]) => {
+      const distinct = []
+      keyItems.forEach(item => {
+        const valueKey = JSON.stringify([item.normalized.sets ?? "", item.normalized.reps ?? "", item.normalized.load ?? ""])
+        if (!distinct.some(existing => existing.valueKey === valueKey)) distinct.push({ ...item, valueKey })
+      })
+      const defaultItem = distinct.find(item => entryKey(item.entry) === entryKey(recent)) || distinct[0]
+      return {
+        key,
+        name: keyItems[0]?.normalized?.name || keyItems[0]?.normalized?.id || "Unnamed exercise",
+        options: distinct,
+        differs: distinct.length > 1,
+        defaultChoice: `${entryKey(defaultItem.entry)}_${defaultItem.idx}_${defaultItem.valueKey}`
+      }
+    })
+  }
+  const getMergeChoiceId = (clusterKey, item) => mergeChoices[`${clusterKey}_${item.key}`] || item.defaultChoice
+  const getChosenMergeOption = (clusterKey, item) => item.options.find(option => `${entryKey(option.entry)}_${option.idx}_${option.valueKey}` === getMergeChoiceId(clusterKey, item)) || item.options[0]
+  const getMergeFields = group => {
+    const recent = moreRecentEntry(group.entries)
+    return mergeFields[group.clusterKey] || {
+      date: String(recent?.date || recent?.logged_at || group.date || "").slice(0, 10),
+      day: recent?.day || group.impliedWeekday || "",
+      venue: recent?.venue_label || recent?.venue || group.slotLabel || ""
+    }
+  }
+  const setMergeField = (clusterKey, field, value) => {
+    setMergeFields(prev => ({ ...prev, [clusterKey]: { ...(prev[clusterKey] || {}), [field]: value } }))
+  }
+  const handleDelete = async (entry, group) => {
+    const id = entry?.id
+    if (String(deleteConfirmId) !== String(id)) {
+      setDeleteConfirmId(id)
+      return
+    }
+    await onDeleteEntry?.(id)
+    setDeleteConfirmId(null)
+    const remaining = group.entries.filter(item => String(item.id) !== String(id))
+    if (remaining.length < 2) {
+      onBack?.()
+      onConflictResolved?.()
+    }
+  }
+  const startEdit = (entry, exercises) => {
+    const id = entryKey(entry)
+    setEditingId(id)
+    setEditDrafts(prev => ({
+      ...prev,
+      [id]: exercises.reduce((acc, ex, idx) => {
+        acc[idx] = { sets: ex.sets ?? "", reps: ex.reps ?? "", load: ex.load ?? "" }
+        return acc
+      }, {})
+    }))
+  }
+  const updateEditDraft = (id, idx, field, value) => {
+    setEditDrafts(prev => ({
+      ...prev,
+      [id]: {
+        ...(prev[id] || {}),
+        [idx]: { ...((prev[id] || {})[idx] || {}), [field]: value }
+      }
+    }))
+  }
+  const saveEdit = async entry => {
+    const id = entryKey(entry)
+    const draft = editDrafts[id] || {}
+    const updated = {
+      ...entry,
+      exercises: (Array.isArray(entry.exercises) ? entry.exercises : []).map((raw, idx) => {
+        const current = normalizeLoggedExercise(raw)
+        return writeExerciseValuesForExistingSchema(raw, {
+          sets: draft[idx]?.sets ?? current?.sets ?? "",
+          reps: draft[idx]?.reps ?? current?.reps ?? "",
+          load: draft[idx]?.load ?? current?.load ?? ""
+        })
+      })
+    }
+    await onUpdateEntry?.(updated)
+    setEditingId(null)
+  }
+  const executeMerge = async (group, plan) => {
+    const recent = moreRecentEntry(group.entries)
+    const fields = getMergeFields(group)
+    const mergedExercises = plan.map(item => toScheduleExercise(getChosenMergeOption(group.clusterKey, item).normalized))
+    await onMergeEntries?.({
+      entries: group.entries,
+      baseEntry: recent,
+      mergedEntryFields: fields,
+      mergedExercises
+    })
+    setMergeOpenKey(null)
+    onBack?.()
   }
 
   if (!clusters.length) {
@@ -1327,40 +1466,154 @@ function ConflictCompareView({ date, entries, onBack = null }) {
           })
           return acc
         }, {})
+        const mergePlan = buildMergePlan(group.entries)
+        const mergeFieldsForGroup = getMergeFields(group)
 
         return (
           <div key={group.clusterKey} style={{ border: "1px solid rgba(239,68,68,0.45)", borderRadius: 8, background: "rgba(239,68,68,0.08)", overflow: "hidden" }}>
             <div style={{ padding: "9px 12px", borderBottom: "1px solid rgba(239,68,68,0.22)", display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: "#fca5a5" }}>{group.slotLabel || "Unslotted"} conflict</div>
-              <div style={{ fontSize: 11, color: "#888" }}>{group.entries.length} entries</div>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#fca5a5" }}>{group.slotLabel || "Unslotted"} conflict</div>
+                <div style={{ fontSize: 11, color: "#888", marginTop: 2 }}>{group.entries.length} entries</div>
+              </div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                <button
+                  disabled={group.entries.length !== 2}
+                  onClick={() => group.entries.length === 2 && setMergeOpenKey(mergeOpenKey === group.clusterKey ? null : group.clusterKey)}
+                  style={{ background: group.entries.length === 2 ? "#1f3b2e" : "#121212", border: `1px solid ${group.entries.length === 2 ? "#28543d" : "#242424"}`, borderRadius: 6, color: group.entries.length === 2 ? "#d1fae5" : "#555", fontSize: 11, padding: "6px 10px", cursor: group.entries.length === 2 ? "pointer" : "not-allowed", fontFamily: "inherit" }}
+                >
+                  Merge entries
+                </button>
+                {group.entries.length > 2 && <span style={{ fontSize: 10, color: "#777" }}>Merge supports 2 entries; delete extras first</span>}
+              </div>
             </div>
+            {mergeOpenKey === group.clusterKey && (
+              <div style={{ padding: 10, background: "#0a0a0a", borderBottom: "1px solid #1a1a1a", display: "grid", gap: 10 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8 }}>
+                  {["date", "day", "venue"].map(field => (
+                    <label key={field} style={{ display: "grid", gap: 4, fontSize: 10, color: "#666", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                      {field}
+                      <input
+                        type={field === "date" ? "date" : "text"}
+                        value={mergeFieldsForGroup[field] || ""}
+                        onChange={e => setMergeField(group.clusterKey, field, e.target.value)}
+                        style={{ background: "#07080e", color: "#ced2f0", border: "1px solid #1a1b2e", borderRadius: 6, padding: "7px 8px", fontSize: 12, fontFamily: "inherit" }}
+                      />
+                    </label>
+                  ))}
+                </div>
+                <div style={{ display: "grid", gap: 6 }}>
+                  {mergePlan.map(item => {
+                    const chosen = getChosenMergeOption(group.clusterKey, item)
+                    return (
+                      <div key={item.key} style={{ padding: "7px 8px", background: "#0e0e0e", border: "1px solid #1a1a1a", borderRadius: 6 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                          <span style={{ fontSize: 12, color: "#aaa", fontWeight: 700 }}>{item.name}</span>
+                          <span style={{ fontSize: 11, color: item.differs ? "#f59e0b" : "#777", fontFamily: "'IBM Plex Mono',monospace" }}>{fmtExercise(chosen.normalized)}</span>
+                        </div>
+                        {item.differs && (
+                          <div style={{ display: "grid", gap: 4, marginTop: 6 }}>
+                            {item.options.map(option => {
+                              const choiceId = `${entryKey(option.entry)}_${option.idx}_${option.valueKey}`
+                              const recent = isMoreRecent(option.entry, group.entries.find(entry => entryKey(entry) !== entryKey(option.entry)))
+                              return (
+                                <label key={choiceId} style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 11, color: "#888" }}>
+                                  <input
+                                    type="radio"
+                                    name={`${group.clusterKey}_${item.key}`}
+                                    checked={getMergeChoiceId(group.clusterKey, item) === choiceId}
+                                    onChange={() => setMergeChoices(prev => ({ ...prev, [`${group.clusterKey}_${item.key}`]: choiceId }))}
+                                  />
+                                  <span>{fmtExercise(option.normalized)} from {option.entry.dayLabel || option.entry.day || "entry"}{recent ? " (more recent)" : ""}</span>
+                                </label>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button onClick={() => executeMerge(group, mergePlan)} style={{ background: "#1f3b2e", border: "1px solid #28543d", borderRadius: 6, color: "#d1fae5", fontSize: 11, padding: "7px 12px", cursor: "pointer", fontFamily: "inherit" }}>
+                    Confirm merge
+                  </button>
+                  <button onClick={() => setMergeOpenKey(null)} style={{ background: "none", border: "1px solid #2a2a2a", borderRadius: 6, color: "#aaa", fontSize: 11, padding: "7px 12px", cursor: "pointer", fontFamily: "inherit" }}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
             <div style={{ overflowX: "auto" }}>
               <div style={{ display: "grid", gridAutoFlow: allCount > 2 ? "column" : "row", gridAutoColumns: "minmax(280px, 1fr)", gridTemplateColumns: allCount <= 2 ? "repeat(auto-fit, minmax(260px, 1fr))" : undefined, gap: 10, padding: 10, minWidth: allCount > 2 ? allCount * 290 : undefined }}>
                 {normalizedByEntry.map(({ entry, exercises }) => (
                   <div key={entry.id || entry.session_id} style={{ background: "#0e0e0e", border: "1px solid #242424", borderRadius: 8, overflow: "hidden" }}>
                     <div style={{ padding: "9px 10px", background: "#111", borderBottom: "1px solid #1a1a1a" }}>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: "#d0d0d0" }}>{entry.dayLabel || entry.day || "NA"}</div>
-                      <div style={{ fontSize: 10, color: "#777", marginTop: 3 }}>
-                        {entry.venue_label || entry.venue || "NA"} · {entry.source || "local"} · {fmtLoggedAt(entry.logged_at)}
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: "#d0d0d0" }}>{entry.dayLabel || entry.day || "NA"}</div>
+                          <div style={{ fontSize: 10, color: "#777", marginTop: 3 }}>
+                            {entry.venue_label || entry.venue || "NA"} · {entry.source || "local"} · {fmtLoggedAt(entry.logged_at)}
+                          </div>
+                        </div>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                          <button onClick={() => editingId === entryKey(entry) ? setEditingId(null) : startEdit(entry, exercises)} style={{ background: "none", border: "1px solid #2a2a2a", borderRadius: 5, color: "#aaa", fontSize: 10, padding: "4px 8px", cursor: "pointer", fontFamily: "inherit" }}>
+                            {editingId === entryKey(entry) ? "Cancel" : "Edit"}
+                          </button>
+                          <button onClick={() => handleDelete(entry, group)} style={{ background: deleteConfirmId === entry.id ? "rgba(239,68,68,0.18)" : "none", border: "1px solid rgba(239,68,68,0.35)", borderRadius: 5, color: "#fca5a5", fontSize: 10, padding: "4px 8px", cursor: "pointer", fontFamily: "inherit" }}>
+                            {deleteConfirmId === entry.id ? "Confirm delete?" : "Delete this entry"}
+                          </button>
+                          {deleteConfirmId === entry.id && (
+                            <button onClick={() => setDeleteConfirmId(null)} style={{ background: "none", border: "1px solid #2a2a2a", borderRadius: 5, color: "#aaa", fontSize: 10, padding: "4px 8px", cursor: "pointer", fontFamily: "inherit" }}>
+                              Cancel
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                     <div style={{ padding: "8px 10px" }}>
+                      {editingId === entryKey(entry) && (
+                        <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+                          <button onClick={() => saveEdit(entry)} style={{ background: "#1f3b2e", border: "1px solid #28543d", borderRadius: 6, color: "#d1fae5", fontSize: 11, padding: "6px 10px", cursor: "pointer", fontFamily: "inherit" }}>
+                            Save changes
+                          </button>
+                          <button onClick={() => setEditingId(null)} style={{ background: "none", border: "1px solid #2a2a2a", borderRadius: 6, color: "#aaa", fontSize: 11, padding: "6px 10px", cursor: "pointer", fontFamily: "inherit" }}>
+                            Cancel
+                          </button>
+                        </div>
+                      )}
                       {!exercises.length ? (
                         <div style={{ fontSize: 12, color: "#444" }}>No exercise data recorded.</div>
                       ) : exercises.map((ex, idx) => {
                         const shared = keyCounts[ex.key] === allCount
                         const differs = shared && valueMap[ex.key]?.size > 1
+                        const draft = editDrafts[entryKey(entry)]?.[idx] || {}
+                        const isEditing = editingId === entryKey(entry)
                         return (
-                          <div key={`${ex.key}_${idx}`} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8, alignItems: "baseline", padding: "6px 0", borderBottom: idx < exercises.length - 1 ? "1px solid #171717" : "none", background: shared ? "transparent" : "rgba(245,158,11,0.08)" }}>
+                          <div key={`${ex.key}_${idx}`} style={{ display: "grid", gridTemplateColumns: isEditing ? "1fr" : "1fr auto", gap: 8, alignItems: "baseline", padding: "6px 0", borderBottom: idx < exercises.length - 1 ? "1px solid #171717" : "none", background: shared ? "transparent" : "rgba(245,158,11,0.08)" }}>
                             <div>
                               <span style={{ fontSize: 12, fontWeight: 700, color: shared ? "#aaa" : "#f59e0b" }}>{ex.name || ex.id || "Unnamed exercise"}</span>
                               {!shared && <span style={{ marginLeft: 6, fontSize: 9, color: "#f59e0b", textTransform: "uppercase", letterSpacing: "0.08em" }}>only here</span>}
                               {shared && <span style={{ marginLeft: 6, fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em" }}>shared</span>}
                               {differs && <span style={{ marginLeft: 6, fontSize: 9, color: "#fca5a5", textTransform: "uppercase", letterSpacing: "0.08em" }}>differs</span>}
                             </div>
-                            <div style={{ fontSize: 11, color: differs ? "#fca5a5" : "#777", fontFamily: "'IBM Plex Mono',monospace", whiteSpace: "nowrap" }}>
-                              {fmtExercise(ex)}
-                            </div>
+                            {isEditing ? (
+                              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 6 }}>
+                                {["sets", "reps", "load"].map(field => (
+                                  <input
+                                    key={field}
+                                    value={draft[field] ?? ex[field] ?? ""}
+                                    onChange={event => updateEditDraft(entryKey(entry), idx, field, event.target.value)}
+                                    placeholder={field}
+                                    style={{ background: "#07080e", color: "#ced2f0", border: "1px solid #1a1b2e", borderRadius: 6, padding: "6px 7px", fontSize: 11, fontFamily: "inherit", minWidth: 0 }}
+                                  />
+                                ))}
+                              </div>
+                            ) : (
+                              <div style={{ fontSize: 11, color: differs ? "#fca5a5" : "#777", fontFamily: "'IBM Plex Mono',monospace", whiteSpace: "nowrap" }}>
+                                {fmtExercise(ex)}
+                              </div>
+                            )}
                           </div>
                         )
                       })}
@@ -1372,15 +1625,11 @@ function ConflictCompareView({ date, entries, onBack = null }) {
           </div>
         )
       })}
-
-      <div style={{ padding: "10px 12px", background: "#0a0a0a", border: "1px solid #1a1a1a", borderRadius: 8, color: "#777", fontSize: 12 }}>
-        Resolution actions (merge, delete, edit) coming next.
-      </div>
     </div>
   )
 }
 
-function MonthLogCalendar({ log, onOpenEntry }) {
+function MonthLogCalendar({ log, onOpenEntry, onDeleteEntry, onMergeEntries, onUpdateEntry, onConflictResolved }) {
   const [monthDate, setMonthDate] = useState(() => new Date())
   const [selectedConflictDate, setSelectedConflictDate] = useState(null)
   const [pickerDate, setPickerDate] = useState(null)
@@ -1511,6 +1760,10 @@ function MonthLogCalendar({ log, onOpenEntry }) {
           date={selectedConflictDate}
           entries={entries}
           onBack={() => setSelectedConflictDate(null)}
+          onDeleteEntry={onDeleteEntry}
+          onMergeEntries={onMergeEntries}
+          onUpdateEntry={onUpdateEntry}
+          onConflictResolved={onConflictResolved}
         />
       )}
     </div>
@@ -5268,6 +5521,62 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     showToast("Entry deleted")
   }
 
+  const removeScheduleIdsFromStoredWorkouts = async ids => {
+    const removeIds = new Set(Array.from(ids).map(String))
+    const existingWorkouts = await store.get("ufd-workouts") || storedWorkouts
+    const newWorkouts = (Array.isArray(existingWorkouts) ? existingWorkouts : []).filter(w => !removeIds.has(String(w._scheduleId)))
+    setStoredWorkouts(newWorkouts)
+    const savedWorkouts = await saveScheduleKey("ufd-workouts", newWorkouts)
+    if (Array.isArray(savedWorkouts?.value ?? savedWorkouts)) setStoredWorkouts(savedWorkouts?.value ?? savedWorkouts)
+  }
+
+  const updateConflictEntry = async updatedEntry => {
+    const id = updatedEntry?.id
+    const currentLog = await loadScheduleLogForMutation(schedLog)
+    const newLog = currentLog.map(entry => String(entry.id) === String(id) ? updatedEntry : entry)
+    setSchedLog(newLog)
+    const savedLog = await saveScheduleKey("wt-log", newLog)
+    if (Array.isArray(savedLog?.value ?? savedLog)) setSchedLog(savedLog?.value ?? savedLog)
+    showToast("Entry updated")
+  }
+
+  const mergeConflictEntries = async ({ entries, baseEntry, mergedEntryFields, mergedExercises }) => {
+    const sourceEntries = Array.isArray(entries) ? entries : []
+    if (sourceEntries.length !== 2 || !baseEntry) {
+      showToast("Merge requires exactly two entries")
+      return
+    }
+    const sourceIds = new Set(sourceEntries.map(entry => entry?.id).filter(id => id != null))
+    const date = String(mergedEntryFields?.date || baseEntry.date || baseEntry.logged_at || "").slice(0, 10)
+    const day = mergedEntryFields?.day || baseEntry.day || dayKeyFromScheduleDate(date) || ""
+    const venue = mergedEntryFields?.venue || baseEntry.venue_label || baseEntry.venue || ""
+    const loggedTime = /^\d{4}-\d{2}-\d{2}$/.test(date)
+      ? String(baseEntry.logged_at || "").slice(11, 19) || "12:00:00"
+      : null
+    const mergedEntry = {
+      ...baseEntry,
+      id: Date.now(),
+      session_id: `merged_${Date.now()}`,
+      date,
+      day,
+      dayLabel: day,
+      venue,
+      venue_label: venue,
+      logged_at: loggedTime ? new Date(`${date}T${loggedTime}`).toISOString() : baseEntry.logged_at,
+      source: "LIFT Merge",
+      exercises: Array.isArray(mergedExercises) ? mergedExercises : [],
+      merged_from: sourceEntries
+    }
+
+    const currentLog = await loadScheduleLogForMutation(schedLog)
+    const newLog = currentLog.filter(entry => !sourceIds.has(entry.id)).concat(mergedEntry)
+    setSchedLog(newLog)
+    const savedLog = await saveScheduleKey("wt-log", newLog)
+    if (Array.isArray(savedLog?.value ?? savedLog)) setSchedLog(savedLog?.value ?? savedLog)
+    await removeScheduleIdsFromStoredWorkouts(sourceIds)
+    showToast("Entries merged")
+  }
+
   const resolveDiagnosticConflict = useCallback(async ({ clusterKey, canonicalId, deleteOthers = false, reassignDate = null }) => {
     if (!canonicalId) {
       showToast("Select a canonical record first")
@@ -6381,6 +6690,10 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
             <MonthLogCalendar
               log={schedLog}
               onOpenEntry={openCalendarLogEntry}
+              onDeleteEntry={deleteEntry}
+              onMergeEntries={mergeConflictEntries}
+              onUpdateEntry={updateConflictEntry}
+              onConflictResolved={() => showToast("Conflict resolved")}
             />
           )}
         </>
