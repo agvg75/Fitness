@@ -7922,7 +7922,7 @@ if (w.category === "Strength") {
                 { name: "Chest Press",       match: "chest press",      baseline: 110 },
                 { name: "Incline Press",      match: "incline",          baseline: 90  },
                 { name: "Machine Flys",       match: "fly",              baseline: 30  },
-                { name: "Triceps Pulldown",   match: "tricep",           baseline: 25  },
+                { name: "Triceps Pulldown",   match: "tricep",           exclude: ["overhead"], baseline: 25  },
                 { name: "Lateral Raise",      match: "lateral raise",    baseline: null },
                 { name: "Face Pull",          match: "face pull",        baseline: null },
                 { name: "Rear Delt Fly",      match: "rear delt",        baseline: null },
@@ -7937,7 +7937,7 @@ if (w.category === "Strength") {
               exercises: [
                 { name: "Lat Pulldown",       match: "lat pulldown",     baseline: 133 },
                 { name: "Cable Row",          match: "cable row",        baseline: 133 },
-                { name: "Bicep Curl",         match: "bicep curl",       baseline: 75  },
+                { name: "Bicep Curl",         match: "bicep curl",       exclude: ["reverse", "hammer", "eccentric", "leg"], baseline: 75  },
                 { name: "Hammer Curl",        match: "hammer curl",      baseline: null },
                 { name: "Inverted Row",       match: "inverted row",     baseline: null },
                 { name: "Straight Arm Pulldown", match: "straight arm",  baseline: null },
@@ -7953,7 +7953,7 @@ if (w.category === "Strength") {
                 { name: "Hip Thrust",         match: "hip thrust",       baseline: null },
                 { name: "Leg Press",          match: "leg press",        baseline: 320  },
                 { name: "Leg Extension",      match: "leg extension",    baseline: null },
-                { name: "Leg Curl",           match: "leg curl",         baseline: 125  },
+                { name: "Leg Curl",           match: "leg curl",         exclude: ["bicep", "hamstring eccentric"], baseline: 125  },
                 { name: "KB RDL",             match: "rdl",              baseline: null },
                 { name: "Hip Abduction",      match: "abduction",        baseline: null },
                 { name: "Hip Adduction",      match: "adduction",        baseline: null },
@@ -7995,14 +7995,18 @@ if (w.category === "Strength") {
           const log = Array.isArray(schedLog) ? schedLog : []
           // Also pull from canonical sessions as a fallback source
           const allSessions = [...log]
-          const sessionHasExerciseMatch = (sess, match) =>
+          const sessionHasExerciseMatch = (sess, match, exclude = []) =>
             (sess.exercises || [])
               .map(normalizeLoggedExercise)
               .filter(Boolean)
-              .some(e => (e.name || "").toLowerCase().includes(match.toLowerCase()))
+              .some(e => {
+                const nm = (e.name || "").toLowerCase()
+                if (!nm.includes(match.toLowerCase())) return false
+                return !exclude.some(x => nm.includes(x.toLowerCase()))
+              })
 
           const renderGroup = ({ group, color, exercises }) => {
-            const charts = exercises.map(({ name, match, baseline }) => {
+            const charts = exercises.map(({ name, match, exclude = [], baseline }) => {
               const points = []
               for (const sess of allSessions) {
                 // Collect ALL sets for this exercise (not just the first) so the
@@ -8010,9 +8014,11 @@ if (w.category === "Strength") {
                 const normalized = (sess.exercises || [])
                   .map(normalizeLoggedExercise)
                   .filter(Boolean)
-                const matches = normalized.filter(e =>
-                  (e.name || "").toLowerCase().includes(match.toLowerCase())
-                )
+                const matches = normalized.filter(e => {
+                  const nm = (e.name || "").toLowerCase()
+                  if (!nm.includes(match.toLowerCase())) return false
+                  return !exclude.some(x => nm.includes(x.toLowerCase()))
+                })
                 if (!matches.length) continue
                 let bestE1rm = 0
                 for (const ex of matches) {
@@ -8072,8 +8078,8 @@ if (w.category === "Strength") {
           }
 
           const anyData = EXERCISE_GROUPS.some(g =>
-            g.exercises.some(({ match }) =>
-              allSessions.some(sess => sessionHasExerciseMatch(sess, match))
+            g.exercises.some(({ match, exclude = [] }) =>
+              allSessions.some(sess => sessionHasExerciseMatch(sess, match, exclude))
             )
           )
 
