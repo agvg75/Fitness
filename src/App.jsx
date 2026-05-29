@@ -3934,8 +3934,20 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       if (!ss[d]) return
       Object.keys(ss[d]).forEach(exId => {
         const v = ss[d][exId]
-        if (v && typeof v === "object" && !Array.isArray(v) && v.sets) {
-          newFields[`${d}_${exId}`] = { sets: v.sets, reps: v.reps, load: v.load, notes: v.notes || "" }
+        if (!v || typeof v !== "object" || Array.isArray(v)) return
+        // Accept an entry if ANY editable field was saved, not only when `sets`
+        // is present. A weight-only edit (load set, sets/reps untouched) is the
+        // common gym case and must rehydrate, otherwise the field reverts to Rx.
+        const hasEdit =
+          v.sets != null || v.reps != null || v.load != null ||
+          (typeof v.notes === "string" && v.notes.length > 0)
+        if (hasEdit) {
+          const merged = {}
+          if (v.sets != null) merged.sets = v.sets
+          if (v.reps != null) merged.reps = v.reps
+          if (v.load != null) merged.load = v.load
+          merged.notes = typeof v.notes === "string" ? v.notes : ""
+          newFields[`${d}_${exId}`] = merged
           if (v.variant) newVariants[exId] = v.variant
         }
       })
