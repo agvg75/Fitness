@@ -808,6 +808,24 @@ const buildScheduleDayDateMismatchReport = entries => {
     .sort((a, b) => String(b.date).localeCompare(String(a.date)))
 }
 
+// Normalize an exercise object from either the Schedule-tab schema
+// (exercise_name + actual{}) or the Trainer schema (n + flat fields)
+// into one shape for display and comparison.
+function normalizeLoggedExercise(ex) {
+  if (!ex || typeof ex !== "object") return null
+  const name = ex.exercise_name ?? ex.n ?? null
+  const id = ex.exercise_id ?? ex.id ?? null
+  const sets = ex.actual?.sets ?? ex.sets ?? null
+  const reps = ex.actual?.reps ?? ex.reps ?? null
+  const load = ex.actual?.load ?? ex.load ?? null
+  const notes = ex.notes ?? ""
+  return {
+    name, id, sets, reps, load, notes,
+    // normalized comparison key: lowercased trimmed name, fallback to id
+    key: String(name ?? id ?? "").trim().toLowerCase(),
+  }
+}
+
 const mergeScheduleLogEntries = (...logs) => Object.values(
   logs
     .flatMap(log => Array.isArray(log) ? log : [])
@@ -1234,6 +1252,267 @@ function ScheduleLogView({ log, expanded, setExpanded, onDelete, onEdit, highlig
           </div>
         )
       })}
+    </div>
+  )
+}
+
+function ConflictCompareView({ date, entries, onBack = null }) {
+  const clusters = useMemo(() => {
+    const safeEntries = Array.isArray(entries) ? entries : []
+    return buildScheduleDayDateMismatchReport(safeEntries)
+      .filter(group => group.date === date)
+      .map(group => {
+        const records = group.records
+          .map(record => safeEntries.find(entry => String(entry?.id) === String(record.id) || String(entry?.session_id) === String(record.id)))
+          .filter(Boolean)
+        return { ...group, entries: records }
+      })
+      .filter(group => group.entries.length >= 2)
+  }, [date, entries])
+
+  const fmtValue = value => value == null || value === "" ? "—" : String(value)
+  const fmtExercise = ex => `${fmtValue(ex.sets)} x ${fmtValue(ex.reps)} @ ${fmtValue(ex.load)}`
+  const fmtLoggedAt = value => {
+    if (!value) return "NA"
+    const parsed = new Date(value)
+    if (Number.isNaN(parsed.getTime())) return String(value)
+    return parsed.toLocaleString()
+  }
+
+  if (!clusters.length) {
+    return (
+      <div style={{ padding: "14px", background: "#0a0a0a", border: "1px solid #1a1a1a", borderRadius: 8, color: "#777" }}>
+        {onBack && (
+          <button onClick={onBack} style={{ marginBottom: 10, background: "none", border: "1px solid #2a2a2a", borderRadius: 6, color: "#aaa", fontSize: 11, padding: "6px 10px", cursor: "pointer", fontFamily: "inherit" }}>
+            Back to calendar
+          </button>
+        )}
+        No conflict cluster found for {date}.
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ display: "grid", gap: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+        <div>
+          <div style={{ fontSize: 9, letterSpacing: "0.2em", color: "#555", textTransform: "uppercase", marginBottom: 4 }}>Conflict compare</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: "#e8e8e8" }}>{date}</div>
+        </div>
+        {onBack && (
+          <button onClick={onBack} style={{ background: "none", border: "1px solid #2a2a2a", borderRadius: 6, color: "#aaa", fontSize: 11, padding: "6px 10px", cursor: "pointer", fontFamily: "inherit" }}>
+            Back to calendar
+          </button>
+        )}
+      </div>
+
+      {clusters.map(group => {
+        const normalizedByEntry = group.entries.map(entry => ({
+          entry,
+          exercises: (Array.isArray(entry.exercises) ? entry.exercises : [])
+            .map(normalizeLoggedExercise)
+            .filter(ex => ex && ex.key)
+        }))
+        const keyCounts = normalizedByEntry.reduce((acc, item) => {
+          new Set(item.exercises.map(ex => ex.key)).forEach(key => {
+            acc[key] = (acc[key] || 0) + 1
+          })
+          return acc
+        }, {})
+        const allCount = normalizedByEntry.length
+        const valueMap = normalizedByEntry.reduce((acc, item) => {
+          item.exercises.forEach(ex => {
+            if (!acc[ex.key]) acc[ex.key] = new Set()
+            acc[ex.key].add(JSON.stringify([ex.sets ?? "", ex.reps ?? "", ex.load ?? ""]))
+          })
+          return acc
+        }, {})
+
+        return (
+          <div key={group.clusterKey} style={{ border: "1px solid rgba(239,68,68,0.45)", borderRadius: 8, background: "rgba(239,68,68,0.08)", overflow: "hidden" }}>
+            <div style={{ padding: "9px 12px", borderBottom: "1px solid rgba(239,68,68,0.22)", display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#fca5a5" }}>{group.slotLabel || "Unslotted"} conflict</div>
+              <div style={{ fontSize: 11, color: "#888" }}>{group.entries.length} entries</div>
+            </div>
+            <div style={{ overflowX: "auto" }}>
+              <div style={{ display: "grid", gridAutoFlow: allCount > 2 ? "column" : "row", gridAutoColumns: "minmax(280px, 1fr)", gridTemplateColumns: allCount <= 2 ? "repeat(auto-fit, minmax(260px, 1fr))" : undefined, gap: 10, padding: 10, minWidth: allCount > 2 ? allCount * 290 : undefined }}>
+                {normalizedByEntry.map(({ entry, exercises }) => (
+                  <div key={entry.id || entry.session_id} style={{ background: "#0e0e0e", border: "1px solid #242424", borderRadius: 8, overflow: "hidden" }}>
+                    <div style={{ padding: "9px 10px", background: "#111", borderBottom: "1px solid #1a1a1a" }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: "#d0d0d0" }}>{entry.dayLabel || entry.day || "NA"}</div>
+                      <div style={{ fontSize: 10, color: "#777", marginTop: 3 }}>
+                        {entry.venue_label || entry.venue || "NA"} · {entry.source || "local"} · {fmtLoggedAt(entry.logged_at)}
+                      </div>
+                    </div>
+                    <div style={{ padding: "8px 10px" }}>
+                      {!exercises.length ? (
+                        <div style={{ fontSize: 12, color: "#444" }}>No exercise data recorded.</div>
+                      ) : exercises.map((ex, idx) => {
+                        const shared = keyCounts[ex.key] === allCount
+                        const differs = shared && valueMap[ex.key]?.size > 1
+                        return (
+                          <div key={`${ex.key}_${idx}`} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8, alignItems: "baseline", padding: "6px 0", borderBottom: idx < exercises.length - 1 ? "1px solid #171717" : "none", background: shared ? "transparent" : "rgba(245,158,11,0.08)" }}>
+                            <div>
+                              <span style={{ fontSize: 12, fontWeight: 700, color: shared ? "#aaa" : "#f59e0b" }}>{ex.name || ex.id || "Unnamed exercise"}</span>
+                              {!shared && <span style={{ marginLeft: 6, fontSize: 9, color: "#f59e0b", textTransform: "uppercase", letterSpacing: "0.08em" }}>only here</span>}
+                              {shared && <span style={{ marginLeft: 6, fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em" }}>shared</span>}
+                              {differs && <span style={{ marginLeft: 6, fontSize: 9, color: "#fca5a5", textTransform: "uppercase", letterSpacing: "0.08em" }}>differs</span>}
+                            </div>
+                            <div style={{ fontSize: 11, color: differs ? "#fca5a5" : "#777", fontFamily: "'IBM Plex Mono',monospace", whiteSpace: "nowrap" }}>
+                              {fmtExercise(ex)}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )
+      })}
+
+      <div style={{ padding: "10px 12px", background: "#0a0a0a", border: "1px solid #1a1a1a", borderRadius: 8, color: "#777", fontSize: 12 }}>
+        Resolution actions (merge, delete, edit) coming next.
+      </div>
+    </div>
+  )
+}
+
+function MonthLogCalendar({ log, onOpenEntry }) {
+  const [monthDate, setMonthDate] = useState(() => new Date())
+  const [selectedConflictDate, setSelectedConflictDate] = useState(null)
+  const [pickerDate, setPickerDate] = useState(null)
+  const entries = Array.isArray(log) ? log : []
+  const todayKey = todayISO()
+  const monthStart = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1)
+  const monthLabel = monthStart.toLocaleDateString(undefined, { month: "long", year: "numeric" })
+  const weekdayLabels = Array.from({ length: 7 }, (_, idx) => new Date(2020, 5, 7 + idx).toLocaleDateString(undefined, { weekday: "short" }))
+  const dateFromEntry = entry => String(entry?.date || entry?.logged_at || "").slice(0, 10)
+  const entriesByDate = useMemo(() => {
+    return entries.reduce((acc, entry) => {
+      const date = dateFromEntry(entry)
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return acc
+      if (!acc[date]) acc[date] = []
+      acc[date].push(entry)
+      return acc
+    }, {})
+  }, [entries])
+  const conflictDates = useMemo(() => new Set(buildScheduleDayDateMismatchReport(entries).map(group => group.date)), [entries])
+  const calendarDays = useMemo(() => {
+    const first = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1)
+    const start = new Date(first)
+    start.setDate(first.getDate() - first.getDay())
+    return Array.from({ length: 42 }, (_, idx) => {
+      const d = new Date(start)
+      d.setDate(start.getDate() + idx)
+      return d
+    })
+  }, [monthDate])
+  const keyFromDate = date => {
+    const y = date.getFullYear()
+    const m = String(date.getMonth() + 1).padStart(2, "0")
+    const d = String(date.getDate()).padStart(2, "0")
+    return `${y}-${m}-${d}`
+  }
+  const shiftMonth = delta => {
+    setSelectedConflictDate(null)
+    setPickerDate(null)
+    setMonthDate(prev => new Date(prev.getFullYear(), prev.getMonth() + delta, 1))
+  }
+  const openEntry = entry => {
+    setPickerDate(null)
+    setSelectedConflictDate(null)
+    onOpenEntry?.(entry)
+  }
+  const handleDayClick = dateKey => {
+    const dayEntries = entriesByDate[dateKey] || []
+    if (!dayEntries.length) return
+    if (conflictDates.has(dateKey)) {
+      setPickerDate(null)
+      setSelectedConflictDate(dateKey)
+      return
+    }
+    if (dayEntries.length === 1) {
+      openEntry(dayEntries[0])
+      return
+    }
+    setSelectedConflictDate(null)
+    setPickerDate(dateKey)
+  }
+
+  return (
+    <div style={{ display: "grid", gap: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
+        <button onClick={() => shiftMonth(-1)} style={{ background: "none", border: "1px solid #2a2a2a", borderRadius: 6, color: "#aaa", fontSize: 14, width: 34, height: 30, cursor: "pointer", fontFamily: "inherit" }}>‹</button>
+        <div style={{ fontSize: 16, fontWeight: 700, color: "#e8e8e8" }}>{monthLabel}</div>
+        <button onClick={() => shiftMonth(1)} style={{ background: "none", border: "1px solid #2a2a2a", borderRadius: 6, color: "#aaa", fontSize: 14, width: 34, height: 30, cursor: "pointer", fontFamily: "inherit" }}>›</button>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: 4 }}>
+        {weekdayLabels.map(day => (
+          <div key={day} style={{ fontSize: 10, color: "#555", textAlign: "center", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>{day}</div>
+        ))}
+        {calendarDays.map(date => {
+          const dateKey = keyFromDate(date)
+          const inMonth = date.getMonth() === monthDate.getMonth()
+          const dayEntries = entriesByDate[dateKey] || []
+          const hasEntries = dayEntries.length > 0
+          const hasConflict = conflictDates.has(dateKey)
+          const isToday = dateKey === todayKey
+          return (
+            <button
+              key={dateKey}
+              onClick={() => handleDayClick(dateKey)}
+              disabled={!hasEntries}
+              style={{
+                minHeight: 58,
+                padding: 7,
+                textAlign: "left",
+                borderRadius: 7,
+                border: hasConflict ? "1px solid rgba(239,68,68,0.45)" : isToday ? "1px solid #7F77DD" : "1px solid #1a1a1a",
+                background: hasConflict ? "rgba(239,68,68,0.22)" : hasEntries ? "#0e0e0e" : "#070707",
+                opacity: inMonth ? 1 : 0.35,
+                color: hasEntries ? "#cfcfcf" : "#333",
+                cursor: hasEntries ? "pointer" : "default",
+                fontFamily: "inherit",
+                position: "relative",
+                boxShadow: isToday ? "0 0 0 1px rgba(127,119,221,0.65)" : "none"
+              }}
+            >
+              <div style={{ fontSize: 12, fontWeight: isToday ? 800 : 700 }}>{date.getDate()}</div>
+              {hasEntries && (
+                <div style={{ position: "absolute", right: 6, bottom: 6, minWidth: 18, height: 18, borderRadius: 9, background: hasConflict ? "rgba(239,68,68,0.45)" : "#1f2937", color: hasConflict ? "#fecaca" : "#9ca3af", fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700 }}>
+                  {dayEntries.length}
+                </div>
+              )}
+            </button>
+          )
+        })}
+      </div>
+
+      {pickerDate && (
+        <div style={{ padding: "10px 12px", background: "#0a0a0a", border: "1px solid #1a1a1a", borderRadius: 8 }}>
+          <div style={{ fontSize: 11, color: "#777", marginBottom: 8 }}>Choose a logged session for {pickerDate}</div>
+          <div style={{ display: "grid", gap: 6 }}>
+            {(entriesByDate[pickerDate] || []).map(entry => (
+              <button key={entry.id || entry.session_id} onClick={() => openEntry(entry)} style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", background: "#0e0e0e", border: "1px solid #1f1f1f", borderRadius: 6, color: "#aaa", fontSize: 12, padding: "8px 10px", cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
+                <span>{entry.dayLabel || entry.day || "NA"} · {entry.venue_label || entry.venue || "NA"}</span>
+                <span style={{ color: "#555", fontSize: 10 }}>{entry.logged_at || entry.id}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {selectedConflictDate && (
+        <ConflictCompareView
+          date={selectedConflictDate}
+          entries={entries}
+          onBack={() => setSelectedConflictDate(null)}
+        />
+      )}
     </div>
   )
 }
@@ -3849,6 +4128,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const safeScheduleFeedback = Array.isArray(scheduleFeedback) ? scheduleFeedback : []
   const [activeDay, setActiveDay] = useState(todayDayKey())
   const [schedView, setSchedView] = useState("schedule")
+  const [logView, setLogView] = useState("list")
   const [expandedLog, setExpandedLog] = useState({})
   const [toast, setToast] = useState(null)
   const [openSections, setOpenSections] = useState(() => {
@@ -5101,6 +5381,11 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     showToast(`Opened log entry ${entry.id}`)
   }, [schedLog, showToast])
 
+  const openCalendarLogEntry = useCallback((entry) => {
+    setLogView("list")
+    openDiagnosticEntry(entry?.id ?? entry?.session_id)
+  }, [openDiagnosticEntry])
+
   const toggleSection = k => setOpenSections(prev => ({ ...prev, [k]: !prev[k] }))
  const importRef = useRef(null)
 
@@ -6050,15 +6335,55 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       </div>
 
       {schedView === "log" && (
-        <ScheduleLogView
-          log={schedLog}
-          expanded={expandedLog}
-          setExpanded={setExpandedLog}
-          onDelete={deleteEntry}
-          onEdit={editEntry}
-          highlightedId={highlightedLogEntryId}
-          setEntryRef={setLogEntryRef}
-        />
+        <>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
+            <div style={{ fontSize: "9px", letterSpacing: "0.2em", color: "#333", textTransform: "uppercase" }}>
+              Log view
+            </div>
+            <div style={{ display: "flex", gap: 3, background: "#0a0a0a", borderRadius: 8, padding: 4, border: "1px solid #1a1a1a" }}>
+              {["list", "calendar"].map(view => (
+                <button
+                  key={view}
+                  onClick={() => setLogView(view)}
+                  style={{
+                    padding: "6px 12px",
+                    border: "none",
+                    cursor: "pointer",
+                    background: logView === view ? "rgba(127,119,221,0.18)" : "transparent",
+                    fontSize: 12,
+                    fontWeight: logView === view ? 700 : 500,
+                    letterSpacing: "0.06em",
+                    textTransform: "uppercase",
+                    color: logView === view ? "#7F77DD" : "#555",
+                    borderRadius: 6,
+                    fontFamily: "inherit"
+                  }}
+                >
+                  {view === "list" ? "List" : "Calendar"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {logView === "list" && (
+            <ScheduleLogView
+              log={schedLog}
+              expanded={expandedLog}
+              setExpanded={setExpandedLog}
+              onDelete={deleteEntry}
+              onEdit={editEntry}
+              highlightedId={highlightedLogEntryId}
+              setEntryRef={setLogEntryRef}
+            />
+          )}
+
+          {logView === "calendar" && (
+            <MonthLogCalendar
+              log={schedLog}
+              onOpenEntry={openCalendarLogEntry}
+            />
+          )}
+        </>
       )}
 
       {schedView === "schedule" && (
