@@ -15535,6 +15535,69 @@ function getDayTypeBucket(isoDate) {
 
 const MEAL_SLOTS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks']
 
+function normalizeMealSlotLabel(value) {
+  const raw = String(value || "").trim().toLowerCase()
+  if (raw === "breakfast") return "Breakfast"
+  if (raw === "lunch") return "Lunch"
+  if (raw === "dinner" || raw === "supper") return "Dinner"
+  if (raw === "snack" || raw === "snacks") return "Snacks"
+  return value || "Snacks"
+}
+
+function buildUfdEntriesFromTrainerMeal(newMeal) {
+  const baseId = String(newMeal?.id || newMeal?.meal_id || `trainer_meal_${Date.now()}`)
+  const mealSlot = normalizeMealSlotLabel(newMeal?.meal)
+  return (newMeal?.items || []).map((item, idx) => ({
+    id: `${baseId}_item${idx}`,
+    date: newMeal.date,
+    meal: newMeal.meal,
+    meal_type: mealSlot,
+    name: item.name,
+    preset_name: item.name,
+    calories: Number(item.calories) || 0,
+    protein_g: Number(item.protein_g) || 0,
+    fat_g: Number(item.fat_g) || 0,
+    carbs_g: Number(item.carbs_g) || 0,
+    fiber_g: Number(item.fiber_g) || 0,
+    source: "trainer"
+  }))
+}
+
+function backfillMealRecordsToUfd(storedMeals, mealRecords) {
+  const existingMeals = Array.isArray(storedMeals) ? storedMeals : []
+  const existingIds = new Set(existingMeals.map(entry => String(entry.id)))
+  const bridged = []
+  ;(Array.isArray(mealRecords) ? mealRecords : []).forEach(meal => {
+    buildUfdEntriesFromTrainerMeal(meal).forEach(entry => {
+      if (!existingIds.has(String(entry.id))) {
+        existingIds.add(String(entry.id))
+        bridged.push(entry)
+      }
+    })
+  })
+  return bridged.length > 0 ? [...existingMeals, ...bridged] : existingMeals
+}
+
+function buildUfdEntryFromQuickLog(entry) {
+  const quickLogId = `meal-log-${entry.date}_${entry.meal_label}_${Date.now()}`
+  const mealSlot = normalizeMealSlotLabel(entry.meal_label)
+  return {
+    id: quickLogId,
+    date: entry.date,
+    meal: entry.meal_label,
+    meal_type: mealSlot,
+    name: entry.description,
+    preset_name: entry.description,
+    calories: Number(entry.calories_est) || 0,
+    protein_g: Number(entry.protein_g_est) || 0,
+    fat_g: 0,
+    carbs_g: 0,
+    fiber_g: 0,
+    notes: entry.notes || "",
+    source: "meal-log"
+  }
+}
+
 function getImputedSlots(isoDate, realEntries, templateTotals, mealPresets, skippedSlots = new Set()) {
   const bucket = getDayTypeBucket(isoDate)
 
@@ -16576,19 +16639,21 @@ useEffect(() => {
         local.forEach(e => { if (e?.id) byId.set(String(e.id), e) })
         return [...byId.values()].sort((a, b) => String(a.date).localeCompare(String(b.date)))
       })()
+      const storedMealRecords = await store.get("lift_meal_records") || []
+      const storedMeals = backfillMealRecordsToUfd(mergedMeals, storedMealRecords)
 
-      if (mergedMeals.length > 0) {
-        setMealEntries(mergedMeals)
+      if (storedMeals.length > 0) {
+        setMealEntries(storedMeals)
         // Write merged set back to localStorage so this device has everything
-        try { localStorage.setItem("ufd-meal-entries", JSON.stringify(mergedMeals)) } catch {}
+        try { localStorage.setItem("ufd-meal-entries", JSON.stringify(storedMeals)) } catch {}
         // Write merged set back to Supabase user_kv if we have a session
         if (session?.user?.id && supabase) {
           supabase.from("user_kv").upsert(
-            { user_id: session.user.id, key: "ufd-meal-entries", value: mergedMeals, updated_at: new Date().toISOString() },
+            { user_id: session.user.id, key: "ufd-meal-entries", value: storedMeals, updated_at: new Date().toISOString() },
             { onConflict: "user_id,key" }
           ).then(({ error }) => {
             if (error) console.warn("[LIFT] Load-time meal merge sync failed:", error.message)
-            else if (process.env.NODE_ENV === "development") console.log("[LIFT] Load-time meal merge synced:", mergedMeals.length, "entries")
+            else if (process.env.NODE_ENV === "development") console.log("[LIFT] Load-time meal merge synced:", storedMeals.length, "entries")
           })
         }
       } else if (Array.isArray(supabaseMeals) && supabaseMeals.length > 0) {
@@ -17072,8 +17137,11 @@ const overviewWeightDomain = useMemo(() => {
   }, [typeof mealRecords !== "undefined" ? mealRecords : null])
 
   const trainerDerivedDays = useMemo(() => {
+    const bridgedMealIds = new Set((Array.isArray(mealEntries) ? mealEntries : []).map(entry => String(entry.id)))
     // Convert lift_meal_records shape to mealEntries shape for deriveDailyNutrition
-    return trainerMealEntries.map(m => ({
+    return trainerMealEntries.filter(m =>
+      !buildUfdEntriesFromTrainerMeal(m).some(entry => bridgedMealIds.has(String(entry.id)))
+    ).map(m => ({
       id:        m.meal_id || m.id,
       date:      (m.date || "").slice(0, 10),
       meal_type: m.meal || "dinner",
@@ -17085,7 +17153,7 @@ const overviewWeightDomain = useMemo(() => {
       fiber_g:   Number(m.total_fiber_g   || 0),
       source:    m.source || "trainer",
     })).filter(m => m.date && m.calories > 0)
-  }, [trainerMealEntries])
+  }, [trainerMealEntries, mealEntries])
 
   const mealDerivedDays = useMemo(() => {
     // Combine manual entries and trainer entries, deduplicated by date+meal_type
@@ -20095,6 +20163,17 @@ const overviewExplainButton = (key) => (
     localStorage.setItem("lift_meal_records", JSON.stringify(merged))
     setMealRecords(merged)
     try {
+      // Bridge to ufd-meal-entries so Calories tab sees Coach meals
+      const baseId = String(mealRecord.id || mealRecord.meal_id || "")
+      const existingUfd = await store.get("ufd-meal-entries") || []
+      const deduped = (Array.isArray(existingUfd) ? existingUfd : []).filter(entry =>
+        baseId ? !String(entry.id).startsWith(baseId) : true
+      )
+      const bridgeEntries = buildUfdEntriesFromTrainerMeal(mealRecord)
+      const mergedUfd = [...deduped, ...bridgeEntries]
+      await store.set("ufd-meal-entries", mergedUfd)
+      setMealEntries(mergedUfd)
+
       if (supabase && session?.user?.id) {
         await supabase.from("user_kv").upsert(
           { user_id: session.user.id, key: "lift_meal_records", value: merged, updated_at: new Date().toISOString() },
@@ -20102,7 +20181,16 @@ const overviewExplainButton = (key) => (
         )
       }
     } catch (e) { console.warn("[Trainer] Meal save error", e) }
-  }, [setMealRecords, session, supabase])
+  }, [setMealRecords, setMealEntries, session, supabase])
+
+  const bridgeQuickLogMealToUfd = React.useCallback(async (entry) => {
+    // Bridge to ufd-meal-entries so Calories tab sees quick-log meals
+    const existingUfd = await store.get("ufd-meal-entries") || []
+    const quickEntry = buildUfdEntryFromQuickLog(entry)
+    const mergedUfd = [...(Array.isArray(existingUfd) ? existingUfd : []), quickEntry]
+    await store.set("ufd-meal-entries", mergedUfd)
+    setMealEntries(mergedUfd)
+  }, [setMealEntries])
 
   const trainerLogExercise = React.useCallback(async (exerciseName, day, sets = "3", reps = "10", load = "") => {
     const today = new Date()
@@ -23266,7 +23354,7 @@ return (
 )}
 
 {tab === "Coach" && (
-  <CoachEntry supabase={supabase} />
+  <CoachEntry supabase={supabase} onMealLogged={bridgeQuickLogMealToUfd} />
 )}
 
       

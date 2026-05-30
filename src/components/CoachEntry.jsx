@@ -8,7 +8,7 @@ function appendToLocalKey(key, item) {
   localStorage.setItem(key, JSON.stringify(existing));
 }
 
-function commitPayload(type, payload, supabase) {
+async function commitPayload(type, payload, supabase, onMealLogged) {
   const now = new Date().toISOString();
 
   if (type === 'weight') {
@@ -63,8 +63,10 @@ function commitPayload(type, payload, supabase) {
   if (type === 'meal') {
     const key = `meal-log-${payload.date}`;
     const existing = JSON.parse(localStorage.getItem(key) || '[]');
-    existing.push({ ...payload, logged_at: now });
+    const entry = { ...payload, logged_at: now };
+    existing.push(entry);
     localStorage.setItem(key, JSON.stringify(existing));
+    if (typeof onMealLogged === 'function') await onMealLogged(entry);
     return { store: `meal-log-${payload.date} (localStorage)`, summary: `Meal: ${payload.meal_label} on ${payload.date}` };
   }
 
@@ -113,7 +115,7 @@ const TYPE_LABELS = {
   unknown: 'Unknown'
 };
 
-export default function CoachEntry({ supabase }) {
+export default function CoachEntry({ supabase, onMealLogged }) {
   const [input, setInput] = useState('');
   const [status, setStatus] = useState('idle');
   const [parsed, setParsed] = useState(null);
@@ -144,14 +146,19 @@ export default function CoachEntry({ supabase }) {
     }
   }
 
-  function handleConfirm() {
+  async function handleConfirm() {
     setStatus('writing');
-    const r = commitPayload(parsed.type, parsed.payload, supabase);
-    setResult(r);
-    setHistory(prev => [{ input, parsed, result: r, ts: new Date().toLocaleTimeString() }, ...prev.slice(0, 9)]);
-    setStatus('done');
-    setInput('');
-    setParsed(null);
+    try {
+      const r = await commitPayload(parsed.type, parsed.payload, supabase, onMealLogged);
+      setResult(r);
+      setHistory(prev => [{ input, parsed, result: r, ts: new Date().toLocaleTimeString() }, ...prev.slice(0, 9)]);
+      setStatus('done');
+      setInput('');
+      setParsed(null);
+    } catch (e) {
+      setErrorMsg(e.message || 'Write failed.');
+      setStatus('error');
+    }
   }
 
   function handleReject() {
