@@ -53,6 +53,7 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
 const ANTHROPIC_API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY
 const SUPABASE_AUTH_STORAGE_KEY = "sb-rjirurdpluknrwnxlcox-auth-token"
 const SIGN_OUT_TIMEOUT_MS = 8000
+const MODALITY_COEFF = { running: 0.65, cycling: 0.45, swimming: 0.55, strength: 0.35 }
 const supabase = SUPABASE_URL && SUPABASE_ANON_KEY
   ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       auth: {
@@ -455,7 +456,7 @@ function fmtShortDate(dateStr) {
     : String(dateStr)
   const d = new Date(normalized)
   if (Number.isNaN(d.getTime())) return dateStr
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "2-digit" })
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" })
 }
 
 function todayISO() {
@@ -18680,7 +18681,14 @@ const tsbV2Panel = useMemo(() => {
     const cat = normalizeWorkoutType(w.type, w)
     const dur = Number(w.duration_min ?? w.dur ?? 0) || 0
     const hr = Number(w.preferred_metrics?.hr?.value ?? w.hr ?? 0) || 0
-    const load = Math.max(0, dur * (hr > 0 ? Math.max(0.75, Math.min(1.35, hr/145)) : 1))
+    const typeKey = String(w.canonical_type || w.type || w.category || "").toLowerCase()
+    const modalityKey = typeKey.includes("run") ? "running"
+      : typeKey.includes("cycl") || typeKey.includes("bike") || typeKey.includes("indoor") ? "cycling"
+      : typeKey.includes("swim") || typeKey.includes("pool") ? "swimming"
+      : typeKey.includes("strength") || typeKey.includes("functional") || typeKey.includes("weight") || typeKey.includes("resistance") || typeKey.includes("traditional") ? "strength"
+      : null
+    const fallbackCoeff = MODALITY_COEFF[modalityKey] ?? 0.50
+    const load = Math.max(0, dur * (hr > 0 ? Math.max(0.75, Math.min(1.35, hr/145)) : fallbackCoeff))
     if (load <= 0) return
     dailyLoads[date].anyWorkout = true
     dailyLoads[date].overall += load
@@ -22765,7 +22773,7 @@ return (
       <ResponsiveContainer width="100%" height={280}>
         <ComposedChart data={bodyWeightForecastChart} margin={{ top: 10, right: 20, left: 55, bottom: 20 }}>
           <CartesianGrid stroke="#1a1b2e" />
-          <XAxis dataKey="label" interval="preserveStartEnd" tickCount={8} tick={{ fontSize: 10 }} />
+          <XAxis dataKey="label" tick={{ fontSize: 11 }} interval={Math.max(1, Math.floor((bodyWeightForecastChart.length - 1) / 7))} />
           <YAxis domain={forecastYDomain} label={{ value: "Weight (lb)", angle: -90, position: "insideLeft", offset: 15, fill: "#ced2f0", style: { textAnchor: "middle" } }} />
           <Tooltip formatter={(v, n) => [v != null ? `${v} lb` : "—", n === "actual" ? "Actual (7d avg)" : "Projected"]} />
           <Legend verticalAlign="top" height={28} />
@@ -22942,13 +22950,13 @@ return (
         <LineChart data={readinessProjectionData} margin={{ top: 10, right: 20, left: 55, bottom: 20 }}>
           <CartesianGrid stroke="#1a1b2e" />
           <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-          <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} label={{ value: "Readiness score", angle: -90, position: "insideLeft", offset: 15, fill: "#ced2f0", style: { textAnchor: "middle" } }} />
+          <YAxis domain={[0, 100]} allowDataOverflow={false} tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} label={{ value: "Readiness score", angle: -90, position: "insideLeft", offset: 15, fill: "#ced2f0", style: { textAnchor: "middle" } }} />
           <Tooltip />
           <Legend verticalAlign="top" height={28} />
-          <Line type="monotone" dataKey="baseReadiness" name="Readiness"      stroke="#4a9ee8" strokeWidth={2} dot={{ r: 3 }} isAnimationActive={false} />
-          <Line type="monotone" dataKey="fiveK"         name="5K readiness"   stroke="#ef4444" strokeWidth={1} strokeDasharray="4 3" dot={false} isAnimationActive={false} />
-          <Line type="monotone" dataKey="tenK"          name="10K readiness"  stroke="#22c55e" strokeWidth={1} strokeDasharray="4 3" dot={false} isAnimationActive={false} />
-          <Line type="monotone" dataKey="half"          name="Half readiness" stroke="#facc15" strokeWidth={1} strokeDasharray="4 3" dot={false} isAnimationActive={false} />
+          <Line type="monotone" dataKey="baseReadiness" name="Readiness"      stroke="#4a9ee8" strokeWidth={2} dot={{ r: 3 }} isAnimationActive={false} allowDataOverflow={false} />
+          <Line type="monotone" dataKey="fiveK"         name="5K readiness"   stroke="#ef4444" strokeWidth={1} strokeDasharray="4 3" dot={false} isAnimationActive={false} allowDataOverflow={false} />
+          <Line type="monotone" dataKey="tenK"          name="10K readiness"  stroke="#22c55e" strokeWidth={1} strokeDasharray="4 3" dot={false} isAnimationActive={false} allowDataOverflow={false} />
+          <Line type="monotone" dataKey="half"          name="Half readiness" stroke="#facc15" strokeWidth={1} strokeDasharray="4 3" dot={false} isAnimationActive={false} allowDataOverflow={false} />
         </LineChart>
       </ResponsiveContainer>
       ) : (
@@ -23019,7 +23027,7 @@ return (
                 <ComposedChart data={data} margin={{ top: 5, right: 10, left: 40, bottom: 15 }}>
                   <CartesianGrid stroke="#1a1b2e" />
                   <XAxis dataKey="label" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
-                  <YAxis tickFormatter={v => Number.isFinite(v) ? Math.round(v) : v} tick={{ fontSize: 10 }} domain={[0, "dataMax + 3"]} />
+                  <YAxis tick={{ fontSize: 10 }} domain={[0, "dataMax + 3"]} tickFormatter={v => Math.round(v)} />
                   <Tooltip formatter={(v, n) => [
                     v != null ? Number(v).toFixed(2) : "—",
                     n === "actual" ? "Actual" : n === "forecast" ? "Projected" : "HM Plan"
