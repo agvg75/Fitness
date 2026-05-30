@@ -22765,7 +22765,7 @@ return (
       <ResponsiveContainer width="100%" height={280}>
         <ComposedChart data={bodyWeightForecastChart} margin={{ top: 10, right: 20, left: 55, bottom: 20 }}>
           <CartesianGrid stroke="#1a1b2e" />
-          <XAxis dataKey="label" interval="preserveStartEnd" tick={{ fontSize: 10 }} />
+          <XAxis dataKey="label" interval="preserveStartEnd" tickCount={8} tick={{ fontSize: 10 }} />
           <YAxis domain={forecastYDomain} label={{ value: "Weight (lb)", angle: -90, position: "insideLeft", offset: 15, fill: "#ced2f0", style: { textAnchor: "middle" } }} />
           <Tooltip formatter={(v, n) => [v != null ? `${v} lb` : "—", n === "actual" ? "Actual (7d avg)" : "Projected"]} />
           <Legend verticalAlign="top" height={28} />
@@ -22796,7 +22796,7 @@ return (
         <ResponsiveContainer width="100%" height={260}>
           <ComposedChart data={vo2TrendChartData} margin={{ top: 10, right: 50, left: 30, bottom: 20 }}>
             <CartesianGrid stroke="#1a1b2e" />
-            <XAxis dataKey="label" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
+            <XAxis dataKey="label" tickFormatter={v => String(v).replace(',', '')} tick={{ fontSize: 10 }} interval="preserveStartEnd" />
             <YAxis
               yAxisId="apple"
               orientation="left"
@@ -22942,7 +22942,7 @@ return (
         <LineChart data={readinessProjectionData} margin={{ top: 10, right: 20, left: 55, bottom: 20 }}>
           <CartesianGrid stroke="#1a1b2e" />
           <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-          <YAxis domain={[55, 105]} tickFormatter={v => v + '%'} label={{ value: "Readiness score", angle: -90, position: "insideLeft", offset: 15, fill: "#ced2f0", style: { textAnchor: "middle" } }} />
+          <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} label={{ value: "Readiness score", angle: -90, position: "insideLeft", offset: 15, fill: "#ced2f0", style: { textAnchor: "middle" } }} />
           <Tooltip />
           <Legend verticalAlign="top" height={28} />
           <Line type="monotone" dataKey="baseReadiness" name="Readiness"      stroke="#4a9ee8" strokeWidth={2} dot={{ r: 3 }} isAnimationActive={false} />
@@ -22966,7 +22966,7 @@ return (
         <LineChart data={cardioMinutesForecastChart} margin={{ top: 10, right: 20, left: 55, bottom: 20 }}>
           <CartesianGrid stroke="#1a1b2e" />
           <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-          <YAxis label={{ value: "Min / week", angle: -90, position: "insideLeft", offset: 15, fill: "#ced2f0", style: { textAnchor: "middle" } }} tickFormatter={v => fmt0(v)} />
+          <YAxis label={{ value: "Min / week", angle: -90, position: "insideLeft", offset: 15, fill: "#ced2f0", style: { textAnchor: "middle" } }} tickFormatter={v => Number.isFinite(v) ? Math.round(v) : v} />
           <Tooltip formatter={(v, n) => [v == null ? "—" : fmt0(v), n === "actual" ? "Actual min/week" : "Forecast min/week"]} />
           <Legend verticalAlign="top" height={28} />
           <Line type="monotone" dataKey="actual"   name="Actual min/week"   stroke="#4a9ee8" strokeWidth={2} dot={{ r: 3 }} connectNulls={false} />
@@ -23019,7 +23019,7 @@ return (
                 <ComposedChart data={data} margin={{ top: 5, right: 10, left: 40, bottom: 15 }}>
                   <CartesianGrid stroke="#1a1b2e" />
                   <XAxis dataKey="label" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
-                  <YAxis tick={{ fontSize: 10 }} domain={[0, "dataMax + 3"]} />
+                  <YAxis tickFormatter={v => Number.isFinite(v) ? Math.round(v) : v} tick={{ fontSize: 10 }} domain={[0, "dataMax + 3"]} />
                   <Tooltip formatter={(v, n) => [
                     v != null ? Number(v).toFixed(2) : "—",
                     n === "actual" ? "Actual" : n === "forecast" ? "Projected" : "HM Plan"
@@ -23053,7 +23053,7 @@ return (
               <ComposedChart data={data} margin={{ top: 5, right: 10, left: 40, bottom: 15 }}>
                 <CartesianGrid stroke="#1a1b2e" />
                 <XAxis dataKey="label" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
-                <YAxis tick={{ fontSize: 10 }} />
+                <YAxis tickFormatter={v => Number.isFinite(v) ? Math.round(v) : v} tick={{ fontSize: 10 }} />
                 <Tooltip formatter={(v, n) => [v != null ? Number(v).toFixed(2) : "—", n === "actual" ? "Actual" : "Projected"]} />
                 <Legend verticalAlign="top" height={24} wrapperStyle={{ fontSize: "11px" }} />
                 <Bar  dataKey="actual"   name="Actual"    fill={color} opacity={0.7} />
