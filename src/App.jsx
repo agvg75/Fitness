@@ -18803,14 +18803,12 @@ const tsbV2Panel = useMemo(() => {
     const cat = normalizeWorkoutType(w.type, w)
     const dur = Number(w.duration_min ?? w.dur ?? 0) || 0
     const hr = Number(w.preferred_metrics?.hr?.value ?? w.hr ?? 0) || 0
-    const typeKey = String(w.canonical_type || w.type || w.category || "").toLowerCase()
-    const modalityKey = typeKey.includes("run") ? "running"
-      : typeKey.includes("cycl") || typeKey.includes("bike") || typeKey.includes("indoor") ? "cycling"
-      : typeKey.includes("swim") || typeKey.includes("pool") ? "swimming"
-      : typeKey.includes("strength") || typeKey.includes("functional") || typeKey.includes("weight") || typeKey.includes("resistance") || typeKey.includes("traditional") ? "strength"
-      : null
-    const fallbackCoeff = MODALITY_COEFF[modalityKey] ?? 0.50
-    const load = Math.max(0, dur * (hr > 0 ? Math.max(0.75, Math.min(1.35, hr/145)) : fallbackCoeff))
+    const MODALITY_NO_HR_COEFF = {
+      running: 0.65, walking: 0.40,
+      cycling: 0.45, swimming: 0.55, strength: 0.35
+    }
+    const modalCoeff = MODALITY_NO_HR_COEFF[cat.toLowerCase()] ?? 0.55
+    const load = Math.max(0, dur * (hr > 0 ? Math.max(0.75, Math.min(1.35, hr / 152)) : modalCoeff))
     if (load <= 0) return
     dailyLoads[date].anyWorkout = true
     dailyLoads[date].overall += load
