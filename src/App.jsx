@@ -7941,9 +7941,10 @@ if (w.category === "Strength") {
                 { name: "Hammer Curl",        match: "hammer curl",      baseline: null },
                 { name: "Inverted Row",       match: "inverted row",     baseline: null },
                 { name: "Straight Arm Pulldown", match: "straight arm",  baseline: null },
+                { name: "Chin-Up",            match: "chin",             baseline: null },
+                { name: "Pull-Up",            match: "pull-up",          baseline: null },
                 { name: "Pull ups",           match: "pull up",          baseline: null },
                 { name: "Reverse Biceps",     match: "reverse bicep",    baseline: null },
-                { name: "Chin-ups",           match: "chin",             baseline: null },
               ]
             },
             {
@@ -7966,13 +7967,21 @@ if (w.category === "Strength") {
                 { name: "Eccentric Calf",     match: "eccentric calf",   baseline: null },
                 { name: "Eccentric Lateral",  match: "eccentric lateral",baseline: null },
                 { name: "Eccentric Biceps",   match: "eccentric biceps", baseline: null },
-                { name: "Pallof Press",       match: "pallof",           baseline: null },
                 { name: "Suitcase Carry",     match: "suitcase",         baseline: null },
                 { name: "KB Swing",           match: "kb swing",         baseline: null },
                 { name: "Shoulder Clock",     match: "shoulder clock",   baseline: null },
                 { name: "Tibialis Raise",     match: "tibialis",         baseline: null },
                 { name: "Calf Raise",         match: "calf raise",       baseline: null },
-                { name: "Russian Twists",     match: "russian twist",    baseline: null },
+              ]
+            },
+            {
+              group: "Core",
+              color: "#a78bfa",
+              exercises: [
+                { name: "Russian Twist",      match: "russian twist",    baseline: null },
+                { name: "Pallof Press",       match: "pallof",           baseline: null },
+                { name: "Plank",              match: "plank",            baseline: null },
+                { name: "Dead Bug",           match: "dead bug",         baseline: null },
               ]
             },
             {
@@ -8009,8 +8018,9 @@ if (w.category === "Strength") {
             const charts = exercises.map(({ name, match, exclude = [], baseline }) => {
               const points = []
               for (const sess of allSessions) {
-                // Collect ALL sets for this exercise (not just the first) so the
-                // max e1RM across the session is used, not a warmup set.
+                const date = (sess.date || sess.start_date || "").slice(0, 10)
+                if (!date) continue
+                // Collect all exercises matching this name (there may be more than one entry per session).
                 const normalized = (sess.exercises || [])
                   .map(normalizeLoggedExercise)
                   .filter(Boolean)
@@ -8020,22 +8030,37 @@ if (w.category === "Strength") {
                   return !exclude.some(x => nm.includes(x.toLowerCase()))
                 })
                 if (!matches.length) continue
-                let bestE1rm = 0
+
+                let maxE1rm = null
+                let totalVolume = 0
+
                 for (const ex of matches) {
-                  const w = parseFloat(ex.load)
-                  if (!Number.isFinite(w) || w <= 0) continue
-                  const r = parseFloat(ex.reps)
-                  // Epley: w × (1 + r/30), capped at 15 reps to avoid extrapolation
-                  const e1rm = Number.isFinite(r) && r > 0 && r <= 15
-                    ? Math.round(w * (1 + r / 30))
-                    : w
-                  if (e1rm > bestE1rm) bestE1rm = e1rm
+                  // Prefer the full sets array; fall back to scalar actual/load fields if sets are absent.
+                  const setsArr = Array.isArray(ex.sets) && ex.sets.length > 0
+                    ? ex.sets
+                    : [{ weight: ex.load, reps: ex.reps }]
+
+                  for (const set of setsArr) {
+                    const w = parseFloat(set.weight ?? set.load)
+                    const r = parseFloat(set.reps)
+                    if (!Number.isFinite(w) || w <= 0) continue
+                    // Volume: always accumulate (reps default to 1 for time-based sets).
+                    const effectiveReps = Number.isFinite(r) && r > 0 ? r : 1
+                    totalVolume += w * effectiveReps
+                    // e1RM: only for sets at or below 15 reps.
+                    if (Number.isFinite(r) && r > 0 && r <= 15) {
+                      const e1rm = Math.round(w * (1 + r / 30))
+                      if (maxE1rm === null || e1rm > maxE1rm) maxE1rm = e1rm
+                    }
+                  }
                 }
-                if (bestE1rm > 0)
-                  points.push({ date: (sess.date || sess.start_date || "").slice(0, 10), weight: bestE1rm })
+
+                // Only push a point if we have at least volume data.
+                if (totalVolume > 0) {
+                  points.push({ date, e1rm: maxE1rm, volume: Math.round(totalVolume) })
+                }
               }
               const sorted = points
-                .filter(p => p.date)
                 .sort((a, b) => a.date.localeCompare(b.date))
               return { name, baseline, data: sorted }
             }).filter(c => {
@@ -8057,18 +8082,54 @@ if (w.category === "Strength") {
                   {charts.map(({ name, baseline, data }) => (
                     <div key={name}>
                       <div style={{ fontSize: 10, fontWeight: 600, color: "#8fa8d8", marginBottom: 3 }}>{name}</div>
-                      <ResponsiveContainer width="100%" height={100}>
-                        <LineChart data={data} margin={{ top: 4, right: 4, left: 0, bottom: 4 }}>
+                      <ResponsiveContainer width="100%" height={110}>
+                        <ComposedChart data={data} margin={{ top: 4, right: 28, left: 0, bottom: 4 }}>
                           <CartesianGrid stroke="#1a1b2e" />
                           <XAxis dataKey="date" tick={{ fontSize: 8 }} interval="preserveStartEnd" />
-                          <YAxis tick={{ fontSize: 8 }} width={32} />
-                          <Tooltip formatter={v => [`${v} lb`, "e1RM"]} labelFormatter={l => l} />
-                          <Line type="monotone" dataKey="weight" stroke={color} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+                          <YAxis
+                            yAxisId="left"
+                            tick={{ fontSize: 8 }}
+                            width={32}
+                            label={{ value: "lb", angle: -90, position: "insideLeft", fontSize: 7, fill: "#666" }}
+                          />
+                          <YAxis
+                            yAxisId="right"
+                            orientation="right"
+                            tick={{ fontSize: 8 }}
+                            width={28}
+                            tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(1)}k` : v}
+                            label={{ value: "vol", angle: 90, position: "insideRight", fontSize: 7, fill: "#444" }}
+                          />
+                          <Tooltip
+                            formatter={(v, n) => n === "volume"
+                              ? [`${v.toLocaleString()} lb·reps`, "Volume"]
+                              : [`${v} lb`, "e1RM"]}
+                            labelFormatter={l => l}
+                          />
+                          <Area
+                            yAxisId="right"
+                            type="monotone"
+                            dataKey="volume"
+                            fill="rgba(255,255,255,0.07)"
+                            stroke="rgba(255,255,255,0.15)"
+                            strokeWidth={1}
+                            dot={false}
+                            connectNulls
+                          />
+                          <Line
+                            yAxisId="left"
+                            type="monotone"
+                            dataKey="e1rm"
+                            stroke={color}
+                            strokeWidth={2}
+                            dot={{ r: 2 }}
+                            connectNulls
+                          />
                           {baseline != null && (
-                            <ReferenceLine y={baseline} stroke="#4a9ee8" strokeDasharray="4 2"
+                            <ReferenceLine yAxisId="left" y={baseline} stroke="#4a9ee8" strokeDasharray="4 2"
                               label={{ value: `B ${baseline}`, position: "insideTopRight", fontSize: 8, fill: "#4a9ee8" }} />
                           )}
-                        </LineChart>
+                        </ComposedChart>
                       </ResponsiveContainer>
                     </div>
                   ))}
@@ -8093,7 +8154,7 @@ if (w.category === "Strength") {
             <div style={{ background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: 12, padding: 16 }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: "#ced2f0", marginBottom: 14 }}>
                 Strength Progression
-                <span style={{ fontSize: 10, fontWeight: 400, color: "#555", marginLeft: 8 }}>e1RM where reps logged · raw load otherwise</span>
+                <span style={{ fontSize: 10, fontWeight: 400, color: "#555", marginLeft: 8 }}>e1RM line (left axis) · volume area (right axis) · max set per session</span>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 16 }}>
                 {EXERCISE_GROUPS.map(g => renderGroup(g))}
