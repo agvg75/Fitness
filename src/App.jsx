@@ -7923,11 +7923,10 @@ if (w.category === "Strength") {
                 { name: "Chest Press",       match: "chest press",      baseline: 110 },
                 { name: "Incline Press",      match: "incline",          baseline: 90  },
                 { name: "Machine Flys",       match: "fly",              baseline: 30  },
-                { name: "Triceps Pulldown",   match: "tricep",           exclude: ["overhead"], baseline: 25  },
+                { name: "Triceps",            match: ["tricep", "push down", "pull down"], baseline: null },
                 { name: "Lateral Raise",      match: "lateral raise",    baseline: null },
                 { name: "Face Pull",          match: "face pull",        baseline: null },
                 { name: "Rear Delt Fly",      match: "rear delt",        baseline: null },
-                { name: "Triceps Overhead",   match: "tricep overhead",  baseline: null },
                 { name: "Cable Crossover",    match: "crossover",        baseline: null },
                 { name: "Pushup Plank",       match: "pushup plank",     baseline: null },
               ]
@@ -7936,15 +7935,13 @@ if (w.category === "Strength") {
               group: "Back & Arms",
               color: "#4a9ee8",
               exercises: [
-                { name: "Lat Pulldown",       match: "lat pulldown",     baseline: 133 },
+                { name: "Lat Pulldown",       match: ["lat pulldown", "lat pull", "pull down"], baseline: 133 },
                 { name: "Cable Row",          match: "cable row",        baseline: 133 },
-                { name: "Bicep Curl",         match: "bicep curl",       exclude: ["reverse", "hammer", "eccentric", "leg"], baseline: 75  },
+                { name: "Bicep Curl",         match: ["bicep"],          baseline: 75  },
                 { name: "Hammer Curl",        match: "hammer curl",      baseline: null },
-                { name: "Inverted Row",       match: "inverted row",     baseline: null },
+                { name: "Inverted Row",       match: ["inverted row"],   baseline: null },
                 { name: "Straight Arm Pulldown", match: "straight arm",  baseline: null },
-                { name: "Chin-Up",            match: "chin",             baseline: null },
-                { name: "Pull-Up",            match: "pull-up",          baseline: null },
-                { name: "Pull ups",           match: "pull up",          baseline: null },
+                { name: "Chin-Up / Pull-Up",  match: ["chin", "pull up", "pull-up", "pull ups"], baseline: null },
                 { name: "Reverse Biceps",     match: "reverse bicep",    baseline: null },
               ]
             },
@@ -7952,7 +7949,7 @@ if (w.category === "Strength") {
               group: "Lower Body",
               color: "#ffd166",
               exercises: [
-                { name: "Hip Thrust",         match: "hip thrust",       baseline: null },
+                { name: "Hip Thrust",         match: ["hip thrust"],     baseline: null },
                 { name: "Leg Press",          match: "leg press",        baseline: 320  },
                 { name: "Leg Extension",      match: "leg extension",    baseline: null },
                 { name: "Leg Curl",           match: "leg curl",         exclude: ["bicep", "hamstring eccentric"], baseline: 125  },
@@ -7971,7 +7968,7 @@ if (w.category === "Strength") {
                 { name: "Suitcase Carry",     match: "suitcase",         baseline: null },
                 { name: "KB Swing",           match: "kb swing",         baseline: null },
                 { name: "Shoulder Clock",     match: "shoulder clock",   baseline: null },
-                { name: "Tibialis Raise",     match: "tibialis",         baseline: null },
+                { name: "Tibialis Raise",     match: ["tibialis", "shin raise"], baseline: null },
                 { name: "Calf Raise",         match: "calf raise",       baseline: null },
               ]
             },
@@ -8017,7 +8014,8 @@ if (w.category === "Strength") {
               .filter(Boolean)
               .some(e => {
                 const nm = (e.name || "").toLowerCase()
-                if (!nm.includes(match.toLowerCase())) return false
+                const matchList = Array.isArray(match) ? match : [match]
+                if (!matchList.some(m => nm.includes(m.toLowerCase()))) return false
                 return !exclude.some(x => nm.includes(x.toLowerCase()))
               })
 
@@ -8033,7 +8031,8 @@ if (w.category === "Strength") {
                   .filter(Boolean)
                 const matches = normalized.filter(e => {
                   const nm = (e.name || "").toLowerCase()
-                  if (!nm.includes(match.toLowerCase())) return false
+                  const matchList = Array.isArray(match) ? match : [match]
+                  if (!matchList.some(m => nm.includes(m.toLowerCase()))) return false
                   return !exclude.some(x => nm.includes(x.toLowerCase()))
                 })
                 if (!matches.length) continue
