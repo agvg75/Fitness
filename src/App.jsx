@@ -266,6 +266,23 @@ function seedHistoricalMtpEpisodes(items) {
   return missingEpisodes.length ? [...missingEpisodes, ...loadedItems] : loadedItems
 }
 
+function backfillOcChronicity(items) {
+  const loaded = Array.isArray(items) ? items : []
+  const needsMigration = loaded.some(
+    item => (item.episodeCount || 0) >= 2 && item.chronicity !== "chronic"
+  )
+  if (!needsMigration) return { items: loaded, migrated: false }
+
+  return {
+    items: loaded.map(item =>
+      (item.episodeCount || 0) >= 2 && item.chronicity !== "chronic"
+        ? { ...item, chronicity: "chronic" }
+        : item
+    ),
+    migrated: true
+  }
+}
+
 // ── Session compartment classifier ───────────────────────────────────────
 // Returns the COMPARTMENT_SPLITS key for a canonical session.
 // Priority: canonical_type → exercise list analysis → day-of-week → "other"
@@ -16616,15 +16633,17 @@ useEffect(() => {
     const dedupedWorkouts = dedupeUfdWorkouts(wo)
     const ninetyDaysAgo = Date.now() - 90 * 24 * 3600000
     const ocLocalItems = Array.isArray(ocLocal) ? ocLocal : []
-    const cleanedOcLocal = seedHistoricalMtpEpisodes(ocLocalItems.filter(item => {
+    const seededOcLocal = seedHistoricalMtpEpisodes(ocLocalItems.filter(item => {
       if ((item.initialScore || item.currentScore || 0) > 0) return true
       const startMs = item.startDate ? new Date(item.startDate).getTime() : 0
       return Number.isFinite(startMs) && startMs >= ninetyDaysAgo
     }))
+    const { items: cleanedOcLocal, migrated: ocLocalChronicityMigrated } = backfillOcChronicity(seededOcLocal)
     const ocLocalIds = new Set(ocLocalItems.map(item => String(item?.id || "")))
     const ocLocalChanged = !Array.isArray(ocLocal) ||
       cleanedOcLocal.length !== ocLocalItems.length ||
-      HISTORICAL_MTP_EPISODES.some(item => !ocLocalIds.has(item.id))
+      HISTORICAL_MTP_EPISODES.some(item => !ocLocalIds.has(item.id)) ||
+      ocLocalChronicityMigrated
     if (Array.isArray(wo) && dedupedWorkouts.length !== wo.length) {
       await store.set("ufd-workouts", dedupedWorkouts)
       setStoredWorkouts(dedupedWorkouts)
@@ -16711,7 +16730,7 @@ useEffect(() => {
                 return Number.isFinite(startMs) && startMs >= ninetyDaysAgo
               })
               .sort((a, b) => b.id - a.id)
-            const cleanedOcItems = seedHistoricalMtpEpisodes(merged.filter(function(item) {
+            const seededOcItems = seedHistoricalMtpEpisodes(merged.filter(function(item) {
               // Remove ghost OC entries: zero-severity Toe L joint items created by body map mis-taps
               if (
                 item.key === 'jointStatus' &&
@@ -16721,6 +16740,7 @@ useEffect(() => {
               ) return false
               return true
             }))
+            const { items: cleanedOcItems } = backfillOcChronicity(seededOcItems)
             setOcItems(cleanedOcItems)
             await store.set("oc-items", cleanedOcItems)
           } else if (Array.isArray(cleanedOcLocal)) {
