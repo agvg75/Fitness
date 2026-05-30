@@ -8003,8 +8003,14 @@ if (w.category === "Strength") {
           ]
 
           const log = Array.isArray(schedLog) ? schedLog : []
-          // Also pull from canonical sessions as a fallback source
-          const allSessions = [...log]
+          // Pull wt-log from localStorage as the primary logged session source
+          const wtLog = (() => {
+            try { return JSON.parse(localStorage.getItem('wt-log') || '[]') } catch { return [] }
+          })()
+          // Merge: prefer wt-log entries, supplement with any schedLog entries not already present
+          const wtLogIds = new Set(wtLog.map(s => String(s.id || s.session_id)))
+          const schedOnly = log.filter(s => !wtLogIds.has(String(s.id || s.session_id)))
+          const allSessions = [...wtLog, ...schedOnly]
           const sessionHasExerciseMatch = (sess, match, exclude = []) =>
             (sess.exercises || [])
               .map(normalizeLoggedExercise)
@@ -8037,10 +8043,14 @@ if (w.category === "Strength") {
                 let totalTimeSec = 0
 
                 for (const ex of matches) {
-                  // Prefer the full sets array; fall back to scalar actual/load fields if sets are absent.
-                  const setsArr = Array.isArray(ex.sets) && ex.sets.length > 0
-                    ? ex.sets
-                    : [{ weight: ex.load, reps: ex.reps }]
+                  // Prefer the per-set data array from sess.data[exercise_id] (shape: [{r, w}])
+                  // Fall back to ex.sets array, then to the single actual scalar
+                  const dataEntry = sess.data?.[ex.exercise_id ?? ex.id]
+                  const setsArr = Array.isArray(dataEntry) && dataEntry.length > 0
+                    ? dataEntry.map(s => ({ weight: s.w ?? s.weight, reps: s.r ?? s.reps }))
+                    : Array.isArray(ex.sets) && ex.sets.length > 0
+                      ? ex.sets
+                      : [{ weight: ex.actual?.load ?? ex.load, reps: ex.actual?.reps ?? ex.reps }]
 
                   for (const set of setsArr) {
                     const rawLoad = set.weight ?? set.load ?? set.w
