@@ -15458,17 +15458,6 @@ function normalizeDistanceToMiles(workout) {
   return value
 }
 
-// ── Meal imputation helper ──────────────────────────────────────────────────
-// Returns an imputed day record for a given ISO date string, or null if not
-// enough data exists and no template fallback is configured.
-// Tier 1: rolling 7-entry average per day-type bucket (min 3 entries required)
-// Tier 2: static dailyTemplate totals (passed in as templateTotals)
-// Tier 3: null (slot left empty on chart)
-//
-// dayTypeBucket: "weekday" | "saturday" | "sunday"
-// realEntries: full mealEntries array (ufd-meal-entries, each has date, meal_type, calories, protein_g, carbs_g, fat_g, fiber_g)
-// templateTotals: { calories, protein_g, carbs_g, fat_g } from existing templateTotals useMemo
-
 function getDayTypeBucket(isoDate) {
   // Use UTC to avoid timezone rollover at midnight local
   const d = new Date(isoDate + "T12:00:00")
@@ -15478,59 +15467,88 @@ function getDayTypeBucket(isoDate) {
   return "weekday"
 }
 
-function getImputedDay(isoDate, realEntries, templateTotals) {
+// ── Slot-level meal imputation ──────────────────────────────────────────────
+// For a given ISO date, returns estimated entries ONLY for slots that have no
+// real logged entry. Slots with real entries are left alone.
+// Returns an array of estimated entry objects (same shape as ufd-meal-entries).
+// Returns empty array if all slots are covered or no estimate is possible.
+//
+// skippedSlots: Set of strings in the form "YYYY-MM-DD|MealType" for intentional skips
+// templateTotals: { calories, protein_g, carbs_g, fat_g } from existing useMemo
+// mealPresets: the full mealPresets object keyed by slot name
+
+const MEAL_SLOTS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks']
+
+function getImputedSlots(isoDate, realEntries, templateTotals, mealPresets, skippedSlots = new Set()) {
   const bucket = getDayTypeBucket(isoDate)
 
-  const byDate = {}
-  ;(Array.isArray(realEntries) ? realEntries : []).forEach(e => {
-    const d = String(e.date || "").slice(0, 10)
-    if (!d || d === isoDate) return
-    if (!byDate[d]) byDate[d] = { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0 }
-    byDate[d].calories += Number(e.calories || 0)
-    byDate[d].protein_g += Number(e.protein_g || 0)
-    byDate[d].carbs_g += Number(e.carbs_g || 0)
-    byDate[d].fat_g += Number(e.fat_g || 0)
-    byDate[d].fiber_g += Number(e.fiber_g || 0)
+  const coveredSlots = new Set(
+    (Array.isArray(realEntries) ? realEntries : [])
+      .filter(e => String(e.date || '').slice(0, 10) === isoDate)
+      .map(e => String(e.meal_type || ''))
+  )
+
+  const estimated = []
+
+  MEAL_SLOTS.forEach(slot => {
+    if (coveredSlots.has(slot)) return
+    if (skippedSlots.has(`${isoDate}|${slot}`)) return
+
+    const slotEntries = (Array.isArray(realEntries) ? realEntries : [])
+      .filter(e => {
+        const d = String(e.date || '').slice(0, 10)
+        return d !== isoDate &&
+          String(e.meal_type || '') === slot &&
+          getDayTypeBucket(d) === bucket
+      })
+      .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))
+      .slice(0, 7)
+
+    if (slotEntries.length >= 3) {
+      const n = slotEntries.length
+      const avg = field => Math.round(slotEntries.reduce((s, e) => s + Number(e[field] || 0), 0) / n)
+      estimated.push({
+        id: `est_${isoDate}_${slot}`,
+        date: isoDate,
+        meal_type: slot,
+        preset_name: `Estimated (${bucket}, n=${n})`,
+        calories: avg('calories'),
+        protein_g: avg('protein_g'),
+        carbs_g: avg('carbs_g'),
+        fat_g: avg('fat_g'),
+        fiber_g: avg('fiber_g'),
+        isEstimated: true,
+        isTemplate: false,
+        estimatedN: n,
+        estimatedBucket: bucket,
+        created_at: isoDate + 'T00:00:00.000Z'
+      })
+      return
+    }
+
+    const templateSlotPresets = mealPresets?.[slot] || []
+    const fallbackPreset = templateSlotPresets[0]
+    if (fallbackPreset && fallbackPreset.calories > 0) {
+      estimated.push({
+        id: `tmpl_${isoDate}_${slot}`,
+        date: isoDate,
+        meal_type: slot,
+        preset_name: `Template: ${fallbackPreset.name}`,
+        calories: fallbackPreset.calories,
+        protein_g: fallbackPreset.protein_g || 0,
+        carbs_g: fallbackPreset.carbs_g || 0,
+        fat_g: fallbackPreset.fat_g || 0,
+        fiber_g: fallbackPreset.fiber_g || 0,
+        isEstimated: false,
+        isTemplate: true,
+        estimatedN: slotEntries.length,
+        estimatedBucket: bucket,
+        created_at: isoDate + 'T00:00:00.000Z'
+      })
+    }
   })
 
-  const qualifying = Object.entries(byDate)
-    .filter(([d]) => getDayTypeBucket(d) === bucket)
-    .sort(([a], [b]) => b.localeCompare(a))
-    .slice(0, 7)
-    .map(([, totals]) => totals)
-
-  if (qualifying.length >= 3) {
-    const n = qualifying.length
-    return {
-      date: isoDate,
-      calories: Math.round(qualifying.reduce((s, r) => s + r.calories, 0) / n),
-      protein_g: Math.round(qualifying.reduce((s, r) => s + r.protein_g, 0) / n),
-      carbs_g: Math.round(qualifying.reduce((s, r) => s + r.carbs_g, 0) / n),
-      fat_g: Math.round(qualifying.reduce((s, r) => s + r.fat_g, 0) / n),
-      fiber_g: Math.round(qualifying.reduce((s, r) => s + r.fiber_g, 0) / n),
-      isEstimated: true,
-      isTemplate: false,
-      estimatedN: n,
-      estimatedBucket: bucket
-    }
-  }
-
-  if (templateTotals && templateTotals.calories > 0) {
-    return {
-      date: isoDate,
-      calories: templateTotals.calories,
-      protein_g: templateTotals.protein_g,
-      carbs_g: templateTotals.carbs_g,
-      fat_g: templateTotals.fat_g,
-      fiber_g: 0,
-      isEstimated: false,
-      isTemplate: true,
-      estimatedN: 0,
-      estimatedBucket: null
-    }
-  }
-
-  return null
+  return estimated
 }
 
 function summarizeDailyNutrition(entries) {
@@ -15971,11 +15989,35 @@ const [newPresetSlot, setNewPresetSlot] = useState("Breakfast")
 const [newPreset, setNewPreset] = useState({ name:"", calories:"", protein_g:"", carbs_g:"", fat_g:"" })
   const [mealDate, setMealDate] = useState(todayISO())
   const [calendarSelectedDate, setCalendarSelectedDate] = useState(todayISO())
+  const [skippedSlots, setSkippedSlots] = useState(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem('lift-skipped-slots') || '[]')
+      return new Set(Array.isArray(stored) ? stored : [])
+    } catch { return new Set() }
+  })
   const [mealTab, setMealTab] = useState("Breakfast")
   const [customMealName, setCustomMealName] = useState("")
   const [customMeal, setCustomMeal] = useState({ calories: "", protein_g: "", carbs_g: "", fat_g: "", fiber_g: "" })
   const [saveAsPreset, setSaveAsPreset] = useState(false)
   const [rawNutrition, setRawNutrition] = useState({ breakfast: "", lunch: "", dinner: "", snacks: "" })
+
+  function markSlotSkipped(isoDate, slot) {
+    setSkippedSlots(prev => {
+      const next = new Set(prev)
+      next.add(`${isoDate}|${slot}`)
+      try { localStorage.setItem('lift-skipped-slots', JSON.stringify([...next])) } catch {}
+      return next
+    })
+  }
+
+  function unmarkSlotSkipped(isoDate, slot) {
+    setSkippedSlots(prev => {
+      const next = new Set(prev)
+      next.delete(`${isoDate}|${slot}`)
+      try { localStorage.setItem('lift-skipped-slots', JSON.stringify([...next])) } catch {}
+      return next
+    })
+  }
 if (process.env.NODE_ENV === "development") console.log("canonical sessions loaded:", canonicalSessions.length)
 useEffect(() => {
   if (process.env.NODE_ENV === "development") console.log(
@@ -19724,22 +19766,63 @@ const calorieChartData = useMemo(() => {
   const actualByDate = {}
   filteredNutrition.forEach(r => { const d = String(r.date || '').slice(0,10); if (d) actualByDate[d] = r })
   const rows = []
+
   for (let i = days - 1; i >= 0; i--) {
     const d = new Date(now); d.setDate(d.getDate() - i)
     const dateStr = d.toISOString().slice(0,10)
     const actual = actualByDate[dateStr]
+
+    const estimatedSlots = getImputedSlots(dateStr, mealEntries, templateTotals, mealPresets, skippedSlots)
+    const hasEstimates = estimatedSlots.length > 0
+    const estCalories = estimatedSlots.reduce((s, e) => s + Number(e.calories || 0), 0)
+    const estProtein = estimatedSlots.reduce((s, e) => s + Number(e.protein_g || 0), 0)
+    const estCarbs = estimatedSlots.reduce((s, e) => s + Number(e.carbs_g || 0), 0)
+    const estFat = estimatedSlots.reduce((s, e) => s + Number(e.fat_g || 0), 0)
+
     if (actual) {
-      rows.push({ ...actual, label: dateStr.slice(5), target: calorieTarget.targetCalories,
-        isTemplate: false, isEstimated: false })
-    } else {
-      const imputed = getImputedDay(dateStr, mealEntries, templateTotals)
-      if (imputed) {
-        rows.push({ ...imputed, label: dateStr.slice(5), target: calorieTarget.targetCalories })
-      }
+      const anyEstFromHistory = estimatedSlots.some(e => e.isEstimated)
+      const anyEstFromTemplate = estimatedSlots.some(e => e.isTemplate)
+      rows.push({
+        ...actual,
+        label: dateStr.slice(5),
+        target: calorieTarget.targetCalories,
+        isTemplate: false,
+        isEstimated: false,
+        calories_real: Number(actual.calories || 0),
+        calories_aug: hasEstimates ? Number(actual.calories || 0) + estCalories : null,
+        calories_est: null,
+        calories_tmpl: null,
+        hasAugmentation: hasEstimates,
+        augIsEstimated: anyEstFromHistory,
+        augIsTemplate: anyEstFromTemplate,
+        augCalories: estCalories,
+        augProtein: estProtein,
+        augCarbs: estCarbs,
+        augFat: estFat
+      })
+    } else if (hasEstimates) {
+      const anyFromHistory = estimatedSlots.some(e => e.isEstimated)
+      const anyFromTemplate = estimatedSlots.some(e => e.isTemplate)
+      rows.push({
+        date: dateStr,
+        label: dateStr.slice(5),
+        calories: estCalories,
+        protein_g: estProtein,
+        carbs_g: estCarbs,
+        fat_g: estFat,
+        target: calorieTarget.targetCalories,
+        isEstimated: anyFromHistory,
+        isTemplate: !anyFromHistory && anyFromTemplate,
+        calories_real: null,
+        calories_aug: null,
+        calories_est: anyFromHistory ? estCalories : null,
+        calories_tmpl: (!anyFromHistory && anyFromTemplate) ? estCalories : null,
+        hasAugmentation: false
+      })
     }
   }
   return rows
-}, [filteredNutrition, calorieTarget, templateTotals, selectedRangePoints, mealEntries])
+}, [filteredNutrition, calorieTarget, templateTotals, selectedRangePoints, mealEntries, mealPresets, skippedSlots])
 
 // Recharts does not support per-point stroke colors on a single Line.
 // Solution: split calories into three keys; each Line renders only its tier.
@@ -21499,6 +21582,7 @@ return (
                   if (value == null) return null
                   const labels = {
                     calories_real: "Calories (logged)",
+                    calories_aug: "Calories (logged + estimated missing slots)",
                     calories_est: "Calories (estimated)",
                     calories_tmpl: "Calories (template)",
                     target: "Target",
@@ -21508,6 +21592,7 @@ return (
                 }}
               />
               <Line type="monotone" dataKey="calories_real" stroke="#4acfe8" strokeWidth={2} dot={false} name="Logged" connectNulls={false} />
+              <Line type="monotone" dataKey="calories_aug" stroke="#f97316" strokeWidth={2} dot={false} name="Partial+Est" connectNulls={false} />
               <Line type="monotone" dataKey="calories_est" stroke="#E05C5C" strokeWidth={2} dot={false} name="Estimated" connectNulls={false} strokeDasharray="4 3" />
               <Line type="monotone" dataKey="calories_tmpl" stroke="#d97706" strokeWidth={1} dot={false} name="Template" connectNulls={false} strokeDasharray="2 4" />
               <Line type="monotone" dataKey="target" stroke="#ffd166" strokeDasharray="6 6" dot={false} name="Target" />
@@ -22089,6 +22174,7 @@ return (
                     if (value == null) return null
                     const labels = {
                       calories_real: "Calories (logged)",
+                      calories_aug: "Calories (logged + estimated missing slots)",
                       calories_est: "Calories (estimated)",
                       calories_tmpl: "Calories (template)",
                       target: "Target",
@@ -22099,6 +22185,7 @@ return (
                 />
                 <Legend verticalAlign="top" height={36} />
                 <Line type="monotone" dataKey="calories_real" stroke="#4acfe8" strokeWidth={2} dot={false} name="Logged" connectNulls={false} />
+<Line type="monotone" dataKey="calories_aug" stroke="#f97316" strokeWidth={2} dot={false} name="Partial+Est" connectNulls={false} />
 <Line type="monotone" dataKey="calories_est" stroke="#E05C5C" strokeWidth={2} dot={false} name="Estimated" connectNulls={false} strokeDasharray="4 3" />
 <Line type="monotone" dataKey="calories_tmpl" stroke="#d97706" strokeWidth={1} dot={false} name="Template" connectNulls={false} strokeDasharray="2 4" />
 <Line type="monotone" dataKey="target" stroke="#ffd166" strokeDasharray="6 6" dot={false} name="Target" />
@@ -22291,8 +22378,16 @@ return (
                 <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 12 }}>
                   {stripDates.map(dateStr => {
                     const hasReal = !!realByDate[dateStr]
-                    const imputed = !hasReal && getImputedDay(dateStr, mealEntries, templateTotals)
-                    const dotColor = hasReal ? "#4ade80" : imputed ? "#E05C5C" : "#333"
+                    const estimatedSlots = getImputedSlots(dateStr, mealEntries, templateTotals, mealPresets, skippedSlots)
+                    const hasAugmentation = hasReal && estimatedSlots.length > 0
+                    const fullyEstimated = !hasReal && estimatedSlots.length > 0
+                    const dotColor = hasReal && !hasAugmentation
+                      ? "#4ade80"
+                      : hasAugmentation
+                      ? "#f97316"
+                      : fullyEstimated
+                      ? "#E05C5C"
+                      : "#333"
                     const isSelected = dateStr === calendarSelectedDate
                     const isToday = dateStr === today
                     return (
@@ -22319,11 +22414,24 @@ return (
                 </div>
 
                 {(() => {
-                  const hasReal = !!(Array.isArray(mealEntries) && mealEntries.some(e => String(e.date || "").slice(0, 10) === calendarSelectedDate))
-                  const imputedDay = !hasReal ? getImputedDay(calendarSelectedDate, mealEntries, templateTotals) : null
-                  const selectedMeals = (Array.isArray(mealEntries) ? mealEntries : [])
-                    .filter(e => String(e.date || "").slice(0, 10) === calendarSelectedDate)
-                    .sort((a, b) => String(a.created_at || "").localeCompare(String(b.created_at || "")))
+                  const realForDate = (Array.isArray(mealEntries) ? mealEntries : [])
+                    .filter(e => String(e.date || '').slice(0, 10) === calendarSelectedDate)
+                    .sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')))
+
+                  const estimatedForDate = getImputedSlots(
+                    calendarSelectedDate, mealEntries, templateTotals, mealPresets, skippedSlots
+                  )
+
+                  const allSlotRows = MEAL_SLOTS.map(slot => {
+                    const realEntries = realForDate.filter(e => e.meal_type === slot)
+                    const estEntry = estimatedForDate.find(e => e.meal_type === slot)
+                    const isSkipped = skippedSlots.has(`${calendarSelectedDate}|${slot}`)
+                    return { slot, realEntries, estEntry, isSkipped }
+                  })
+
+                  const totalReal = realForDate.reduce((s, e) => s + Number(e.calories || 0), 0)
+                  const totalEst = estimatedForDate.reduce((s, e) => s + Number(e.calories || 0), 0)
+                  const totalAll = totalReal + totalEst
 
                   return (
                     <div>
@@ -22331,6 +22439,11 @@ return (
                         <div style={{ fontWeight: "bold", fontSize: 13 }}>
                           {calendarSelectedDate}
                           {calendarSelectedDate === today && <span style={{ fontSize: 10, color: "#4acfe8", marginLeft: 8 }}>Today</span>}
+                        </div>
+                        <div style={{ fontSize: 11, color: "#667" }}>
+                          {totalReal > 0 && <span style={{ color: "#4acfe8" }}>{Math.round(totalReal)} logged</span>}
+                          {totalEst > 0 && <span style={{ color: "#f97316", marginLeft: 8 }}>+{Math.round(totalEst)} est</span>}
+                          {totalAll > 0 && <span style={{ color: "#ced2f0", marginLeft: 8 }}>= {Math.round(totalAll)} kcal total</span>}
                         </div>
                         <button
                           onClick={() => { setMealDate(calendarSelectedDate); setShowMealDialog(true) }}
@@ -22340,37 +22453,56 @@ return (
                         </button>
                       </div>
 
-                      {selectedMeals.length > 0 ? (
-                        <div style={{ display: "grid", gap: 6 }}>
-                          {selectedMeals.map(row => (
-                            <div key={row.id} style={{ display: "flex", justifyContent: "space-between", gap: 12, borderBottom: "1px solid #1a1b2e", paddingBottom: 6 }}>
-                              <div>
-                                <div style={{ fontSize: 12, fontWeight: 600 }}>{row.meal_type} - {row.preset_name}</div>
-                                <div style={{ fontSize: 11, color: "#667" }}>
-                                  {row.calories} kcal, {row.protein_g}g prot, {row.carbs_g}g carbs, {row.fat_g}g fat
+                      <div style={{ display: "grid", gap: 6 }}>
+                        {allSlotRows.map(({ slot, realEntries, estEntry, isSkipped }) => (
+                          <div key={slot} style={{ borderBottom: "1px solid #1a1b2e", paddingBottom: 6 }}>
+                            <div style={{ fontSize: 10, color: "#667", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>{slot}</div>
+
+                            {realEntries.map(row => (
+                              <div key={row.id} style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 2 }}>
+                                <div>
+                                  <span style={{ fontSize: 12, fontWeight: 600 }}>{row.preset_name}</span>
+                                  <span style={{ fontSize: 11, color: "#667", marginLeft: 8 }}>
+                                    {row.calories} kcal · {row.protein_g}g prot
+                                  </span>
                                 </div>
+                                <button onClick={() => deleteMealEntry(row.id)} style={{ ...buttonStyle(false), padding: "2px 6px", fontSize: 10 }}>×</button>
                               </div>
-                              <button onClick={() => deleteMealEntry(row.id)} style={{ ...buttonStyle(false), padding: "4px 8px", fontSize: 11 }}>Delete</button>
-                            </div>
-                          ))}
-                        </div>
-                      ) : imputedDay ? (
-                        <div style={{ background: "#14152a", border: "1px solid #1a1b2e", borderRadius: 8, padding: 10 }}>
-                          <div style={{ fontSize: 11, color: imputedDay.isEstimated ? "#E05C5C" : "#d97706", marginBottom: 4, fontStyle: "italic" }}>
-                            {imputedDay.isEstimated
-                              ? `Estimated from ${imputedDay.estimatedN} similar ${imputedDay.estimatedBucket} days`
-                              : "Template fallback (insufficient history)"}
+                            ))}
+
+                            {estEntry && !isSkipped && (
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                                <div style={{ fontStyle: "italic", fontSize: 11, color: estEntry.isEstimated ? "#f97316" : "#d97706" }}>
+                                  {estEntry.preset_name} — {estEntry.calories} kcal · {estEntry.protein_g}g prot
+                                </div>
+                                <button
+                                  onClick={() => markSlotSkipped(calendarSelectedDate, slot)}
+                                  title="I actually skipped this meal"
+                                  style={{ ...buttonStyle(false), padding: "2px 6px", fontSize: 10, color: "#555" }}
+                                >
+                                  Skip
+                                </button>
+                              </div>
+                            )}
+
+                            {isSkipped && (
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                                <div style={{ fontSize: 11, color: "#333", fontStyle: "italic" }}>Skipped</div>
+                                <button
+                                  onClick={() => unmarkSlotSkipped(calendarSelectedDate, slot)}
+                                  style={{ ...buttonStyle(false), padding: "2px 6px", fontSize: 10, color: "#555" }}
+                                >
+                                  Undo
+                                </button>
+                              </div>
+                            )}
+
+                            {realEntries.length === 0 && !estEntry && !isSkipped && (
+                              <div style={{ fontSize: 11, color: "#333", fontStyle: "italic" }}>No data</div>
+                            )}
                           </div>
-                          <div style={{ fontSize: 12, color: "#ced2f0" }}>
-                            {imputedDay.calories} kcal, {imputedDay.protein_g}g prot, {imputedDay.carbs_g}g carbs, {imputedDay.fat_g}g fat
-                          </div>
-                          <div style={{ fontSize: 11, color: "#556", marginTop: 6 }}>
-                            Log an entry for this date to replace the estimate.
-                          </div>
-                        </div>
-                      ) : (
-                        <div style={{ fontSize: 12, color: "#555" }}>No entries for this date.</div>
-                      )}
+                        ))}
+                      </div>
                     </div>
                   )
                 })()}
