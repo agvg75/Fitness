@@ -18831,16 +18831,34 @@ const tsbV2Panel = useMemo(() => {
       }
     }
   })
+  // Modality-specific tau pairs (days)
+  // overall uses the globally fitted values; modalities use physiologically calibrated pairs
+  const MODALITY_TAUS = {
+    overall: { t1: tau1, t2: tau2 },
+    running: { t1: 27, t2: 18 },
+    cycling: { t1: 30, t2: 14 },
+    swimming: { t1: 25, t2: 12 },
+    strength: { t1: 35, t2: 10 },
+    upperStrength: { t1: 35, t2: 10 },
+    lowerStrength: { t1: 35, t2: 10 },
+  }
+
   const acute = {overall:0,running:0,cycling:0,swimming:0,strength:0,upperStrength:0,lowerStrength:0}
   const chronic = {overall:0,running:0,cycling:0,swimming:0,strength:0,upperStrength:0,lowerStrength:0}
-  const aA = 1 - Math.exp(-1/tau2), aC = 1 - Math.exp(-1/tau1)
+
+  const decayA = {}
+  const decayC = {}
+  Object.entries(MODALITY_TAUS).forEach(([key, { t1, t2 }]) => {
+    decayA[key] = 1 - Math.exp(-1 / t2)
+    decayC[key] = 1 - Math.exp(-1 / t1)
+  })
 
   const allRows = dayKeys.map(date => {
     const load = dailyLoads[date]
     const row = { date }
     ;['overall','running','cycling','swimming','strength','upperStrength','lowerStrength'].forEach(k => {
-      acute[k] += aA * (load[k] - acute[k])
-      chronic[k] += aC * (load[k] - chronic[k])
+      acute[k] += decayA[k] * (load[k] - acute[k])
+      chronic[k] += decayC[k] * (load[k] - chronic[k])
       row[`${k}Tsb`] = Number((chronic[k] - acute[k]).toFixed(2))
       row[`${k}Ctl`] = Number(chronic[k].toFixed(2))
       row[`${k}Atl`] = Number(acute[k].toFixed(2))
