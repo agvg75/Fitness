@@ -15970,6 +15970,7 @@ const [showAddPreset, setShowAddPreset] = useState(false)
 const [newPresetSlot, setNewPresetSlot] = useState("Breakfast")
 const [newPreset, setNewPreset] = useState({ name:"", calories:"", protein_g:"", carbs_g:"", fat_g:"" })
   const [mealDate, setMealDate] = useState(todayISO())
+  const [calendarSelectedDate, setCalendarSelectedDate] = useState(todayISO())
   const [mealTab, setMealTab] = useState("Breakfast")
   const [customMealName, setCustomMealName] = useState("")
   const [customMeal, setCustomMeal] = useState({ calories: "", protein_g: "", carbs_g: "", fat_g: "", fiber_g: "" })
@@ -17489,6 +17490,12 @@ async function persistMealEntries(nextEntries, currentUserId) {
   }
 
   const todayMeals = useMemo(() => {
+    return [...mealEntries, ...trainerDerivedDays]
+      .filter(row => row.date === calendarSelectedDate)
+      .sort((a, b) => String(a.created_at || "").localeCompare(String(b.created_at || "")))
+  }, [mealEntries, trainerDerivedDays, calendarSelectedDate])
+
+  const mealDateMeals = useMemo(() => {
     return [...mealEntries, ...trainerDerivedDays]
       .filter(row => row.date === mealDate)
       .sort((a, b) => String(a.created_at || "").localeCompare(String(b.created_at || "")))
@@ -22201,8 +22208,8 @@ return (
           <div style={{ ...cardStyle(), maxWidth: "1000px", marginBottom: "16px" }}>
             {(() => {
               const PROTEIN_TARGET = LIFT_CONFIG.protein_target_g
-              const todayProtein = todayMeals.reduce((s, r) => s + toNum(r.protein_g), 0)
-              const todayCalories = todayMeals.reduce((s, r) => s + toNum(r.calories), 0)
+              const todayProtein = mealDateMeals.reduce((s, r) => s + toNum(r.protein_g), 0)
+              const todayCalories = mealDateMeals.reduce((s, r) => s + toNum(r.calories), 0)
               const proteinPct = Math.min(100, Math.round((todayProtein / PROTEIN_TARGET) * 100))
               const remaining = Math.max(0, PROTEIN_TARGET - todayProtein)
               const barColor = proteinPct >= 100 ? "#4ade80" : proteinPct >= 70 ? "#fbbf24" : "#ef4444"
@@ -22259,8 +22266,117 @@ return (
             })()}
           </div>
 
+          {/* ── Meal Calendar Strip ─────────────────────────────────── */}
+          {(() => {
+            const today = todayISO()
+            const stripDates = []
+            for (let i = 13; i >= 0; i--) {
+              const d = new Date()
+              d.setDate(d.getDate() - i)
+              stripDates.push(d.toISOString().slice(0, 10))
+            }
+
+            const realByDate = {}
+            ;(Array.isArray(mealEntries) ? mealEntries : []).forEach(e => {
+              const d = String(e.date || "").slice(0, 10)
+              if (d) realByDate[d] = true
+            })
+
+            return (
+              <div style={{ ...cardStyle(), marginBottom: 16, maxWidth: "1000px" }}>
+                <div style={{ fontWeight: "bold", marginBottom: 10, fontSize: 13 }}>Meal Calendar</div>
+                <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 12 }}>
+                  {stripDates.map(dateStr => {
+                    const hasReal = !!realByDate[dateStr]
+                    const imputed = !hasReal && getImputedDay(dateStr, mealEntries, templateTotals)
+                    const dotColor = hasReal ? "#4ade80" : imputed ? "#E05C5C" : "#333"
+                    const isSelected = dateStr === calendarSelectedDate
+                    const isToday = dateStr === today
+                    return (
+                      <button
+                        key={dateStr}
+                        onClick={() => setCalendarSelectedDate(dateStr)}
+                        style={{
+                          display: "flex", flexDirection: "column", alignItems: "center",
+                          padding: "6px 8px", border: `1px solid ${isSelected ? "#4acfe8" : "#1a1b2e"}`,
+                          borderRadius: 6, background: isSelected ? "rgba(74,207,232,0.10)" : "#14152a",
+                          cursor: "pointer", minWidth: 42
+                        }}
+                      >
+                        <div style={{ fontSize: 9, color: "#667", marginBottom: 2, textTransform: "uppercase" }}>
+                          {new Date(dateStr + "T12:00:00").toLocaleDateString("en-US", { weekday: "short" })}
+                        </div>
+                        <div style={{ fontSize: 13, fontWeight: isToday ? 800 : 500, color: isSelected ? "#4acfe8" : "#ced2f0" }}>
+                          {dateStr.slice(8)}
+                        </div>
+                        <div style={{ width: 7, height: 7, borderRadius: "50%", background: dotColor, marginTop: 3 }} />
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {(() => {
+                  const hasReal = !!(Array.isArray(mealEntries) && mealEntries.some(e => String(e.date || "").slice(0, 10) === calendarSelectedDate))
+                  const imputedDay = !hasReal ? getImputedDay(calendarSelectedDate, mealEntries, templateTotals) : null
+                  const selectedMeals = (Array.isArray(mealEntries) ? mealEntries : [])
+                    .filter(e => String(e.date || "").slice(0, 10) === calendarSelectedDate)
+                    .sort((a, b) => String(a.created_at || "").localeCompare(String(b.created_at || "")))
+
+                  return (
+                    <div>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, flexWrap: "wrap", gap: 8 }}>
+                        <div style={{ fontWeight: "bold", fontSize: 13 }}>
+                          {calendarSelectedDate}
+                          {calendarSelectedDate === today && <span style={{ fontSize: 10, color: "#4acfe8", marginLeft: 8 }}>Today</span>}
+                        </div>
+                        <button
+                          onClick={() => { setMealDate(calendarSelectedDate); setShowMealDialog(true) }}
+                          style={buttonStyle(true)}
+                        >
+                          + Add entry
+                        </button>
+                      </div>
+
+                      {selectedMeals.length > 0 ? (
+                        <div style={{ display: "grid", gap: 6 }}>
+                          {selectedMeals.map(row => (
+                            <div key={row.id} style={{ display: "flex", justifyContent: "space-between", gap: 12, borderBottom: "1px solid #1a1b2e", paddingBottom: 6 }}>
+                              <div>
+                                <div style={{ fontSize: 12, fontWeight: 600 }}>{row.meal_type} - {row.preset_name}</div>
+                                <div style={{ fontSize: 11, color: "#667" }}>
+                                  {row.calories} kcal, {row.protein_g}g prot, {row.carbs_g}g carbs, {row.fat_g}g fat
+                                </div>
+                              </div>
+                              <button onClick={() => deleteMealEntry(row.id)} style={{ ...buttonStyle(false), padding: "4px 8px", fontSize: 11 }}>Delete</button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : imputedDay ? (
+                        <div style={{ background: "#14152a", border: "1px solid #1a1b2e", borderRadius: 8, padding: 10 }}>
+                          <div style={{ fontSize: 11, color: imputedDay.isEstimated ? "#E05C5C" : "#d97706", marginBottom: 4, fontStyle: "italic" }}>
+                            {imputedDay.isEstimated
+                              ? `Estimated from ${imputedDay.estimatedN} similar ${imputedDay.estimatedBucket} days`
+                              : "Template fallback (insufficient history)"}
+                          </div>
+                          <div style={{ fontSize: 12, color: "#ced2f0" }}>
+                            {imputedDay.calories} kcal, {imputedDay.protein_g}g prot, {imputedDay.carbs_g}g carbs, {imputedDay.fat_g}g fat
+                          </div>
+                          <div style={{ fontSize: 11, color: "#556", marginTop: 6 }}>
+                            Log an entry for this date to replace the estimate.
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 12, color: "#555" }}>No entries for this date.</div>
+                      )}
+                    </div>
+                  )
+                })()}
+              </div>
+            )
+          })()}
+
           <div style={{ ...cardStyle(), maxWidth: "1000px" }}>
-            <div style={{ fontWeight: "bold", marginBottom: "12px" }}>Meal Log ({mealDate})</div>
+            <div style={{ fontWeight: "bold", marginBottom: "12px" }}>Meal Log ({calendarSelectedDate})</div>
             {!todayMeals.length ? (
               <div>No synced meal entries for this date.</div>
             ) : (
