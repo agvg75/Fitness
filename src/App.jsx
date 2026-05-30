@@ -7914,6 +7914,7 @@ if (w.category === "Strength") {
         </div>
 
         {(() => {
+          const BW_LB = 160 // bodyweight substitution for BW-loaded exercises
           const EXERCISE_GROUPS = [
             {
               group: "Upper Body — Chest & Shoulders",
@@ -8033,6 +8034,7 @@ if (w.category === "Strength") {
 
                 let maxE1rm = null
                 let totalVolume = 0
+                let totalTimeSec = 0
 
                 for (const ex of matches) {
                   // Prefer the full sets array; fall back to scalar actual/load fields if sets are absent.
@@ -8041,23 +8043,40 @@ if (w.category === "Strength") {
                     : [{ weight: ex.load, reps: ex.reps }]
 
                   for (const set of setsArr) {
-                    const w = parseFloat(set.weight ?? set.load)
-                    const r = parseFloat(set.reps)
+                    const rawLoad = set.weight ?? set.load ?? set.w
+                    const rawReps = set.reps ?? set.r
+                    // Resolve load: substitute BW constant for bodyweight exercises.
+                    const loadStr = String(rawLoad ?? "").trim().toUpperCase()
+                    const w = loadStr === "BW" || loadStr === "BODYWEIGHT" || loadStr === "—"
+                      ? BW_LB
+                      : parseFloat(rawLoad)
                     if (!Number.isFinite(w) || w <= 0) continue
+                    // Resolve reps: handle time descriptors (e.g. "30s") as seconds, not reps.
+                    const repsStr = String(rawReps ?? "").trim()
+                    const isTimeBased = /^\d+s$/i.test(repsStr)
+                    const r = isTimeBased ? null : parseFloat(repsStr)
+                    if (isTimeBased) {
+                      totalTimeSec += parseInt(repsStr, 10) || 0
+                    }
                     // Volume: always accumulate (reps default to 1 for time-based sets).
                     const effectiveReps = Number.isFinite(r) && r > 0 ? r : 1
                     totalVolume += w * effectiveReps
                     // e1RM: only for sets at or below 15 reps.
-                    if (Number.isFinite(r) && r > 0 && r <= 15) {
+                    if (!isTimeBased && Number.isFinite(r) && r > 0 && r <= 15) {
                       const e1rm = Math.round(w * (1 + r / 30))
                       if (maxE1rm === null || e1rm > maxE1rm) maxE1rm = e1rm
                     }
                   }
                 }
 
-                // Only push a point if we have at least volume data.
-                if (totalVolume > 0) {
-                  points.push({ date, e1rm: maxE1rm, volume: Math.round(totalVolume) })
+                // Only push a point if we have at least volume or duration data.
+                if (totalVolume > 0 || totalTimeSec > 0) {
+                  points.push({
+                    date,
+                    e1rm: maxE1rm,
+                    volume: totalVolume > 0 ? Math.round(totalVolume) : null,
+                    durationSec: totalTimeSec > 0 ? totalTimeSec : null
+                  })
                 }
               }
               const sorted = points
