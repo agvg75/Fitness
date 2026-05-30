@@ -228,6 +228,44 @@ const store = {
   }
 }
 
+const HISTORICAL_MTP_EPISODES = [
+  {
+    id: "mtp-dec-2025",
+    key: "jointStatus",
+    location: "Toe L",
+    label: "Joint — Toe L",
+    startDate: "2025-12-01",
+    resolvedAt: "2026-01-10",
+    initialScore: 3,
+    currentScore: 0,
+    halfLifeHours: 840,
+    episodeCount: 1,
+    notes: "December 2025 MTP flare. TSB -1.85, 14-day load 676. Onset after volume increase. Resolved with rest and anti-inflammatory protocol.",
+    source: "historical-seed"
+  },
+  {
+    id: "mtp-feb-2026",
+    key: "jointStatus",
+    location: "Toe L",
+    label: "Joint — Toe L",
+    startDate: "2026-02-01",
+    resolvedAt: "2026-03-15",
+    initialScore: 2,
+    currentScore: 0,
+    halfLifeHours: 840,
+    episodeCount: 2,
+    notes: "February 2026 MTP recurrence. TSB -2.83, 14-day load 756. Second episode within 90 days — chronicity flag. Resolved before Rivian 5K.",
+    source: "historical-seed"
+  }
+]
+
+function seedHistoricalMtpEpisodes(items) {
+  const loadedItems = Array.isArray(items) ? items : []
+  const existingIds = new Set(loadedItems.map(item => String(item?.id || "")))
+  const missingEpisodes = HISTORICAL_MTP_EPISODES.filter(item => !existingIds.has(item.id))
+  return missingEpisodes.length ? [...missingEpisodes, ...loadedItems] : loadedItems
+}
+
 // ── Session compartment classifier ───────────────────────────────────────
 // Returns the COMPARTMENT_SPLITS key for a canonical session.
 // Priority: canonical_type → exercise list analysis → day-of-week → "other"
@@ -16577,20 +16615,25 @@ useEffect(() => {
     const hfLocal = await store.get("lift_healthfit_daily") || await store.get("healthfit-daily")
     const dedupedWorkouts = dedupeUfdWorkouts(wo)
     const ninetyDaysAgo = Date.now() - 90 * 24 * 3600000
-    const cleanedOcLocal = (Array.isArray(ocLocal) ? ocLocal : []).filter(item => {
+    const ocLocalItems = Array.isArray(ocLocal) ? ocLocal : []
+    const cleanedOcLocal = seedHistoricalMtpEpisodes(ocLocalItems.filter(item => {
       if ((item.initialScore || item.currentScore || 0) > 0) return true
       const startMs = item.startDate ? new Date(item.startDate).getTime() : 0
       return Number.isFinite(startMs) && startMs >= ninetyDaysAgo
-    })
+    }))
+    const ocLocalIds = new Set(ocLocalItems.map(item => String(item?.id || "")))
+    const ocLocalChanged = !Array.isArray(ocLocal) ||
+      cleanedOcLocal.length !== ocLocalItems.length ||
+      HISTORICAL_MTP_EPISODES.some(item => !ocLocalIds.has(item.id))
     if (Array.isArray(wo) && dedupedWorkouts.length !== wo.length) {
       await store.set("ufd-workouts", dedupedWorkouts)
       setStoredWorkouts(dedupedWorkouts)
       console.log(`[migration] Removed ${wo.length - dedupedWorkouts.length} duplicate ufd-workouts entries`)
     }
-    if (Array.isArray(ocLocal) && cleanedOcLocal.length !== ocLocal.length) {
+    if (ocLocalChanged) {
       await store.set("oc-items", cleanedOcLocal)
       setOcItems(cleanedOcLocal)
-      console.log(`[migration] Removed ${ocLocal.length - cleanedOcLocal.length} zero-score OC items`)
+      console.log(`[migration] Updated OC items: ${ocLocalItems.length} → ${cleanedOcLocal.length}`)
     }
     if (Array.isArray(hfLocal)) {
       localStorage.setItem("lift_healthfit_daily", JSON.stringify(hfLocal))
@@ -16668,7 +16711,7 @@ useEffect(() => {
                 return Number.isFinite(startMs) && startMs >= ninetyDaysAgo
               })
               .sort((a, b) => b.id - a.id)
-            const cleanedOcItems = merged.filter(function(item) {
+            const cleanedOcItems = seedHistoricalMtpEpisodes(merged.filter(function(item) {
               // Remove ghost OC entries: zero-severity Toe L joint items created by body map mis-taps
               if (
                 item.key === 'jointStatus' &&
@@ -16677,16 +16720,7 @@ useEffect(() => {
                 (item.currentScore || 0) === 0
               ) return false
               return true
-            }).map(function(item) {
-              // Correct episodeCount for the chronic MTP item (3 known episodes: Dec 2025, Feb 2026, Mar 2026)
-              if (
-                item.key === 'jointStatus' &&
-                item.location === 'Toe L' &&
-                (item.initialScore || 0) > 0 &&
-                (item.episodeCount || 0) < 3
-              ) return Object.assign({}, item, { episodeCount: 3 })
-              return item
-            })
+            }))
             setOcItems(cleanedOcItems)
             await store.set("oc-items", cleanedOcItems)
           } else if (Array.isArray(cleanedOcLocal)) {
@@ -18735,7 +18769,7 @@ const tsbV2Panel = useMemo(() => {
     rollingLoad14 += Number(row.dailyLoad || 0)
     if (index >= 14) rollingLoad14 -= Number(allRows[index - 14]?.dailyLoad || 0)
     row.rollingLoad14 = Number(rollingLoad14.toFixed(2))
-    row.load14Alert = row.rollingLoad14 > 700 && Number(row.overallTsb) < LIFT_CONFIG.tsbModerateRiskThreshold
+    row.load14Alert = false
   })
   const canonicalSessions = dedupedForTsb
   const acwrByDate = {}
@@ -18798,7 +18832,11 @@ const tsbV2Panel = useMemo(() => {
     readinessDetail: { score: readinessScore ?? Math.round(50 + tsbNow) },
     currentOverallTsb: tsbNow,
     currentLoad14: cur.rollingLoad14 ?? 0,
-    currentLoad14Alert: Boolean(cur.load14Alert),
+    currentLoad14Alert: (
+      (cur.rollingLoad14 ?? 0) > 700 &&
+      Number(cur.overallTsb) < LIFT_CONFIG.tsbModerateRiskThreshold &&
+      ocItems.some(item => Number(item.currentScore) > 0 && !item.resolvedAt)
+    ),
     currentRow: cur,
     tsbDomain
   }
