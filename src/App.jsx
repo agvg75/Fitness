@@ -18109,6 +18109,7 @@ const bodyForecast = useMemo(() => {
       ? Number(fromDaily.weight_lb || fromDaily.weight)
       : (LIFT_CONFIG.total_mass_lb ?? 162.3)
   })()
+  console.log("[bodyForecast] anchorWeight:", anchorWeight, "| biometricRecords:", (Array.isArray(biometricRecords) ? biometricRecords : []).length)
 
   const lossRateMonthly = LIFT_CONFIG.fat_loss_rate_monthly ?? 1.7
   const slopePerDay = -(lossRateMonthly / 30.44)
@@ -19614,7 +19615,9 @@ const forecastYDomain = useMemo(() => {
   const projected    = bodyWeightForecastChart.filter(r => r.forecast != null).map(r => r.forecast)
   const allVals = [...recentActuals, ...projected].filter(Number.isFinite)
   if (!allVals.length) return ["auto", "auto"]
-  const upper = recentActuals.length ? Math.max(...recentActuals) + 5 : Math.max(...allVals) + 5
+  const upper = recentActuals.length
+    ? Math.min(Math.max(...recentActuals) + 5, 200)
+    : Math.min(Math.max(...allVals) + 5, 200)
   const lower = Math.min(...allVals) - 3
   return [Math.floor(lower), Math.ceil(upper)]
 }, [bodyWeightForecastChart])
@@ -22631,7 +22634,7 @@ return (
         <ComposedChart data={bodyWeightForecastChart} margin={{ top: 10, right: 20, left: 55, bottom: 20 }}>
           <CartesianGrid stroke="#1a1b2e" />
           <XAxis dataKey="label" interval="preserveStartEnd" tick={{ fontSize: 10 }} />
-          <YAxis domain={[148, 'dataMax + 2']} label={{ value: "Weight (lb)", angle: -90, position: "insideLeft", offset: 15, fill: "#ced2f0", style: { textAnchor: "middle" } }} />
+          <YAxis domain={forecastYDomain} label={{ value: "Weight (lb)", angle: -90, position: "insideLeft", offset: 15, fill: "#ced2f0", style: { textAnchor: "middle" } }} />
           <Tooltip formatter={(v, n) => [v != null ? `${v} lb` : "—", n === "actual" ? "Actual (7d avg)" : "Projected"]} />
           <Legend verticalAlign="top" height={28} />
           <Line type="monotone" dataKey="actual"   name="Actual (7d avg)" stroke="#4a9ee8" strokeWidth={2} dot={false} connectNulls={false} />
