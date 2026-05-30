@@ -15458,6 +15458,81 @@ function normalizeDistanceToMiles(workout) {
   return value
 }
 
+// ── Meal imputation helper ──────────────────────────────────────────────────
+// Returns an imputed day record for a given ISO date string, or null if not
+// enough data exists and no template fallback is configured.
+// Tier 1: rolling 7-entry average per day-type bucket (min 3 entries required)
+// Tier 2: static dailyTemplate totals (passed in as templateTotals)
+// Tier 3: null (slot left empty on chart)
+//
+// dayTypeBucket: "weekday" | "saturday" | "sunday"
+// realEntries: full mealEntries array (ufd-meal-entries, each has date, meal_type, calories, protein_g, carbs_g, fat_g, fiber_g)
+// templateTotals: { calories, protein_g, carbs_g, fat_g } from existing templateTotals useMemo
+
+function getDayTypeBucket(isoDate) {
+  // Use UTC to avoid timezone rollover at midnight local
+  const d = new Date(isoDate + "T12:00:00")
+  const dow = d.getDay() // 0=Sun, 1=Mon, ..., 6=Sat
+  if (dow === 0) return "sunday"
+  if (dow === 6) return "saturday"
+  return "weekday"
+}
+
+function getImputedDay(isoDate, realEntries, templateTotals) {
+  const bucket = getDayTypeBucket(isoDate)
+
+  const byDate = {}
+  ;(Array.isArray(realEntries) ? realEntries : []).forEach(e => {
+    const d = String(e.date || "").slice(0, 10)
+    if (!d || d === isoDate) return
+    if (!byDate[d]) byDate[d] = { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0 }
+    byDate[d].calories += Number(e.calories || 0)
+    byDate[d].protein_g += Number(e.protein_g || 0)
+    byDate[d].carbs_g += Number(e.carbs_g || 0)
+    byDate[d].fat_g += Number(e.fat_g || 0)
+    byDate[d].fiber_g += Number(e.fiber_g || 0)
+  })
+
+  const qualifying = Object.entries(byDate)
+    .filter(([d]) => getDayTypeBucket(d) === bucket)
+    .sort(([a], [b]) => b.localeCompare(a))
+    .slice(0, 7)
+    .map(([, totals]) => totals)
+
+  if (qualifying.length >= 3) {
+    const n = qualifying.length
+    return {
+      date: isoDate,
+      calories: Math.round(qualifying.reduce((s, r) => s + r.calories, 0) / n),
+      protein_g: Math.round(qualifying.reduce((s, r) => s + r.protein_g, 0) / n),
+      carbs_g: Math.round(qualifying.reduce((s, r) => s + r.carbs_g, 0) / n),
+      fat_g: Math.round(qualifying.reduce((s, r) => s + r.fat_g, 0) / n),
+      fiber_g: Math.round(qualifying.reduce((s, r) => s + r.fiber_g, 0) / n),
+      isEstimated: true,
+      isTemplate: false,
+      estimatedN: n,
+      estimatedBucket: bucket
+    }
+  }
+
+  if (templateTotals && templateTotals.calories > 0) {
+    return {
+      date: isoDate,
+      calories: templateTotals.calories,
+      protein_g: templateTotals.protein_g,
+      carbs_g: templateTotals.carbs_g,
+      fat_g: templateTotals.fat_g,
+      fiber_g: 0,
+      isEstimated: false,
+      isTemplate: true,
+      estimatedN: 0,
+      estimatedBucket: null
+    }
+  }
+
+  return null
+}
+
 function summarizeDailyNutrition(entries) {
   const grouped = {}
 
@@ -19644,15 +19719,32 @@ const calorieChartData = useMemo(() => {
     const dateStr = d.toISOString().slice(0,10)
     const actual = actualByDate[dateStr]
     if (actual) {
-      rows.push({ ...actual, label: dateStr.slice(5), target: calorieTarget.targetCalories, isTemplate: false })
-    } else if (templateTotals.calories > 0) {
-      rows.push({ date: dateStr, label: dateStr.slice(5), calories: templateTotals.calories,
-        protein_g: templateTotals.protein_g, carbs_g: templateTotals.carbs_g, fat_g: templateTotals.fat_g,
-        target: calorieTarget.targetCalories, isTemplate: true })
+      rows.push({ ...actual, label: dateStr.slice(5), target: calorieTarget.targetCalories,
+        isTemplate: false, isEstimated: false })
+    } else {
+      const imputed = getImputedDay(dateStr, mealEntries, templateTotals)
+      if (imputed) {
+        rows.push({ ...imputed, label: dateStr.slice(5), target: calorieTarget.targetCalories })
+      }
     }
   }
   return rows
-}, [filteredNutrition, calorieTarget, templateTotals, selectedRangePoints])
+}, [filteredNutrition, calorieTarget, templateTotals, selectedRangePoints, mealEntries])
+
+// Recharts does not support per-point stroke colors on a single Line.
+// Solution: split calories into three keys; each Line renders only its tier.
+// A row with isEstimated=true has calories_est set and calories/calories_tmpl null.
+// A row with isTemplate=true has calories_tmpl set.
+// A real row has calories set and the others null.
+const calorieChartDataSplit = useMemo(() => {
+  return calorieChartData.map(row => ({
+    ...row,
+    calories_real: (!row.isEstimated && !row.isTemplate) ? row.calories : null,
+    calories_est: row.isEstimated ? row.calories : null,
+    calories_tmpl: row.isTemplate ? row.calories : null,
+  }))
+}, [calorieChartData])
+
 const overviewCaloriesDomain = useMemo(() => {
   const vals = calorieChartData
     .flatMap(row => [Number(row.calories), Number(row.target), Number(row.calories_7d)])
@@ -21388,12 +21480,26 @@ return (
           <div style={{ color: "#555", padding: "40px 0", textAlign: "center", fontSize: 12 }}>No nutrition data logged for this period.</div>
         ) : (
           <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={calorieChartData} margin={{ top: 8, right: 14, left: 10, bottom: 18 }}>
+            <LineChart data={calorieChartDataSplit} margin={{ top: 8, right: 14, left: 10, bottom: 18 }}>
               <CartesianGrid stroke="#1a1b2e" />
               <XAxis dataKey="label" interval="preserveStartEnd" tickCount={6} tick={{ fontSize: 10 }} />
               <YAxis domain={overviewCaloriesDomain} tick={{ fontSize: 10 }} width={36} />
-              <Tooltip />
-              <Line type="monotone" dataKey="calories" stroke="#4acfe8" strokeWidth={2} dot={false} name="Calories" />
+              <Tooltip
+                formatter={(value, name) => {
+                  if (value == null) return null
+                  const labels = {
+                    calories_real: "Calories (logged)",
+                    calories_est: "Calories (estimated)",
+                    calories_tmpl: "Calories (template)",
+                    target: "Target",
+                    calories_7d: "7-day avg"
+                  }
+                  return [`${Math.round(value)} kcal`, labels[name] || name]
+                }}
+              />
+              <Line type="monotone" dataKey="calories_real" stroke="#4acfe8" strokeWidth={2} dot={false} name="Logged" connectNulls={false} />
+              <Line type="monotone" dataKey="calories_est" stroke="#E05C5C" strokeWidth={2} dot={false} name="Estimated" connectNulls={false} strokeDasharray="4 3" />
+              <Line type="monotone" dataKey="calories_tmpl" stroke="#d97706" strokeWidth={1} dot={false} name="Template" connectNulls={false} strokeDasharray="2 4" />
               <Line type="monotone" dataKey="target" stroke="#ffd166" strokeDasharray="6 6" dot={false} name="Target" />
               <Line type="monotone" dataKey="calories_7d" stroke="#ffffff" strokeWidth={2} dot={false} name="7 day avg" />
             </LineChart>
@@ -21892,8 +21998,8 @@ return (
               </div>
               <div style={{ fontSize: 11, opacity: 0.6 }}>
                 {templateTotals.calories > 0
-                  ? `${templateTotals.calories} kcal / ${templateTotals.protein_g}g protein default. Fills chart on unlogged days.`
-                  : "Set defaults below. Chart fills these automatically on unlogged days."}
+                  ? `${templateTotals.calories} kcal / ${templateTotals.protein_g}g protein default. Used as fallback when history is sparse (fewer than 3 same-day-type entries).`
+                  : "Set defaults below. Used as fallback when rolling average history is insufficient."}
               </div>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))", gap: "10px" }}>
@@ -21962,17 +22068,31 @@ return (
             <div style={{ fontWeight: "bold", marginBottom: "12px" }}>Calories Trend ({rangeKey})</div>
            <ResponsiveContainer width="100%" height={260}>
   <LineChart
-  data={calorieChartData}
+  data={calorieChartDataSplit}
   margin={{ top: 20, right: 20, left: 55, bottom: 35 }}
 >
                 <CartesianGrid stroke="#1a1b2e" />
                 <XAxis dataKey="label" />
                 <YAxis domain={[0, chartMaxCalories]} />
-                <Tooltip />
+                <Tooltip
+                  formatter={(value, name) => {
+                    if (value == null) return null
+                    const labels = {
+                      calories_real: "Calories (logged)",
+                      calories_est: "Calories (estimated)",
+                      calories_tmpl: "Calories (template)",
+                      target: "Target",
+                      calories7: "7-day avg"
+                    }
+                    return [`${Math.round(value)} kcal`, labels[name] || name]
+                  }}
+                />
                 <Legend verticalAlign="top" height={36} />
-                <Line type="monotone" dataKey="calories" stroke="#4acfe8" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="calories_real" stroke="#4acfe8" strokeWidth={2} dot={false} name="Logged" connectNulls={false} />
+<Line type="monotone" dataKey="calories_est" stroke="#E05C5C" strokeWidth={2} dot={false} name="Estimated" connectNulls={false} strokeDasharray="4 3" />
+<Line type="monotone" dataKey="calories_tmpl" stroke="#d97706" strokeWidth={1} dot={false} name="Template" connectNulls={false} strokeDasharray="2 4" />
 <Line type="monotone" dataKey="target" stroke="#ffd166" strokeDasharray="6 6" dot={false} name="Target" />
-<Line type="monotone" dataKey="calories7" stroke="#ffffff" strokeWidth={2} dot={false} />
+<Line type="monotone" dataKey="calories7" stroke="#ffffff" strokeWidth={2} dot={false} name="7-day avg" />
               </LineChart>
             </ResponsiveContainer>
           </div>
