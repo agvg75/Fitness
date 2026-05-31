@@ -14858,6 +14858,35 @@ function explainCardio(panel) {
   return `Aerobic freshness by compartment (running, cycling, swimming). Positive is fresh, negative is accumulating fatigue; risk rises past -7. Currently run ${f(r.runningTsb)}, cycle ${f(r.cyclingTsb)}, swim ${f(r.swimmingTsb)}.`
 }
 
+function explainStrength(panel) {
+  const r = panel?.currentRow || {}
+  const f = v => Number.isFinite(v) ? v.toFixed(1) : "—"
+  const upper = Number(r.upperStrengthTsb)
+  const lower = Number(r.lowerStrengthTsb)
+  const diverge = Number.isFinite(upper) && Number.isFinite(lower) && Math.abs(upper - lower) >= 3
+    ? ` Upper and lower are diverging (${f(upper)} vs ${f(lower)}), so one compartment is carrying more fatigue than the other.`
+    : ""
+  return `Strength freshness, aggregate plus upper and lower compartments. Positive is fresh, negative is accumulating fatigue; risk rises past -7. Currently strength ${f(r.strengthTsb)}, upper ${f(r.upperStrengthTsb)}, lower ${f(r.lowerStrengthTsb)}.${diverge}`
+}
+
+function explainAcwr(panel) {
+  const r = panel?.currentRow || {}
+  const a = Number(r.acwr)
+  const af = Number.isFinite(a) ? a.toFixed(2) : "—"
+  let zone
+  if (!Number.isFinite(a)) zone = "No current reading."
+  else if (a > 1.5) zone = "Above the 1.5 ceiling — load has ramped faster than your chronic base, elevated injury risk."
+  else if (a < 0.8) zone = "Below the 0.8 floor — load is well under your chronic base, detraining territory."
+  else zone = "Inside the 0.8 to 1.5 corridor — load progression is in a reasonable range."
+  return `Acute to chronic workload ratio: this week's load against your rolling baseline. Currently ${af}. ${zone}`
+}
+
+const EXPLAIN_FNS = {
+  cardioTsb: explainCardio,
+  strengthTsb: explainStrength,
+  acwr: explainAcwr
+}
+
 export default function App() {
 
   // ── LIFT Calibration Config ─────────────────────────────────────────────
@@ -21137,6 +21166,22 @@ return (
     borderRadius: 8,
     color: "#0f172a"
   }
+  const explainText = EXPLAIN_FNS[activeReadinessView?.id]
+    ? EXPLAIN_FNS[activeReadinessView.id](panel)
+    : "Tissue capacity is calibrating. It needs at least 4 logged episodes per region before risk can be scored."
+  const readinessSummaryValues = activeReadinessView?.id === "strengthTsb"
+    ? [
+        ["Strength", panel.currentRow?.strengthTsb],
+        ["Upper", panel.currentRow?.upperStrengthTsb],
+        ["Lower", panel.currentRow?.lowerStrengthTsb]
+      ]
+    : activeReadinessView?.id === "acwr"
+      ? [["ACWR", panel.currentRow?.acwr]]
+      : [
+          ["Run", panel.currentRow?.runningTsb],
+          ["Cycle", panel.currentRow?.cyclingTsb],
+          ["Swim", panel.currentRow?.swimmingTsb]
+        ]
   return (
     <>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:10, flexWrap:"wrap", marginBottom:10 }}>
@@ -21197,13 +21242,7 @@ return (
       </div>
       {showReadinessExplain ? (
         <div style={{ border:"1px solid #1a1b2e", borderRadius:8, padding:"8px 10px", color:"#cbd5e1", fontSize:11, lineHeight:1.5, marginBottom:10 }}>
-          {activeReadinessView?.id === "cardioTsb"
-            ? explainCardio(panel)
-            : activeReadinessView?.id === "strengthTsb"
-              ? "Strength freshness across total, upper, and lower compartments. This view will land in slice 2."
-              : activeReadinessView?.id === "acwr"
-                ? "Load risk compares recent acute load against chronic load. This view will land in slice 2."
-                : "Tissue capacity is calibrating until enough logged episodes exist per region."}
+          {explainText}
         </div>
       ) : null}
       {(() => {
@@ -21262,6 +21301,79 @@ return (
                 </ResponsiveContainer>
               </div>
             </>
+          ) : activeReadinessView?.id === "strengthTsb" ? (
+            <>
+              <div style={{ display:"flex", gap:14, alignItems:"center", marginBottom:8, flexWrap:"wrap" }}>
+                {[
+                  ["Strength", "#ffd166"],
+                  ["Upper", "#f97316"],
+                  ["Lower", "#4ade80"]
+                ].map(([label, color]) => (
+                  <div key={label} style={{ display:"flex", alignItems:"center", gap:5, fontSize:10, color:"#999" }}>
+                    <div style={{ width:14, height:2, background:color, borderRadius:999, opacity:0.95 }} />
+                    <span style={{ color }}>{label}</span>
+                  </div>
+                ))}
+              </div>
+              <div
+                onTouchStart={event => { readinessTouchStartX.current = event.touches?.[0]?.clientX ?? null }}
+                onTouchEnd={event => {
+                  const startX = readinessTouchStartX.current
+                  const endX = event.changedTouches?.[0]?.clientX ?? null
+                  readinessTouchStartX.current = null
+                  if (startX == null || endX == null) return
+                  const delta = endX - startX
+                  if (Math.abs(delta) < 40) return
+                  moveReadinessView(delta < 0 ? 1 : -1)
+                }}
+              >
+                <ResponsiveContainer width="100%" height={230}>
+                  <ComposedChart data={panel.rows} margin={{ top:8, right:14, left:12, bottom:14 }}>
+                    <CartesianGrid stroke="#1a1b2e" />
+                    <XAxis dataKey="label" tick={{ fontSize:10 }} interval={Math.max(1, Math.floor((panel.rows.length || 1) / (isLongWindow ? 10 : 12)) - 1)} />
+                    <YAxis domain={panel.tsbDomain || [dataMin => Math.min(Math.floor(dataMin - 3), -5), dataMax => Math.max(Math.ceil(dataMax + 3), 5)]} tick={{ fontSize:10 }} width={30} tickFormatter={value => Number(value).toFixed(0)} />
+                    <ReferenceLine y={0} stroke="#444" strokeDasharray="3 3" />
+                    <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: "#0f172a" }} formatter={(v, n) => [Number(v).toFixed(2), n]} />
+                    <Line type="monotone" dataKey="strengthTsb" name="Strength TSB" stroke="#ffd166" strokeWidth={2.2} dot={false} connectNulls isAnimationActive={false} />
+                    <Line type="monotone" dataKey="upperStrengthTsb" name="Upper Strength TSB" stroke="#f97316" strokeWidth={1.5} strokeOpacity={0.8} dot={false} connectNulls strokeDasharray="2 3" isAnimationActive={false} />
+                    <Line type="monotone" dataKey="lowerStrengthTsb" name="Lower Strength TSB" stroke="#4ade80" strokeWidth={1.5} strokeOpacity={0.8} dot={false} connectNulls strokeDasharray="2 3" isAnimationActive={false} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            </>
+          ) : activeReadinessView?.id === "acwr" ? (
+            <>
+              <div style={{ display:"flex", gap:14, alignItems:"center", marginBottom:8, flexWrap:"wrap" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:5, fontSize:10, color:"#999" }}>
+                  <div style={{ width:14, height:2, background:"#f59e0b", borderRadius:999, opacity:0.95 }} />
+                  <span style={{ color:"#f59e0b" }}>ACWR</span>
+                </div>
+              </div>
+              <div
+                onTouchStart={event => { readinessTouchStartX.current = event.touches?.[0]?.clientX ?? null }}
+                onTouchEnd={event => {
+                  const startX = readinessTouchStartX.current
+                  const endX = event.changedTouches?.[0]?.clientX ?? null
+                  readinessTouchStartX.current = null
+                  if (startX == null || endX == null) return
+                  const delta = endX - startX
+                  if (Math.abs(delta) < 40) return
+                  moveReadinessView(delta < 0 ? 1 : -1)
+                }}
+              >
+                <ResponsiveContainer width="100%" height={230}>
+                  <ComposedChart data={panel.rows} margin={{ top:10, right:20, left:8, bottom:18 }}>
+                    <CartesianGrid stroke="#1a1b2e" />
+                    <XAxis dataKey="label" tick={{ fontSize:10 }} interval={Math.max(1, Math.floor((panel.rows.length || 1) / (isLongWindow ? 10 : 12)) - 1)} />
+                    <YAxis domain={[0, 2.5]} tick={{ fontSize:10 }} width={30} tickFormatter={v => Number(v).toFixed(1)} />
+                    <ReferenceLine y={1.5} stroke="#ef4444" strokeDasharray="3 2" strokeOpacity={0.6} label={{ value:"high 1.5", position:"insideTopRight", fontSize:8, fill:"#ef4444" }} />
+                    <ReferenceLine y={0.8} stroke="#3b82f6" strokeDasharray="3 2" strokeOpacity={0.6} label={{ value:"low 0.8", position:"insideBottomRight", fontSize:8, fill:"#3b82f6" }} />
+                    <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: "#0f172a" }} formatter={v => [v != null ? Number(v).toFixed(2) : "—", "ACWR"]} />
+                    <Line type="monotone" dataKey="acwr" name="ACWR" stroke="#f59e0b" strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            </>
           ) : (
             <div
               onTouchStart={event => { readinessTouchStartX.current = event.touches?.[0]?.clientX ?? null }}
@@ -21276,21 +21388,15 @@ return (
               }}
               style={{ height:230, display:"flex", alignItems:"center", justifyContent:"center", border:"1px dashed #1a1b2e", borderRadius:8, color:"#64748b", fontSize:12 }}
             >
-              {activeReadinessView?.id === "tissue"
-                ? "Calibrating — needs >=4 logged episodes per region"
-                : `${activeReadinessView?.label || "Readiness"} view placeholder`}
+              Calibrating — needs &gt;=4 logged episodes per region
             </div>
           )}
           <div style={{ display:"flex", gap:10, flexWrap:"wrap", fontSize:11, color:"#94a3b8", marginTop:8 }}>
-            {[
-              ["Run", panel.currentRow?.runningTsb],
-              ["Cycle", panel.currentRow?.cyclingTsb],
-              ["Swim", panel.currentRow?.swimmingTsb]
-            ].map(([label, value]) => (
+            {readinessSummaryValues.map(([label, value]) => (
               <div key={label} style={{ display:"flex", alignItems:"center", gap:4 }}>
                 <span>{label}:</span>
                 <span style={tsbNumberStyle(Number(value))}>
-                  {Number.isFinite(Number(value)) ? Number(value).toFixed(1) : "—"}
+                  {Number.isFinite(Number(value)) ? Number(value).toFixed(activeReadinessView?.id === "acwr" ? 2 : 1) : "—"}
                 </span>
               </div>
             ))}
