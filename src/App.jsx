@@ -18869,10 +18869,10 @@ const tsbV2Panel = useMemo(() => {
     const loads = dayKeys.map(d => Number(dailyLoads[d]?.[modality] || 0))
     const states = new Array(dayKeys.length).fill('build')
     let lowStreak = 0
-    let returnDaysLeft = 0   // latch: once set, hold 'return' for this many days
+    let wasResting = false      // were we in a rest block recently?
+    let returnDaysLeft = 0      // latch for the return window
 
     for (let i = 0; i < dayKeys.length; i++) {
-      // 56-day active-day baseline (unchanged)
       const windowStart = Math.max(0, i - 55)
       const trailing = loads.slice(windowStart, i + 1)
       const activeDays = trailing.filter(v => v > 0)
@@ -18882,29 +18882,25 @@ const tsbV2Panel = useMemo(() => {
       const threshold = avg * 0.20
       const isLow = avg > 0 && loads[i] < threshold
 
-      // Track consecutive low days for rest entry.
       if (isLow) {
         lowStreak += 1
       } else {
         lowStreak = 0
       }
 
-      // Genuine resumption test: at least 3 active days in the trailing 7.
-      const last7 = loads.slice(Math.max(0, i - 6), i + 1)
-      const active7 = last7.filter(v => v > 0).length
+      // Resumption signal: any training today after a rest block.
+      const active7 = loads.slice(Math.max(0, i - 6), i + 1).filter(v => v > 0).length
 
       if (lowStreak >= 5) {
-        // Sustained low load -> forced rest. Cancels any pending return latch.
         states[i] = 'rest'
+        wasResting = true
         returnDaysLeft = 0
-      } else if (i > 0 && states[i - 1] === 'rest' && active7 >= 3) {
-        // Just exited rest with a genuine resumption (3+ active days in last 7).
-        // Latch the return state for 21 days.
+      } else if (wasResting && loads[i] > 0) {
+        // First real training day after a rest block opens the return window.
         states[i] = 'return'
-        returnDaysLeft = 21
+        returnDaysLeft = 20            // this day + 20 more = ~21 day window
+        wasResting = false
       } else if (returnDaysLeft > 0) {
-        // Hold the return state continuously through the latch window,
-        // regardless of individual rest/run days.
         states[i] = 'return'
         returnDaysLeft -= 1
       } else {
