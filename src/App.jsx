@@ -13697,6 +13697,10 @@ function assembleTrainerContext({ sessions60, ocItems, tsbData, raceCalendar, li
   const load14 = tsbData?.currentLoad14 != null ? Number(tsbData.currentLoad14).toFixed(0) : "?"
   const readiness = readinessScore != null ? `${Math.round(readinessScore)}%` : "?"
   const tsbLine = `TSB: ${tsbNow} | 14d load: ${load14} | Readiness: ${readiness}`
+  const runState = tsbData?.currentRow?.runningState || 'build'
+  const stateLine = runState !== 'build'
+    ? `Running state: ${runState === 'rest' ? 'forced rest (detraining tau active)' : 'return-to-training (accelerated rebuild tau active)'}`
+    : ''
   const riskFlag = (tsbData?.currentOverallTsb < -7 && tsbData?.currentLoad14 > 700)
     ? "⚠ RISK ZONE: TSB below -7 and 14d load above 700 — reduce intensity"
     : "Risk zone: clear"
@@ -13839,6 +13843,7 @@ function assembleTrainerContext({ sessions60, ocItems, tsbData, raceCalendar, li
 
 READINESS
 ${tsbLine}
+${stateLine}
 ${riskFlag}
 
 TODAY'S SCHEDULE (${dayName})
@@ -18843,25 +18848,79 @@ const tsbV2Panel = useMemo(() => {
     lowerStrength: { t1: 35, t2: 10 },
   }
 
+  // State-dependent tau: each modality switches decay rates by training state.
+  // build = normal training; rest = forced layoff (injury); return = ramp back up.
+  const MODALITY_TAUS_BY_STATE = {
+    overall:       { build:{t1:tau1,t2:tau2}, rest:{t1:Math.round(tau1*0.75),t2:Math.round(tau2*1.1)}, return:{t1:Math.round(tau1*0.82),t2:Math.round(tau2*0.9)} },
+    running:       { build:{t1:27,t2:18}, rest:{t1:20,t2:20}, return:{t1:22,t2:16} },
+    cycling:       { build:{t1:30,t2:14}, rest:{t1:22,t2:16}, return:{t1:25,t2:12} },
+    swimming:      { build:{t1:25,t2:12}, rest:{t1:19,t2:14}, return:{t1:21,t2:11} },
+    strength:      { build:{t1:35,t2:10}, rest:{t1:26,t2:12}, return:{t1:29,t2:9} },
+    upperStrength: { build:{t1:35,t2:10}, rest:{t1:26,t2:12}, return:{t1:29,t2:9} },
+    lowerStrength: { build:{t1:35,t2:10}, rest:{t1:26,t2:12}, return:{t1:29,t2:9} },
+  }
+  const TAU_MODALITIES = ['overall','running','cycling','swimming','strength','upperStrength','lowerStrength']
+
+  // Detect per-modality training state for each day from the daily load series.
+  // rest: load < 20% of trailing 28d avg for >=5 consecutive days.
+  // return: rising back above the 20% threshold within 21 days of exiting rest.
+  // build: default.
+  function detectModalityStates(dayKeys, dailyLoads, modality) {
+    const loads = dayKeys.map(d => Number(dailyLoads[d]?.[modality] || 0))
+    const states = new Array(dayKeys.length).fill('build')
+    let lowStreak = 0
+    let daysSinceRestExit = Infinity
+    for (let i = 0; i < dayKeys.length; i++) {
+      const windowStart = Math.max(0, i - 27)
+      const trailing = loads.slice(windowStart, i + 1)
+      const avg = trailing.length ? trailing.reduce((s,v)=>s+v,0) / trailing.length : 0
+      const threshold = avg * 0.20
+      const isLow = avg > 0 && loads[i] < threshold
+      if (isLow) {
+        lowStreak += 1
+      } else {
+        if (lowStreak >= 5) daysSinceRestExit = 0
+        lowStreak = 0
+      }
+      if (lowStreak >= 5) {
+        states[i] = 'rest'
+      } else if (daysSinceRestExit <= 21 && avg > 0 && loads[i] >= threshold) {
+        states[i] = 'return'
+      } else {
+        states[i] = 'build'
+      }
+      if (states[i] !== 'rest' && daysSinceRestExit !== Infinity) daysSinceRestExit += 1
+    }
+    return states
+  }
+
+  const modalityStates = {}
+  TAU_MODALITIES.forEach(m => { modalityStates[m] = detectModalityStates(dayKeys, dailyLoads, m) })
+
   const acute = {overall:0,running:0,cycling:0,swimming:0,strength:0,upperStrength:0,lowerStrength:0}
   const chronic = {overall:0,running:0,cycling:0,swimming:0,strength:0,upperStrength:0,lowerStrength:0}
 
-  const decayA = {}
-  const decayC = {}
-  Object.entries(MODALITY_TAUS).forEach(([key, { t1, t2 }]) => {
-    decayA[key] = 1 - Math.exp(-1 / t2)
-    decayC[key] = 1 - Math.exp(-1 / t1)
+  // Precompute decay factors for every (modality, state) pair once.
+  const decayByState = {}
+  TAU_MODALITIES.forEach(m => {
+    decayByState[m] = {}
+    Object.entries(MODALITY_TAUS_BY_STATE[m]).forEach(([state, { t1, t2 }]) => {
+      decayByState[m][state] = { a: 1 - Math.exp(-1 / t2), c: 1 - Math.exp(-1 / t1) }
+    })
   })
 
-  const allRows = dayKeys.map(date => {
+  const allRows = dayKeys.map((date, dayIndex) => {
     const load = dailyLoads[date]
     const row = { date }
-    ;['overall','running','cycling','swimming','strength','upperStrength','lowerStrength'].forEach(k => {
-      acute[k] += decayA[k] * (load[k] - acute[k])
-      chronic[k] += decayC[k] * (load[k] - chronic[k])
+    TAU_MODALITIES.forEach(k => {
+      const state = modalityStates[k][dayIndex] || 'build'
+      const f = decayByState[k][state]
+      acute[k] += f.a * (load[k] - acute[k])
+      chronic[k] += f.c * (load[k] - chronic[k])
       row[`${k}Tsb`] = Number((chronic[k] - acute[k]).toFixed(2))
       row[`${k}Ctl`] = Number(chronic[k].toFixed(2))
       row[`${k}Atl`] = Number(acute[k].toFixed(2))
+      row[`${k}State`] = state
     })
     row.dailyLoad = Number((load.overall || 0).toFixed(2))
     row.strengthLoad = Number((load.strength || 0).toFixed(2))
