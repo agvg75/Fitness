@@ -972,6 +972,17 @@ const TENDON_GROUP_META = {
   },
 }
 
+// Empirical MTP (left forefoot) episode anchors. Each: 14-day cumulative forefoot
+// load at symptom onset, and the peak symptom score reached. Used to calibrate
+// the personal onset threshold instead of a seeded constant.
+// Sources: Dec 2025 (load 676, score 3), Feb 2026 (load 756, score 2),
+// resolved current episode (load ~620 at score 1, self-limited).
+const MTP_FOREFOOT_EPISODES = [
+  { date: "2025-12-05", load14: 676, peakScore: 3 },
+  { date: "2026-02-08", load14: 756, peakScore: 2 },
+  { date: "2026-04-02", load14: 620, peakScore: 1 },
+]
+
 function getDefaultTendonWork(day) {
   const buildPlanTendonEntry = item => {
     const def = Array.isArray(item?.def) && item.def.length
@@ -9718,6 +9729,31 @@ function getTendonGroupKeywords(groupKey) {
   return []
 }
 
+// Fit a personal forefoot onset threshold from episode anchors.
+// Threshold = load at which symptom probability crosses ~0.5.
+// With sparse data (n=3) use a conservative fit: the load midway between the
+// lowest symptomatic load and a safety margin below it, weighted by severity.
+function fitForefootThreshold(episodes) {
+  if (!Array.isArray(episodes) || episodes.length === 0) {
+    return { threshold: null, lowerWarn: null, fitConfidence: 0 }
+  }
+  const symptomaticLoads = episodes.filter(e => e.peakScore >= 1).map(e => e.load14)
+  if (!symptomaticLoads.length) {
+    return { threshold: null, lowerWarn: null, fitConfidence: 0 }
+  }
+  const minSymptomatic = Math.min(...symptomaticLoads)
+  const meanSymptomatic = symptomaticLoads.reduce((s, v) => s + v, 0) / symptomaticLoads.length
+  const threshold = minSymptomatic
+  const lowerWarn = minSymptomatic * 0.85
+  const fitConfidence = Math.min(1, episodes.length / 4)
+  return {
+    threshold: Number(threshold.toFixed(1)),
+    lowerWarn: Number(lowerWarn.toFixed(1)),
+    meanSymptomatic: Number(meanSymptomatic.toFixed(1)),
+    fitConfidence: Number(fitConfidence.toFixed(2)),
+  }
+}
+
 function estimateOcBurdenForDate(ocItems, isoDate, keywords = []) {
   const target = new Date(`${isoDate}T12:00:00`).getTime()
   return (Array.isArray(ocItems) ? ocItems : []).reduce((sum, item) => {
@@ -9778,7 +9814,7 @@ function buildAdaptiveTrainingState({
   const safeAcwrSeries = Array.isArray(acwrSeries) ? acwrSeries : []
   const safeTsbRows = Array.isArray(tsbRows) ? tsbRows : []
   const safeWeeklyTrainingBuckets = Array.isArray(weeklyTrainingBuckets) ? weeklyTrainingBuckets : []
-  const weekKeys = enumerateRecentWeeks(12)
+  const weekKeys = enumerateRecentWeeks(30)
   const weekMap = new Map(weekKeys.map(weekStart => [weekStart, {
     weekStart,
     domains: {
@@ -9873,6 +9909,11 @@ function buildAdaptiveTrainingState({
     forefoot_toe_extensor: 18,
     patellar_knee: 22
   }
+  const forefootFit = fitForefootThreshold(MTP_FOREFOOT_EPISODES)
+  // Convert 14-day TRIMP-style anchors into the model's weekly forefoot-load units.
+  const forefootThresholdModelUnits = forefootFit.threshold != null
+    ? forefootFit.threshold * 0.5 * 0.06
+    : null
   const tendonSeries = {
     combined: [],
     achilles_calf: [],
@@ -9958,8 +9999,14 @@ function buildAdaptiveTrainingState({
       },
       forefoot_toe_extensor: {
         load: Number(forefootLoad.toFixed(2)),
-        capacity: Number(tendonCapacities.forefoot_toe_extensor.toFixed(2)),
-        risk: Number((forefootLoad / Math.max(1, tendonCapacities.forefoot_toe_extensor)).toFixed(2))
+        capacity: forefootThresholdModelUnits != null
+          ? Number(forefootThresholdModelUnits.toFixed(2))
+          : Number(tendonCapacities.forefoot_toe_extensor.toFixed(2)),
+        risk: forefootThresholdModelUnits != null
+          ? Number((forefootLoad / Math.max(1, forefootThresholdModelUnits)).toFixed(2))
+          : Number((forefootLoad / Math.max(1, tendonCapacities.forefoot_toe_extensor)).toFixed(2)),
+        calibrated: forefootThresholdModelUnits != null,
+        fitConfidence: forefootFit.fitConfidence,
       },
       patellar_knee: {
         load: Number(patellarLoad.toFixed(2)),
@@ -9969,9 +10016,9 @@ function buildAdaptiveTrainingState({
     }
     const combinedLoad = achillesLoad + forefootLoad + patellarLoad
     const combinedCapacity =
-      tendonCapacities.achilles_calf +
-      tendonCapacities.forefoot_toe_extensor +
-      tendonCapacities.patellar_knee
+      Number(tendonSnapshot.achilles_calf.capacity || 0) +
+      Number(tendonSnapshot.forefoot_toe_extensor.capacity || 0) +
+      Number(tendonSnapshot.patellar_knee.capacity || 0)
     tendonSnapshot.combined = {
       load: Number(combinedLoad.toFixed(2)),
       capacity: Number(combinedCapacity.toFixed(2)),
@@ -9990,7 +10037,9 @@ function buildAdaptiveTrainingState({
         label: String(weekStart).slice(5),
         load: snapshot.load,
         capacity: snapshot.capacity,
-        risk: snapshot.risk
+        risk: snapshot.risk,
+        calibrated: snapshot.calibrated || false,
+        fitConfidence: snapshot.fitConfidence ?? null,
       })
     })
   })
@@ -10001,6 +10050,17 @@ function buildAdaptiveTrainingState({
     ...weekMap.get(weekStart)
   }))
   const latestWeek = weeklyRows[weeklyRows.length - 1] || null
+  if (typeof window !== "undefined") {
+    window.__liftTendonStates = weeklyRows.map(row => ({
+      weekStart: row.weekStart,
+      achilles: row.tendon?.achilles_calf?.risk ?? null,
+      forefoot: row.tendon?.forefoot_toe_extensor?.risk ?? null,
+      patellar: row.tendon?.patellar_knee?.risk ?? null,
+      forefootLoad: row.tendon?.forefoot_toe_extensor?.load ?? null,
+      forefootCapacity: row.tendon?.forefoot_toe_extensor?.capacity ?? null,
+      forefootCalibrated: row.tendon?.forefoot_toe_extensor?.calibrated ?? false,
+    }))
+  }
   const averageCompliance = domain => {
     const rows = weeklyRows.slice(-8)
     const completed = rows.reduce((sum, row) => sum + Number(row.domains?.[domain]?.completedDose || 0), 0)
@@ -14847,7 +14907,9 @@ export function computeViewRisk(viewId, panel) {
     return 0
   }
   if (viewId === "tissue") {
-    return null
+    const ff = panel?.tendonLatest?.forefoot_toe_extensor
+    if (!ff || !ff.calibrated || !Number.isFinite(ff.risk)) return null
+    return Math.max(0, Math.min(1, ff.risk))
   }
   return null
 }
@@ -14881,10 +14943,23 @@ function explainAcwr(panel) {
   return `Acute to chronic workload ratio: this week's load against your rolling baseline. Currently ${af}. ${zone}`
 }
 
+function explainTissue(panel) {
+  const ff = panel?.tendonLatest?.forefoot_toe_extensor
+  if (!ff || !ff.calibrated) {
+    return "Tissue capacity is calibrating. The forefoot onset threshold needs at least 4 logged MTP episodes for a confident fit; currently using 3."
+  }
+  const pct = Math.round(ff.risk * 100)
+  const zone = ff.risk >= 1 ? "at or above your personal onset threshold — high caution" :
+               ff.risk >= 0.85 ? "in the caution band approaching onset" :
+               "below your onset threshold"
+  return `Forefoot (MTP) load relative to your personal onset threshold, fitted from your actual episodes. Currently ${pct}% of threshold — ${zone}. Fit confidence ${Math.round(ff.fitConfidence * 100)}% (improves with more logged episodes).`
+}
+
 const EXPLAIN_FNS = {
   cardioTsb: explainCardio,
   strengthTsb: explainStrength,
-  acwr: explainAcwr
+  acwr: explainAcwr,
+  tissue: explainTissue
 }
 
 export default function App() {
@@ -20485,7 +20560,21 @@ const trainerSessions60 = React.useMemo(() => {
     .sort((a, b) => (b.start_date || b.date || "").localeCompare(a.start_date || a.date || ""))
 }, [canonicalSessions])
 
-const readinessCarouselPanel = tsbV2Panel || { rows: [], readinessDetail: { score: "NA" } }
+const readinessCarouselPanel = React.useMemo(() => {
+  const basePanel = tsbV2Panel || { rows: [], readinessDetail: { score: "NA" } }
+  const tendonRows = (Array.isArray(adaptiveTrainingState?.weeklyRows) ? adaptiveTrainingState.weeklyRows : []).map(row => ({
+    weekStart: row.weekStart,
+    label: String(row.weekStart || "").slice(5),
+    achillesRisk: row.tendon?.achilles_calf?.risk ?? null,
+    forefootRisk: row.tendon?.forefoot_toe_extensor?.risk ?? null,
+    patellarRisk: row.tendon?.patellar_knee?.risk ?? null,
+  }))
+  return {
+    ...basePanel,
+    tendonLatest: adaptiveTrainingState?.latestWeek?.tendon || null,
+    tendonRows,
+  }
+}, [tsbV2Panel, adaptiveTrainingState])
 const rankedReadinessViews = React.useMemo(() => {
   return READINESS_VIEWS
     .map(v => ({ ...v, risk: computeViewRisk(v.id, readinessCarouselPanel) }))
@@ -21153,7 +21242,7 @@ return (
 
     <div style={{ ...cardStyle(), minWidth: 0, marginBottom: 16 }}>
 {(() => {
-  const panel = tsbV2Panel || { rows: [], readinessDetail: { score: "NA" } }
+  const panel = readinessCarouselPanel || { rows: [], readinessDetail: { score: "NA" }, tendonRows: [] }
   const isLongWindow = rangeKey === "1Y" || rangeKey === "ALL"
   const modalityStrokeWidth = isLongWindow ? 1.2 : 1.8
   const tsbNumberStyle = value => ({
@@ -21177,6 +21266,12 @@ return (
       ]
     : activeReadinessView?.id === "acwr"
       ? [["ACWR", panel.currentRow?.acwr]]
+      : activeReadinessView?.id === "tissue"
+        ? [
+            ["Achilles", panel.tendonLatest?.achilles_calf?.risk],
+            ["Forefoot", panel.tendonLatest?.forefoot_toe_extensor?.risk],
+            ["Patellar", panel.tendonLatest?.patellar_knee?.risk]
+          ]
       : [
           ["Run", panel.currentRow?.runningTsb],
           ["Cycle", panel.currentRow?.cyclingTsb],
@@ -21374,6 +21469,46 @@ return (
                 </ResponsiveContainer>
               </div>
             </>
+          ) : activeReadinessView?.id === "tissue" ? (
+            <>
+              <div style={{ display:"flex", gap:14, alignItems:"center", marginBottom:8, flexWrap:"wrap" }}>
+                {[
+                  ["Achilles", "#f59e0b"],
+                  ["Forefoot", "#fb7185"],
+                  ["Patellar", "#38bdf8"]
+                ].map(([label, color]) => (
+                  <div key={label} style={{ display:"flex", alignItems:"center", gap:5, fontSize:10, color:"#999" }}>
+                    <div style={{ width:14, height:2, background:color, borderRadius:999, opacity:0.95 }} />
+                    <span style={{ color }}>{label}</span>
+                  </div>
+                ))}
+              </div>
+              <div
+                onTouchStart={event => { readinessTouchStartX.current = event.touches?.[0]?.clientX ?? null }}
+                onTouchEnd={event => {
+                  const startX = readinessTouchStartX.current
+                  const endX = event.changedTouches?.[0]?.clientX ?? null
+                  readinessTouchStartX.current = null
+                  if (startX == null || endX == null) return
+                  const delta = endX - startX
+                  if (Math.abs(delta) < 40) return
+                  moveReadinessView(delta < 0 ? 1 : -1)
+                }}
+              >
+                <ResponsiveContainer width="100%" height={230}>
+                  <ComposedChart data={panel.tendonRows || []} margin={{ top:10, right:20, left:8, bottom:18 }}>
+                    <CartesianGrid stroke="#1a1b2e" />
+                    <XAxis dataKey="label" tick={{ fontSize:10 }} interval={Math.max(1, Math.floor(((panel.tendonRows || []).length || 1) / (isLongWindow ? 10 : 12)) - 1)} />
+                    <YAxis domain={[0, dataMax => Math.max(1.5, Math.ceil((Number(dataMax) || 1.2) * 10) / 10)]} tick={{ fontSize:10 }} width={30} tickFormatter={v => Number(v).toFixed(1)} />
+                    <ReferenceLine y={1} stroke="#ef4444" strokeDasharray="3 2" strokeOpacity={0.75} label={{ value:"onset 1.0", position:"insideTopRight", fontSize:8, fill:"#ef4444" }} />
+                    <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: "#0f172a" }} formatter={(v, n) => [v != null ? Number(v).toFixed(2) : "—", n]} />
+                    <Line type="monotone" dataKey="achillesRisk" name="Achilles risk" stroke="#f59e0b" strokeWidth={1.8} dot={false} connectNulls isAnimationActive={false} />
+                    <Line type="monotone" dataKey="forefootRisk" name="Forefoot risk" stroke="#fb7185" strokeWidth={2.2} dot={false} connectNulls isAnimationActive={false} />
+                    <Line type="monotone" dataKey="patellarRisk" name="Patellar risk" stroke="#38bdf8" strokeWidth={1.8} dot={false} connectNulls isAnimationActive={false} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            </>
           ) : (
             <div
               onTouchStart={event => { readinessTouchStartX.current = event.touches?.[0]?.clientX ?? null }}
@@ -21396,7 +21531,7 @@ return (
               <div key={label} style={{ display:"flex", alignItems:"center", gap:4 }}>
                 <span>{label}:</span>
                 <span style={tsbNumberStyle(Number(value))}>
-                  {Number.isFinite(Number(value)) ? Number(value).toFixed(activeReadinessView?.id === "acwr" ? 2 : 1) : "—"}
+                  {Number.isFinite(Number(value)) ? Number(value).toFixed(activeReadinessView?.id === "acwr" || activeReadinessView?.id === "tissue" ? 2 : 1) : "—"}
                 </span>
               </div>
             ))}
