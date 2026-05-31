@@ -18862,7 +18862,7 @@ const tsbV2Panel = useMemo(() => {
   const TAU_MODALITIES = ['overall','running','cycling','swimming','strength','upperStrength','lowerStrength']
 
   // Detect per-modality training state for each day from the daily load series.
-  // rest: load < 20% of trailing 28d avg for >=5 consecutive days.
+  // rest: load < 20% of trailing 56d active-day baseline for >=5 consecutive days.
   // return: rising back above the 20% threshold within 21 days of exiting rest.
   // build: default.
   function detectModalityStates(dayKeys, dailyLoads, modality) {
@@ -18871,9 +18871,15 @@ const tsbV2Panel = useMemo(() => {
     let lowStreak = 0
     let daysSinceRestExit = Infinity
     for (let i = 0; i < dayKeys.length; i++) {
-      const windowStart = Math.max(0, i - 27)
+      // Baseline = mean of the trailing 56-day window's ACTIVE days (load > 0),
+      // so a long zero-load layoff doesn't collapse the threshold and prematurely
+      // flip the day out of rest. Falls back to all-day mean if no active days.
+      const windowStart = Math.max(0, i - 55)
       const trailing = loads.slice(windowStart, i + 1)
-      const avg = trailing.length ? trailing.reduce((s,v)=>s+v,0) / trailing.length : 0
+      const activeDays = trailing.filter(v => v > 0)
+      const avg = activeDays.length
+        ? activeDays.reduce((s, v) => s + v, 0) / activeDays.length
+        : (trailing.length ? trailing.reduce((s, v) => s + v, 0) / trailing.length : 0)
       const threshold = avg * 0.20
       const isLow = avg > 0 && loads[i] < threshold
       if (isLow) {
