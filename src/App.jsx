@@ -18869,11 +18869,10 @@ const tsbV2Panel = useMemo(() => {
     const loads = dayKeys.map(d => Number(dailyLoads[d]?.[modality] || 0))
     const states = new Array(dayKeys.length).fill('build')
     let lowStreak = 0
-    let daysSinceRestExit = Infinity
+    let returnDaysLeft = 0
+
     for (let i = 0; i < dayKeys.length; i++) {
-      // Baseline = mean of the trailing 56-day window's ACTIVE days (load > 0),
-      // so a long zero-load layoff doesn't collapse the threshold and prematurely
-      // flip the day out of rest. Falls back to all-day mean if no active days.
+      // 56-day active-day baseline.
       const windowStart = Math.max(0, i - 55)
       const trailing = loads.slice(windowStart, i + 1)
       const activeDays = trailing.filter(v => v > 0)
@@ -18882,20 +18881,28 @@ const tsbV2Panel = useMemo(() => {
         : (trailing.length ? trailing.reduce((s, v) => s + v, 0) / trailing.length : 0)
       const threshold = avg * 0.20
       const isLow = avg > 0 && loads[i] < threshold
+
       if (isLow) {
         lowStreak += 1
       } else {
-        if (lowStreak >= 5) daysSinceRestExit = 0
         lowStreak = 0
       }
+
+      const last7 = loads.slice(Math.max(0, i - 6), i + 1)
+      const active7 = last7.filter(v => v > 0).length
+
       if (lowStreak >= 5) {
         states[i] = 'rest'
-      } else if (daysSinceRestExit <= 21 && avg > 0 && loads[i] >= threshold) {
+        returnDaysLeft = 0
+      } else if (i > 0 && states[i - 1] === 'rest' && active7 >= 3) {
         states[i] = 'return'
+        returnDaysLeft = 21
+      } else if (returnDaysLeft > 0) {
+        states[i] = 'return'
+        returnDaysLeft -= 1
       } else {
         states[i] = 'build'
       }
-      if (states[i] !== 'rest' && daysSinceRestExit !== Infinity) daysSinceRestExit += 1
     }
     return states
   }
@@ -18933,6 +18940,7 @@ const tsbV2Panel = useMemo(() => {
     row.hasAnyWorkout = Boolean(load.anyWorkout)
     return row
   })
+  if (typeof window !== 'undefined') window.__liftStates = allRows.map(r => ({ d: r.date, run: r.runningState, str: r.strengthState }))
   let rollingLoad14 = 0
   allRows.forEach((row, index) => {
     rollingLoad14 += Number(row.dailyLoad || 0)
