@@ -39,8 +39,7 @@ import {
   Area,
   ComposedChart,
   ReferenceArea,
-  ReferenceLine,
-  ReferenceDot
+  ReferenceLine
 } from "recharts"
 import { createClient } from "@supabase/supabase-js"
 import { generateTrainerReport } from "./exportReport"
@@ -14815,6 +14814,50 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
 }
 // ── end TrainerPanel ────────────────────────────────────────────────────────
 
+const READINESS_VIEWS = [
+  { id: "cardioTsb", label: "Cardio" },
+  { id: "strengthTsb", label: "Strength" },
+  { id: "acwr", label: "Load risk" },
+  { id: "tissue", label: "Tissue" },
+]
+
+// Normalized 0..1 risk score per readiness view. 0 = safe, 1 = at/over danger line.
+// Returns null when a view cannot be scored yet (sorts last, shows placeholder).
+// Shared by the readiness carousel; reusable by Coach and Schedule gate.
+export function computeViewRisk(viewId, panel) {
+  const row = panel?.currentRow || {}
+  const clamp01 = v => Math.max(0, Math.min(1, v))
+  if (viewId === "cardioTsb") {
+    const vals = [row.runningTsb, row.cyclingTsb, row.swimmingTsb].filter(v => Number.isFinite(v))
+    if (!vals.length) return null
+    const worst = Math.min(...vals)
+    return clamp01((-worst) / 9)
+  }
+  if (viewId === "strengthTsb") {
+    const vals = [row.strengthTsb, row.upperStrengthTsb, row.lowerStrengthTsb].filter(v => Number.isFinite(v))
+    if (!vals.length) return null
+    const worst = Math.min(...vals)
+    return clamp01((-worst) / 9)
+  }
+  if (viewId === "acwr") {
+    const a = Number(row.acwr)
+    if (!Number.isFinite(a)) return null
+    if (a > 1.5) return clamp01((a - 1.5) / 0.5)
+    if (a < 0.8) return clamp01((0.8 - a) / 0.5)
+    return 0
+  }
+  if (viewId === "tissue") {
+    return null
+  }
+  return null
+}
+
+function explainCardio(panel) {
+  const r = panel?.currentRow || {}
+  const f = v => Number.isFinite(v) ? v.toFixed(1) : "—"
+  return `Aerobic freshness by compartment (running, cycling, swimming). Positive is fresh, negative is accumulating fatigue; risk rises past -7. Currently run ${f(r.runningTsb)}, cycle ${f(r.cyclingTsb)}, swim ${f(r.swimmingTsb)}.`
+}
+
 export default function App() {
 
   // ── LIFT Calibration Config ─────────────────────────────────────────────
@@ -20413,6 +20456,28 @@ const trainerSessions60 = React.useMemo(() => {
     .sort((a, b) => (b.start_date || b.date || "").localeCompare(a.start_date || a.date || ""))
 }, [canonicalSessions])
 
+const readinessCarouselPanel = tsbV2Panel || { rows: [], readinessDetail: { score: "NA" } }
+const rankedReadinessViews = React.useMemo(() => {
+  return READINESS_VIEWS
+    .map(v => ({ ...v, risk: computeViewRisk(v.id, readinessCarouselPanel) }))
+    .sort((a, b) => (b.risk ?? -1) - (a.risk ?? -1))
+}, [readinessCarouselPanel])
+const [activeReadinessViewId, setActiveReadinessViewId] = React.useState(null)
+React.useEffect(() => {
+  if (activeReadinessViewId === null && rankedReadinessViews.length) {
+    setActiveReadinessViewId(rankedReadinessViews[0].id)
+  }
+}, [rankedReadinessViews, activeReadinessViewId])
+const [showReadinessExplain, setShowReadinessExplain] = React.useState(false)
+const activeReadinessView = rankedReadinessViews.find(v => v.id === activeReadinessViewId) || rankedReadinessViews[0]
+const readinessTouchStartX = React.useRef(null)
+const moveReadinessView = React.useCallback((offset) => {
+  if (!rankedReadinessViews.length) return
+  const currentIndex = Math.max(0, rankedReadinessViews.findIndex(v => v.id === (activeReadinessView?.id || activeReadinessViewId)))
+  const nextIndex = Math.max(0, Math.min(rankedReadinessViews.length - 1, currentIndex + offset))
+  setActiveReadinessViewId(rankedReadinessViews[nextIndex].id)
+}, [activeReadinessView?.id, activeReadinessViewId, rankedReadinessViews])
+
 return (
   <>
   <ErrorBoundary>
@@ -21077,12 +21142,70 @@ return (
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:10, flexWrap:"wrap", marginBottom:10 }}>
         <div>
           <div style={{ fontWeight:"bold", minHeight:"20px" }}>Training Readiness</div>
-          <div style={{ fontSize:11, color:"#667", marginTop:2 }}>TSB by modality across the selected window. Positive values suggest usable freshness; negative values suggest accumulating fatigue.</div>
         </div>
         <div style={{ fontSize:"10px", color:"#445", textAlign:"right", lineHeight:1.5 }}>
           tau1={LIFT_CONFIG.tau1}d (fitness) · tau2={LIFT_CONFIG.tau2}d (fatigue) · DEXA anchor {LIFT_CONFIG.dexa_anchor_date}
         </div>
       </div>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, marginBottom:8 }}>
+        <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+          {rankedReadinessViews.map(view => {
+            const isActive = view.id === activeReadinessView?.id
+            const showRiskDot = view.risk != null && view.risk > 0.5
+            return (
+              <button
+                key={view.id}
+                onClick={() => setActiveReadinessViewId(view.id)}
+                style={{
+                  display:"inline-flex",
+                  alignItems:"center",
+                  gap:6,
+                  border:`1px solid ${isActive ? "#38bdf8" : "#1a1b2e"}`,
+                  borderRadius:6,
+                  background:isActive ? "rgba(56,189,248,0.14)" : "rgba(15,23,42,0.45)",
+                  color:isActive ? "#e0f2fe" : "#94a3b8",
+                  fontSize:11,
+                  padding:"5px 9px",
+                  cursor:"pointer"
+                }}
+              >
+                {showRiskDot ? <span style={{ width:6, height:6, borderRadius:"50%", background:view.risk >= 0.85 ? "#ef4444" : "#f59e0b", display:"inline-block" }} /> : null}
+                {view.label}
+              </button>
+            )
+          })}
+        </div>
+        <button
+          onClick={() => setShowReadinessExplain(open => !open)}
+          aria-label="Toggle readiness explanation"
+          title="Toggle readiness explanation"
+          style={{
+            width:24,
+            height:24,
+            borderRadius:"50%",
+            border:`1px solid ${showReadinessExplain ? "#38bdf8" : "#1a1b2e"}`,
+            background:showReadinessExplain ? "rgba(56,189,248,0.14)" : "rgba(15,23,42,0.45)",
+            color:showReadinessExplain ? "#e0f2fe" : "#94a3b8",
+            fontSize:12,
+            fontWeight:700,
+            lineHeight:1,
+            cursor:"pointer"
+          }}
+        >
+          i
+        </button>
+      </div>
+      {showReadinessExplain ? (
+        <div style={{ border:"1px solid #1a1b2e", borderRadius:8, padding:"8px 10px", color:"#cbd5e1", fontSize:11, lineHeight:1.5, marginBottom:10 }}>
+          {activeReadinessView?.id === "cardioTsb"
+            ? explainCardio(panel)
+            : activeReadinessView?.id === "strengthTsb"
+              ? "Strength freshness across total, upper, and lower compartments. This view will land in slice 2."
+              : activeReadinessView?.id === "acwr"
+                ? "Load risk compares recent acute load against chronic load. This view will land in slice 2."
+                : "Tissue capacity is calibrating until enough logged episodes exist per region."}
+        </div>
+      ) : null}
       {(() => {
         const tsb = panel.currentOverallTsb ?? 0
         let borderColor = "#4ade80"
@@ -21099,82 +21222,70 @@ return (
       })()}
       {readinessChartsReady && panel.rows.length > 0 ? (
         <>
-          <div style={{ display:"flex", gap:14, alignItems:"center", marginBottom:8, flexWrap:"wrap" }}>
-            {[
-              ["Overall", "#e5e7eb"],
-              ["Run", "#ef4444"],
-              ["Cycle", "#22d3ee"],
-              ["Swim", "#a78bfa"],
-              ["Strength", "#ffd166"]
-            ].map(([label, color]) => (
-              <div key={label} style={{ display:"flex", alignItems:"center", gap:5, fontSize:10, color:"#999" }}>
-                <div style={{ width:14, height:2, background:color, borderRadius:999, opacity:0.95 }} />
-                <span style={{ color }}>{label}</span>
+          {activeReadinessView?.id === "cardioTsb" ? (
+            <>
+              <div style={{ display:"flex", gap:14, alignItems:"center", marginBottom:8, flexWrap:"wrap" }}>
+                {[
+                  ["Run", "#ef4444"],
+                  ["Cycle", "#22d3ee"],
+                  ["Swim", "#a78bfa"]
+                ].map(([label, color]) => (
+                  <div key={label} style={{ display:"flex", alignItems:"center", gap:5, fontSize:10, color:"#999" }}>
+                    <div style={{ width:14, height:2, background:color, borderRadius:999, opacity:0.95 }} />
+                    <span style={{ color }}>{label}</span>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-          <ResponsiveContainer width="100%" height={230}>
-            <ComposedChart data={panel.rows} margin={{ top:8, right:14, left:12, bottom:14 }}>
-              <CartesianGrid stroke="#1a1b2e" />
-              <XAxis dataKey="label" tick={{ fontSize:10 }} interval={Math.max(1, Math.floor((panel.rows.length || 1) / (isLongWindow ? 10 : 12)) - 1)} />
-              <YAxis domain={[dataMin => Math.min(Math.floor(dataMin - 3), -5), dataMax => Math.max(Math.ceil(dataMax + 3), 5)]} tick={{ fontSize:10 }} width={30} tickFormatter={value => Number(value).toFixed(0)} />
-              <YAxis
-                yAxisId="acwr"
-                orientation="right"
-                domain={[0, 2.5]}
-                tick={{ fontSize: 10 }}
-                tickFormatter={v => v.toFixed(1)}
-                label={{ value: "ACWR", angle: 90, position: "insideRight", offset: 10, fontSize: 10 }}
-              />
-              <ReferenceLine y={0} stroke="#444" strokeDasharray="3 3" />
-              <ReferenceLine yAxisId="acwr" y={1.5} stroke="#ef4444" strokeDasharray="3 2" strokeOpacity={0.5} />
-              <ReferenceLine yAxisId="acwr" y={0.8} stroke="#3b82f6" strokeDasharray="3 2" strokeOpacity={0.5} />
-              <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: '#0f172a' }} formatter={(v, n) => [Number(v).toFixed(2), n]} />
-              <Line type="monotone" dataKey="overallTsb" name="Overall TSB" stroke="#e5e7eb" strokeWidth={isLongWindow ? 2 : 2.2} dot={false} connectNulls isAnimationActive={false} />
-              <Line type="monotone" dataKey="runningTsb" name="Running TSB" stroke="#ef4444" strokeWidth={modalityStrokeWidth} strokeOpacity={isLongWindow ? 0.78 : 1} dot={false} connectNulls isAnimationActive={false} />
-              <Line type="monotone" dataKey="cyclingTsb" name="Cycling TSB" stroke="#22d3ee" strokeWidth={modalityStrokeWidth} strokeOpacity={isLongWindow ? 0.78 : 1} dot={false} connectNulls isAnimationActive={false} />
-              <Line type="monotone" dataKey="swimmingTsb" name="Swimming TSB" stroke="#a78bfa" strokeWidth={modalityStrokeWidth} strokeOpacity={isLongWindow ? 0.78 : 1} dot={false} connectNulls isAnimationActive={false} />
-              <Line type="monotone" dataKey="strengthTsb" name="Strength TSB" stroke="#ffd166" strokeWidth={modalityStrokeWidth} strokeOpacity={isLongWindow ? 0.78 : 1} dot={false} connectNulls strokeDasharray="4 2" isAnimationActive={false} />
-              <Line type="monotone" dataKey="upperStrengthTsb" name="Upper Strength TSB" stroke="#f97316" strokeWidth={1.2} strokeOpacity={isLongWindow ? 0.6 : 0.75} dot={false} connectNulls strokeDasharray="2 3" isAnimationActive={false} />
-              <Line type="monotone" dataKey="lowerStrengthTsb" name="Lower Strength TSB" stroke="#4ade80" strokeWidth={1.2} strokeOpacity={isLongWindow ? 0.6 : 0.75} dot={false} connectNulls strokeDasharray="2 3" isAnimationActive={false} />
-              <Line
-                yAxisId="acwr"
-                type="monotone"
-                dataKey="acwr"
-                stroke="#f59e0b"
-                strokeWidth={1.5}
-                strokeDasharray="6 3"
-                dot={false}
-                name="ACWR"
-                connectNulls
-              />
-              {panel.rows.map(row => {
-                const penalty = formDecayReadinessPenalty?.penaltyByDate?.[row.date]
-                if (!penalty || penalty <= 5) return null
-                return (
-                  <ReferenceDot
-                    key={`fd-dot-${row.date}`}
-                    x={row.label}
-                    y={row.overallTsb ?? 0}
-                    r={5}
-                    fill="#fbbf24"
-                    stroke="#92400e"
-                    strokeWidth={1.5}
-                    label={{ value: "⚠", position: "top", fontSize: 9, fill: "#fbbf24" }}
-                  />
-                )
-              })}
-            </ComposedChart>
-          </ResponsiveContainer>
+              <div
+                onTouchStart={event => { readinessTouchStartX.current = event.touches?.[0]?.clientX ?? null }}
+                onTouchEnd={event => {
+                  const startX = readinessTouchStartX.current
+                  const endX = event.changedTouches?.[0]?.clientX ?? null
+                  readinessTouchStartX.current = null
+                  if (startX == null || endX == null) return
+                  const delta = endX - startX
+                  if (Math.abs(delta) < 40) return
+                  moveReadinessView(delta < 0 ? 1 : -1)
+                }}
+              >
+                <ResponsiveContainer width="100%" height={230}>
+                  <ComposedChart data={panel.rows} margin={{ top:8, right:14, left:12, bottom:14 }}>
+                    <CartesianGrid stroke="#1a1b2e" />
+                    <XAxis dataKey="label" tick={{ fontSize:10 }} interval={Math.max(1, Math.floor((panel.rows.length || 1) / (isLongWindow ? 10 : 12)) - 1)} />
+                    <YAxis domain={panel.tsbDomain || [dataMin => Math.min(Math.floor(dataMin - 3), -5), dataMax => Math.max(Math.ceil(dataMax + 3), 5)]} tick={{ fontSize:10 }} width={30} tickFormatter={value => Number(value).toFixed(0)} />
+                    <ReferenceLine y={0} stroke="#444" strokeDasharray="3 3" />
+                    <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: "#0f172a" }} formatter={(v, n) => [Number(v).toFixed(2), n]} />
+                    <Line type="monotone" dataKey="runningTsb" name="Running TSB" stroke="#ef4444" strokeWidth={modalityStrokeWidth} strokeOpacity={isLongWindow ? 0.78 : 1} dot={false} connectNulls isAnimationActive={false} />
+                    <Line type="monotone" dataKey="cyclingTsb" name="Cycling TSB" stroke="#22d3ee" strokeWidth={modalityStrokeWidth} strokeOpacity={isLongWindow ? 0.78 : 1} dot={false} connectNulls isAnimationActive={false} />
+                    <Line type="monotone" dataKey="swimmingTsb" name="Swimming TSB" stroke="#a78bfa" strokeWidth={modalityStrokeWidth} strokeOpacity={isLongWindow ? 0.78 : 1} dot={false} connectNulls isAnimationActive={false} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            </>
+          ) : (
+            <div
+              onTouchStart={event => { readinessTouchStartX.current = event.touches?.[0]?.clientX ?? null }}
+              onTouchEnd={event => {
+                const startX = readinessTouchStartX.current
+                const endX = event.changedTouches?.[0]?.clientX ?? null
+                readinessTouchStartX.current = null
+                if (startX == null || endX == null) return
+                const delta = endX - startX
+                if (Math.abs(delta) < 40) return
+                moveReadinessView(delta < 0 ? 1 : -1)
+              }}
+              style={{ height:230, display:"flex", alignItems:"center", justifyContent:"center", border:"1px dashed #1a1b2e", borderRadius:8, color:"#64748b", fontSize:12 }}
+            >
+              {activeReadinessView?.id === "tissue"
+                ? "Calibrating — needs >=4 logged episodes per region"
+                : `${activeReadinessView?.label || "Readiness"} view placeholder`}
+            </div>
+          )}
           <div style={{ display:"flex", gap:10, flexWrap:"wrap", fontSize:11, color:"#94a3b8", marginTop:8 }}>
             {[
-              ["Overall", panel.currentRow?.overallTsb],
               ["Run", panel.currentRow?.runningTsb],
               ["Cycle", panel.currentRow?.cyclingTsb],
-              ["Swim", panel.currentRow?.swimmingTsb],
-              ["Strength", panel.currentRow?.strengthTsb],
-              ["Str·Upper", panel.currentRow?.upperStrengthTsb],
-              ["Str·Lower", panel.currentRow?.lowerStrengthTsb]
+              ["Swim", panel.currentRow?.swimmingTsb]
             ].map(([label, value]) => (
               <div key={label} style={{ display:"flex", alignItems:"center", gap:4 }}>
                 <span>{label}:</span>
