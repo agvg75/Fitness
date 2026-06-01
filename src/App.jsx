@@ -2688,6 +2688,7 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
   const [capacityInfoOpen, setCapacityInfoOpen] = useState({ tendonPain: false })
   const [quickLog, setQuickLog] = useState({ open: false, key: "tendonStatus", location: "Elbow L", score: 0 })
   const [addIssueOpen, setAddIssueOpen] = useState(false)
+  const [activeListOpen, setActiveListOpen] = useState(true)
   const [calibState, setCalibState] = React.useState(() => {
     const init = {}
     Object.entries(OC_REGION_COORDS).forEach(([key, val]) => {
@@ -3761,9 +3762,14 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
           </div>
 
           <div style={cardStyle()}>
-            <div style={{ fontSize: "10px", letterSpacing: "0.15em", textTransform: "uppercase", color: "#555", marginBottom: "10px" }}>
-              Active Issues ({active.length})
+            <div
+              onClick={() => setActiveListOpen(o => !o)}
+              style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", fontSize: "10px", letterSpacing: "0.15em", textTransform: "uppercase", color: active.length ? "#f59e0b" : "#555", marginBottom: activeListOpen ? "10px" : "0" }}
+            >
+              <span>Active Issues ({active.length})</span>
+              <span>{activeListOpen ? "▾" : "▸"}</span>
             </div>
+            {activeListOpen && (<>
             {active.length === 0 && (
               <div style={{ fontSize: "12px", color: "#444", textAlign: "center", padding: "24px 0" }}>No active issues</div>
             )}
@@ -3898,6 +3904,7 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
                 }
               </div>
             )}
+            </>)}
           </div>
         </div>
 
