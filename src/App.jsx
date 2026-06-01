@@ -19555,7 +19555,17 @@ const operationalCapacityData = useMemo(() => {
 
   // Include items with a valid startDate and a nonzero initialScore.
   // Resolved items (currentScore 0) are included so their historical arc shows.
-  const PEAK_LOSS_BY_SCORE = [0, 0.15, 0.25, 0.40, 0.60, 0.80]
+  // Peak operational loss by signal score on the 0–6 scale (interpolated, no
+  // Math.round so 0.5/1.5 are preserved). Calibrated to new scale 2026-06-01.
+  const peakLossForScore = s => {
+    const pts = [[0,0],[0.5,0.05],[1,0.10],[1.5,0.18],[2,0.28],[3,0.45],[4,0.62],[5,0.80],[6,0.95]]
+    const x = Math.max(0, Math.min(6, Number(s) || 0))
+    for (let i = 0; i < pts.length - 1; i++) {
+      const [x0,y0] = pts[i], [x1,y1] = pts[i+1]
+      if (x >= x0 && x <= x1) return y0 + (y1 - y0) * ((x - x0) / (x1 - x0))
+    }
+    return 0
+  }
 
   const classifyItem = item => {
     if (item.key === "illnessLoad") return "disease"
@@ -19574,7 +19584,7 @@ const operationalCapacityData = useMemo(() => {
         LIFT_CONFIG.ocHalfLifeOverrides,
         Number(OC_KEY_META[item.key]?.halfLifeHours || 72)
       )
-      const peakLoss = PEAK_LOSS_BY_SCORE[Math.min(5, Math.max(0, Math.round(initScore)))] ?? 0.40
+      const peakLoss = peakLossForScore(initScore)
 
       // resolvedAt: the date this episode was closed (score dropped to 0).
       // After this date the item contributes zero loss, regardless of the decay curve.
