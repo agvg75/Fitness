@@ -15437,16 +15437,6 @@ const [sleepRecords, setSleepRecords] = useState(() => { try { return JSON.parse
 const [schedLog, setSchedLog] = useState(() => { try { return JSON.parse(localStorage.getItem('wt-log') || '[]') } catch { return [] } })
 const [ocItems, setOcItems] = useState(() => { try { return JSON.parse(localStorage.getItem('oc-items') || '[]') } catch { return [] } })
 const [ocLoadOverrides, setOcLoadOverrides] = useState(() => { try { return JSON.parse(localStorage.getItem("oc-load-overrides") || "{}") } catch { return {} } })
-const saveOcLoadOverrides = useCallback(async next => {
-  setOcLoadOverrides(next)
-  await store.set("oc-load-overrides", next)
-  if (supabase && session?.user?.id) {
-    await supabase.from("user_kv").upsert(
-      { user_id: session.user.id, key: "oc-load-overrides", value: next, updated_at: new Date().toISOString() },
-      { onConflict: "user_id,key" }
-    )
-  }
-}, [session])
 useEffect(() => {
   try {
     const raw = localStorage.getItem("injuries")
@@ -16436,6 +16426,16 @@ useEffect(() => {
 
 
 const [session, setSession] = useState(null)
+const saveOcLoadOverrides = useCallback(async next => {
+  setOcLoadOverrides(next)
+  await store.set("oc-load-overrides", next)
+  if (supabase && session?.user?.id) {
+    await supabase.from("user_kv").upsert(
+      { user_id: session.user.id, key: "oc-load-overrides", value: next, updated_at: new Date().toISOString() },
+      { onConflict: "user_id,key" }
+    )
+  }
+}, [session])
 const [email, setEmail] = useState("avidal@ilstu.edu")
 const [password, setPassword] = useState("")
 const [recoveryPassword, setRecoveryPassword] = useState("")
