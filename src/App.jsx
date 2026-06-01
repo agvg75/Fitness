@@ -3192,6 +3192,7 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
           // Maps TLI canonical region names → OC_REGION_COORDS keys.
           // "Lower Back" has f=null → ring skipped on front silhouette (back-only region).
           const TLI_TO_COORD = {
+            "MTP L":       "Toe L",      "MTP R":       "Toe R",
             "AnkleFoot L": "Ankle L",    "AnkleFoot R": "Ankle R",
             "Knee L":      "Knee L",     "Knee R":      "Knee R",
             "Hip L":       "Hip L",      "Hip R":       "Hip R",
@@ -18762,9 +18763,11 @@ const tissueLoadIndex = useMemo(() => {
   // Any string not present here (including modality labels like "Run", "Strength")
   // is silently dropped, which eliminates the category-key bug.
   const REGION_CANONICAL = {
-    "Toe L": "AnkleFoot L", "Ankle L": "AnkleFoot L", "AnkleFoot L": "AnkleFoot L",
+    "Toe L": "MTP L", "MTP L": "MTP L",
+    "Ankle L": "AnkleFoot L", "AnkleFoot L": "AnkleFoot L",
     "Calf L": "AnkleFoot L", "Shin L": "AnkleFoot L",
-    "Toe R": "AnkleFoot R", "Ankle R": "AnkleFoot R", "AnkleFoot R": "AnkleFoot R",
+    "Toe R": "MTP R", "MTP R": "MTP R",
+    "Ankle R": "AnkleFoot R", "AnkleFoot R": "AnkleFoot R",
     "Calf R": "AnkleFoot R", "Shin R": "AnkleFoot R",
     "Knee L": "Knee L", "Quad L": "Knee L", "IT Band L": "Knee L",
     "Knee R": "Knee R", "Quad R": "Knee R", "IT Band R": "Knee R",
