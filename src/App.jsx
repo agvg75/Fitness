@@ -2686,6 +2686,7 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
     note: "",
   })
   const [capacityInfoOpen, setCapacityInfoOpen] = useState({ tendonPain: false })
+  const [quickLog, setQuickLog] = useState({ open: false, key: "tendonStatus", location: "Elbow L", score: 0 })
   const [calibState, setCalibState] = React.useState(() => {
     const init = {}
     Object.entries(OC_REGION_COORDS).forEach(([key, val]) => {
@@ -2876,31 +2877,32 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
     saveOcItems(updated)
   }
 
-  const addItem = () => {
-    if (!addForm.currentScore) return
-    const meta = OC_KEY_META[addForm.key] || OC_KEY_META.muscleStatus
+  const addItem = (override = null) => {
+    const src = override || addForm
+    if (!src.currentScore) return
+    const meta = OC_KEY_META[src.key] || OC_KEY_META.muscleStatus
 
-    const isHistorical = addForm.isHistorical && addForm.historicalStartDate
+    const isHistorical = src.isHistorical && src.historicalStartDate
 
     const startDate = isHistorical
-      ? new Date(addForm.historicalStartDate).toISOString()
+      ? new Date(src.historicalStartDate).toISOString()
       : new Date().toISOString()
 
-    const resolvedDate = addForm.isHistorical && addForm.historicalResolvedDate
-      ? new Date(addForm.historicalResolvedDate).toISOString()
+    const resolvedDate = src.isHistorical && src.historicalResolvedDate
+      ? new Date(src.historicalResolvedDate).toISOString()
       : null
 
-    const currentScore = isHistorical && resolvedDate ? 0 : Number(addForm.currentScore)
+    const currentScore = isHistorical && resolvedDate ? 0 : Number(src.currentScore)
 
     // Compute chronicity: check existing items for same key+location to
     // determine prior episode count and last resolution interval.
     const sameRegionItems = ocItems.filter(
-      i => i.key === addForm.key && i.location === addForm.location
+      i => i.key === src.key && i.location === src.location
     )
     const priorEpisodeCount = sameRegionItems.reduce(
       (sum, i) => sum + (i.episodeCount || 0) + (Number(i.initialScore || 0) > 0 ? 1 : 0), 0
     )
-    const newEpisodeCount = priorEpisodeCount + (Number(addForm.currentScore) > 0 ? 1 : 0)
+    const newEpisodeCount = priorEpisodeCount + (Number(src.currentScore) > 0 ? 1 : 0)
 
     const mostRecentResolved = sameRegionItems
       .map(i => i.lastResolvedDate)
@@ -2918,32 +2920,32 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
 
     const item = {
       id: Date.now(),
-      key: addForm.key,
-      location: addForm.location,
-      label: `${meta.label} — ${addForm.location}`,
+      key: src.key,
+      location: src.location,
+      label: `${meta.label} — ${src.location}`,
       currentScore,
-      initialScore: Number(addForm.currentScore),
+      initialScore: Number(src.currentScore),
       startDate,
-      halfLifeHours: Number(addForm.halfLifeHours) || meta.halfLifeHours,
+      halfLifeHours: Number(src.halfLifeHours) || meta.halfLifeHours,
       episodeCount: isHistorical && resolvedDate ? 1 : 0,
       lastResolvedDate: resolvedDate,
       chronicity,
       scaleMigratedV2: true,
       migrationConfidence: "native",
-      note: addForm.note || "",
+      note: src.note || "",
       history: isHistorical ? [makeSignalHistoryEntry({
-        date: addForm.historicalStartDate,
-        score: Number(addForm.currentScore),
+        date: src.historicalStartDate,
+        score: Number(src.currentScore),
         context: "historical episode",
         trimp: null,
-        note: addForm.note || ""
+        note: src.note || ""
       })] : [],
       ...(isHistorical ? { eventType: "historical_entry" } : {}),
     }
 
     const updated = chronicity === "chronic"
       ? [item, ...ocItems.map(existing =>
-          existing.key === addForm.key && existing.location === addForm.location
+          existing.key === src.key && existing.location === src.location
             ? { ...existing, chronicity: "chronic" }
             : existing
         )]
@@ -2952,15 +2954,17 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
     saveOcItems(updated)
 
     // Reset form, preserving key/location for rapid multi-episode entry.
-    setAddForm(f => ({
-      ...f,
-      currentScore: 1,
-      halfLifeHours: null,
-      note: "",
-      isHistorical: false,
-      historicalStartDate: "",
-      historicalResolvedDate: "",
-    }))
+    if (!override) {
+      setAddForm(f => ({
+        ...f,
+        currentScore: 1,
+        halfLifeHours: null,
+        note: "",
+        isHistorical: false,
+        historicalStartDate: "",
+        historicalResolvedDate: "",
+      }))
+    }
   }
 
   const updateItem = (id, changes) => {
@@ -3399,39 +3403,42 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
       </div>
 
       <div style={{ ...cardStyle(), marginBottom: "16px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px", marginBottom: "10px" }}>
-          <div>
-            <div style={{ fontSize: "12px", fontWeight: "700" }}>Tendon Pain</div>
-            {!capacityInfoOpen.tendonPain && (
-              <div style={{ fontSize: "11px", color: "#667", marginTop: "2px" }}>
-                OC-backed tendon control for readiness and progression gating.
-              </div>
-            )}
-          </div>
-          {infoButton("tendonPain")}
+        <div
+          onClick={() => setQuickLog(q => ({ ...q, open: !q.open }))}
+          style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}
+        >
+          <div style={{ fontSize: "12px", fontWeight: "700" }}>Quick Log a Signal</div>
+          <span style={{ fontSize: 11, color: "#667" }}>{quickLog.open ? "▾" : "▸ log"}</span>
         </div>
-        {capacityInfoOpen.tendonPain ? (
-          <div style={{ fontSize: "12px", lineHeight: 1.5, color: "#cbd5e1" }}>
-            This slider updates the tendon operational-capacity state directly. It feeds the tendon gate used by Readiness and Schedule recommendations, and a zero value clears the active tendon burden without showing extra UI by default.
-          </div>
-        ) : (
-          <div style={{ display: "grid", gap: "8px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", fontSize: "12px" }}>
-              <span style={{ color: "#ced2f0" }}>Current tendon pain</span>
-              <span style={{ fontWeight: "700", color: "#f59e0b" }}>{tendonPainTenPoint}/10</span>
+        {quickLog.open && (
+          <div style={{ display: "grid", gap: "8px", marginTop: "10px" }}>
+            <div style={{ fontSize: 11, color: "#667" }}>
+              Which structure? Then rate what you felt on the 0–6 scale.
             </div>
-            <input
-              type="range"
-              min={0}
-              max={10}
-              step={1}
-              value={tendonPainTenPoint}
-              onChange={e => updateTendonPain(e.target.value)}
-              style={{ width: "100%", accentColor: "#f59e0b" }}
-            />
-            <div style={{ fontSize: "11px", color: "#667" }}>
-              Tendon gate: {rd.active.filter(item => item.key === "tendonStatus").length ? `${Math.max(...rd.active.filter(item => item.key === "tendonStatus").map(item => Number(item.currentScore || 0)))}/6 OC` : "clear"}
+            <select value={quickLog.key} onChange={e => setQuickLog(q => ({ ...q, key: e.target.value }))} style={inputStyle()}>
+              {Object.entries(OC_KEY_META).map(([k, m]) => <option key={k} value={k}>{m.label}</option>)}
+            </select>
+            <select value={quickLog.location} onChange={e => setQuickLog(q => ({ ...q, location: e.target.value }))} style={inputStyle()}>
+              {OC_BODY_REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+            <div>
+              <div style={{ fontSize: "11px", color: "#666", marginBottom: "4px" }}>
+                {quickLog.score} — {OC_SEVERITY_LABELS[Number(quickLog.score)]}
+              </div>
+              <input type="range" min={0} max={8} step={1}
+                value={ocScaleStepIndex(quickLog.score)}
+                onChange={e => setQuickLog(q => ({ ...q, score: OC_SCALE_STEPS[Number(e.target.value)] }))}
+                style={{ width: "100%" }} />
             </div>
+            <button
+              onClick={() => {
+                addItem({ key: quickLog.key, location: quickLog.location, currentScore: quickLog.score, isHistorical: false, note: "quick log" })
+                setQuickLog(q => ({ ...q, open: false, score: 0 }))
+              }}
+              style={{ ...buttonStyle(true), fontSize: "12px" }}
+            >
+              Log signal
+            </button>
           </div>
         )}
       </div>
