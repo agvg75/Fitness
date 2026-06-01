@@ -233,10 +233,11 @@ export const EXERCISE_LIBRARY = [
     loads: [
       { region: "Shoulder L", tissueType: "tendonStatus", score: 2 },
       { region: "Shoulder R", tissueType: "tendonStatus", score: 2 },
+      { region: "Toe L", tissueType: "jointStatus", score: 1.5, cueReducible: true, cue: "Lean-back pushes toes into shoe front. Keep heels planted, don't rock onto forefoot." },
     ],
     substitutes: [],
     mtp_safe: true,
-    notes: "Rotator cuff health maintenance. Loaded ER stimulus. Thursday loaded version is therapeutic intent. Maintain indefinitely regardless of other OC items.",
+    notes: "Rotator cuff health (PROTECTIVE for shoulder). Note: leaning back loads Toe L via forefoot pressure — cue-reducible, not intrinsic. Maintain indefinitely for shoulder regardless of other OC items.",
   },
   {
     id: "triceps_pulldown",
@@ -357,7 +358,7 @@ export const EXERCISE_LIBRARY = [
       { region: "Hamstring L", tissueType: "muscleStatus", score: 1 },
       { region: "Hamstring R", tissueType: "muscleStatus", score: 1 },
       { region: "Lower Back", tissueType: "muscleStatus", score: 1 },
-      { region: "Toe L", tissueType: "jointStatus", score: 1 },
+      { region: "Toe L", tissueType: "jointStatus", score: 2, cueReducible: true, cue: "Toe crushes into shoe front on heavy lifts. Drive through heel, keep toes long. User compensates with heel-drive when aware." },
     ],
     substitutes: [
       {
@@ -369,12 +370,12 @@ export const EXERCISE_LIBRARY = [
       {
         id: "hip_abduction",
         name: "Hip Abduction (Machine)",
-        reason: "Seated machine; removes hamstring, lower back, and foot load entirely",
-        substituteSpares: ["Hamstring L", "Hamstring R", "Lower Back", "Toe L"],
+        reason: "Seated machine; removes hamstring and lower back load; reduces but does not eliminate forefoot load",
+        substituteSpares: ["Hamstring L", "Hamstring R", "Lower Back"],
       },
     ],
     mtp_safe: true,
-    notes: "Foot drive against platform creates incidental forefoot load (score 1). Monitor MTP response across sessions.",
+    notes: "Foot drive creates forefoot load (score 2, cue-reducible). Mitigation is heel-drive + toes long, NOT dropping the exercise. Monitor MTP across sessions.",
   },
   {
     id: "leg_press_heel_drive",
@@ -448,14 +449,14 @@ export const EXERCISE_LIBRARY = [
       { region: "Hip R", tissueType: "tendonStatus", score: 3 },
       { region: "Knee L", tissueType: "tendonStatus", score: 1 },
       { region: "Knee R", tissueType: "tendonStatus", score: 1 },
-      { region: "Toe L", tissueType: "jointStatus", score: 2 },
+      { region: "Toe L", tissueType: "jointStatus", score: 2, cueReducible: true, cue: "Toe grip for lateral stability. Keep toes long, push through mid-foot." },
     ],
     substitutes: [
       {
         id: "hip_abduction",
         name: "Hip Abduction (Machine)",
-        reason: "Seated machine removes forefoot and knee lateral load entirely",
-        substituteSpares: ["Toe L", "Knee L", "Knee R"],
+        reason: "Seated machine removes knee lateral load and reduces forefoot demand",
+        substituteSpares: ["Knee L", "Knee R"],
       },
       {
         id: "hip_drive_marches",
@@ -484,8 +485,8 @@ export const EXERCISE_LIBRARY = [
       {
         id: "hip_abduction",
         name: "Hip Abduction (Machine)",
-        reason: "Seated machine eliminates forefoot contact entirely",
-        substituteSpares: ["Toe L"],
+        reason: "Seated machine reduces but does not eliminate forefoot demand",
+        substituteSpares: [],
       },
     ],
     mtp_safe: true,
@@ -703,6 +704,8 @@ export const EXERCISE_LIBRARY = [
     loads: [
       { region: "Elbow L", tissueType: "tendonStatus", score: 3 },
       { region: "Elbow R", tissueType: "tendonStatus", score: 3 },
+      { region: "Wrist L", tissueType: "tendonStatus", score: 2, cueReducible: true, cue: "Lateral wrist complains on heavy SUPINATED curl, worse late in session. Switch to rotating cable bar if it flares." },
+      { region: "Wrist R", tissueType: "tendonStatus", score: 2, cueReducible: true, cue: "Lateral wrist complains on heavy SUPINATED curl, worse late in session. Switch to rotating cable bar if it flares." },
       { region: "Forearm L", tissueType: "tendonStatus", score: 1 },
       { region: "Forearm R", tissueType: "tendonStatus", score: 1 },
     ],
@@ -751,8 +754,6 @@ export const EXERCISE_LIBRARY = [
     loads: [
       { region: "Elbow L", tissueType: "tendonStatus", score: 2 },
       { region: "Elbow R", tissueType: "tendonStatus", score: 2 },
-      { region: "Wrist L", tissueType: "tendonStatus", score: 1 },
-      { region: "Wrist R", tissueType: "tendonStatus", score: 1 },
     ],
     substitutes: [],
     mtp_safe: true,
@@ -908,6 +909,7 @@ export const EXERCISE_LIBRARY = [
       { region: "Hip R", tissueType: "muscleStatus", score: 3 },
       { region: "IT Band L", tissueType: "tendonStatus", score: 1 },
       { region: "IT Band R", tissueType: "tendonStatus", score: 1 },
+      { region: "Toe L", tissueType: "jointStatus", score: 1, cueReducible: true, cue: "Toe flexion creeps in when going heavy. Keep toes relaxed/long." },
     ],
     substitutes: [
       {
@@ -918,7 +920,7 @@ export const EXERCISE_LIBRARY = [
       },
     ],
     mtp_safe: true,
-    notes: "Seated machine. No forefoot load. Preferred substitute for lateral band walk when Toe L OC is active.",
+    notes: "Seated machine. Light toe-flexion forefoot load when heavy (cue-reducible). Still a reasonable lateral-band-walk substitute, but not zero-MTP as previously assumed.",
   },
   {
     id: "hip_adduction",
@@ -987,8 +989,8 @@ export const EXERCISE_LIBRARY = [
       {
         id: "hip_abduction",
         name: "Hip Abduction (Machine)",
-        reason: "Seated machine; removes hamstring and forefoot load entirely",
-        substituteSpares: ["Hamstring L", "Hamstring R", "Toe L"],
+        reason: "Seated machine; removes hamstring load and reduces but does not eliminate forefoot demand",
+        substituteSpares: ["Hamstring L", "Hamstring R"],
       },
       {
         id: "hip_adduction",
