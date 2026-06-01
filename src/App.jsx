@@ -557,20 +557,20 @@ const PLAN = {
         { id:"chinups", name:"Chin-ups", sub:"Bodyweight · full ROM · do before pulldown", def:[mk(7,"BW"),mk(7,"BW"),mk(7,"BW")], note:"Dead hang start · 3×7 PR confirmed 2026-05-27 · MUST be first in pull section · transition: replace 1 set/week with pronated pull-up grip · target 3×6 pull-ups by July" },
         { id:"pull_down_cable", name:"Pull Down", sub:"Cable straight-arm or heavy lat pulldown", def:[mk(8,160),mk(8,160),mk(8,160)], note:"Lat primary · Monday back volume · arms straight for straight-arm variant" },
       ]},
-      { h: "C — SHOULDER (HYPERTROPHY)", ex: [
+      { h: "C — BICEPS (isolation first · before pre-fatigue)", ex: [
+        { id:"hammer_curl", name:"Hammer Curls", sub:"DB alternating · brachialis emphasis", def:[mk(6,55),mk(6,55),mk(6,55)], note:"Neutral grip · controlled · brachialis and brachioradialis" },
+        { id:"bicep_curl_heavy", name:"Biceps Curl", sub:"DB or BB · supinated", def:[mk(6,55),mk(6,55),mk(6,55)], note:"Full supination at top · Monday is lighter volume day vs Thursday heavy · keep at 55 lb · if lateral wrist complains, switch to rotating cable bar" },
+        { id:"bicep_curl_reverse", name:"Biceps Curl — Reverse", sub:"DB or cable · pronated grip", def:[mk(6,35),mk(6,35),mk(6,35)], note:"Brachioradialis and forearm extensor emphasis · reduce or skip if wrist discomfort" },
+      ]},
+      { h: "D — SHOULDER (HYPERTROPHY)", ex: [
         { id:"lateral_raise", name:"Lateral Raise", sub:"Cable or DB", def:[mk(12,15),mk(12,15),mk(12,15)], note:"Controlled arc · no shrug · shoulder width · target 22–25 lb by September" },
         { id:"rear_delt_fly", name:"Rear Delt Fly", sub:"Reverse pec deck or incline DB", def:[mk(12,25),mk(12,25),mk(12,25)], note:"Squeeze at top · posterior cuff health" },
         { id:"face_pull_er", name:"Face Pull / ER", sub:"Cable rope · neutral grip", def:[mk(15,45),mk(15,45)], note:"External rotation emphasis · shoulder health · maintain indefinitely" },
       ]},
-      { h: "D — TRICEPS (do before biceps — 65% of arm mass)", ex: [
+      { h: "E — TRICEPS", ex: [
         { id:"triceps_pulldown", name:"Triceps Pulldown", sub:"Cable rope or bar", def:[mk(8,50),mk(8,50),mk(8,50)], note:"Elbows fixed · full extension · target 65–70 lb by September · primary arm size driver" },
         { id:"triceps_overhead", name:"Triceps Overhead", sub:"Cable or DB · long head stretch", def:[mk(8,30),mk(8,30)], note:"Full overhead extension · 4 sec eccentric · long head stretch is the stimulus · target 45–50 lb" },
         { id:"cable_incline_pushdown", name:"Cable Incline Pushdown", sub:"Standing at angle · high-to-low cable", def:[mk(6,40),mk(6,40),mk(6,40)], note:"Sternal head · 3rd triceps angle" },
-      ]},
-      { h: "E — BICEPS", ex: [
-        { id:"hammer_curl", name:"Hammer Curls", sub:"DB alternating · brachialis emphasis", def:[mk(6,55),mk(6,55),mk(6,55)], note:"Neutral grip · controlled · brachialis and brachioradialis" },
-        { id:"bicep_curl_heavy", name:"Biceps Curl", sub:"DB or BB · supinated", def:[mk(6,55),mk(6,55),mk(6,55)], note:"Full supination at top · Monday is lighter volume day vs Thursday heavy · keep at 55 lb" },
-        { id:"bicep_curl_reverse", name:"Biceps Curl — Reverse", sub:"DB or cable · pronated grip", def:[mk(6,35),mk(6,35),mk(6,35)], note:"Brachioradialis and forearm extensor emphasis · reduce or skip if wrist discomfort" },
       ]},
       { h: "F — CORE + STABILITY", ex: [
         { id:"pushup_plank_shoulder_touch", name:"Pushup Plank w/ Shoulder Touch", sub:"Bodyweight · anti-rotation", def:[mk("10e","BW"),mk("10e","BW")], note:"Hips level · touch opposite shoulder" },
@@ -581,7 +581,7 @@ const PLAN = {
 
   // ─── TUESDAY: Legs (Heavy) + Swim ────────────────────────────────────────
   Tue: {
-    cardio: "Medium swim · 25–35 min · 600–900 yards · Zone 2 · No backstroke · Pull buoy if toe irritated · Do AFTER strength · No run today: swim covers cardio without MTP or leg fatigue overlap",
+    cardio: "Optional easy swim · ~600 yards · low priority · 2×/week target · Pull buoy if toe irritated · Do AFTER strength · No run today (leg day)",
     warmup: [
       "Stationary bike 5–10 min · light → moderate · get blood flowing",
       "Standing calf raises 2×8 off plate/step · full stretch at bottom",
@@ -673,6 +673,12 @@ const PLAN = {
         { id:"th10", name:"Chin-ups",                        sub:"Bodyweight · full ROM · do first while fresh", def:[mk(7,"BW"),mk(7,"BW"),mk(7,"BW")], note:"Dead hang start · 3×7 PR confirmed 2026-05-27 · transition: replace 1 set/week with pronated pull-up grip · target 3×6 pull-ups by July · add weight via belt once 3×10 BW consistent" },
         { id:"th11", name:"Hanging Leg Raises",              sub:"Pull-up bar · stay on bar immediately after chin-ups", def:[mk(10,"BW"),mk(10,"BW"),mk(10,"BW")], note:"Posterior pelvic tilt at top · no swing · 2-sec hold · direct rectus abdominis work for pelvic tilt control miles 10–13 · progress: 10 → 15 reps → add 2.5 lb ankle weight" },
       ]},
+      { h: "Biceps — Fresh (before grip-limited back work)", ex: [
+        { id:"th5", name:"Biceps Curl",                      sub:"DB or barbell · palms up",               def:[mk(6,80),mk(6,80),mk(6,80)],              note:"No sway · full elbow extension · heavy day · 80 lb confirmed 2026-05-27 · if lateral wrist complains, switch to rotating cable bar" },
+        { id:"th8", name:"Hammer Curl",                      sub:"DB alternating",                         def:[mk(6,60),mk(6,60),mk(6,60)],              note:"Neutral grip · full ROM · 60 lb confirmed 2026-05-27" },
+        { id:"th6", name:"Cable D2 Flexion",                 sub:"Cable · unsheathing sword",              def:[mk(6,10),mk(6,10),mk(6,10)],              note:"Full diagonal ROM · controlled · 10 lb first session" },
+        { id:"th_rbc", name:"Reverse Bicep Curl",            sub:"Cable · palms down",                     def:[mk(6,40),mk(6,40),mk(6,40)],              note:"Forearm and brachioradialis · 40 lb" },
+      ]},
       { h: "Back Primary", ex: [
         { id:"th1", name:"Cable Row (mid) — Single Arm",     sub:"Cable · mid-height · SA · use straps",   def:[mk(8,200),mk(8,200),mk(8,200)],           note:"Single-arm · scapula retraction · don't round · grip limit not back limit · use wrist straps" },
         { id:"th2", name:"Lat Pulldown",                     sub:"Machine or cable",                       def:[mk(8,180),mk(8,180),mk(8,180)],           note:"Chest up · elbows to ribs · 2-1-2 · 180 lb confirmed 2026-05-27" },
@@ -683,12 +689,6 @@ const PLAN = {
       { h: "Back Auxiliary", ex: [
         { id:"th4", name:"Inverted Row",                     sub:"TRX or bar · 3–4 sets",                  def:[mk(8,"BW"),mk(8,"BW"),mk(8,"BW")],        note:"Full ROM · chest to bar" },
         { id:"th3", name:"Straight Arm Pulldowns",           sub:"Cable · Wolverines · 40 lb",             def:[mk(8,40),mk(8,40),mk(8,40)],              note:"Arms straight · lat isolation" },
-      ]},
-      { h: "Biceps", ex: [
-        { id:"th5", name:"Biceps Curl",                      sub:"DB or barbell · palms up",               def:[mk(6,80),mk(6,80),mk(6,80)],              note:"No sway · full elbow extension · heavy day · 80 lb confirmed 2026-05-27" },
-        { id:"th8", name:"Hammer Curl",                      sub:"DB alternating",                         def:[mk(6,60),mk(6,60),mk(6,60)],              note:"Neutral grip · full ROM · 60 lb confirmed 2026-05-27" },
-        { id:"th6", name:"Cable D2 Flexion",                 sub:"Cable · unsheathing sword",              def:[mk(6,10),mk(6,10),mk(6,10)],              note:"Full diagonal ROM · controlled · 10 lb first session" },
-        { id:"th_rbc", name:"Reverse Bicep Curl",            sub:"Cable · palms down",                     def:[mk(6,40),mk(6,40),mk(6,40)],              note:"Forearm and brachioradialis · 40 lb" },
       ]},
       { h: "Core", ex: [
         { id:"th9", name:"Suitcase Carry",                   sub:"DB · 2 laps each arm (~30 ft/lap)",      def:[mk("2 laps",70),mk("2 laps",70)],         note:"Upright · no lateral lean · core braced · 70 lb confirmed 2026-05-27" },
@@ -13848,11 +13848,11 @@ function assembleTrainerContext({ sessions60, ocItems, tsbData, raceCalendar, li
   const PLAN_THEMES = {
     Mon: "Chest & Triceps + Long Bike — Chest press, Incline press, Flys, Chin-ups (first), Pull-down, Lateral raise, Rear delt, Face pull, Triceps pulldown/overhead/pushdown, Hammer curls, Biceps reverse, Pallof press",
     Tue: "Legs + Swim — Hip thrust 160lb, Leg press 220lb bilateral + 80lb left-only, KB RDL 70lb, Hip drive marches, Leg extension bilateral + left-only, Plank 60s, Dead bugs",
-    Wed: "Rest / Recovery — Tendon protocol only at home. Optional easy run at lunch (Zone 2, 1.5–2 miles max).",
+    Wed: "Rest / Recovery + Staple Run — Tendon protocol at home. Wednesday run is a STAPLE (not optional): 3.5 mi Zone 2 at lunch, ≈60% of long-run ceiling, advance on 3 clean (score-0) sessions.",
     Thu: "Back & Arms + Run — Chin-ups BW (first, 3×7 PR), Hanging leg raises, Cable row SA 200lb, Lat pulldown 180lb, Shoulder press 90lb (NEW), Inverted row, Straight arm pulldown, Biceps curl 80lb, Hammer curl 60lb, Suitcase carry 70lb",
-    Fri: "Legs Volume + Hip + Swim — Hip thrust 120lb, RDL 70lb, Back extension BW, Hamstring eccentric curl 45lb + extra left, Hip abduction 120lb, Hip adduction 90lb, KB swing, Pallof press, Russian twists, Cable crossover 40lb (last)",
-    Sat: "Long Swim — 50–60 min, 800–1200 yards, Zone 2",
-    Sun: "Long Run — Zone 2, current ceiling 4.4 miles (MTP protocol), no strength"
+    Fri: "Legs Volume + Hip + Friday Run — Staple run 2.5 mi Zone 2, ≈45% of long-run ceiling, advance on 3 clean (score-0) sessions. Strength: Hip thrust 120lb, RDL 70lb, Back extension BW, Hamstring eccentric curl 45lb + extra left, Hip abduction 120lb, Hip adduction 90lb, KB swing, Pallof press, Russian twists, Cable crossover 40lb (last)",
+    Sat: "Long Run / Race day option — weekend long run may land Saturday when a race dictates. Swim is low-priority, ~2×/week, ~600 yards, flexible.",
+    Sun: "Long Run — Zone 2, current ceiling 6 miles (MTP protocol), no strength · spring/summer some long runs move to Saturday for races"
   }
   const todayPlan = PLAN_THEMES[todayKey] || "Rest"
 
