@@ -2687,6 +2687,7 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
   })
   const [capacityInfoOpen, setCapacityInfoOpen] = useState({ tendonPain: false })
   const [quickLog, setQuickLog] = useState({ open: false, key: "tendonStatus", location: "Elbow L", score: 0 })
+  const [addIssueOpen, setAddIssueOpen] = useState(false)
   const [calibState, setCalibState] = React.useState(() => {
     const init = {}
     Object.entries(OC_REGION_COORDS).forEach(([key, val]) => {
@@ -3640,7 +3641,14 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
         {/* LEFT: Add Issue + Active Issues stacked */}
         <div style={{ display: "grid", gap: "16px" }}>
           <div style={cardStyle()}>
-            <div style={{ fontSize: "10px", letterSpacing: "0.15em", textTransform: "uppercase", color: "#555", marginBottom: "10px" }}>Add Issue</div>
+            <div
+              onClick={() => setAddIssueOpen(o => !o)}
+              style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", fontSize: "10px", letterSpacing: "0.15em", textTransform: "uppercase", color: "#555", marginBottom: addIssueOpen ? "10px" : "0" }}
+            >
+              <span>＋ Add Issue</span>
+              <span>{addIssueOpen ? "▾" : "▸"}</span>
+            </div>
+            {addIssueOpen && (
             <div style={{ display: "grid", gap: "8px" }}>
               <select value={addForm.key} onChange={e => setAddForm(f => ({ ...f, key: e.target.value, halfLifeHours: null }))} style={inputStyle()}>
                 {Object.entries(OC_KEY_META).map(([k, m]) => <option key={k} value={k}>{m.label}</option>)}
@@ -3749,6 +3757,7 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
                 {addForm.isHistorical ? "+ Add Historical Episode" : "+ Add Issue"}
               </button>
             </div>
+            )}
           </div>
 
           <div style={cardStyle()}>
