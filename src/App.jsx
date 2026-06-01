@@ -3309,6 +3309,11 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
     )
   }
 
+  const weeklyTissueLoadRows = Object.entries(tissueLoadIndex || {})
+    .map(([region, info]) => ({ region, maxPct: Number(info?.maxPct || 0) }))
+    .filter(row => row.maxPct > 30)
+    .sort((a, b) => b.maxPct - a.maxPct)
+
   return (
     <div style={{ padding: "16px", maxWidth: "900px" }}>
 
@@ -3916,6 +3921,31 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
               Form decay
             </span>
           </div>
+          {weeklyTissueLoadRows.length > 0 && (
+            <div style={{ marginTop: "14px", paddingTop: "12px", borderTop: "1px solid #1a1b2e" }}>
+              <div style={{ fontSize: "10px", letterSpacing: "0.15em", textTransform: "uppercase", color: "#555", marginBottom: "3px" }}>
+                Weekly Tissue Load
+              </div>
+              <div style={{ fontSize: "10px", color: "#667", marginBottom: "10px" }}>
+                Accumulated load per structure, decayed by tissue half-life.
+              </div>
+              <div style={{ display: "grid", gap: "7px" }}>
+                {weeklyTissueLoadRows.map(row => {
+                  const widthPct = Math.max(0, Math.min(100, row.maxPct))
+                  const color = row.maxPct > 100 ? "#ef4444" : row.maxPct > 80 ? "#f97316" : row.maxPct > 60 ? "#fbbf24" : "#6b7280"
+                  return (
+                    <div key={row.region} style={{ display: "grid", gridTemplateColumns: "90px 1fr 44px", gap: "8px", alignItems: "center" }}>
+                      <div style={{ fontSize: "10px", color: "#cbd5e1", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.region}</div>
+                      <div style={{ height: "7px", background: "#151728", borderRadius: "4px", overflow: "hidden" }}>
+                        <div style={{ height: "100%", width: `${widthPct}%`, background: color, borderRadius: "4px" }} />
+                      </div>
+                      <div style={{ fontSize: "10px", color, textAlign: "right", fontWeight: 700 }}>{Math.round(row.maxPct)}%</div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
       </div>
