@@ -19033,6 +19033,10 @@ const tissueLoadIndex = useMemo(() => {
   const allAbove40 = sorted.filter(([, v]) => v.maxPct > 40).map(([r, v]) => `${r}=${v.maxPct.toFixed(0)}%`)
   console.log("[TLI] top 3:", top3.join(", ") || "none")
   console.log("[TLI] regions >40%:", allAbove40.join(", ") || "none")
+  console.log("[TLI RAW]", Object.entries(result)
+    .sort((a,b) => b[1].maxPct - a[1].maxPct)
+    .map(([r,v]) => `${r}: M=${v.muscleStatus.toFixed(1)} T=${v.tendonStatus.toFixed(1)} J=${v.jointStatus.toFixed(1)}`)
+    .join("  |  "))
 
   return result
 }, [schedLog, unifiedCanonicalSessions, ocItems, ocLoadOverrides])
