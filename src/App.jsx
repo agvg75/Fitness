@@ -237,6 +237,8 @@ const HISTORICAL_MTP_EPISODES = [
     resolvedAt: "2026-01-10",
     initialScore: 3,
     currentScore: 0,
+    scaleMigratedV2: true,
+    migrationConfidence: "native",
     halfLifeHours: 840,
     episodeCount: 1,
     notes: "December 2025 MTP flare. TSB -1.85, 14-day load 676. Onset after volume increase. Resolved with rest and anti-inflammatory protocol.",
@@ -249,8 +251,10 @@ const HISTORICAL_MTP_EPISODES = [
     label: "Joint — Toe L",
     startDate: "2026-02-01",
     resolvedAt: "2026-03-15",
-    initialScore: 2,
+    initialScore: 3,
     currentScore: 0,
+    scaleMigratedV2: true,
+    migrationConfidence: "medium",
     halfLifeHours: 840,
     episodeCount: 2,
     notes: "February 2026 MTP recurrence. TSB -2.83, 14-day load 756. Second episode within 90 days — chronicity flag. Resolved before Rivian 5K.",
@@ -2046,14 +2050,97 @@ function ScheduleMismatchDiagnostics({ report, onOpenEntry, onEditEntry, onResol
 }
 
 // ─── Operational Capacity constants ───────────────────────────────────────────
-const SCORE_LABELS = ["Resolved", "Mild", "Discomfort", "Pain", "Impairment", "Severe"]
+// -- 0-6 signal scale (migrated from legacy 0-5 2026-06-01) --
+// Fine resolution at the low end where logging is frequent and signal/noise
+// ambiguity lives; coarse at the top where the decision is already obvious.
+const OC_SCALE_STEPS = [0, 0.5, 1, 1.5, 2, 3, 4, 5, 6]
 const OC_SEVERITY_LABELS = {
-  0: "None — no awareness, no restriction",
-  1: "Mild — noticeable under load, resolves immediately",
-  2: "Moderate — present during activity, gone within an hour",
-  3: "Significant — alters technique or pace, lingers post-session",
-  4: "Severe — prevents normal training, present at rest",
-  5: "Unable — cannot bear load or complete session",
+  0:   "Nothing",
+  0.5: "Aware it's there (no pain, no warmth)",
+  1:   "Warmth or presence, no pain",
+  1.5: "Mild discomfort, doesn't change movement",
+  2:   "Feel it, work around it, but load/output unchanged",
+  3:   "Reducing load, reps, or range to manage it",
+  4:   "Major reduction or stopping the exercise",
+  5:   "Working around it now hurts something else",
+  6:   "Can't perform at all",
+}
+// Short labels for compact display (tooltip/badge). Keyed by score.
+function ocScoreShortLabel(score) {
+  const s = Number(score)
+  if (!Number.isFinite(s) || s <= 0) return "Resolved"
+  if (s <= 0.5) return "Awareness"
+  if (s <= 1)   return "Presence"
+  if (s <= 1.5) return "Mild"
+  if (s <= 2)   return "Noticeable"
+  if (s <= 3)   return "Altering"
+  if (s <= 4)   return "Major"
+  if (s <= 5)   return "Secondary pain"
+  return "Unable"
+}
+// Legacy 0-5 -> new 0-6 migration map. Old 1 was the FORCED FLOOR (no 0.5/1.5
+// existed), so an old 1 realistically meant a real event - map to 2, LOW CONFIDENCE.
+// Every migrated value is flagged scaleMigrated:true and never overwrites the original.
+const OC_LEGACY_SCALE_MAP = { 0: 0, 1: 2, 2: 2.5, 3: 3, 4: 4, 5: 6 }
+function migrateLegacyOcScore(oldScore) {
+  const n = Number(oldScore)
+  if (!Number.isFinite(n)) return { score: 0, confidence: "low" }
+  if (Object.prototype.hasOwnProperty.call(OC_LEGACY_SCALE_MAP, n)) {
+    return { score: OC_LEGACY_SCALE_MAP[n], confidence: n === 1 ? "low" : "medium" }
+  }
+  return { score: n, confidence: "native" }  // already on new scale
+}
+function ocScaleStepIndex(score) {
+  const idx = OC_SCALE_STEPS.indexOf(Number(score))
+  return idx < 0 ? 0 : idx
+}
+// Signal-schema trajectory fields. null on legacy entries (pre-2026-06-01).
+const OC_ONSET_OPTIONS   = ["from_start", "early", "mid", "late", "after"]
+const OC_COURSE_OPTIONS  = ["self_resolved", "stable", "worsened"]
+const OC_PERSIST_OPTIONS = ["gone_at_end", "gone_by_evening", "next_morning", "next_session"]
+function makeSignalHistoryEntry({ date, score, context, trimp, note,
+  onset = null, course = null, persistence = null, provokingItem = null,
+  scaleMigrated = false, migrationConfidence = "native" }) {
+  return {
+    date, score, context, trimp: trimp ?? null, note: note || "",
+    onset, course, persistence, provokingItem,
+    scaleMigrated, migrationConfidence,
+    schemaVersion: 2,
+  }
+}
+function migrateOcScaleNonDestructive(items) {
+  const list = Array.isArray(items) ? items : []
+  let migrated = false
+  const out = list.map(item => {
+    if (item.scaleMigratedV2) return item
+    const legacyCur = item.currentScore
+    const legacyInit = item.initialScore
+    const mCur = migrateLegacyOcScore(legacyCur)
+    const mInit = migrateLegacyOcScore(legacyInit)
+    migrated = true
+    return {
+      ...item,
+      legacyCurrentScore: legacyCur,
+      legacyInitialScore: legacyInit,
+      currentScore: mCur.score,
+      initialScore: mInit.score,
+      migrationConfidence: mCur.confidence,
+      scaleMigratedV2: true,
+      history: Array.isArray(item.history)
+        ? item.history.map(h =>
+            h.schemaVersion === 2 ? h : {
+              ...h,
+              legacyScore: h.score,
+              score: migrateLegacyOcScore(h.score).score,
+              onset: null, course: null, persistence: null, provokingItem: null,
+              scaleMigrated: true,
+              migrationConfidence: migrateLegacyOcScore(h.score).confidence,
+              schemaVersion: 2,
+            })
+        : item.history,
+    }
+  })
+  return { items: out, migrated }
 }
 const MTP_CURRENT_CEILING = 4.0
 const MTP_NEXT_MILESTONE = 4.4
@@ -2562,6 +2649,10 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
     date: new Date().toISOString().slice(0, 10),
     score: 0,
     note: "",
+    onset: null,
+    course: null,
+    persistence: null,
+    provokingItem: null,
   })
   const [editingHistoryId, setEditingHistoryId] = useState(null)
   const [historyEditForm, setHistoryEditForm] = useState({
@@ -2708,7 +2799,10 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
 
   const updateTendonPain = nextPainValue => {
     const nextPainScore = Math.max(0, Math.min(10, Number(nextPainValue || 0)))
-    const nextOcScore = Math.round(nextPainScore / 2)
+    // 0-10 pain input -> 0-6 signal scale. Low end kept fine-grained.
+    const painToScale = p =>
+      p <= 0 ? 0 : p <= 1 ? 0.5 : p <= 2 ? 1 : p <= 3 ? 1.5 : p <= 4 ? 2 : p <= 6 ? 3 : p <= 7 ? 4 : p <= 9 ? 5 : 6
+    const nextOcScore = painToScale(nextPainScore)
     const nowIso = new Date().toISOString()
 
     if (tendonControlItem) {
@@ -2747,6 +2841,8 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
       episodeCount: 0,
       lastResolvedDate: null,
       chronicity: "acute",
+      scaleMigratedV2: true,
+      migrationConfidence: "native",
       painScore10: nextPainScore
     }
 
@@ -2807,14 +2903,16 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
       episodeCount: isHistorical && resolvedDate ? 1 : 0,
       lastResolvedDate: resolvedDate,
       chronicity,
+      scaleMigratedV2: true,
+      migrationConfidence: "native",
       note: addForm.note || "",
-      history: isHistorical ? [{
+      history: isHistorical ? [makeSignalHistoryEntry({
         date: addForm.historicalStartDate,
         score: Number(addForm.currentScore),
         context: "historical episode",
         trimp: null,
         note: addForm.note || ""
-      }] : [],
+      })] : [],
       ...(isHistorical ? { eventType: "historical_entry" } : {}),
     }
 
@@ -2870,6 +2968,10 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
       date: new Date().toISOString().slice(0, 10),
       score: 0,
       note: "",
+      onset: null,
+      course: null,
+      persistence: null,
+      provokingItem: null,
     })
     setMtpCheckFormOpen(true)
   }
@@ -2878,13 +2980,17 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
     const selectedDate = String(mtpCheckForm.date || "").slice(0, 10)
     if (!selectedDate) return
 
-    const historyEntry = {
+    const historyEntry = makeSignalHistoryEntry({
       date: selectedDate,
       score: Number(mtpCheckForm.score || 0),
       context: "zero-pain check",
       trimp: getCanonicalLoadForDate(selectedDate),
-      note: mtpCheckForm.note || ""
-    }
+      note: mtpCheckForm.note || "",
+      onset: mtpCheckForm.onset || null,
+      course: mtpCheckForm.course || null,
+      persistence: mtpCheckForm.persistence || null,
+      provokingItem: mtpCheckForm.provokingItem || null,
+    })
 
     const matchingItem = [...ocItems]
       .filter(item => item.key === MTP_KEY && String(item.location || "").includes(MTP_LOCATION))
@@ -2921,6 +3027,8 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
       lastResolvedDate: score === 0 ? new Date(`${selectedDate}T12:00:00`).toISOString() : null,
       lastCheckedDate: selectedDate,
       chronicity: "acute",
+      scaleMigratedV2: true,
+      migrationConfidence: "native",
       history: [historyEntry],
       note: mtpCheckForm.note || "",
       eventType: "explicit_zero_check"
@@ -3152,7 +3260,7 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
                 e.stopPropagation()
                 setSelectedId(selectedId === item.id ? null : item.id)
               }}
-              title={`${item.location} — ${SCORE_LABELS[item.currentScore]}`}
+              title={`${item.location} — ${ocScoreShortLabel(item.currentScore)}`}
               style={{
                 position: "absolute", left: `${coords[0]}%`, top: `${coords[1]}%`,
                 width: sz, height: sz, borderRadius: "50%",
@@ -3282,7 +3390,7 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
               style={{ width: "100%", accentColor: "#f59e0b" }}
             />
             <div style={{ fontSize: "11px", color: "#667" }}>
-              Tendon gate: {rd.active.filter(item => item.key === "tendonStatus").length ? `${Math.max(...rd.active.filter(item => item.key === "tendonStatus").map(item => Number(item.currentScore || 0)))}/5 OC` : "clear"}
+              Tendon gate: {rd.active.filter(item => item.key === "tendonStatus").length ? `${Math.max(...rd.active.filter(item => item.key === "tendonStatus").map(item => Number(item.currentScore || 0)))}/6 OC` : "clear"}
             </div>
           </div>
         )}
@@ -3372,7 +3480,7 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
               <div style={{ textAlign: "right" }}>
                 {isActive ? (
                   <div style={{ fontSize: "12px", color: "#ef4444", fontWeight: "600" }}>
-                    Score {currentScore}/5 — progression paused
+                    Score {currentScore}/6 — progression paused
                   </div>
                 ) : (
                   <div style={{ fontSize: "12px", color: "#4ade80", fontWeight: "600" }}>
@@ -3444,15 +3552,15 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
                 </div>
                 <div>
                   <div style={{ fontSize: "11px", color: "#666", marginBottom: "4px" }}>
-                    Score: {mtpCheckForm.score}/3
+                    Score: {mtpCheckForm.score} — {ocScoreShortLabel(mtpCheckForm.score)}
                   </div>
                   <input
                     type="range"
                     min={0}
-                    max={3}
+                    max={8}
                     step={1}
-                    value={mtpCheckForm.score}
-                    onChange={e => setMtpCheckForm(prev => ({ ...prev, score: Number(e.target.value) }))}
+                    value={ocScaleStepIndex(mtpCheckForm.score)}
+                    onChange={e => setMtpCheckForm(prev => ({ ...prev, score: OC_SCALE_STEPS[Number(e.target.value)] }))}
                     style={{ width: "100%" }}
                   />
                   <div style={{ fontSize: "10px", color: "#555", marginTop: "4px" }}>
@@ -3495,10 +3603,10 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
               </select>
               <div>
                 <div style={{ fontSize: "11px", color: "#666", marginBottom: "4px" }}>
-                  Severity: {addForm.currentScore}/5 — {SCORE_LABELS[Number(addForm.currentScore)]}
+                  Severity: {addForm.currentScore} — {OC_SEVERITY_LABELS[Number(addForm.currentScore)]}
                 </div>
-                <input type="range" min={0} max={5} step={1} value={addForm.currentScore}
-                  onChange={e => setAddForm(f => ({ ...f, currentScore: Number(e.target.value) }))}
+                <input type="range" min={0} max={8} step={1} value={ocScaleStepIndex(addForm.currentScore)}
+                  onChange={e => setAddForm(f => ({ ...f, currentScore: OC_SCALE_STEPS[Number(e.target.value)] }))}
                   style={{ width: "100%" }} />
                 <div style={{ fontSize: "10px", color: "#555", marginTop: "4px" }}>
                   {OC_SEVERITY_LABELS[Number(addForm.currentScore)]}
@@ -3553,10 +3661,10 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
                     <input
                       type="range"
                       min={0}
-                      max={5}
+                      max={8}
                       step={1}
-                      value={addForm.currentScore}
-                      onChange={e => setAddForm(f => ({ ...f, currentScore: Number(e.target.value) }))}
+                      value={ocScaleStepIndex(addForm.currentScore)}
+                      onChange={e => setAddForm(f => ({ ...f, currentScore: OC_SCALE_STEPS[Number(e.target.value)] }))}
                       style={{ width: "100%" }}
                     />
                     <div style={{ fontSize: "10px", color: "#555", marginTop: "4px" }}>
@@ -3655,7 +3763,7 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
                             <span style={{ fontSize: "10px", color: item.chronicity === "chronic" ? "#ef4444" : "#555" }}>
                               {item.chronicity === "chronic" ? "chronic" : "resolved"}
                             </span>
-                            <span style={{ fontSize: "11px", color: "#555" }}>peak {item.initialScore}/5</span>
+                            <span style={{ fontSize: "11px", color: "#555" }}>peak {item.initialScore}/6</span>
                             <button
                               onClick={() => isEditing ? setEditingHistoryId(null) : startHistoryEdit(item)}
                               style={{ background: "none", border: "none", color: "#777", cursor: "pointer", fontSize: "12px", padding: 0 }}
@@ -3689,14 +3797,14 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
                               style={{ ...inputStyle(), padding: "6px 10px" }}
                             />
                             <div>
-                              <div style={{ fontSize: "11px", color: "#666", marginBottom: "2px" }}>Peak score: {historyEditForm.peakScore}/5</div>
+                              <div style={{ fontSize: "11px", color: "#666", marginBottom: "2px" }}>Peak score: {historyEditForm.peakScore}</div>
                               <input
                                 type="range"
                                 min={0}
-                                max={5}
+                                max={8}
                                 step={1}
-                                value={historyEditForm.peakScore}
-                                onChange={e => setHistoryEditForm(prev => ({ ...prev, peakScore: Number(e.target.value) }))}
+                                value={ocScaleStepIndex(historyEditForm.peakScore)}
+                                onChange={e => setHistoryEditForm(prev => ({ ...prev, peakScore: OC_SCALE_STEPS[Number(e.target.value)] }))}
                                 style={{ width: "100%" }}
                               />
                               <div style={{ fontSize: "10px", color: "#555", marginTop: "4px" }}>
@@ -3830,15 +3938,15 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
               <span>Resolved — last active {fmtShortDate(String(selectedItem.lastResolvedDate || selectedItem.startDate || "").slice(0, 10))}</span>
             )}
             <span>Episode count: {selectedItem.episodeCount || 0}</span>
-            <span>Peak score: {Math.max(Number(selectedItem.initialScore || 0), Number(selectedItem.currentScore || 0))}/5</span>
+            <span>Peak score: {Math.max(Number(selectedItem.initialScore || 0), Number(selectedItem.currentScore || 0))}/6</span>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: window.innerWidth < 600 ? "1fr" : "1fr 1fr", gap: "16px", marginBottom: "12px" }}>
             <div>
               <div style={{ fontSize: "11px", color: "#666", marginBottom: "4px" }}>
-                Score: {selectedItem.currentScore}/5 — {SCORE_LABELS[selectedItem.currentScore]}
+                Score: {selectedItem.currentScore} — {ocScoreShortLabel(selectedItem.currentScore)}
               </div>
-              <input type="range" min={0} max={5} step={1} value={selectedItem.currentScore}
-                onChange={e => updateItem(selectedItem.id, { currentScore: Number(e.target.value) })}
+              <input type="range" min={0} max={8} step={1} value={ocScaleStepIndex(selectedItem.currentScore)}
+                onChange={e => updateItem(selectedItem.id, { currentScore: OC_SCALE_STEPS[Number(e.target.value)] })}
                 style={{ width: "100%" }} />
               <div style={{ fontSize: "10px", color: "#555", marginTop: "4px" }}>
                 {OC_SEVERITY_LABELS[Number(selectedItem.currentScore)]}
@@ -4708,7 +4816,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     if (!keywords?.length) return null
     const hits = ocItems.filter(i => i.currentScore >= 3 && keywords.some(kw => (i.location || "").includes(kw)))
     if (!hits.length) return null
-    return hits.map(i => `${i.location} (${SCORE_LABELS[i.currentScore] || i.currentScore})`).join(", ")
+    return hits.map(i => `${i.location} (${ocScoreShortLabel(i.currentScore) || i.currentScore})`).join(", ")
   }
   const injuryTag = (note) => note ? (
     <div style={{ fontSize: 10, color: "#f97316", marginTop: 4, display: "flex", alignItems: "flex-start", gap: 4 }}>
@@ -6173,7 +6281,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
                   {mtpUnsafe && (
                     <div style={{ fontSize: 11, color: "#f97316", marginBottom: 4, display: "flex", alignItems: "flex-start", gap: 4 }}>
                       <span style={{ flexShrink: 0 }}>●</span>
-                      <span>Toe L OC is active ({mtpItem.currentScore}/5). This modality is not MTP-safe; substitute cycling or swimming.</span>
+                      <span>Toe L OC is active ({mtpItem.currentScore}/6). This modality is not MTP-safe; substitute cycling or swimming.</span>
                     </div>
                   )}
                   {renderExerciseFlags(cardioFlags)}
@@ -9206,15 +9314,15 @@ function buildOcConstraintState({ ocItems, sleepRecords, healthFitDaily, compute
   }
 
   if (tendon.painScore >= 3) {
-    applyState("deload", `Active tendon OC ${tendon.painScore}/5`)
+    applyState("deload", `Active tendon OC ${tendon.painScore}/6`)
   } else if (tendon.painScore >= 2) {
-    applyState("hold", `Active tendon OC ${tendon.painScore}/5`)
+    applyState("hold", `Active tendon OC ${tendon.painScore}/6`)
   }
 
   if (maxOcScore >= 4) {
-    applyState("deload", `OC issue severity ${maxOcScore}/5`)
+    applyState("deload", `OC issue severity ${maxOcScore}/6`)
   } else if (maxOcScore >= 3) {
-    applyState("hold", `OC issue severity ${maxOcScore}/5`)
+    applyState("hold", `OC issue severity ${maxOcScore}/6`)
   }
 
   if (systemic.sleepPenalty >= 20) {
@@ -13766,7 +13874,7 @@ function assembleTrainerContext({ sessions60, ocItems, tsbData, raceCalendar, li
 
   // ── OC issues ─────────────────────────────────────────────────────────────
   const ocLines = (ocItems || []).filter(i => i.currentScore > 0)
-    .map(i => `  ${i.location || i.label || "Unknown"}: score ${i.currentScore}/5, ${i.episodeCount || 0} episode(s)`)
+    .map(i => `  ${i.location || i.label || "Unknown"}: score ${i.currentScore}/6, ${i.episodeCount || 0} episode(s)`)
     .join("\n") || "  None active"
 
   // ── Last logged session ────────────────────────────────────────────────────
@@ -16855,12 +16963,14 @@ useEffect(() => {
       const startMs = item.startDate ? new Date(item.startDate).getTime() : 0
       return Number.isFinite(startMs) && startMs >= ninetyDaysAgo
     }))
-    const { items: cleanedOcLocal, migrated: ocLocalChronicityMigrated } = backfillOcChronicity(seededOcLocal)
+    const { items: chronicityOcLocal, migrated: ocLocalChronicityMigrated } = backfillOcChronicity(seededOcLocal)
+    const { items: cleanedOcLocal, migrated: ocLocalScaleMigrated } = migrateOcScaleNonDestructive(chronicityOcLocal)
     const ocLocalIds = new Set(ocLocalItems.map(item => String(item?.id || "")))
     const ocLocalChanged = !Array.isArray(ocLocal) ||
       cleanedOcLocal.length !== ocLocalItems.length ||
       HISTORICAL_MTP_EPISODES.some(item => !ocLocalIds.has(item.id)) ||
-      ocLocalChronicityMigrated
+      ocLocalChronicityMigrated ||
+      ocLocalScaleMigrated
     if (Array.isArray(wo) && dedupedWorkouts.length !== wo.length) {
       await store.set("ufd-workouts", dedupedWorkouts)
       setStoredWorkouts(dedupedWorkouts)
@@ -16869,6 +16979,12 @@ useEffect(() => {
     if (ocLocalChanged) {
       await store.set("oc-items", cleanedOcLocal)
       setOcItems(cleanedOcLocal)
+      if ((ocLocalChronicityMigrated || ocLocalScaleMigrated) && supabase && session?.user?.id) {
+        await supabase.from("user_kv").upsert(
+          { user_id: session.user.id, key: "oc-items", value: cleanedOcLocal, updated_at: new Date().toISOString() },
+          { onConflict: "user_id,key" }
+        )
+      }
       console.log(`[migration] Updated OC items: ${ocLocalItems.length} → ${cleanedOcLocal.length}`)
     }
     if (Array.isArray(hfLocal)) {
@@ -16957,9 +17073,16 @@ useEffect(() => {
               ) return false
               return true
             }))
-            const { items: cleanedOcItems } = backfillOcChronicity(seededOcItems)
+            const { items: chronicityOcItems, migrated: ocRemoteChronicityMigrated } = backfillOcChronicity(seededOcItems)
+            const { items: cleanedOcItems, migrated: ocRemoteScaleMigrated } = migrateOcScaleNonDestructive(chronicityOcItems)
             setOcItems(cleanedOcItems)
             await store.set("oc-items", cleanedOcItems)
+            if ((ocRemoteChronicityMigrated || ocRemoteScaleMigrated) && session?.user?.id) {
+              await supabase.from("user_kv").upsert(
+                { user_id: session.user.id, key: "oc-items", value: cleanedOcItems, updated_at: new Date().toISOString() },
+                { onConflict: "user_id,key" }
+              )
+            }
           } else if (Array.isArray(cleanedOcLocal)) {
             setOcItems(cleanedOcLocal)
           }
