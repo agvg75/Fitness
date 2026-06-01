@@ -2678,6 +2678,7 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
     provokingItem: null,
   })
   const [editingHistoryId, setEditingHistoryId] = useState(null)
+  const [expandedEpisodes, setExpandedEpisodes] = useState({})
   const [historyEditForm, setHistoryEditForm] = useState({
     startDate: "",
     endDate: "",
@@ -2696,6 +2697,7 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
   const [dragInfo, setDragInfo] = React.useState(null)
   const MTP_LOCATION = "Toe L"
   const MTP_KEY = "jointStatus"
+  const toggleEpisode = id => setExpandedEpisodes(s => ({ ...s, [id]: !s[id] }))
 
   const selectedItem = ocItems.find(i => i.id === selectedId) || null
   const rd = computeReadinessDetail(ocItems, sleepRecords, healthFitDaily, tsbFallback)
@@ -3242,12 +3244,13 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
               if (maxPct > 100)     { stroke = "#ef4444"; strokeWidth = 4; opacity = 1.0 }
               else if (maxPct > 80) { stroke = "#f97316"; strokeWidth = 3; opacity = 0.9 }
               else if (maxPct > 60) { stroke = "#fbbf24"; strokeWidth = 2; opacity = 0.7 }
-              if (stroke === "#ef4444") {
-                const regionKey = coordKey
-                const hasActive = (active || ocItems || [])
-                  .some(item => item.location === regionKey && (item.currentScore || 0) > 0)
-                if (!hasActive) return null
-              }
+              // Show rings for elevated LOAD regardless of a logged injury.
+              // A confirmed active OC item at this region gets a stronger style
+              // (the load tracker should surface accumulation, not hide it).
+              const regionKey = coordKey
+              const hasActive = (active || ocItems || [])
+                .some(item => item.location === regionKey && (item.currentScore || 0) > 0)
+              if (hasActive) { strokeWidth = strokeWidth + 2; opacity = 1.0 }
               return (
                 <circle
                   key={tliRegion}
@@ -3788,21 +3791,33 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
                     const durationDays = item.startDate && item.lastResolvedDate
                       ? Math.round((new Date(item.lastResolvedDate) - new Date(item.startDate)) / 86400000)
                       : null
+                    const episodeId = item.id || item.startDate || `${item.key}_${item.location}`
+                    const isExpanded = !!expandedEpisodes[episodeId]
                     return (
                       <div key={item.id} style={{
                         padding: "6px 8px", marginBottom: "4px", borderRadius: "4px",
                         border: `1px solid ${item.chronicity === "chronic" ? "rgba(239,68,68,0.2)" : "#1a1b2e"}`,
                         background: item.chronicity === "chronic" ? "rgba(239,68,68,0.04)" : "transparent",
                       }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div
+                          onClick={() => toggleEpisode(episodeId)}
+                          style={{ cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px" }}
+                        >
                           <span style={{ fontSize: "11px", color: meta.color }}>{item.location}</span>
                           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                             <span style={{ fontSize: "10px", color: item.chronicity === "chronic" ? "#ef4444" : "#555" }}>
                               {item.chronicity === "chronic" ? "chronic" : "resolved"}
                             </span>
                             <span style={{ fontSize: "11px", color: "#555" }}>peak {item.initialScore}/6</span>
+                            {durationDays != null && (
+                              <span style={{ fontSize: "11px", color: "#555" }}>{durationDays}d</span>
+                            )}
+                            <span style={{ color: "#667", fontSize: "11px" }}>{isExpanded ? "▾ hide days" : "▸ show days"}</span>
                             <button
-                              onClick={() => isEditing ? setEditingHistoryId(null) : startHistoryEdit(item)}
+                              onClick={e => {
+                                e.stopPropagation()
+                                isEditing ? setEditingHistoryId(null) : startHistoryEdit(item)
+                              }}
                               style={{ background: "none", border: "none", color: "#777", cursor: "pointer", fontSize: "12px", padding: 0 }}
                               title="Edit episode"
                             >
@@ -3817,7 +3832,7 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
                         {item.note && !isEditing && (
                           <div style={{ fontSize: "10px", color: "#555", marginTop: "4px" }}>{item.note}</div>
                         )}
-                        {renderSessionCompliance(item)}
+                        {isExpanded && renderSessionCompliance(item)}
                         {isEditing && (
                           <div style={{ display: "grid", gap: "6px", marginTop: "8px", paddingTop: "8px", borderTop: "1px solid #1a1b2e" }}>
                             <input
@@ -18905,13 +18920,34 @@ const tissueLoadIndex = useMemo(() => {
   // is silently dropped, which eliminates the category-key bug.
   const REGION_CANONICAL = OC_LOAD_REGION_CANONICAL
 
-  // Thresholds: accumulated load that corresponds to 100% saturation.
-  // Based on ~3 sessions/week of score-3 exercise at each tissue tau.
+  // Fallback thresholds by tissue type (used when a region has no per-region value).
   const TISSUE_LOAD_THRESHOLDS = {
     muscleStatus: 25,
     tendonStatus: 15,
     jointStatus:  18,
   }
+  // Per-region thresholds. 100% = a normal heavy week for THIS structure.
+  // Calibrated from real accumulated load 2026-06-01 (single snapshot — revisit
+  // after several weeks). Keyed "Region|tissueType". Falls back to the tissue-type
+  // value above if a region/tissue combo is absent.
+  // CALIBRATION SNAPSHOT (heavy state): Elbow T≈176, Shoulder T≈127, Knee T≈107,
+  // AnkleFoot L T≈65, Wrist T≈17.6(rising, headroom left), Hip M≈61, LowBack M≈33,
+  // MTP J≈60.
+  const REGION_LOAD_THRESHOLDS = {
+    "Elbow L|tendonStatus": 180, "Elbow R|tendonStatus": 180,
+    "Shoulder L|tendonStatus": 135, "Shoulder R|tendonStatus": 135,
+    "Knee L|tendonStatus": 115, "Knee R|tendonStatus": 115,
+    "AnkleFoot L|tendonStatus": 70, "AnkleFoot R|tendonStatus": 50,
+    "Wrist L|tendonStatus": 25, "Wrist R|tendonStatus": 25,  // headroom: supinated-curl load just added, will rise
+    "Hip L|muscleStatus": 65, "Hip R|muscleStatus": 65,
+    "Lower Back|muscleStatus": 38,
+    "Knee L|muscleStatus": 20, "Knee R|muscleStatus": 20,
+    "Shoulder L|muscleStatus": 15, "Shoulder R|muscleStatus": 15,
+    "AnkleFoot L|muscleStatus": 12, "AnkleFoot R|muscleStatus": 12,
+    "MTP L|jointStatus": 65, "MTP R|jointStatus": 65,
+  }
+  const regionThreshold = (region, tissueType) =>
+    REGION_LOAD_THRESHOLDS[`${region}|${tissueType}`] ?? TISSUE_LOAD_THRESHOLDS[tissueType]
 
   const today = new Date()
   today.setHours(0, 0, 0, 0)
@@ -19014,9 +19050,9 @@ const tissueLoadIndex = useMemo(() => {
   // ── Normalise: (raw / threshold) × 100, clamped to 150 ───────────────────
   const result = {}
   for (const [region, loads] of Object.entries(acc)) {
-    const musclePct = Math.min(150, Math.max(0, (loads.muscleStatus / TISSUE_LOAD_THRESHOLDS.muscleStatus) * 100))
-    const tendonPct = Math.min(150, Math.max(0, (loads.tendonStatus / TISSUE_LOAD_THRESHOLDS.tendonStatus) * 100))
-    const jointPct  = Math.min(150, Math.max(0, (loads.jointStatus  / TISSUE_LOAD_THRESHOLDS.jointStatus)  * 100))
+    const musclePct = Math.min(150, Math.max(0, (loads.muscleStatus / regionThreshold(region, "muscleStatus")) * 100))
+    const tendonPct = Math.min(150, Math.max(0, (loads.tendonStatus / regionThreshold(region, "tendonStatus")) * 100))
+    const jointPct  = Math.min(150, Math.max(0, (loads.jointStatus  / regionThreshold(region, "jointStatus"))  * 100))
     result[region] = {
       muscleStatus: loads.muscleStatus,
       tendonStatus: loads.tendonStatus,
@@ -19033,10 +19069,6 @@ const tissueLoadIndex = useMemo(() => {
   const allAbove40 = sorted.filter(([, v]) => v.maxPct > 40).map(([r, v]) => `${r}=${v.maxPct.toFixed(0)}%`)
   console.log("[TLI] top 3:", top3.join(", ") || "none")
   console.log("[TLI] regions >40%:", allAbove40.join(", ") || "none")
-  console.log("[TLI RAW]", Object.entries(result)
-    .sort((a,b) => b[1].maxPct - a[1].maxPct)
-    .map(([r,v]) => `${r}: M=${v.muscleStatus.toFixed(1)} T=${v.tendonStatus.toFixed(1)} J=${v.jointStatus.toFixed(1)}`)
-    .join("  |  "))
 
   return result
 }, [schedLog, unifiedCanonicalSessions, ocItems, ocLoadOverrides])
