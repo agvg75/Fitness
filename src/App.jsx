@@ -172,6 +172,7 @@ const SYNC_KEYS = new Set([
   "wt-checked-items",
   "ufd-workouts",
   "oc-items",
+  "oc-load-overrides",
   "lift_meal_records",
   "lift_sleep_records"
 ])
@@ -2108,6 +2109,27 @@ function makeSignalHistoryEntry({ date, score, context, trimp, note,
     schemaVersion: 2,
   }
 }
+const OC_LOAD_REGION_CANONICAL = {
+  "Toe L": "MTP L", "MTP L": "MTP L",
+  "Ankle L": "AnkleFoot L", "AnkleFoot L": "AnkleFoot L",
+  "Calf L": "AnkleFoot L", "Shin L": "AnkleFoot L",
+  "Toe R": "MTP R", "MTP R": "MTP R",
+  "Ankle R": "AnkleFoot R", "AnkleFoot R": "AnkleFoot R",
+  "Calf R": "AnkleFoot R", "Shin R": "AnkleFoot R",
+  "Knee L": "Knee L", "Quad L": "Knee L", "IT Band L": "Knee L",
+  "Knee R": "Knee R", "Quad R": "Knee R", "IT Band R": "Knee R",
+  "Hip L": "Hip L", "Glute L": "Hip L", "Hamstring L": "Hip L",
+  "Hip R": "Hip R", "Glute R": "Hip R", "Hamstring R": "Hip R",
+  "Lower Back": "Lower Back",
+  "Shoulder L": "Shoulder L", "Shoulder R": "Shoulder R",
+  "Elbow L": "Elbow L", "Forearm L": "Elbow L",
+  "Elbow R": "Elbow R", "Forearm R": "Elbow R",
+  "Wrist L": "Wrist L", "Wrist R": "Wrist R",
+  "Cervical": "Cervical",
+}
+function getOcLoadCanonicalRegion(region) {
+  return OC_LOAD_REGION_CANONICAL[region] || null
+}
 function migrateOcScaleNonDestructive(items) {
   const list = Array.isArray(items) ? items : []
   let migrated = false
@@ -2632,8 +2654,9 @@ function computeOcRecoveryDate(item) {
 }
 
 // ─── TabOperationalCapacity ────────────────────────────────────────────────────
-function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapacityData, healthFitDaily, sleepRecords, tsbFallback = null, runSessions = [], canonicalSessions = [], schedLog = [], biometricRecords = [], formDecayAccumulation = {}, tissueLoadIndex = {} }) {
+function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapacityData, healthFitDaily, sleepRecords, tsbFallback = null, runSessions = [], canonicalSessions = [], schedLog = [], biometricRecords = [], formDecayAccumulation = {}, tissueLoadIndex = {}, ocLoadOverrides = {}, saveOcLoadOverrides = async () => {} }) {
   const [selectedId, setSelectedId] = useState(null)
+  const [loadSourcesOpen, setLoadSourcesOpen] = useState(false)
   const [addForm, setAddForm] = useState({
     key: "muscleStatus",
     location: "Quad L",
@@ -3313,6 +3336,14 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
     .map(([region, info]) => ({ region, maxPct: Number(info?.maxPct || 0) }))
     .filter(row => row.maxPct > 30)
     .sort((a, b) => b.maxPct - a.maxPct)
+  const selectedLoadCanonicalRegion = selectedItem ? getOcLoadCanonicalRegion(selectedItem.location) : null
+  const selectedLoadSources = selectedLoadCanonicalRegion
+    ? EXERCISE_LIBRARY.flatMap(exercise =>
+        (Array.isArray(exercise.loads) ? exercise.loads : [])
+          .filter(load => getOcLoadCanonicalRegion(load.region) === selectedLoadCanonicalRegion)
+          .map(load => ({ exercise, load, overrideKey: `${exercise.id}:${load.region}` }))
+      )
+    : []
 
   return (
     <div style={{ padding: "16px", maxWidth: "900px" }}>
@@ -3990,6 +4021,66 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
                 style={{ ...inputStyle(), padding: "6px 10px" }} />
             </div>
           </div>
+          {selectedLoadSources.length > 0 && (
+            <div style={{ marginBottom: "12px", padding: "10px", background: "#0a0b14", borderRadius: "6px", border: "1px solid #1a1b2e" }}>
+              <button
+                type="button"
+                onClick={() => setLoadSourcesOpen(v => !v)}
+                style={{ background: "none", border: "none", color: "#cbd5e1", cursor: "pointer", padding: 0, fontSize: "11px", fontWeight: 800, display: "flex", justifyContent: "space-between", width: "100%" }}
+              >
+                <span>Load sources</span>
+                <span style={{ color: "#667" }}>{loadSourcesOpen ? "Hide" : `${selectedLoadSources.length}`}</span>
+              </button>
+              {loadSourcesOpen && (
+                <div style={{ display: "grid", gap: "7px", marginTop: "10px" }}>
+                  {selectedLoadSources.map(({ exercise, load, overrideKey }) => {
+                    const override = ocLoadOverrides?.[overrideKey]
+                    const currentMultiplier = Number.isFinite(Number(override?.multiplier)) ? Number(override.multiplier) : 1
+                    const setMultiplier = multiplier => {
+                      const next = { ...(ocLoadOverrides || {}) }
+                      if (multiplier === 1) delete next[overrideKey]
+                      else next[overrideKey] = { multiplier, note: multiplier === 0 ? "this didn't load me" : "this loaded me more", at: new Date().toISOString() }
+                      saveOcLoadOverrides(next)
+                    }
+                    const sourceButtons = [
+                      { label: "none", multiplier: 0 },
+                      { label: "default", multiplier: 1 },
+                      { label: "more", multiplier: 1.5 },
+                    ]
+                    return (
+                      <div key={overrideKey} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "8px", alignItems: "center" }}>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: "10px", color: "#cbd5e1", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{exercise.name}</div>
+                          <div style={{ fontSize: "9px", color: "#667" }}>default {load.score} · {load.region}</div>
+                          {load.cue && <div style={{ fontSize: "9px", color: "#8b95ad", marginTop: "2px" }}>{load.cue}</div>}
+                        </div>
+                        <div style={{ display: "flex", gap: "4px" }}>
+                          {sourceButtons.map(btn => (
+                            <button
+                              key={btn.label}
+                              type="button"
+                              onClick={() => setMultiplier(btn.multiplier)}
+                              style={{
+                                border: "1px solid #2a2d45",
+                                background: currentMultiplier === btn.multiplier ? "#252640" : "#0d0e1c",
+                                color: currentMultiplier === btn.multiplier ? "#e5e7eb" : "#667",
+                                borderRadius: "4px",
+                                padding: "3px 6px",
+                                fontSize: "9px",
+                                cursor: "pointer",
+                              }}
+                            >
+                              {btn.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
           <div style={{ fontSize: "11px", color: "#555", display: "flex", gap: "12px", flexWrap: "wrap", marginBottom: "12px" }}>
             <span>Started: {selectedItem.startDate?.slice(0, 10)}</span>
             <span>·</span>
@@ -15345,6 +15436,17 @@ const [mealRecords, setMealRecords] = useState(() => { try { return JSON.parse(l
 const [sleepRecords, setSleepRecords] = useState(() => { try { return JSON.parse(localStorage.getItem("lift_sleep_records") || "[]") } catch { return [] } })
 const [schedLog, setSchedLog] = useState(() => { try { return JSON.parse(localStorage.getItem('wt-log') || '[]') } catch { return [] } })
 const [ocItems, setOcItems] = useState(() => { try { return JSON.parse(localStorage.getItem('oc-items') || '[]') } catch { return [] } })
+const [ocLoadOverrides, setOcLoadOverrides] = useState(() => { try { return JSON.parse(localStorage.getItem("oc-load-overrides") || "{}") } catch { return {} } })
+const saveOcLoadOverrides = useCallback(async next => {
+  setOcLoadOverrides(next)
+  await store.set("oc-load-overrides", next)
+  if (supabase && session?.user?.id) {
+    await supabase.from("user_kv").upsert(
+      { user_id: session.user.id, key: "oc-load-overrides", value: next, updated_at: new Date().toISOString() },
+      { onConflict: "user_id,key" }
+    )
+  }
+}, [session])
 useEffect(() => {
   try {
     const raw = localStorage.getItem("injuries")
@@ -16985,6 +17087,7 @@ useEffect(() => {
       }
     }
     const ocLocal = await store.get("oc-items")
+    const ocOverridesLocal = await store.get("oc-load-overrides")
     const hfLocal = await store.get("lift_healthfit_daily") || await store.get("healthfit-daily")
     const dedupedWorkouts = dedupeUfdWorkouts(wo)
     const ninetyDaysAgo = Date.now() - 90 * 24 * 3600000
@@ -17022,13 +17125,16 @@ useEffect(() => {
       localStorage.setItem("lift_healthfit_daily", JSON.stringify(hfLocal))
       setHealthFitDaily(hfLocal)
     }
+    if (ocOverridesLocal && typeof ocOverridesLocal === "object" && !Array.isArray(ocOverridesLocal)) {
+      setOcLoadOverrides(ocOverridesLocal)
+    }
     // Then fetch from Supabase and merge
     if (supabase) {
       try {
         const { data } = await supabase
           .from("user_kv")
           .select("key, value, updated_at")
-          .in("key", ["ufd-workouts", "wt-log", "oc-items", "healthfit-daily", "wt-sessions", "lift_meal_records"])
+          .in("key", ["ufd-workouts", "wt-log", "oc-items", "oc-load-overrides", "healthfit-daily", "wt-sessions", "lift_meal_records"])
         if (data) {
           const sbWo = data.find(r => r.key === "ufd-workouts")?.value
           if (process.env.NODE_ENV === "development") console.log("Supabase user_kv fetch:", { sbWo_count: Array.isArray(sbWo)?sbWo.length:0 })
@@ -17116,6 +17222,11 @@ useEffect(() => {
             }
           } else if (Array.isArray(cleanedOcLocal)) {
             setOcItems(cleanedOcLocal)
+          }
+          const sbOcLoadOverrides = data.find(r => r.key === "oc-load-overrides")?.value
+          if (sbOcLoadOverrides && typeof sbOcLoadOverrides === "object" && !Array.isArray(sbOcLoadOverrides)) {
+            setOcLoadOverrides(sbOcLoadOverrides)
+            await store.set("oc-load-overrides", sbOcLoadOverrides)
           }
           // HealthFit daily records — merge by date, Supabase wins on conflict
           const sbHf = data.find(r => r.key === "healthfit-daily")?.value
@@ -18792,25 +18903,7 @@ const tissueLoadIndex = useMemo(() => {
   // Maps fine-grained library regions to the 14 canonical spec output regions.
   // Any string not present here (including modality labels like "Run", "Strength")
   // is silently dropped, which eliminates the category-key bug.
-  const REGION_CANONICAL = {
-    "Toe L": "MTP L", "MTP L": "MTP L",
-    "Ankle L": "AnkleFoot L", "AnkleFoot L": "AnkleFoot L",
-    "Calf L": "AnkleFoot L", "Shin L": "AnkleFoot L",
-    "Toe R": "MTP R", "MTP R": "MTP R",
-    "Ankle R": "AnkleFoot R", "AnkleFoot R": "AnkleFoot R",
-    "Calf R": "AnkleFoot R", "Shin R": "AnkleFoot R",
-    "Knee L": "Knee L", "Quad L": "Knee L", "IT Band L": "Knee L",
-    "Knee R": "Knee R", "Quad R": "Knee R", "IT Band R": "Knee R",
-    "Hip L": "Hip L", "Glute L": "Hip L", "Hamstring L": "Hip L",
-    "Hip R": "Hip R", "Glute R": "Hip R", "Hamstring R": "Hip R",
-    "Lower Back": "Lower Back",
-    "Shoulder L": "Shoulder L", "Shoulder R": "Shoulder R",
-    "Elbow L": "Elbow L", "Forearm L": "Elbow L",
-    "Elbow R": "Elbow R", "Forearm R": "Elbow R",
-    "Wrist L": "Wrist L", "Wrist R": "Wrist R",
-    "Cervical": "Cervical",
-    // Upper Back, Core/Abs, Chest intentionally omitted (not in spec output regions)
-  }
+  const REGION_CANONICAL = OC_LOAD_REGION_CANONICAL
 
   // Thresholds: accumulated load that corresponds to 100% saturation.
   // Based on ~3 sessions/week of score-3 exercise at each tissue tau.
@@ -18826,12 +18919,16 @@ const tissueLoadIndex = useMemo(() => {
   // acc keyed by canonical region name; values are tissue type accumulators
   const acc = {}
 
-  function applyLoad(rawRegion, tissueType, score, daysAgo) {
+  function applyLoad(rawRegion, tissueType, score, daysAgo, exerciseId = null) {
     const canonical = REGION_CANONICAL[rawRegion]
     if (!canonical) return                        // drop unknown/modality strings
     const tau = TISSUE_DECAY_CONSTANTS[tissueType]?.tau
     if (!tau) return
-    const s = Number(score)
+    const overrideKey = exerciseId ? `${exerciseId}:${rawRegion}` : null
+    const overrideMultiplier = overrideKey && Number.isFinite(Number(ocLoadOverrides?.[overrideKey]?.multiplier))
+      ? Number(ocLoadOverrides[overrideKey].multiplier)
+      : 1
+    const s = Number(score) * overrideMultiplier
     if (!Number.isFinite(s) || s <= 0) return    // guard against NaN/negative scores
     const decayed = s * Math.exp(-Math.max(0, daysAgo) / tau)
     if (!acc[canonical]) acc[canonical] = { muscleStatus: 0, tendonStatus: 0, jointStatus: 0 }
@@ -18853,11 +18950,11 @@ const tissueLoadIndex = useMemo(() => {
             e.name.toLowerCase() === String(ex.exercise_name || ex.name || "").toLowerCase()
           )
       if (!libEntry) return
-      libEntry.loads.forEach(load => applyLoad(load.region, load.tissueType, load.score, daysAgo))
+      libEntry.loads.forEach(load => applyLoad(load.region, load.tissueType, load.score, daysAgo, libEntry.id))
       // Form decay secondary tissues at 50% weight
       if (Array.isArray(libEntry.form_decay?.secondary_tissues)) {
         libEntry.form_decay.secondary_tissues.forEach(t =>
-          applyLoad(t.region, t.tissueType, t.score * 0.5, daysAgo)
+          applyLoad(t.region, t.tissueType, t.score * 0.5, daysAgo, libEntry.id)
         )
       }
     })
@@ -18893,7 +18990,7 @@ const tissueLoadIndex = useMemo(() => {
       const cardioId = isSwim ? "swim_freestyle" : isCycle ? "cycling_stationary" : "run"
       const libEntry = getExerciseProfile(cardioId)
       if (libEntry) {
-        libEntry.loads.forEach(load => applyLoad(load.region, load.tissueType, load.score, daysAgo))
+        libEntry.loads.forEach(load => applyLoad(load.region, load.tissueType, load.score, daysAgo, libEntry.id))
       }
     } else {
       // Strength/other: process individual exercises.
@@ -18909,7 +19006,7 @@ const tissueLoadIndex = useMemo(() => {
               e.name.toLowerCase() === String(ex.exercise_name || ex.name || "").toLowerCase()
             )
         if (!libEntry) return
-        libEntry.loads.forEach(load => applyLoad(load.region, load.tissueType, load.score, daysAgo))
+        libEntry.loads.forEach(load => applyLoad(load.region, load.tissueType, load.score, daysAgo, libEntry.id))
       })
     }
   })
@@ -18938,7 +19035,7 @@ const tissueLoadIndex = useMemo(() => {
   console.log("[TLI] regions >40%:", allAbove40.join(", ") || "none")
 
   return result
-}, [schedLog, unifiedCanonicalSessions, ocItems])
+}, [schedLog, unifiedCanonicalSessions, ocItems, ocLoadOverrides])
 
 const formDecayReadinessPenalty = useMemo(() => {
   const now = new Date()
@@ -23498,6 +23595,8 @@ return (
     biometricRecords={biometricRecords}
     formDecayAccumulation={formDecayAccumulation}
     tissueLoadIndex={tissueLoadIndex}
+    ocLoadOverrides={ocLoadOverrides}
+    saveOcLoadOverrides={saveOcLoadOverrides}
   />
 )}
 {tab === "Forecast" && (
