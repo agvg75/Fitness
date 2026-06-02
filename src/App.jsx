@@ -15965,6 +15965,23 @@ export default function App() {
   if (typeof window !== "undefined") window.__liftConfig = LIFT_CONFIG
   // ────────────────────────────────────────────────────────────────────────
 
+  // User-added races: persisted in localStorage under "lift_user_races".
+  // Shape matches RACE_CALENDAR entries: { date, name, city, dist_mi, note, recommended, source: "user" }
+  const loadUserRaces = () => {
+    try {
+      const raw = localStorage.getItem("lift_user_races")
+      if (!raw) return []
+      const parsed = JSON.parse(raw)
+      return Array.isArray(parsed) ? parsed.filter(r => r && r.date && r.name && r.dist_mi > 0) : []
+    } catch { return [] }
+  }
+  const saveUserRaces = (races) => {
+    try { localStorage.setItem("lift_user_races", JSON.stringify(races)) } catch {}
+  }
+  const [userRaces, setUserRaces] = useState(() => loadUserRaces())
+  const [addRaceFormOpen, setAddRaceFormOpen] = useState(false)
+  const [addRaceForm, setAddRaceForm] = useState({ date: "", name: "", city: "", dist_mi: "", note: "" })
+
   // ── Half Marathon Race Calendar ─────────────────────────────────────────
   const RACE_CALENDAR = [
     { date: "2026-04-11", name: "SOAR Miles of Smiles",        city: "Bloomington",  dist_mi: 3.1,  recommended: true,  note: "First race back. Easy effort, not a time trial." },
@@ -21039,7 +21056,10 @@ const eventReadinessMarkers = useMemo(() => {
 }, [readinessProjectionData])
 const targetableRaces = useMemo(() => {
   const safeEventReadinessMarkers = Array.isArray(eventReadinessMarkers) ? eventReadinessMarkers : []
-  const safeRaceCalendar = Array.isArray(RACE_CALENDAR) ? RACE_CALENDAR : []
+  const safeRaceCalendar = [
+    ...(Array.isArray(RACE_CALENDAR) ? RACE_CALENDAR : []),
+    ...(Array.isArray(userRaces) ? userRaces : [])
+  ].sort((a, b) => a.date.localeCompare(b.date))
   const thresholds = Object.fromEntries(safeEventReadinessMarkers.map(marker => [marker.key, marker.thresholdDate]))
   const ranked = safeRaceCalendar
     .map(race => {
@@ -21065,7 +21085,7 @@ const targetableRaces = useMemo(() => {
     .filter(Boolean)
     .sort((a, b) => (a.bufferDays - b.bufferDays) || String(a.date).localeCompare(String(b.date)))
   return ranked
-}, [eventReadinessMarkers])
+}, [eventReadinessMarkers, userRaces])
 const targetableRaceMarkers = useMemo(() => {
   const safeTargetableRaces = Array.isArray(targetableRaces) ? targetableRaces : []
   return safeTargetableRaces.slice(0, 8).map(race => {
@@ -25081,12 +25101,19 @@ return (
       </div>
     )}
 
-    <RaceHistoryPanel results={RACE_RESULTS} raceCalendar={RACE_CALENDAR} />
+    <RaceHistoryPanel results={RACE_RESULTS} raceCalendar={[
+      ...(Array.isArray(RACE_CALENDAR) ? RACE_CALENDAR : []),
+      ...(Array.isArray(userRaces) ? userRaces : [])
+    ].sort((a, b) => a.date.localeCompare(b.date))} />
 
     {/* ── Race Calendar ─────────────────────────────────────────── */}
     {(() => {
       const today = new Date()
-      const upcoming = RACE_CALENDAR.filter(r => new Date(r.date + "T12:00:00") >= today)
+      const allRaces = [
+        ...(Array.isArray(RACE_CALENDAR) ? RACE_CALENDAR : []),
+        ...(Array.isArray(userRaces) ? userRaces : [])
+      ].sort((a, b) => a.date.localeCompare(b.date))
+      const upcoming = allRaces.filter(r => new Date(r.date + "T12:00:00") >= today)
 
       // Current long run capacity: max distance of runs in last 6 weeks
       const sixWeeksAgo = new Date(today)
@@ -25130,10 +25157,44 @@ return (
         <div style={{ ...cardStyle(), marginBottom: "20px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
             <div style={{ fontWeight: "bold" }}>Race Calendar — St. Jude Half Marathon Build</div>
+            <button
+              onClick={() => setAddRaceFormOpen(o => !o)}
+              style={{ background: "none", border: "1px solid #2a2d45", borderRadius: "4px", color: "#94a3b8", fontSize: "11px", cursor: "pointer", padding: "4px 10px" }}
+            >
+              {addRaceFormOpen ? "Cancel" : "+ Add race"}
+            </button>
             <div style={{ fontSize: "11px", color: "#555" }}>
               Current long run capacity: <strong style={{ color: "#ced2f0" }}>{currentLongRun.toFixed(2)} mi</strong>
             </div>
           </div>
+
+          {addRaceFormOpen && (
+            <div style={{ display: "grid", gap: "8px", marginBottom: "14px", padding: "12px", background: "#0d0e1c", borderRadius: "6px", border: "1px solid #1a1b2e" }}>
+              <div style={{ fontSize: "11px", color: "#667", marginBottom: "2px" }}>Add a race to your calendar</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                <input type="date" value={addRaceForm.date} onChange={e => setAddRaceForm(f => ({ ...f, date: e.target.value }))} style={{ background: "#151728", border: "1px solid #1a1b2e", borderRadius: "4px", color: "#ced2f0", fontSize: "11px", padding: "6px 8px" }} />
+                <input type="number" placeholder="Distance (miles)" step="0.1" min="0.1" value={addRaceForm.dist_mi} onChange={e => setAddRaceForm(f => ({ ...f, dist_mi: e.target.value }))} style={{ background: "#151728", border: "1px solid #1a1b2e", borderRadius: "4px", color: "#ced2f0", fontSize: "11px", padding: "6px 8px" }} />
+              </div>
+              <input type="text" placeholder="Race name" value={addRaceForm.name} onChange={e => setAddRaceForm(f => ({ ...f, name: e.target.value }))} style={{ background: "#151728", border: "1px solid #1a1b2e", borderRadius: "4px", color: "#ced2f0", fontSize: "11px", padding: "6px 8px" }} />
+              <input type="text" placeholder="City (optional)" value={addRaceForm.city} onChange={e => setAddRaceForm(f => ({ ...f, city: e.target.value }))} style={{ background: "#151728", border: "1px solid #1a1b2e", borderRadius: "4px", color: "#ced2f0", fontSize: "11px", padding: "6px 8px" }} />
+              <input type="text" placeholder="Note (optional)" value={addRaceForm.note} onChange={e => setAddRaceForm(f => ({ ...f, note: e.target.value }))} style={{ background: "#151728", border: "1px solid #1a1b2e", borderRadius: "4px", color: "#ced2f0", fontSize: "11px", padding: "6px 8px" }} />
+              <button
+                onClick={() => {
+                  const dist = parseFloat(addRaceForm.dist_mi)
+                  if (!addRaceForm.date || !addRaceForm.name || !Number.isFinite(dist) || dist <= 0) return
+                  const newRace = { date: addRaceForm.date, name: addRaceForm.name.trim(), city: addRaceForm.city.trim() || "—", dist_mi: dist, note: addRaceForm.note.trim(), recommended: true, source: "user" }
+                  const updated = [...userRaces, newRace].sort((a, b) => a.date.localeCompare(b.date))
+                  setUserRaces(updated)
+                  saveUserRaces(updated)
+                  setAddRaceForm({ date: "", name: "", city: "", dist_mi: "", note: "" })
+                  setAddRaceFormOpen(false)
+                }}
+                style={{ background: "#3b82f6", border: "none", borderRadius: "4px", color: "#fff", fontSize: "11px", cursor: "pointer", padding: "6px 12px", fontWeight: 700 }}
+              >
+                Save race
+              </button>
+            </div>
+          )}
 
           {upcoming.length === 0 && (
             <div style={{ fontSize: 12, color: "#445", padding: "16px 0" }}>No upcoming races.</div>
@@ -25145,8 +25206,9 @@ return (
               const projected = getProjectedLongRun(race.date)
               const weeksOut = weeksBetween(race.date)
               const isGoalRace = race.dist_mi >= 13
+              const isUserRace = race.source === "user"
               return (
-                <div key={race.date + race.name} style={{
+                <div key={race.date + race.name} style={{ position: "relative",
                   padding: "10px 14px",
                   background: a.bg,
                   border: `1px solid ${a.border}`,
@@ -25178,6 +25240,20 @@ return (
                       {race.dist_mi.toFixed(1)} mi
                       {projected != null ? ` · plan ${projected.toFixed(1)} mi` : ""}
                     </div>
+                    {isGoalRace && (
+                      <div style={{ fontSize: 10, color: "#f59e0b", marginTop: 4 }}>★ Goal race</div>
+                    )}
+                    {isUserRace && (
+                      <button
+                        onClick={() => {
+                          const updated = userRaces.filter(r => !(r.date === race.date && r.name === race.name))
+                          setUserRaces(updated)
+                          saveUserRaces(updated)
+                        }}
+                        style={{ position: "absolute", top: 8, right: 8, background: "none", border: "none", color: "#ef4444", fontSize: "11px", cursor: "pointer", padding: "2px 6px" }}
+                        title="Remove this race"
+                      >✕</button>
+                    )}
                   </div>
                 </div>
               )
