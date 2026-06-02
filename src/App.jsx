@@ -15652,6 +15652,40 @@ const [sleepRecords, setSleepRecords] = useState(() => { try { return JSON.parse
 const [schedLog, setSchedLog] = useState(() => { try { return JSON.parse(localStorage.getItem('wt-log') || '[]') } catch { return [] } })
 const [ocItems, setOcItems] = useState(() => { try { return JSON.parse(localStorage.getItem('oc-items') || '[]') } catch { return [] } })
 const [ocLoadOverrides, setOcLoadOverrides] = useState(() => { try { return JSON.parse(localStorage.getItem("oc-load-overrides") || "{}") } catch { return {} } })
+const [followupDismissedDate, setFollowupDismissedDate] = useState(null)
+useEffect(() => {
+  let cancelled = false
+  ;(async () => {
+    try {
+      const stored = await store.get("followup-dismissed")
+      if (!cancelled && stored) setFollowupDismissedDate(stored)
+    } catch (e) {
+      console.warn("followup-dismissed load failed", e)
+    }
+  })()
+  return () => { cancelled = true }
+}, [])
+const followupsDue = React.useMemo(() => {
+  try {
+    const today = todayISO()
+    if (followupDismissedDate === today) return []
+    const items = Array.isArray(ocItems) ? ocItems : []
+    return items.filter(it => {
+      if (!it?.episodeOpen) return false
+      const opened = it.episodeOpenedAt ? new Date(it.episodeOpenedAt) : null
+      if (!opened) return false
+      const ageDays = Math.floor((Date.now() - opened.getTime()) / 86400000)
+      const lastChecked = it.lastCheckedDate || null
+      if (lastChecked === today) return false
+      if (ageDays <= 14) return true
+      const daysSinceCheck = lastChecked ? Math.floor((Date.now() - new Date(lastChecked).getTime()) / 86400000) : 99
+      return daysSinceCheck >= 3
+    })
+  } catch (e) {
+    console.warn("followupsDue failed", e)
+    return []
+  }
+}, [ocItems, followupDismissedDate])
 useEffect(() => {
   try {
     const raw = localStorage.getItem("injuries")
@@ -21300,6 +21334,31 @@ return (
       </div>
 
       <style>{`.lift-tab-bar::-webkit-scrollbar { display: none; }`}</style>
+      {followupsDue.length > 0 && (
+        <div style={{ background: "#1a1206", border: "1px solid #f59e0b55", borderRadius: 8, padding: "10px 14px", margin: "0 0 12px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <div style={{ fontSize: 12, color: "#f3c77a" }}>
+            How {followupsDue.length === 1 ? `is your ${followupsDue[0]?.location || "open issue"}` : `are your ${followupsDue.length} open issues`} today? Quick check helps the model learn.
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={() => setTab("Capacity")}
+              style={{ ...buttonStyle(true), fontSize: 11, padding: "5px 10px" }}
+            >
+              Check now
+            </button>
+            <button
+              onClick={() => {
+                const t = todayISO()
+                setFollowupDismissedDate(t)
+                store.set("followup-dismissed", t).catch(() => {})
+              }}
+              style={{ ...buttonStyle(false), fontSize: 11, padding: "5px 10px" }}
+            >
+              Later
+            </button>
+          </div>
+        </div>
+      )}
       <div
         className="lift-tab-bar"
         style={{
