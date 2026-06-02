@@ -586,19 +586,19 @@ const PLAN = {
       { id: "eccentric_bicep_curl_mon", name: "Eccentric Biceps Curl", sub: "DB or cable · 4 sec lowering", note: "Elbow flexor tendon protocol · lighter than working weight · slow eccentric only", def: [mk(8,20), mk(8,20)] },
     ],
     sections: [
-      { h: "A — CHEST (HEAVY)", ex: [
+      { h: "A — CHEST + CHIN-UPS (compound first)", ex: [
         { id:"chest_press_machine", name:"Chest Press", sub:"Technogym / machine", def:[mk(6,110),mk(6,110),mk(6,110)], note:"2-0-2 tempo · full ROM · 4–8 rep range · primary chest metric: target 135–145 lb by September" },
         { id:"incline_chest_press", name:"Incline Chest Press", sub:"Smith machine · low angle", def:[mk(6,90),mk(6,90),mk(6,90)], note:"Low incline · shoulder-safe · upper chest fullness · target 110–120 lb by September" },
-        { id:"machine_flys", name:"Machine Flys", sub:"Cable or pec deck", def:[mk(8,30),mk(8,30),mk(8,30)], note:"Full stretch · controlled return · chest isolation · go last in chest section" },
+        { id:"chinups", name:"Chin-ups", sub:"Bodyweight · full ROM · immediately after incline press", def:[mk(7,"BW"),mk(7,"BW"),mk(7,"BW")], note:"Dead hang start · 3×7 PR confirmed 2026-05-27 · do here while lats and biceps are fresh · transition: replace 1 set/week with pronated pull-up grip · target 3×6 pull-ups by July" },
+        { id:"machine_flys", name:"Machine Flys", sub:"Cable or pec deck", def:[mk(8,30),mk(8,30),mk(8,30)], note:"Full stretch · controlled return · chest isolation finisher · goes after chin-ups" },
       ]},
-      { h: "B — PULL (CHIN-UPS FIRST WHILE FRESH)", ex: [
-        { id:"chinups", name:"Chin-ups", sub:"Bodyweight · full ROM · do before pulldown", def:[mk(7,"BW"),mk(7,"BW"),mk(7,"BW")], note:"Dead hang start · 3×7 PR confirmed 2026-05-27 · MUST be first in pull section · transition: replace 1 set/week with pronated pull-up grip · target 3×6 pull-ups by July" },
+      { h: "B — PULL", ex: [
         { id:"pull_down_cable", name:"Pull Down", sub:"Cable straight-arm or heavy lat pulldown", def:[mk(8,160),mk(8,160),mk(8,160)], note:"Lat primary · Monday back volume · arms straight for straight-arm variant" },
       ]},
-      { h: "C — BICEPS (isolation first · before pre-fatigue)", ex: [
-        { id:"hammer_curl", name:"Hammer Curls", sub:"DB alternating · brachialis emphasis", def:[mk(6,55),mk(6,55),mk(6,55)], note:"Neutral grip · controlled · brachialis and brachioradialis" },
-        { id:"bicep_curl_heavy", name:"Biceps Curl", sub:"DB or BB · supinated", def:[mk(6,55),mk(6,55),mk(6,55)], note:"Full supination at top · Monday is lighter volume day vs Thursday heavy · keep at 55 lb · if lateral wrist complains, switch to rotating cable bar" },
-        { id:"bicep_curl_reverse", name:"Biceps Curl — Reverse", sub:"DB or cable · pronated grip", def:[mk(6,35),mk(6,35),mk(6,35)], note:"Brachioradialis and forearm extensor emphasis · reduce or skip if wrist discomfort" },
+      { h: "C — BICEPS (heaviest first · Biceps Curl before Hammer Curls)", ex: [
+        { id:"bicep_curl_heavy", name:"Biceps Curl", sub:"DB or BB · supinated", def:[mk(6,55),mk(6,55),mk(6,55)], note:"Full supination at top · goes first — heaviest single-joint biceps movement · Monday lighter than Thursday · if lateral wrist complains switch to rotating cable bar" },
+        { id:"hammer_curl", name:"Hammer Curls", sub:"DB alternating · brachialis emphasis", def:[mk(6,55),mk(6,55),mk(6,55)], note:"Neutral grip · controlled · brachialis and brachioradialis · after biceps curl" },
+        { id:"bicep_curl_reverse", name:"Biceps Curl — Reverse", sub:"DB or cable · pronated grip", def:[mk(6,35),mk(6,35),mk(6,35)], note:"Brachioradialis and forearm extensor emphasis · lightest biceps work · goes last · reduce or skip if wrist discomfort" },
       ]},
       { h: "D — SHOULDER (HYPERTROPHY)", ex: [
         { id:"lateral_raise", name:"Lateral Raise", sub:"Cable or DB", def:[mk(12,15),mk(12,15),mk(12,15)], note:"Controlled arc · no shrug · shoulder width · target 22–25 lb by September" },
