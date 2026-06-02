@@ -10822,6 +10822,28 @@ function buildAdaptiveTrainingState({
   )
 
   const feedback = []
+
+  // Gap 4: aerobic substitution routing when MTP constrains running.
+  // Uses the weekly run target derived from the HM build plan vs the current MTP ceiling.
+  // LIFT_CONFIG is in scope via the outer useMemo closure.
+  const mtpCeilingMiles = typeof LIFT_CONFIG !== "undefined" ? (LIFT_CONFIG.mtp_ceiling_miles ?? 4.0) : 4.0
+  const hmWeeklyTargetMiles = typeof LIFT_CONFIG !== "undefined" ? (LIFT_CONFIG.hm_peak_mi_week ?? 9) : 9
+  // The long run target is 30% of weekly target miles, capped at 10 miles (HM build heuristic).
+  const longRunTarget = Math.min(10, hmWeeklyTargetMiles * 0.30)
+  const aerobicSub = computeAerobicSubstituteDose(
+    mtpCeilingMiles,
+    longRunTarget,
+    12.0,
+    typeof LIFT_CONFIG !== "undefined" ? LIFT_CONFIG.COMPARTMENT_SPLITS : null
+  )
+  if (aerobicSub) {
+    feedback.push(
+      `MTP ceiling (${mtpCeilingMiles} mi) is below the long run target (${longRunTarget.toFixed(1)} mi). ` +
+      `Lost cardio stimulus: ${aerobicSub.lostRunMinutes} min of running. ` +
+      `Replace with ${aerobicSub.cyclingMinutes} min cycling or ${aerobicSub.swimmingMinutes} min swimming at Zone 2 to maintain aerobic load.`
+    )
+  }
+
   if (averageCompliance("running") >= 0.8 && averageCompliance("tendon") < 0.6) feedback.push("Running compliance is good, but tendon compliance is lagging.")
   if (avgAbsorption("running") < 0.72) feedback.push("Completed dose was high, but absorbability was poor due to fatigue or operational constraints.")
   if (averageCompliance("tendon") >= 0.75 && avgAbsorption("tendon") >= 0.8) feedback.push("Tendon consistency over the last 8 weeks supports progression.")
