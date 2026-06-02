@@ -2275,6 +2275,18 @@ const DEFAULT_OC_HALF_LIFE_OVERRIDES = {
   foot: 672,
 }
 
+// Scale a base half-life by initial episode severity.
+// Empirical basis: Toe L score-3 episodes resolved in 40-42 days (960-1008h) against
+// a model half-life of 1008h. Score-1 (warmth, no pain) is physiologically ~3x faster.
+// Linear scaling: scaledHalfLife = baseHalfLife * (initialScore / 3).
+// Floor: score-1 produces 1/3 of base; score-6 produces 2x base.
+// If initialScore is absent or zero, returns baseHalfLife unchanged (conservative default).
+function scaleSeverityHalfLife(baseHalfLife, initialScore) {
+  const score = Number(initialScore)
+  if (!Number.isFinite(score) || score <= 0) return baseHalfLife
+  return Math.round(baseHalfLife * (score / 3))
+}
+
 function resolveOcHalfLifeHours(item, overrides = DEFAULT_OC_HALF_LIFE_OVERRIDES, fallback = 72) {
   const explicitHalfLife = Number(item?.halfLifeHours)
   if (Number.isFinite(explicitHalfLife) && explicitHalfLife > 0) return explicitHalfLife
@@ -2282,8 +2294,14 @@ function resolveOcHalfLifeHours(item, overrides = DEFAULT_OC_HALF_LIFE_OVERRIDES
   const override = Object.entries(overrides || {})
     .find(([key]) => haystack.includes(String(key).toLowerCase()))
     ?.[1]
-  if (Number.isFinite(Number(override)) && Number(override) > 0) return Number(override)
-  return fallback
+  const base = (Number.isFinite(Number(override)) && Number(override) > 0) ? Number(override) : fallback
+  // Scale by initial severity. An item with no initialScore (e.g. a zero-check) uses
+  // the base rate unchanged. An explicit halfLifeHours on the item bypasses scaling (above).
+  const initialScore = Number(item?.initialScore ?? item?.currentScore)
+  if (Number.isFinite(initialScore) && initialScore > 0) {
+    return scaleSeverityHalfLife(base, initialScore)
+  }
+  return base
 }
 
 const OC_BODY_REGIONS = [
