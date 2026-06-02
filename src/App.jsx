@@ -174,7 +174,8 @@ const SYNC_KEYS = new Set([
   "oc-items",
   "oc-load-overrides",
   "lift_meal_records",
-  "lift_sleep_records"
+  "lift_sleep_records",
+  "weekly-loss-target"
 ])
 
 const store = {
@@ -489,6 +490,38 @@ function buttonStyle(active = false) {
     color: "#ced2f0",
     cursor: "pointer"
   }
+}
+
+function EnergyBalanceStat({ label, value, unit, highlight = null }) {
+  const highlightNumber = Number(highlight)
+  const valueColor = highlight == null
+    ? "#f8fafc"
+    : highlightNumber >= 0
+      ? "#4ade80"
+      : highlightNumber <= -150
+        ? "#f87171"
+        : "#fbbf24"
+
+  return (
+    <div style={{ background: "#14152a", border: "1px solid #1a1b2e", borderRadius: 8, padding: "10px", minWidth: 0 }}>
+      <div style={{ fontSize: 11, color: "#667", marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 28, lineHeight: 1.05, fontWeight: 800, color: valueColor }}>{value}</div>
+      <div style={{ fontSize: 11, color: "#9aa", marginTop: 4 }}>{unit}</div>
+    </div>
+  )
+}
+
+function getISOWeekDates(anchorDate = new Date()) {
+  const d = new Date(anchorDate)
+  d.setHours(12, 0, 0, 0)
+  const day = d.getDay() || 7
+  const monday = new Date(d)
+  monday.setDate(d.getDate() - day + 1)
+  return Array.from({ length: 7 }, (_, idx) => {
+    const x = new Date(monday)
+    x.setDate(monday.getDate() + idx)
+    return x.toISOString().slice(0, 10)
+  })
 }
 
 function kgToLb(v) {
@@ -9119,17 +9152,26 @@ function estimateMilestoneDate(current, slopePerDay, target) {
 
   return d.toISOString().slice(0, 10)
 }
-function estimateMaintenanceCalories({ currentWeight, recentCardioMinutes, bmr }) {
-  const baseBmr =
-    Number(bmr) > 0
-      ? Number(bmr)
-      : Number(currentWeight) > 0
-      ? Number(currentWeight) * 11
-      : 1800
+// Calibrated BMR. Katch-McArdle (lean-based) preferred; Mifflin fallback.
+// User: 5'6", age 51. Lean mass from latest DEXA when available.
+function estimateBMR({ weightLb, leanMassLb = null, heightCm = 167.6, age = 51, sex = "male" }) {
+  if (Number(leanMassLb) > 0) {
+    const leanKg = Number(leanMassLb) * 0.453592
+    return 370 + 21.6 * leanKg
+  }
+  const wKg = Number(weightLb) * 0.453592
+  return 10 * wKg + 6.25 * heightCm - 5 * age + (sex === "male" ? 5 : -161)
+}
 
-  const activityAdjustment = Number(recentCardioMinutes || 0) * 4
-
-  return baseBmr + activityAdjustment
+function estimateMaintenanceCalories({ currentWeight, recentCardioMinutes, bmr, leanMassLb = null, activeEnergyKcal = null }) {
+  const estimatedBmr = Number(bmr) > 0 ? Number(bmr)
+    : estimateBMR({ weightLb: currentWeight, leanMassLb })
+  const baseBmr = Number.isFinite(estimatedBmr) && estimatedBmr > 0 ? estimatedBmr : 1800
+  const neat = baseBmr * 0.15
+  const active = Number(activeEnergyKcal) > 0
+    ? Number(activeEnergyKcal) * 0.80
+    : Number(recentCardioMinutes || 0) * 4
+  return baseBmr + neat + active
 }
 function buildBodyForecast({
   daily,
@@ -15621,6 +15663,16 @@ const [healthFitDaily, setHealthFitDaily] = useState(() => {
     return JSON.parse(localStorage.getItem('lift_healthfit_daily') || '[]');
   } catch { return []; }
 })
+const [weeklyLossTarget, setWeeklyLossTarget] = useState(() => {
+  try {
+    const stored = JSON.parse(localStorage.getItem("weekly-loss-target") || "null")
+    const n = Number(stored)
+    return Number.isFinite(n) && n >= 0 ? n : 0.4
+  } catch {
+    return 0.4
+  }
+})
+const [weeklyLossTargetHydrated, setWeeklyLossTargetHydrated] = useState(false)
 
 useEffect(() => {
   fetch("/data/fitness_daily.json")
@@ -15630,12 +15682,20 @@ useEffect(() => {
       setHealthFitDaily(prev => {
         const map = {};
         [...fetched, ...(Array.isArray(prev) ? prev : [])]
-          .forEach(row => { if (row?.date) map[row.date] = row; });
+          .forEach(row => {
+            const date = String(row?.metric_date || row?.date || "").slice(0, 10)
+            if (date) map[date] = { ...row, date }
+          });
         return Object.values(map).sort((a,b) => a.date.localeCompare(b.date));
       });
     })
     .catch(() => {});
 }, []);
+
+useEffect(() => {
+  if (!weeklyLossTargetHydrated) return
+  store.set("weekly-loss-target", weeklyLossTarget).catch(() => {})
+}, [weeklyLossTarget, weeklyLossTargetHydrated])
 const [biometricRecords, setBiometricRecords] = useState(() => { try { return JSON.parse(localStorage.getItem("lift_biometric_records") || "[]") } catch { return [] } })
 useEffect(() => {
   fetch("/data/weight_daily.json")
@@ -16689,6 +16749,20 @@ useEffect(() => {
 
 
 const [session, setSession] = useState(null)
+useEffect(() => {
+  let cancelled = false
+  ;(async () => {
+    try {
+      const stored = await store.get("weekly-loss-target")
+      const n = Number(stored)
+      if (!cancelled && Number.isFinite(n) && n >= 0) setWeeklyLossTarget(n)
+    } finally {
+      if (!cancelled) setWeeklyLossTargetHydrated(true)
+    }
+  })()
+  return () => { cancelled = true }
+}, [session?.user?.id])
+
 const saveOcLoadOverrides = useCallback(async next => {
   setOcLoadOverrides(next)
   await store.set("oc-load-overrides", next)
@@ -17956,6 +18030,110 @@ cutoff.setDate(cutoff.getDate() - selectedRangePoints)
     }
     return days
   }, [biometricRecords, nutritionSeries])
+
+  const fitnessDailyByDate = useMemo(() => {
+    const byDate = {}
+    ;(Array.isArray(daily) ? daily : []).forEach(row => {
+      const d = String(row?.metric_date || row?.date || "").slice(0, 10)
+      if (d) byDate[d] = { ...(byDate[d] || {}), ...row, date: d }
+    })
+    ;(Array.isArray(healthFitDaily) ? healthFitDaily : []).forEach(row => {
+      const d = String(row?.metric_date || row?.date || "").slice(0, 10)
+      if (d) byDate[d] = { ...(byDate[d] || {}), ...row, date: d }
+    })
+    ;(Array.isArray(biometricRecords) ? biometricRecords : []).forEach(row => {
+      const d = String(row?.metric_date || row?.measured_date || row?.date || "").slice(0, 10)
+      if (d && Number(row?.active_energy_cal) > 0) byDate[d] = { ...(byDate[d] || {}), active_energy_cal: Number(row.active_energy_cal), date: d }
+    })
+    return byDate
+  }, [daily, healthFitDaily, biometricRecords])
+
+  const intakeByDate = useMemo(() => {
+    const byDate = {}
+    ;(Array.isArray(nutritionSeries) ? nutritionSeries : []).forEach(row => {
+      const d = String(row?.date || "").slice(0, 10)
+      const calories = Number(row?.calories ?? row?.kcal ?? 0)
+      if (d && Number.isFinite(calories)) byDate[d] = calories
+    })
+    return byDate
+  }, [nutritionSeries])
+
+  const energyToday = useMemo(() => {
+    try {
+      const todayKey = todayISO()
+      const wLb = Number(latestWeight?.weight_lb ?? latestWeight?.weight ?? 0)
+      const leanLb = Number(latestLeanAnchor) > 0 ? Number(latestLeanAnchor) : null
+      if (!(wLb > 0) && !(leanLb > 0)) return null
+      const bmr = estimateBMR({ weightLb: wLb, leanMassLb: leanLb })
+      if (!Number.isFinite(bmr) || bmr <= 0) return null
+      const startOfDay = new Date(todayKey + "T00:00:00").getTime()
+      const hrs = (Date.now() - startOfDay) / 3600000
+      const bmrAccrued = bmr * Math.min(24, Math.max(0, hrs)) / 24
+      const activeRaw = Number(fitnessDailyByDate?.[todayKey]?.active_energy_cal || 0)
+      const activeDisc = activeRaw * 0.80
+      const outSoFar = bmrAccrued + activeDisc
+      const inSoFar = Number(intakeByDate[todayKey] || 0)
+      const fullDayMaint = bmr + bmr * 0.15 + activeDisc
+      const dailyDeficit = Number(weeklyLossTarget || 0) * 3210 / 7
+      const targetIntake = fullDayMaint - dailyDeficit
+      const roomLeft = targetIntake - inSoFar
+      const band = bmr * 0.10
+      const values = { bmr, bmrAccrued, activeRaw, activeDisc, outSoFar, inSoFar, targetIntake, roomLeft, band, dailyDeficit }
+      return Object.values(values).every(v => Number.isFinite(v)) ? values : null
+    } catch (e) {
+      console.warn("energyToday failed", e)
+      return null
+    }
+  }, [fitnessDailyByDate, intakeByDate, weeklyLossTarget, latestWeight, latestLeanAnchor])
+
+  const energyWeek = useMemo(() => {
+    try {
+      const weekDates = getISOWeekDates()
+      const todayKey = todayISO()
+      const wLb = Number(latestWeight?.weight_lb ?? latestWeight?.weight ?? 0)
+      const leanLb = Number(latestLeanAnchor) > 0 ? Number(latestLeanAnchor) : null
+      if (!(wLb > 0) && !(leanLb > 0)) return null
+      const bmr = estimateBMR({ weightLb: wLb, leanMassLb: leanLb })
+      if (!Number.isFinite(bmr) || bmr <= 0) return null
+      const dailyDeficit = Number(weeklyLossTarget || 0) * 3210 / 7
+      let cumulative = 0
+      const days = weekDates.map((date, idx) => {
+        const activeRaw = Number(fitnessDailyByDate?.[date]?.active_energy_cal || 0)
+        const maintenance = estimateMaintenanceCalories({
+          currentWeight: wLb,
+          leanMassLb: leanLb,
+          bmr,
+          activeEnergyKcal: activeRaw
+        })
+        const hasIntake = Object.prototype.hasOwnProperty.call(intakeByDate, date) || date === todayKey
+        const intake = hasIntake ? Number(intakeByDate[date] || 0) : null
+        const net = intake != null && Number.isFinite(maintenance) ? intake - maintenance : null
+        if (net != null) cumulative += net
+        return {
+          date,
+          label: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][idx],
+          intake,
+          maintenance,
+          net,
+          cumulative: net == null ? null : cumulative,
+          targetCumulative: -dailyDeficit * (idx + 1)
+        }
+      })
+      const elapsedIdx = Math.max(0, weekDates.findIndex(date => date === todayKey))
+      const targetNow = -dailyDeficit * (elapsedIdx + 1)
+      const actualNow = days.slice(0, elapsedIdx + 1).reduce((last, day) => day.cumulative != null ? day.cumulative : last, 0)
+      return {
+        days,
+        dailyDeficit,
+        actualNow,
+        targetNow,
+        onTrack: actualNow <= targetNow
+      }
+    } catch (e) {
+      console.warn("energyWeek failed", e)
+      return null
+    }
+  }, [fitnessDailyByDate, intakeByDate, weeklyLossTarget, latestWeight, latestLeanAnchor])
 
   const forecastSeries = useMemo(() => {
     return projectWeightTrend(mergedDailyWeights, nutritionSeries, 12)
@@ -20658,11 +20836,17 @@ const recentNutrition = useMemo(() => {
 const calorieTarget = useMemo(() => {
   const currentWeight = Number(bodyForecast?.currentWeight || 0)
   const recentCardioMinutes = Number(trainingSummary?.cardioMinutesWeekly || 0)
+  const latestFitnessDay = Object.values(fitnessDailyByDate || {})
+    .filter(row => Number(row?.active_energy_cal) > 0)
+    .sort((a, b) => String(a.date || a.metric_date || "").localeCompare(String(b.date || b.metric_date || "")))
+    .slice(-1)[0]
 
   const estimatedMaintenance = estimateMaintenanceCalories({
     currentWeight,
     recentCardioMinutes,
-    bmr: null
+    bmr: null,
+    leanMassLb: latestLeanAnchor ?? null,
+    activeEnergyKcal: latestFitnessDay?.active_energy_cal ?? null
   })
 
   return estimateDynamicCalorieTarget({
@@ -20672,7 +20856,7 @@ const calorieTarget = useMemo(() => {
     lowerGoal: 145,
     minimumCalories: 1200
   })
-}, [bodyForecast, trainingSummary])
+}, [bodyForecast, trainingSummary, fitnessDailyByDate, latestLeanAnchor])
 const calorieDelta = useMemo(() => {
   const avg = Number(nutritionSummary?.avgCalories || 0)
   const target = Number(calorieTarget?.targetCalories || 0)
@@ -23209,6 +23393,100 @@ return (
               </button>
             ))}
           </div>
+
+          {energyToday ? (
+            <div style={{ ...cardStyle(), marginBottom: 16, maxWidth: "1000px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10, gap: 10, flexWrap: "wrap" }}>
+                <div style={{ fontWeight: 700, fontSize: 14 }}>Today's Energy Balance</div>
+                <div style={{ fontSize: 11, color: "#667" }}>est. — bands reflect ±10% BMR uncertainty</div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10, marginBottom: 12 }}>
+                <EnergyBalanceStat label="Eaten" value={`${Math.round(energyToday.inSoFar)}`} unit="kcal logged" />
+                <EnergyBalanceStat label="Burned so far" value={`${Math.round(energyToday.outSoFar)}`} unit={`±${Math.round(energyToday.band)}`} />
+                <EnergyBalanceStat
+                  label="Room to target"
+                  value={`${Math.round(energyToday.roomLeft)}`}
+                  unit="kcal"
+                  highlight={energyToday.roomLeft}
+                />
+              </div>
+              <div style={{ fontSize: 12, color: "#9aa", lineHeight: 1.5 }}>
+                {energyToday.roomLeft > 150
+                  ? `About ${Math.round(energyToday.roomLeft)} kcal of room left to stay on track for ${weeklyLossTarget} lb/week. A snack or protein top-up fits.`
+                  : energyToday.roomLeft < -150
+                    ? `About ${Math.round(-energyToday.roomLeft)} kcal over today's target. A ${Math.round(-energyToday.roomLeft / 4)}-min walk (~${Math.round(-energyToday.roomLeft)} kcal) would close it, or absorb it across the week.`
+                    : `On target for ${weeklyLossTarget} lb/week. Good place to land.`}
+              </div>
+              <div style={{ fontSize: 11, color: "#667", marginTop: 8 }}>
+                BMR {Math.round(energyToday.bmr)} kcal/day, active energy {Math.round(energyToday.activeRaw)} kcal raw / {Math.round(energyToday.activeDisc)} kcal discounted, daily deficit target {Math.round(energyToday.dailyDeficit)} kcal.
+              </div>
+              <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid #1a1b2e", display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 11, color: "#667" }}>Weekly loss target</span>
+                <input
+                  type="range"
+                  min={0}
+                  max={1.5}
+                  step={0.1}
+                  value={weeklyLossTarget}
+                  onChange={e => {
+                    const v = Number(e.target.value)
+                    setWeeklyLossTarget(v)
+                    store.set("weekly-loss-target", v).catch(() => {})
+                  }}
+                  style={{ flex: 1, accentColor: "#ffd166" }}
+                />
+                <span style={{ fontSize: 12, color: "#ffd166", fontWeight: 700, minWidth: 64 }}>{weeklyLossTarget.toFixed(1)} lb/wk</span>
+              </div>
+            </div>
+          ) : (
+            <div style={{ ...cardStyle(), marginBottom: 16, maxWidth: "1000px", color: "#9aa", fontSize: 12 }}>
+              Today's Energy Balance: no current weight/BMR data available.
+            </div>
+          )}
+
+          {energyWeek && (
+            <div style={{ ...cardStyle(), marginBottom: 20, maxWidth: "1000px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
+                <div style={{ fontWeight: 700, fontSize: 14 }}>This Week</div>
+                <div style={{ color: energyWeek.onTrack ? "#4ade80" : "#fbbf24", fontWeight: 700, fontSize: 12 }}>
+                  {energyWeek.onTrack ? "On track" : "Behind"} for {weeklyLossTarget.toFixed(1)} lb
+                </div>
+              </div>
+              <div style={{ fontSize: 11, color: "#667", marginBottom: 12 }}>
+                Weekly average is what matters — deviations on one day can be absorbed by others.
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: 8, alignItems: "end" }}>
+                {energyWeek.days.map(day => {
+                  const net = day.net
+                  const barHeight = net == null ? 4 : Math.max(8, Math.min(82, Math.abs(net) / 18))
+                  const barColor = net == null ? "#1a1b2e" : net <= 0 ? "#4ade80" : "#fbbf24"
+                  return (
+                    <div key={day.date} style={{ minWidth: 0 }}>
+                      <div style={{ height: 92, display: "flex", alignItems: net != null && net > 0 ? "flex-start" : "flex-end", justifyContent: "center", borderBottom: "1px solid #2a2b3e", borderTop: "1px dashed #2a2b3e" }}>
+                        <div title={`${day.date}: ${net == null ? "no intake data" : `${Math.round(net)} kcal net`}`} style={{ width: "58%", height: barHeight, background: barColor, borderRadius: 3, opacity: net == null ? 0.35 : 0.95 }} />
+                      </div>
+                      <div style={{ fontSize: 11, color: "#9aa", textAlign: "center", marginTop: 5 }}>{day.label}</div>
+                      <div style={{ fontSize: 10, color: net == null ? "#444" : net <= 0 ? "#4ade80" : "#fbbf24", textAlign: "center", marginTop: 2 }}>
+                        {net == null ? "—" : `${net > 0 ? "+" : ""}${Math.round(net)}`}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+              <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div style={{ background: "#14152a", border: "1px solid #1a1b2e", borderRadius: 8, padding: 10 }}>
+                  <div style={{ fontSize: 11, color: "#667", marginBottom: 4 }}>Cumulative actual</div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: energyWeek.onTrack ? "#4ade80" : "#fbbf24" }}>
+                    {energyWeek.actualNow > 0 ? "+" : ""}{Math.round(energyWeek.actualNow)} kcal
+                  </div>
+                </div>
+                <div style={{ background: "#14152a", border: "1px dashed #ffd166", borderRadius: 8, padding: 10 }}>
+                  <div style={{ fontSize: 11, color: "#667", marginBottom: 4 }}>Target line so far</div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: "#ffd166" }}>{Math.round(energyWeek.targetNow)} kcal</div>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", marginBottom: "20px" }}>
             <div style={cardStyle()}>
