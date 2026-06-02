@@ -4,9 +4,10 @@
 // Backup: YMCA Mon-Sun (activate by setting PROGRAM_META.active = "ymca")
 
 export const PROGRAM_META = {
-  active: "kinesiology",
+  active: "ymca",
   kinesiology_end: "2026-04-30",
   ymca_start: "2026-05-01",
+  knr_resume: "2026-09-01",
 }
 
 export const CARDIO = {
@@ -18,29 +19,28 @@ export const CARDIO = {
   },
   Tue: {
     sessions: [
-      { mod: "run", type: "Short run", dMin: 15, dMax: 25, intensity: "Conversational", dist: "1-2 miles", rationale: "Priority run stays short because it sits near leg day.", cnote: "Light pickups only if foot is calm." },
-      { mod: "swim", type: "Medium swim", dMin: 25, dMax: 35, intensity: "Easy aerobic / technique support", dist: "600-900 yards", rationale: "Paired easy day: short run plus medium swim across different modalities.", cnote: "" },
+      { mod: "swim", type: "Medium swim", dMin: 25, dMax: 35, intensity: "Easy aerobic / technique", dist: "600-900 yards", rationale: "Leg day — no run. Swim is non-impact and does not load MTP.", cnote: "" },
     ],
-    goal: "Short run + medium swim, both easy overall", wt: { run: 20, swim: 30 },
+    goal: "Swim only — leg day, no run", wt: { swim: 30 },
   },
   Wed: {
-    noCardio: true,
-    sessions: [],
-    goal: "Full rest day — no cardio", wt: {},
+    sessions: [
+      { mod: "run", type: "Wednesday run", dMin: 30, dMax: 40, intensity: "Zone 2 — conversational", dist: "3 miles", rationale: "Primary midweek run. 3 days after Sunday long run. MTP protocol applies — score before and after.", cnote: "Noon run. No diclofenac unless symptoms present. Log MTP score." },
+    ],
+    goal: "Wednesday run, Zone 2", wt: { run: 35 },
   },
   Thu: {
     sessions: [
-      { mod: "run", type: "Medium run", dMin: 25, dMax: 35, intensity: "Steady but comfortable", dist: "2-3 miles", rationale: "Second weekday run day, buffered by Wednesday rest.", cnote: "" },
-      { mod: "bike", type: "Short bike", dMin: 15, dMax: 25, intensity: "Light spin / cadence work", dist: "4-6 miles", rationale: "Paired easy day: medium run plus short bike across different modalities.", cnote: "" },
+      { mod: "swim", type: "Short swim", dMin: 15, dMax: 25, intensity: "Easy recovery / technique", dist: "400-600 yards", rationale: "Back and arms day — no run. Short swim supports aerobic frequency without MTP load.", cnote: "" },
     ],
-    goal: "Medium run + short bike", wt: { run: 30, bike: 20 },
+    goal: "Short swim — back and arms day, no run", wt: { swim: 20 },
   },
   Fri: {
     sessions: [
-      { mod: "bike", type: "Medium bike", dMin: 25, dMax: 35, intensity: "Easy aerobic", dist: "6-9 miles", rationale: "Paired easy day: medium bike plus short swim across different modalities.", cnote: "" },
-      { mod: "swim", type: "Short swim", dMin: 15, dMax: 25, intensity: "Easy recovery / technique", dist: "400-600 yards", rationale: "Short swim supports frequency without adding impact.", cnote: "" },
+      { mod: "run", type: "Friday run", dMin: 20, dMax: 30, intensity: "Zone 2 — conversational", dist: "2 miles", rationale: "Second midweek run. Shorter than Wednesday. Keeps Friday light before Saturday hip/leg work.", cnote: "Log MTP score. Stop if any awareness above score 0." },
+      { mod: "swim", type: "Short swim", dMin: 15, dMax: 25, intensity: "Easy aerobic", dist: "400-600 yards", rationale: "Paired easy day. Swim after run — non-impact, supports aerobic base.", cnote: "" },
     ],
-    goal: "Medium bike + short swim", wt: { bike: 30, swim: 20 },
+    goal: "Friday run + short swim", wt: { run: 25, swim: 15 },
   },
   Sat: {
     sessions: [
@@ -50,9 +50,9 @@ export const CARDIO = {
   },
   Sun: {
     sessions: [
-      { mod: "run", type: "Long run", dMin: 35, dMax: 50, intensity: "Easy aerobic", dist: "3-5 miles", rationale: "Run long day. One cardio session only and the priority modality long session.", cnote: "Extend only if foot stays calm and legs feel good." },
+      { mod: "run", type: "Long run", dMin: 60, dMax: 80, intensity: "Zone 2 — easy aerobic", dist: "5-6 miles", rationale: "Long run day. Current ceiling 6.6 miles. MTP protocol applies. One cardio session only.", cnote: "Extend only if foot stays calm and legs feel good. Race weeks: substitute race distance, full rest day after." },
     ],
-    goal: "Long run, easy aerobic", wt: { run: 45 },
+    goal: "Long run, easy aerobic", wt: { run: 55 },
   },
 }
 
