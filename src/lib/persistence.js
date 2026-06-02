@@ -622,7 +622,11 @@ export async function loadBiometricRecords(supabase, userId) {
 
 export async function upsertBiometricRecords(supabase, userId, records) {
   requireSupabase(supabase, userId, "upsertBiometricRecords")
-  const rows = (Array.isArray(records) ? records : [])
+  const normalized = (Array.isArray(records) ? records : []).map(r => ({
+    ...r,
+    biometric_id: r.biometric_id || r.id || `${r.source || "bio"}_${r.timestamp || r.date || Date.now()}`
+  }))
+  const rows = normalized
     .map(record => biometricRecordToRow(record, userId))
     .filter(row => row.biometric_id)
   if (!rows.length) return []
