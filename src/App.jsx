@@ -3452,7 +3452,11 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
                 fill="transparent" style={{ pointerEvents: "auto", cursor: "pointer" }}
                 onClick={e => {
                   e.stopPropagation()
-                  setDialSheet({ open: true, structureKey: key, location: loc })
+                  // Normalize coord key to canonical OC region so repeat logs
+                  // for the same body part match (e.g. "Neck" to "Cervical").
+                  const COORD_TO_CANONICAL = { "Neck": "Cervical" }
+                  const canonicalLoc = COORD_TO_CANONICAL[loc] || loc
+                  setDialSheet({ open: true, structureKey: key, location: canonicalLoc })
                 }} />
             )
           }).filter(Boolean)}
@@ -4022,6 +4026,16 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
                             >
                               ✎
                             </button>
+                            <button
+                              onClick={e => {
+                                e.stopPropagation()
+                                if (window.confirm(`Delete this ${item.location} episode entirely? This removes it from history (use only for mistakes/test entries - real resolved episodes are useful data).`)) {
+                                  removeItem(item.id)
+                                }
+                              }}
+                              title="Delete entry"
+                              style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", fontSize: "12px", padding: "0 4px" }}
+                            >🗑</button>
                           </div>
                         </div>
                         <div style={{ fontSize: "10px", color: "#444", marginTop: "2px" }}>
