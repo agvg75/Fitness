@@ -6857,12 +6857,27 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
                   <div style={{ fontSize: 10, color: "#666", marginBottom: 4 }}>
                     Reason: {workoutSuggestion.reason}
                   </div>
-                  {mtpUnsafe && (
-                    <div style={{ fontSize: 11, color: "#f97316", marginBottom: 4, display: "flex", alignItems: "flex-start", gap: 4 }}>
-                      <span style={{ flexShrink: 0 }}>●</span>
-                      <span>Toe L OC is active ({mtpItem.currentScore}/6). This modality is not MTP-safe; substitute cycling or swimming.</span>
-                    </div>
-                  )}
+                  {mtpUnsafe && (() => {
+                    const mtpCeilingMiles = LIFT_CONFIG?.mtp_ceiling_miles ?? 4.0
+                    const targetMiles = ps.dist
+                      ? parseFloat(String(ps.dist).replace(/[^\d.]/g, "")) || 4.0
+                      : 4.0
+                    const splits = LIFT_CONFIG?.COMPARTMENT_SPLITS ?? null
+                    const sub = ps.mod === "run"
+                      ? computeAerobicSubstituteDose(mtpCeilingMiles, targetMiles, 12.0, splits)
+                      : null
+                    return (
+                      <div style={{ fontSize: 11, color: "#f97316", marginBottom: 4, display: "flex", alignItems: "flex-start", gap: 4 }}>
+                        <span style={{ flexShrink: 0 }}>●</span>
+                        <span>
+                          Toe L OC active ({mtpItem.currentScore}/6).
+                          {ps.mod === "run" && sub
+                            ? ` MTP ceiling ${mtpCeilingMiles} mi. Replace lost ${sub.lostRunMinutes} min with ${sub.cyclingMinutes} min cycling or ${sub.swimmingMinutes} min swimming at Zone 2.`
+                            : " This modality is not MTP-safe — substitute cycling or swimming."}
+                        </span>
+                      </div>
+                    )
+                  })()}
                   {renderExerciseFlags(cardioFlags)}
                 </>
               )
