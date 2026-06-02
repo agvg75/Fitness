@@ -4353,7 +4353,7 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
           {weeklyTissueLoadRows.length > 0 && (
             <div style={{ marginTop: "14px", paddingTop: "12px", borderTop: "1px solid #1a1b2e" }}>
               <div
-                onClick={() => setTissueLoadOpen(o => !o)}
+                onClick={e => { e.stopPropagation(); setTissueLoadOpen(o => !o) }}
                 style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", fontSize: "10px", letterSpacing: "0.15em", textTransform: "uppercase", color: "#555", marginBottom: tissueLoadOpen ? "10px" : "0" }}
               >
                 <span>Weekly Tissue Load</span>
