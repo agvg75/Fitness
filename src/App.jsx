@@ -3001,14 +3001,41 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
     if (override && matchingItem) {
       const updated = ocItems.map(existing => {
         if (existing.id !== matchingItem.id) return existing
+        const hadOpenEpisode = Boolean(existing.episodeOpen)
+        const openedAt = existing.episodeOpenedAt || existing.startDate || startDate
+        const openDateKey = String(openedAt || "").slice(0, 10)
+        const startDateKey = startDate.slice(0, 10)
+        const nextHistory = [...(Array.isArray(existing.history) ? existing.history : []), historyEntry]
+        const firstOpenEntry = (Array.isArray(existing.history) ? existing.history : [])
+          .find(entry => Number(entry?.score || 0) >= 1) || null
+        const shouldUpgradePersistence = incomingScore >= 1 &&
+          hadOpenEpisode &&
+          firstOpenEntry?.persistence === "gone_at_end" &&
+          openDateKey &&
+          startDateKey &&
+          startDateKey !== openDateKey
+        const openedMs = new Date(openedAt).getTime()
+        const closedMs = new Date(startDate).getTime()
+        const durationDays = Number.isFinite(openedMs) && Number.isFinite(closedMs)
+          ? Math.max(0, Math.round((closedMs - openedMs) / 86400000))
+          : null
+        const episodeOpening = incomingScore >= 1 && !hadOpenEpisode
+        const episodeClosing = incomingScore === 0 && hadOpenEpisode
         return {
           ...existing,
           currentScore,
           initialScore: Math.max(Number(existing.initialScore || 0), incomingScore),
           lastCheckedDate: startDate.slice(0, 10),
-          lastResolvedDate: currentScore === 0 ? startDate : existing.lastResolvedDate,
+          episodeOpen: incomingScore >= 1 ? true : episodeClosing ? false : existing.episodeOpen,
+          episodeOpenedAt: episodeOpening ? startDate : existing.episodeOpenedAt,
+          episodeClosedAt: episodeClosing ? startDate : existing.episodeClosedAt,
+          episodeCount: episodeOpening ? Number(existing.episodeCount || 0) + 1 : Number(existing.episodeCount || 0),
+          lastResolvedDate: episodeClosing || currentScore === 0 ? startDate : existing.lastResolvedDate,
+          lastEpisodeDurationDays: episodeClosing ? durationDays : existing.lastEpisodeDurationDays,
+          persistenceUpgraded: shouldUpgradePersistence ? true : existing.persistenceUpgraded,
+          persistenceObservedSpanDays: shouldUpgradePersistence ? Math.max(1, durationDays ?? 1) : existing.persistenceObservedSpanDays,
           note: src.note || existing.note || "",
-          history: [...(Array.isArray(existing.history) ? existing.history : []), historyEntry]
+          history: nextHistory
         }
       })
       setOcItems(updated)
@@ -3049,8 +3076,14 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
       initialScore: incomingScore,
       startDate,
       halfLifeHours: Number(src.halfLifeHours) || meta.halfLifeHours,
-      episodeCount: isHistorical && resolvedDate ? 1 : 0,
+      episodeOpen: currentScore >= 1 && !resolvedDate,
+      episodeOpenedAt: currentScore >= 1 && !resolvedDate ? startDate : null,
+      episodeClosedAt: resolvedDate,
+      episodeCount: currentScore >= 1 || (isHistorical && resolvedDate) ? 1 : 0,
       lastResolvedDate: resolvedDate,
+      lastEpisodeDurationDays: resolvedDate
+        ? Math.max(0, Math.round((new Date(resolvedDate).getTime() - new Date(startDate).getTime()) / 86400000))
+        : null,
       chronicity,
       scaleMigratedV2: true,
       migrationConfidence: "native",
