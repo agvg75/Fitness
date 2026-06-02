@@ -1023,6 +1023,49 @@ const TENDON_GROUP_META = {
 // the personal onset threshold instead of a seeded constant.
 // Sources: Dec 2025 (load 676, score 3), Feb 2026 (load 756, score 2),
 // resolved current episode (load ~620 at score 1, self-limited).
+// Load persisted MTP forefoot episode anchors from localStorage.
+// Returns an array of { date, load14, peakScore } objects.
+// Returns empty array if nothing is stored or the value is malformed.
+function loadMtpForefootEpisodes() {
+  try {
+    const raw = localStorage.getItem("lift_mtp_forefoot_episodes")
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter(e =>
+      e && typeof e.date === "string" && Number.isFinite(Number(e.load14)) && Number.isFinite(Number(e.peakScore))
+    )
+  } catch {
+    return []
+  }
+}
+
+// Append a new MTP forefoot episode anchor if one does not already exist for this date.
+// load14: the current 14-day rolling forefoot load (number).
+// score: the symptom score at onset (number, must be >= 1).
+// date: ISO date string (YYYY-MM-DD).
+// Deduplication key is the date string. If an entry for this date exists, the higher
+// peakScore wins.
+function appendMtpForefootEpisode(date, load14, score) {
+  if (!date || !Number.isFinite(Number(load14)) || Number(load14) <= 0) return
+  if (Number(score) < 1) return
+  try {
+    const existing = loadMtpForefootEpisodes()
+    const idx = existing.findIndex(e => e.date === date)
+    if (idx >= 0) {
+      if (Number(score) > Number(existing[idx].peakScore)) {
+        existing[idx] = { date, load14: Number(Number(load14).toFixed(1)), peakScore: Number(score) }
+      }
+    } else {
+      existing.push({ date, load14: Number(Number(load14).toFixed(1)), peakScore: Number(score) })
+    }
+    existing.sort((a, b) => a.date.localeCompare(b.date))
+    localStorage.setItem("lift_mtp_forefoot_episodes", JSON.stringify(existing))
+  } catch {
+    // localStorage write failure is non-fatal
+  }
+}
+
 const MTP_FOREFOOT_EPISODES = [
   { date: "2025-12-05", load14: 676, peakScore: 3 },
   { date: "2026-02-08", load14: 756, peakScore: 2 },
