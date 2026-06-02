@@ -10483,7 +10483,13 @@ function buildAdaptiveTrainingState({
     forefoot_toe_extensor: 18,
     patellar_knee: 22
   }
-  const forefootFit = fitForefootThreshold(MTP_FOREFOOT_EPISODES)
+  // Merge hardcoded seed episodes with any dynamically captured episodes from localStorage.
+  // Deduplication is by date; dynamic entries take priority over seeds on the same date.
+  const persistedEpisodes = loadMtpForefootEpisodes()
+  const seedByDate = Object.fromEntries(MTP_FOREFOOT_EPISODES.map(e => [e.date, e]))
+  persistedEpisodes.forEach(e => { seedByDate[e.date] = e })
+  const mergedEpisodes = Object.values(seedByDate).sort((a, b) => a.date.localeCompare(b.date))
+  const forefootFit = fitForefootThreshold(mergedEpisodes)
   // Convert 14-day TRIMP-style anchors into the model's weekly forefoot-load units.
   const forefootThresholdModelUnits = forefootFit.threshold != null
     ? forefootFit.threshold * 0.5 * 0.06
