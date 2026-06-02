@@ -9801,6 +9801,34 @@ function scoreThreshold(value, thresholds, fallback = 0) {
   return fallback
 }
 
+// Compute the cross-modal dose (minutes) needed to replace a constrained running session.
+// constrainedMiles: actual run distance allowed by MTP ceiling.
+// targetMiles: unconstrained target run distance for this training phase.
+// paceMinPerMile: estimated Zone 2 pace in min/mile. Default 12.0 (conservative Zone 2).
+// compartmentSplits: the COMPARTMENT_SPLITS object from LIFT_CONFIG.
+// Returns { lostRunMinutes, cyclingMinutes, swimmingMinutes, lostCardioTrimp } or null
+// if the run is not constrained (constrainedMiles >= targetMiles).
+function computeAerobicSubstituteDose(constrainedMiles, targetMiles, paceMinPerMile = 12.0, compartmentSplits = null) {
+  const constrained = Number(constrainedMiles)
+  const target = Number(targetMiles)
+  const pace = Number(paceMinPerMile)
+  if (!Number.isFinite(constrained) || !Number.isFinite(target) || !Number.isFinite(pace) || pace <= 0) return null
+  if (constrained >= target) return null
+  const runCardio = compartmentSplits?.running?.cardio ?? 0.75
+  const cycCardio = compartmentSplits?.cycling?.cardio ?? 0.85
+  const swmCardio = compartmentSplits?.swimming?.cardio ?? 0.70
+  const lostRunMinutes = (target - constrained) * pace
+  const lostCardioTrimp = lostRunMinutes * runCardio
+  const cyclingMinutes = Math.round(lostCardioTrimp / cycCardio)
+  const swimmingMinutes = Math.round(lostCardioTrimp / swmCardio)
+  return {
+    lostRunMinutes: Math.round(lostRunMinutes),
+    lostCardioTrimp: Number(lostCardioTrimp.toFixed(1)),
+    cyclingMinutes,
+    swimmingMinutes,
+  }
+}
+
 function buildOcConstraintState({ ocItems, sleepRecords, healthFitDaily, computedTSB, tsbV2Panel, weeklyTrainingBuckets, workouts }) {
   const readiness = computeReadinessDetail(
     ocItems,
