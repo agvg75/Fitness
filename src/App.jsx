@@ -21388,6 +21388,14 @@ const overviewExplainButton = (key) => (
         updated = [item, ...ocItems]
       }
     }
+    // Capture episode anchor on new-episode onset (non-zero score, no pre-existing item).
+    if (score >= 1 && !existingMtp) {
+      const currentLoad14 = tsbData?.currentLoad14 ?? null
+      const today = nowIso.slice(0, 10)
+      if (currentLoad14 != null) {
+        appendMtpForefootEpisode(today, currentLoad14, score)
+      }
+    }
     setOcItems(updated)
     try {
       await store.set("oc-items", updated)
