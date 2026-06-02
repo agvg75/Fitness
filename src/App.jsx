@@ -5142,6 +5142,25 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const [logView, setLogView] = useState("list")
   const [expandedLog, setExpandedLog] = useState({})
   const [toast, setToast] = useState(null)
+  const [reorderMode, setReorderMode] = useState(false)
+  const [exerciseOrder, setExerciseOrder] = useState(() => {
+    try {
+      const raw = localStorage.getItem("lift_exercise_order")
+      return raw ? JSON.parse(raw) : {}
+    } catch { return {} }
+  })
+  const saveExerciseOrder = async (nextOrder) => {
+    setExerciseOrder(nextOrder)
+    try { localStorage.setItem("lift_exercise_order", JSON.stringify(nextOrder)) } catch {}
+    try {
+      if (supabase && session?.user?.id) {
+        await supabase.from("user_kv").upsert(
+          { user_id: session.user.id, key: "lift_exercise_order", value: nextOrder, updated_at: new Date().toISOString() },
+          { onConflict: "user_id,key" }
+        )
+      }
+    } catch (e) { console.warn("[LIFT] exercise order sync failed", e) }
+  }
   const [openSections, setOpenSections] = useState(() => {
     const mobile = typeof window !== "undefined" ? window.innerWidth < 768 : true
     return { stretch: false, warmup: false, cooldown: false, tendon: false, main: !mobile, core: false, cardio: false, diagnostics: false }
@@ -5567,7 +5586,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       const cooldown = (schDay.cooldown || []).map(s =>
         typeof s === "string" ? { n: s, d: "" } : { n: s.n || "", d: s.d || "" }
       )
-      const exercises = (schDay.sections || []).flatMap(sec =>
+      let exercises = (schDay.sections || []).flatMap(sec =>
         (sec.ex || []).map(ex => {
           const def = ex.def || []
           return {
@@ -5588,6 +5607,15 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
           }
         })
       )
+      // Apply saved custom order for this day if present.
+      const savedOrder = exerciseOrder?.[day]
+      if (Array.isArray(savedOrder) && savedOrder.length) {
+        const byId = new Map(exercises.map(ex => [ex.id, ex]))
+        const ordered = []
+        savedOrder.forEach(id => { if (byId.has(id)) { ordered.push(byId.get(id)); byId.delete(id) } })
+        byId.forEach(ex => ordered.push(ex))  // any new exercises not in saved order go to the end
+        exercises = ordered
+      }
       return { stretch: [], warmup, cooldown, exercises, core: [], _topNote: schDay.topNote }
     }
     // Fallback to PROG for any day not in PLAN
