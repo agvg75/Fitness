@@ -2823,7 +2823,7 @@ function SignalDialSheet({ open, onClose, structureKey, location, onSubmit }) {
 }
 
 // ─── TabOperationalCapacity ────────────────────────────────────────────────────
-function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapacityData, healthFitDaily, sleepRecords, tsbFallback = null, runSessions = [], canonicalSessions = [], schedLog = [], biometricRecords = [], formDecayAccumulation = {}, tissueLoadIndex = {}, ocLoadOverrides = {}, saveOcLoadOverrides = async () => {} }) {
+function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapacityData, healthFitDaily, sleepRecords, tsbFallback = null, runSessions = [], canonicalSessions = [], schedLog = [], biometricRecords = [], formDecayAccumulation = {}, tissueLoadIndex = {}, ocLoadOverrides = {}, saveOcLoadOverrides = async () => {}, tsbV2Panel = null }) {
   const [selectedId, setSelectedId] = useState(null)
   const [loadSourcesOpen, setLoadSourcesOpen] = useState(false)
   const [addForm, setAddForm] = useState({
@@ -3283,6 +3283,16 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
           history: [...(Array.isArray(item.history) ? item.history : []), historyEntry]
         }
       })
+      // Capture episode anchor if this is an onset event (first score >= 1 on a new episode).
+      // Only append when the matching item's prior currentScore was 0 (episode start).
+      const priorScore = Number(matchingItem.currentScore || 0)
+      const newScore = Number(mtpCheckForm.score || 0)
+      if (priorScore === 0 && newScore >= 1) {
+        const currentLoad14 = tsbV2Panel?.currentLoad14 ?? null
+        if (currentLoad14 != null) {
+          appendMtpForefootEpisode(selectedDate, currentLoad14, newScore)
+        }
+      }
       setOcItems(updated)
       saveOcItems(updated)
       setMtpCheckFormOpen(false)
@@ -3290,6 +3300,13 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
     }
 
     const score = Number(mtpCheckForm.score || 0)
+    // New episode starting — capture anchor if score >= 1.
+    if (score >= 1) {
+      const currentLoad14 = tsbV2Panel?.currentLoad14 ?? null
+      if (currentLoad14 != null) {
+        appendMtpForefootEpisode(selectedDate, currentLoad14, score)
+      }
+    }
     const item = {
       id: Date.now(),
       key: MTP_KEY,
@@ -24539,6 +24556,7 @@ return (
     tissueLoadIndex={tissueLoadIndex}
     ocLoadOverrides={ocLoadOverrides}
     saveOcLoadOverrides={saveOcLoadOverrides}
+    tsbV2Panel={tsbV2Panel}
   />
 )}
 {tab === "Forecast" && (
