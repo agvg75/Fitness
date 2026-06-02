@@ -10699,6 +10699,115 @@ function estimateCaloriesFromDuration(category, durationMin) {
   return Math.round(rate * durationMin)
 }
 
+// Personal active-calorie model from the user's OWN measured sessions.
+// For each canonical_type, average kcal/min and kcal/session over sessions that
+// actually have measured active energy. Used to fill watch-less logged sessions.
+function buildPersonalCalorieModel(canonicalSessions) {
+  const byType = {}
+  ;(Array.isArray(canonicalSessions) ? canonicalSessions : []).forEach(s => {
+    const type = s.canonical_type || s.type || "Other"
+    const kcal = Number(
+      s.active_energy_cal ??
+      s.preferred_metrics?.calories?.value ??
+      s.calories ??
+      s.cardioCalories ??
+      s.sources?.apple?.calories ??
+      s.sources?.technogym?.calories ??
+      0
+    )
+    const dur = Number(s.duration_min ?? s.dur ?? (s.duration_sec ? s.duration_sec / 60 : 0))
+    if (kcal > 0) {
+      if (!byType[type]) byType[type] = { kcalSum: 0, durSum: 0, n: 0, perMinVals: [] }
+      byType[type].kcalSum += kcal
+      byType[type].n += 1
+      if (dur > 0) {
+        byType[type].durSum += dur
+        byType[type].perMinVals.push(kcal / dur)
+      }
+    }
+  })
+  const model = {}
+  Object.entries(byType).forEach(([type, v]) => {
+    const perMin = v.perMinVals.length
+      ? v.perMinVals.slice().sort((a, b) => a - b)[Math.floor(v.perMinVals.length / 2)]
+      : null
+    model[type] = {
+      avgKcalPerSession: v.n ? Math.round(v.kcalSum / v.n) : null,
+      medianKcalPerMin: perMin ? Number(perMin.toFixed(2)) : null,
+      n: v.n,
+    }
+  })
+  return model
+}
+
+// Estimate active kcal for a watch-less session, preferring personal history.
+// Falls back to the generic rate table only if no personal data for that type.
+function estimateActiveCalories({ type, durationMin, personalModel }) {
+  const aliases = {
+    Cycling: ["Indoor Cycling"],
+    "Indoor Cycling": ["Cycling"],
+    "Traditional Strength Training": ["Functional Strength Training"],
+    "Functional Strength Training": ["Traditional Strength Training"]
+  }
+  const modelType = personalModel?.[type]
+    ? type
+    : (aliases[type] || []).find(alias => personalModel?.[alias]) || type
+  const m = personalModel?.[modelType]
+  if (m && m.medianKcalPerMin && Number(durationMin) > 0) {
+    return { kcal: Math.round(m.medianKcalPerMin * durationMin), basis: `your ${m.n} ${modelType} sessions`, estimated: true }
+  }
+  if (m && m.avgKcalPerSession) {
+    return { kcal: m.avgKcalPerSession, basis: `avg of your ${m.n} ${modelType} sessions`, estimated: true }
+  }
+  const generic = estimateCaloriesFromDuration(type, Number(durationMin))
+  if (generic) return { kcal: generic, basis: "generic rate (no personal data yet)", estimated: true }
+  return { kcal: null, basis: "no estimate available", estimated: true }
+}
+
+function scheduleCalorieEstimateTargets(entry) {
+  const targets = []
+  const modalityToType = {
+    run: "Running",
+    running: "Running",
+    walk: "Walking",
+    walking: "Walking",
+    bike: "Cycling",
+    cycling: "Cycling",
+    swim: "Swimming",
+    swimming: "Swimming",
+    row: "Rowing",
+    rowing: "Rowing",
+    elliptical: "Elliptical"
+  }
+
+  const hasStrengthWork =
+    (Array.isArray(entry?.exercises) && entry.exercises.length > 0) ||
+    (entry?.data && Object.keys(entry.data).length > 0)
+
+  if (hasStrengthWork) {
+    targets.push({
+      type: entry?.canonical_type || entry?.type || entry?.category || "Traditional Strength Training",
+      durationMin: Number(entry?.duration_min ?? entry?.dur ?? 0) || 0
+    })
+  }
+
+  ;(Array.isArray(entry?.cardio) ? entry.cardio : []).forEach(cardio => {
+    const rawModality = String(cardio?.modality || cardio?.type || "").toLowerCase()
+    const type = modalityToType[rawModality] || cardio?.canonical_type || cardio?.type || "Other"
+    const durationMin = parseScheduleDurationMinutes(cardio?.duration) || Number(cardio?.duration_min ?? cardio?.dur ?? 0) || 0
+    targets.push({ type, durationMin })
+  })
+
+  if (!targets.length) {
+    targets.push({
+      type: entry?.canonical_type || entry?.type || entry?.category || "Other",
+      durationMin: Number(entry?.duration_min ?? entry?.dur ?? 0) || 0
+    })
+  }
+
+  return targets
+}
+
 function buildWeeklyTrainingBuckets(workouts) {
 const buckets = {}
   const cutoffMs = Date.now() - 52 * 7 * 24 * 60 * 60 * 1000
@@ -15841,6 +15950,17 @@ const unifiedCanonicalSessions = useMemo(() => {
   return mergeCanonicalSessionsWithScheduleSeeds(canonicalSessions, scheduleStrengthCanonicalSeeds)
 }, [canonicalSessions, scheduleStrengthCanonicalSeeds])
 
+const personalCalorieModel = useMemo(
+  () => buildPersonalCalorieModel(canonicalSessions),
+  [canonicalSessions]
+)
+
+useEffect(() => {
+  if (process.env.NODE_ENV !== "development") return
+  if (!Object.keys(personalCalorieModel || {}).length) return
+  console.log("[LIFT] personal active-calorie model", personalCalorieModel)
+}, [personalCalorieModel])
+
 const mergedSleepEpisodes = useMemo(() => {
   return canonicalizeSleepRecords(sleepRecords)
 }, [sleepRecords])
@@ -18092,7 +18212,34 @@ cutoff.setDate(cutoff.getDate() - selectedRangePoints)
       const hrs = (Date.now() - startOfDay) / 3600000
       const bmrAccrued = bmr * Math.min(24, Math.max(0, hrs)) / 24
       const activeRaw = Number(fitnessDailyByDate?.[todayKey]?.active_energy_cal || 0)
-      const activeDisc = activeRaw * 0.80
+      let activeEstimated = false
+      let activeEstNote = ""
+      let activeUsed = activeRaw
+      if (activeRaw < 50) {
+        const todaysSessions = (Array.isArray(schedLog) ? schedLog : [])
+          .filter(e => String(e?.date || e?.logged_at || "").slice(0, 10) === todayKey)
+        let estSum = 0
+        const bases = []
+        todaysSessions.forEach(sessionEntry => {
+          scheduleCalorieEstimateTargets(sessionEntry).forEach(target => {
+            const est = estimateActiveCalories({
+              type: target.type,
+              durationMin: target.durationMin,
+              personalModel: personalCalorieModel
+            })
+            if (est.kcal) {
+              estSum += est.kcal
+              bases.push(`${target.type} ${est.kcal} kcal, ${est.basis}`)
+            }
+          })
+        })
+        if (estSum > 0) {
+          activeUsed = estSum
+          activeEstimated = true
+          activeEstNote = bases.join(", ")
+        }
+      }
+      const activeDisc = activeUsed * 0.80
       const outSoFar = bmrAccrued + activeDisc
       const inSoFar = Number(intakeByDate[todayKey] || 0)
       const fullDayMaint = bmr + bmr * 0.15 + activeDisc
@@ -18100,13 +18247,15 @@ cutoff.setDate(cutoff.getDate() - selectedRangePoints)
       const targetIntake = fullDayMaint - dailyDeficit
       const roomLeft = targetIntake - inSoFar
       const band = bmr * 0.10
-      const values = { bmr, bmrAccrued, activeRaw, activeDisc, outSoFar, inSoFar, targetIntake, roomLeft, band, dailyDeficit }
-      return Object.values(values).every(v => Number.isFinite(v)) ? values : null
+      const values = { bmr, bmrAccrued, activeRaw, activeUsed, activeDisc, outSoFar, inSoFar, targetIntake, roomLeft, band, dailyDeficit }
+      return Object.values(values).every(v => Number.isFinite(v))
+        ? { ...values, activeEstimated, activeEstNote }
+        : null
     } catch (e) {
       console.warn("energyToday failed", e)
       return null
     }
-  }, [fitnessDailyByDate, intakeByDate, weeklyLossTarget, latestWeight, latestLeanAnchor])
+  }, [fitnessDailyByDate, intakeByDate, weeklyLossTarget, latestWeight, latestLeanAnchor, schedLog, personalCalorieModel])
 
   const energyWeek = useMemo(() => {
     try {
@@ -23502,8 +23651,13 @@ return (
                     : `On target for ${weeklyLossTarget} lb/week. Good place to land.`}
               </div>
               <div style={{ fontSize: 11, color: "#667", marginTop: 8 }}>
-                BMR {Math.round(energyToday.bmr)} kcal/day, active energy {Math.round(energyToday.activeRaw)} kcal raw / {Math.round(energyToday.activeDisc)} kcal discounted, daily deficit target {Math.round(energyToday.dailyDeficit)} kcal.
+                BMR {Math.round(energyToday.bmr)} kcal/day, active energy {Math.round(energyToday.activeUsed)} kcal used / {Math.round(energyToday.activeDisc)} kcal discounted, daily deficit target {Math.round(energyToday.dailyDeficit)} kcal.
               </div>
+              {energyToday?.activeEstimated && (
+                <div style={{ fontSize: 11, color: "#d97706", marginTop: 6 }}>
+                  No watch data today — burn estimated from your history ({energyToday.activeEstNote} kcal). Wear watch for measured values.
+                </div>
+              )}
               <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid #1a1b2e", display: "flex", alignItems: "center", gap: 10 }}>
                 <span style={{ fontSize: 11, color: "#667" }}>Weekly loss target</span>
                 <input
