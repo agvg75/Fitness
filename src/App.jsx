@@ -7545,18 +7545,46 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
           {hasMainProgram && (
             <div style={{ border: "0.5px solid #1a1a1a", borderRadius: 8, marginBottom: 10, overflow: "visible" }}>
               {secHdr("main", "Main Program", "#185FA5", `${prog.exercises?.filter(ex => isChecked(activeDay, "exercise", ex.id)).length || 0}/${prog.exercises?.length || 0} selected`)}
+              {openSections.main && (prog.exercises?.length || 0) > 0 && (
+                <div style={{ display: "flex", gap: 8, padding: "4px 14px 0", alignItems: "center" }}>
+                  <button onClick={() => setReorderMode(m => !m)} style={{ background: reorderMode ? "#185FA5" : "none", border: "1px solid #2a2d45", borderRadius: 4, color: reorderMode ? "#fff" : "#94a3b8", fontSize: 11, cursor: "pointer", padding: "4px 10px", fontWeight: 700 }}>
+                    {reorderMode ? "Done reordering" : "Reorder exercises"}
+                  </button>
+                  {reorderMode && exerciseOrder?.[activeDay] && (
+                    <button onClick={() => { const next = { ...exerciseOrder }; delete next[activeDay]; saveExerciseOrder(next) }} style={{ background: "none", border: "1px solid #2a2d45", borderRadius: 4, color: "#ef4444", fontSize: 11, cursor: "pointer", padding: "4px 10px" }}>
+                      Reset to default
+                    </button>
+                  )}
+                </div>
+              )}
               {openSections.main && (
                 <div style={{ padding: "4px 14px 12px" }}>
                   {prog.exercises?.length > 0
                     ? (() => {
                       let lastSH = null
-                      return prog.exercises.map(ex => {
+                      const ids = prog.exercises.map(e => e.id)
+                      const moveExercise = (fromIdx, toIdx) => {
+                        if (toIdx < 0 || toIdx >= ids.length) return
+                        const next = [...ids]
+                        const [moved] = next.splice(fromIdx, 1)
+                        next.splice(toIdx, 0, moved)
+                        saveExerciseOrder({ ...exerciseOrder, [activeDay]: next })
+                      }
+                      return prog.exercises.map((ex, idx) => {
                         const showSH = ex._sectionH && ex._sectionH !== lastSH
                         lastSH = ex._sectionH || lastSH
                         return (
                           <React.Fragment key={ex.id}>
                             {showSH && <div style={{ fontSize: 9, color: "#444", textTransform: "uppercase", letterSpacing: "0.12em", margin: "10px 0 3px", fontFamily: "'Barlow Condensed',sans-serif" }}>{ex._sectionH}</div>}
-                            {exCard(ex, activeDay)}
+                            {reorderMode ? (
+                              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", marginBottom: 6, background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: 6 }}>
+                                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                                  <button onClick={() => moveExercise(idx, idx - 1)} disabled={idx === 0} style={{ background: "none", border: "1px solid #2a2d45", borderRadius: 4, color: idx === 0 ? "#333" : "#4a9ee8", cursor: idx === 0 ? "default" : "pointer", fontSize: 14, lineHeight: 1, padding: "2px 8px" }}>▲</button>
+                                  <button onClick={() => moveExercise(idx, idx + 1)} disabled={idx === ids.length - 1} style={{ background: "none", border: "1px solid #2a2d45", borderRadius: 4, color: idx === ids.length - 1 ? "#333" : "#4a9ee8", cursor: idx === ids.length - 1 ? "default" : "pointer", fontSize: 14, lineHeight: 1, padding: "2px 8px" }}>▼</button>
+                                </div>
+                                <div style={{ flex: 1, fontSize: 13, color: "#ced2f0" }}>{ex.n}</div>
+                              </div>
+                            ) : exCard(ex, activeDay)}
                           </React.Fragment>
                         )
                       })
