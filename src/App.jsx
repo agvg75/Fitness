@@ -14135,6 +14135,28 @@ const DEXA_REGIONAL = [
     vatArea: 122, bmd: 1.161,
   },
 ]
+
+// Observed fat vs lean change per completed DEXA interval (lb).
+// Reveals that partition depends on training: Jan-Apr (KNR strength) recomped
+// (lean up, fat down); earlier cardio-heavier intervals were fat-dominant loss.
+function dexaIntervalPartitions(dexaGramsList) {
+  const lb = g => g / 1000 * 2.20462
+  const out = []
+  for (let i = 1; i < dexaGramsList.length; i++) {
+    const a = dexaGramsList[i - 1]
+    const b = dexaGramsList[i]
+    const dFat = lb(b.fatMass) - lb(a.fatMass)
+    const dLean = lb(b.leanMass) - lb(a.leanMass)
+    out.push({ from: a.date, to: b.date, dFat, dLean })
+  }
+  return out
+}
+
+// Apr-Sep 2026: no KNR. Assume fat-dominant loss, lean roughly flat.
+// This is the projection assumption most likely to be wrong; Sept DEXA corrects it.
+// When KNR resumes, revise toward the Jan-Apr recomp partition.
+const PROJECTION_PARTITION = { fatFraction: 0.88, leanFraction: 0.12 }
+
 // Baseline (Aug 2025) values for % change calculations
 const DEXA_BASE = DEXA_REGIONAL[0]
 const dexaRegionalPct = DEXA_REGIONAL.map(s => ({
@@ -18134,6 +18156,68 @@ cutoff.setDate(cutoff.getDate() - selectedRangePoints)
       return null
     }
   }, [fitnessDailyByDate, intakeByDate, weeklyLossTarget, latestWeight, latestLeanAnchor])
+
+  const compositionTrajectory = useMemo(() => {
+    try {
+      const lb = g => g / 1000 * 2.20462
+      const scans = DEXA_REGIONAL.map(s => ({
+        date: s.date,
+        fat: lb(s.fatMass),
+        lean: lb(s.leanMass)
+      }))
+      const anchorPts = scans.map((s, idx) => ({
+        date: s.date,
+        label: fmtShortDate(s.date),
+        fatDexa: Number(s.fat.toFixed(1)),
+        leanDexa: Number(s.lean.toFixed(1)),
+        fatEst: idx === scans.length - 1 ? Number(s.fat.toFixed(1)) : null,
+        leanEst: idx === scans.length - 1 ? Number(s.lean.toFixed(1)) : null,
+        bandLo: idx === scans.length - 1 ? Number(s.fat.toFixed(1)) : null,
+        bandHi: idx === scans.length - 1 ? Number(s.fat.toFixed(1)) : null
+      }))
+      const last = scans[scans.length - 1]
+      const lastDate = new Date(last.date)
+      const nextDate = new Date(LIFT_CONFIG.next_dexa_date)
+      if (!last || !Number.isFinite(lastDate.getTime()) || !Number.isFinite(nextDate.getTime())) return anchorPts
+
+      const lbPerWeek = typeof weeklyLossTarget === "number" && weeklyLossTarget > 0
+        ? weeklyLossTarget
+        : Number(LIFT_CONFIG.fat_loss_rate_monthly || 0) / 4.345
+      const lbPerDay = lbPerWeek / 7
+      const proj = []
+      let d = new Date(lastDate)
+      proj.push({ d: new Date(d), fat: last.fat, lean: last.lean })
+      while (d < nextDate) {
+        d = new Date(d.getTime() + 14 * 86400000)
+        const pointDate = new Date(Math.min(d.getTime(), nextDate.getTime()))
+        const days = (pointDate - lastDate) / 86400000
+        const totalLost = lbPerDay * days
+        const fat = last.fat - totalLost * PROJECTION_PARTITION.fatFraction
+        const lean = last.lean - totalLost * PROJECTION_PARTITION.leanFraction
+        proj.push({ d: pointDate, fat, lean })
+      }
+      const projPts = proj.map(p => {
+        const date = p.d.toISOString().slice(0, 10)
+        const chgFat = last.fat - p.fat
+        return {
+          date,
+          label: fmtShortDate(date),
+          fatDexa: null,
+          leanDexa: null,
+          fatEst: Number(p.fat.toFixed(1)),
+          leanEst: Number(p.lean.toFixed(1)),
+          bandLo: Number((p.fat - chgFat * 0.25).toFixed(1)),
+          bandHi: Number((p.fat + chgFat * 0.25).toFixed(1))
+        }
+      })
+      return [...anchorPts, ...projPts.slice(1)]
+    } catch (e) {
+      console.warn("compositionTrajectory failed", e)
+      return []
+    }
+  }, [weeklyLossTarget, LIFT_CONFIG])
+
+  const dexaPartitions = useMemo(() => dexaIntervalPartitions(DEXA_REGIONAL), [])
 
   const forecastSeries = useMemo(() => {
     return projectWeightTrend(mergedDailyWeights, nutritionSeries, 12)
@@ -23484,6 +23568,52 @@ return (
                   <div style={{ fontSize: 11, color: "#667", marginBottom: 4 }}>Target line so far</div>
                   <div style={{ fontSize: 20, fontWeight: 800, color: "#ffd166" }}>{Math.round(energyWeek.targetNow)} kcal</div>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {compositionTrajectory.length > 0 && (
+            <div style={{ ...cardStyle(), marginBottom: 16, maxWidth: "1000px" }}>
+              <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 2 }}>Body Composition Trajectory</div>
+              <div style={{ fontSize: 11, color: "#667", marginBottom: 8, lineHeight: 1.5 }}>
+                Solid = DEXA measured. Dashed = projection from Apr scan using your energy balance.
+                Projection — estimate pending Sept DEXA. <b>Drive composition with protein + training — this projection only reports the likely trend.</b>
+              </div>
+              <ResponsiveContainer width="100%" height={300}>
+                <ComposedChart data={compositionTrajectory} margin={{ top: 8, right: 14, left: 10, bottom: 18 }}>
+                  <CartesianGrid stroke="#1a1b2e" />
+                  <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                  <YAxis tick={{ fontSize: 10 }} width={36} label={{ value: "lb", angle: -90, position: "insideLeft", fontSize: 10 }} />
+                  <Tooltip
+                    formatter={(v, n) => {
+                      if (v == null) return null
+                      const labels = {
+                        fatDexa: "Fat (DEXA)",
+                        leanDexa: "Lean (DEXA)",
+                        fatEst: "Fat (est.)",
+                        leanEst: "Lean (est.)",
+                        bandHi: "Fat uncertainty high",
+                        bandLo: "Fat uncertainty low"
+                      }
+                      return [`${Number(v).toFixed(1)} lb`, labels[n] || n]
+                    }}
+                  />
+                  <Legend verticalAlign="top" height={30} />
+                  <Area dataKey="bandHi" stroke="none" fill="#ef4444" fillOpacity={0.08} connectNulls name="Fat uncertainty" />
+                  <Area dataKey="bandLo" stroke="none" fill="#0d0e1a" fillOpacity={1} connectNulls name="Fat uncertainty floor" />
+                  <Line type="monotone" dataKey="fatDexa" stroke="#ef4444" strokeWidth={3} dot connectNulls name="Fat (DEXA)" />
+                  <Line type="monotone" dataKey="leanDexa" stroke="#4ade80" strokeWidth={3} dot connectNulls name="Lean (DEXA)" />
+                  <Line type="monotone" dataKey="fatEst" stroke="#ef4444" strokeWidth={2} strokeDasharray="5 4" dot={false} connectNulls name="Fat (est.)" opacity={0.7} />
+                  <Line type="monotone" dataKey="leanEst" stroke="#4ade80" strokeWidth={2} strokeDasharray="5 4" dot={false} connectNulls name="Lean (est.)" opacity={0.7} />
+                </ComposedChart>
+              </ResponsiveContainer>
+              <div style={{ fontSize: 11, color: "#9aa", marginTop: 8, lineHeight: 1.5 }}>
+                {(() => {
+                  const recomp = dexaPartitions.find(p => p.from === "2026-01-14" && p.to === "2026-04-27")
+                  const fat = recomp ? Number(recomp.dFat.toFixed(1)) : -6.7
+                  const lean = recomp ? Number(recomp.dLean.toFixed(1)) : 7.8
+                  return `Jan-Apr you recomped (fat ${fat} lb, lean +${lean} lb) during KNR strength work. KNR is on hiatus until Sept, so this projection assumes fat-dominant loss with lean roughly held. When KNR resumes, the lean line should bend upward again.`
+                })()}
               </div>
             </div>
           )}
