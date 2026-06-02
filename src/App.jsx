@@ -2653,6 +2653,91 @@ function computeOcRecoveryDate(item) {
   return d < new Date() ? "Soon" : d.toISOString().slice(0, 10)
 }
 
+function ChipRow({ label, options, value, onPick }) {
+  return (
+    <div>
+      <div style={{ fontSize: 11, color: "#889", marginBottom: 5 }}>{label}</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+        {options.map(o => (
+          <button key={o} onClick={() => onPick(o)}
+            style={{ fontSize: 11, padding: "5px 9px", borderRadius: 6, cursor: "pointer",
+              border: `1px solid ${value === o ? "#f59e0b" : "#2a2b45"}`,
+              background: value === o ? "#f59e0b22" : "transparent",
+              color: value === o ? "#f59e0b" : "#99a" }}>
+            {o.replace(/_/g, " ")}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function SignalDialSheet({ open, onClose, structureKey, location, onSubmit }) {
+  const [score, setScore] = React.useState(0)
+  const [onset, setOnset] = React.useState(null)
+  const [course, setCourse] = React.useState(null)
+  const [persistence, setPersistence] = React.useState(null)
+  const [note, setNote] = React.useState("")
+
+  React.useEffect(() => {
+    if (open) {
+      setScore(0)
+      setOnset(null)
+      setCourse(null)
+      setPersistence(null)
+      setNote("")
+    }
+  }, [open, structureKey, location])
+
+  if (!open) return null
+
+  const idx = OC_SCALE_STEPS.indexOf(Number(score))
+  const showTrajectory = Number(score) >= 2
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 1000, display: "flex", alignItems: "flex-end" }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: "100%", background: "#0d0e1a", borderTop: "1px solid #2a2b45", borderRadius: "16px 16px 0 0", padding: "18px 16px 28px", maxHeight: "85vh", overflowY: "auto" }}>
+        <div style={{ width: 36, height: 4, background: "#33344f", borderRadius: 2, margin: "0 auto 14px" }} />
+        <div style={{ fontSize: 13, fontWeight: 700, color: "#ced2f0", marginBottom: 2 }}>
+          {(OC_KEY_META[structureKey]?.label) || structureKey} — {location}
+        </div>
+        <div style={{ fontSize: 11, color: "#667", marginBottom: 14 }}>How did it feel? Spin to the description that matches.</div>
+
+        <div style={{ textAlign: "center", marginBottom: 6 }}>
+          <div style={{ fontSize: 34, fontWeight: 800, color: score >= 3 ? "#ef4444" : score >= 2 ? "#f59e0b" : score >= 1 ? "#fbbf24" : "#4ade80" }}>{score}</div>
+          <div style={{ fontSize: 13, color: "#ced2f0", minHeight: 34 }}>{OC_SEVERITY_LABELS[Number(score)]}</div>
+        </div>
+        <input type="range" min={0} max={8} step={1} value={idx < 0 ? 0 : idx}
+          onChange={e => setScore(OC_SCALE_STEPS[Number(e.target.value)])}
+          style={{ width: "100%", accentColor: "#f59e0b" }} />
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: "#556", marginTop: 2 }}>
+          <span>0</span><span>0.5</span><span>1</span><span>1.5</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span>
+        </div>
+
+        {showTrajectory && (
+          <div style={{ display: "grid", gap: 10, marginTop: 16, padding: "12px", background: "#0a0b14", borderRadius: 8, border: "1px solid #1a1b2e" }}>
+            <div style={{ fontSize: 10, letterSpacing: "0.1em", color: "#556" }}>TRAJECTORY (helps tell noise from injury)</div>
+            <ChipRow label="When did it appear?" options={OC_ONSET_OPTIONS} value={onset} onPick={setOnset} />
+            <ChipRow label="During the activity it..." options={OC_COURSE_OPTIONS} value={course} onPick={setCourse} />
+            <ChipRow label="Afterward it was..." options={OC_PERSIST_OPTIONS} value={persistence} onPick={setPersistence} />
+          </div>
+        )}
+
+        <input type="text" value={note} onChange={e => setNote(e.target.value)} placeholder="Optional note (provoking exercise, etc.)"
+          style={{ ...inputStyle(), padding: "8px 10px", marginTop: 14 }} />
+
+        <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+          <button onClick={onClose} style={{ ...buttonStyle(false), flex: 1 }}>Cancel</button>
+          <button onClick={() => onSubmit({ structureKey, location, score: Number(score), onset, course, persistence, note })}
+            style={{ ...buttonStyle(true), flex: 2 }}>
+            {score === 0 ? "Log all-clear" : "Log signal"}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── TabOperationalCapacity ────────────────────────────────────────────────────
 function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapacityData, healthFitDaily, sleepRecords, tsbFallback = null, runSessions = [], canonicalSessions = [], schedLog = [], biometricRecords = [], formDecayAccumulation = {}, tissueLoadIndex = {}, ocLoadOverrides = {}, saveOcLoadOverrides = async () => {} }) {
   const [selectedId, setSelectedId] = useState(null)
@@ -2687,6 +2772,7 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
   })
   const [capacityInfoOpen, setCapacityInfoOpen] = useState({ tendonPain: false })
   const [quickLog, setQuickLog] = useState({ open: false, key: "tendonStatus", location: "Elbow L", score: 0 })
+  const [dialSheet, setDialSheet] = useState({ open: false, structureKey: "tendonStatus", location: "Elbow L" })
   const [addIssueOpen, setAddIssueOpen] = useState(false)
   const [activeListOpen, setActiveListOpen] = useState(true)
   const [calibState, setCalibState] = React.useState(() => {
@@ -2881,7 +2967,8 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
 
   const addItem = (override = null) => {
     const src = override || addForm
-    if (!src.currentScore) return
+    const incomingScore = Number(src.currentScore)
+    if (!Number.isFinite(incomingScore)) return
     const meta = OC_KEY_META[src.key] || OC_KEY_META.muscleStatus
 
     const isHistorical = src.isHistorical && src.historicalStartDate
@@ -2894,7 +2981,40 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
       ? new Date(src.historicalResolvedDate).toISOString()
       : null
 
-    const currentScore = isHistorical && resolvedDate ? 0 : Number(src.currentScore)
+    const currentScore = isHistorical && resolvedDate ? 0 : incomingScore
+    const historyEntry = makeSignalHistoryEntry({
+      date: startDate,
+      score: incomingScore,
+      context: isHistorical ? "historical episode" : "signal log",
+      trimp: getCanonicalLoadForDate(startDate),
+      note: src.note || "",
+      onset: src.onset || null,
+      course: src.course || null,
+      persistence: src.persistence || null,
+      provokingItem: src.provokingItem || null,
+    })
+
+    const matchingItem = [...ocItems]
+      .filter(i => i.key === src.key && i.location === src.location)
+      .sort((a, b) => String(b.startDate || "").localeCompare(String(a.startDate || "")))[0] || null
+
+    if (override && matchingItem) {
+      const updated = ocItems.map(existing => {
+        if (existing.id !== matchingItem.id) return existing
+        return {
+          ...existing,
+          currentScore,
+          initialScore: Math.max(Number(existing.initialScore || 0), incomingScore),
+          lastCheckedDate: startDate.slice(0, 10),
+          lastResolvedDate: currentScore === 0 ? startDate : existing.lastResolvedDate,
+          note: src.note || existing.note || "",
+          history: [...(Array.isArray(existing.history) ? existing.history : []), historyEntry]
+        }
+      })
+      setOcItems(updated)
+      saveOcItems(updated)
+      return
+    }
 
     // Compute chronicity: check existing items for same key+location to
     // determine prior episode count and last resolution interval.
@@ -2904,7 +3024,7 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
     const priorEpisodeCount = sameRegionItems.reduce(
       (sum, i) => sum + (i.episodeCount || 0) + (Number(i.initialScore || 0) > 0 ? 1 : 0), 0
     )
-    const newEpisodeCount = priorEpisodeCount + (Number(src.currentScore) > 0 ? 1 : 0)
+    const newEpisodeCount = priorEpisodeCount + (incomingScore > 0 ? 1 : 0)
 
     const mostRecentResolved = sameRegionItems
       .map(i => i.lastResolvedDate)
@@ -2926,7 +3046,7 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
       location: src.location,
       label: `${meta.label} — ${src.location}`,
       currentScore,
-      initialScore: Number(src.currentScore),
+      initialScore: incomingScore,
       startDate,
       halfLifeHours: Number(src.halfLifeHours) || meta.halfLifeHours,
       episodeCount: isHistorical && resolvedDate ? 1 : 0,
@@ -2935,13 +3055,7 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
       scaleMigratedV2: true,
       migrationConfidence: "native",
       note: src.note || "",
-      history: isHistorical ? [makeSignalHistoryEntry({
-        date: src.historicalStartDate,
-        score: Number(src.currentScore),
-        context: "historical episode",
-        trimp: null,
-        note: src.note || ""
-      })] : [],
+      history: [historyEntry],
       ...(isHistorical ? { eventType: "historical_entry" } : {}),
     }
 
@@ -2967,6 +3081,20 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
         historicalResolvedDate: "",
       }))
     }
+  }
+
+  const submitDialSignal = ({ structureKey, location, score, onset, course, persistence, note }) => {
+    addItem({
+      key: structureKey,
+      location,
+      currentScore: score,
+      isHistorical: false,
+      note: note || "dial log",
+      onset,
+      course,
+      persistence,
+    })
+    setDialSheet(s => ({ ...s, open: false }))
   }
 
   const updateItem = (id, changes) => {
@@ -3356,6 +3484,13 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
 
   return (
     <div style={{ padding: "16px", maxWidth: "900px" }}>
+      <SignalDialSheet
+        open={dialSheet.open}
+        onClose={() => setDialSheet(s => ({ ...s, open: false }))}
+        structureKey={dialSheet.structureKey}
+        location={dialSheet.location}
+        onSubmit={submitDialSignal}
+      />
 
       {/* ── Readiness score ──────────────────────────────────────── */}
       <div style={{ ...cardStyle(), marginBottom: "16px", display: "flex", alignItems: "center", gap: "24px", flexWrap: "wrap" }}>
@@ -3415,7 +3550,7 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
         {quickLog.open && (
           <div style={{ display: "grid", gap: "8px", marginTop: "10px" }}>
             <div style={{ fontSize: 11, color: "#667" }}>
-              Which structure? Then rate what you felt on the 0–6 scale.
+              Which structure and location? The dial opens with the 0-6 signal scale.
             </div>
             <select value={quickLog.key} onChange={e => setQuickLog(q => ({ ...q, key: e.target.value }))} style={inputStyle()}>
               {Object.entries(OC_KEY_META).map(([k, m]) => <option key={k} value={k}>{m.label}</option>)}
@@ -3423,23 +3558,14 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
             <select value={quickLog.location} onChange={e => setQuickLog(q => ({ ...q, location: e.target.value }))} style={inputStyle()}>
               {OC_BODY_REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
             </select>
-            <div>
-              <div style={{ fontSize: "11px", color: "#666", marginBottom: "4px" }}>
-                {quickLog.score} — {OC_SEVERITY_LABELS[Number(quickLog.score)]}
-              </div>
-              <input type="range" min={0} max={8} step={1}
-                value={ocScaleStepIndex(quickLog.score)}
-                onChange={e => setQuickLog(q => ({ ...q, score: OC_SCALE_STEPS[Number(e.target.value)] }))}
-                style={{ width: "100%" }} />
-            </div>
             <button
               onClick={() => {
-                addItem({ key: quickLog.key, location: quickLog.location, currentScore: quickLog.score, isHistorical: false, note: "quick log" })
-                setQuickLog(q => ({ ...q, open: false, score: 0 }))
+                setDialSheet({ open: true, structureKey: quickLog.key, location: quickLog.location })
+                setQuickLog(q => ({ ...q, open: false }))
               }}
               style={{ ...buttonStyle(true), fontSize: "12px" }}
             >
-              Log signal
+              Open dial
             </button>
           </div>
         )}
