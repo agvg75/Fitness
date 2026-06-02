@@ -2739,6 +2739,21 @@ function buildSleepOverviewModel(records, targetHours = 7.5) {
   }
 }
 
+// Compute the half-life implied by an episode's actual duration.
+// actualHours: how long the episode lasted (start to close).
+// initialScore: the peak score during the episode.
+// Returns the half-life (hours) that would have predicted this exact resolution,
+// assuming resolution is defined as score dropping below 0.25.
+// Returns null if inputs are invalid.
+function computeImpliedHalfLife(actualHours, initialScore) {
+  const score = Number(initialScore)
+  const hours = Number(actualHours)
+  if (!Number.isFinite(score) || score <= 0 || !Number.isFinite(hours) || hours <= 0) return null
+  const logFactor = Math.log2(score / 0.25)
+  if (logFactor <= 0) return null
+  return hours / logFactor
+}
+
 function computeOcPredictedScore(item) {
   const hoursElapsed = (Date.now() - new Date(item.startDate).getTime()) / 3600000
   const halfLife = resolveOcHalfLifeHours(item)
@@ -2877,6 +2892,9 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
   const [dialSheet, setDialSheet] = useState({ open: false, structureKey: "tendonStatus", location: "Elbow L" })
   const [addIssueOpen, setAddIssueOpen] = useState(false)
   const [activeListOpen, setActiveListOpen] = useState(true)
+  const [halfLifeCorrection, setHalfLifeCorrection] = useState(null)
+  // halfLifeCorrection shape when active:
+  // { itemId, location, label, impliedHalfLife, modelHalfLife, initialScore, actualDays, predictedDays }
   const [calibState, setCalibState] = React.useState(() => {
     const init = {}
     Object.entries(OC_REGION_COORDS).forEach(([key, val]) => {
@@ -3255,6 +3273,37 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
     const chronicity = episodeCount >= 2 || (daysSinceLast != null && daysSinceLast < 90) ? "chronic" : item.chronicity
     updateItem(id, { currentScore: 0, episodeCount, lastResolvedDate, chronicity })
     setSelectedId(null)
+
+    // Correction proposal: compare actual episode duration to model prediction.
+    // Only fires when actual > 130% of predicted (episode lasted longer than model expected).
+    // Never fires when actual < predicted (conservative model behaving correctly).
+    const startMs = item.startDate ? new Date(item.startDate).getTime() : null
+    const closeMs = new Date(lastResolvedDate).getTime()
+    if (startMs && closeMs > startMs) {
+      const actualHours = (closeMs - startMs) / 3600000
+      const initialScore = Number(item.initialScore || item.currentScore || 0)
+      if (initialScore > 0) {
+        const modelHalfLife = resolveOcHalfLifeHours(item)
+        const predictedHours = modelHalfLife * Math.log2(initialScore / 0.25)
+        const impliedHalfLife = computeImpliedHalfLife(actualHours, initialScore)
+        if (
+          Number.isFinite(predictedHours) && predictedHours > 0 &&
+          Number.isFinite(impliedHalfLife) &&
+          actualHours > predictedHours * 1.30
+        ) {
+          setHalfLifeCorrection({
+            itemId: id,
+            location: item.location || item.label || "Unknown",
+            label: item.label || item.location || "Issue",
+            impliedHalfLife: Math.round(impliedHalfLife),
+            modelHalfLife: Math.round(modelHalfLife),
+            initialScore,
+            actualDays: Math.round(actualHours / 24),
+            predictedDays: Math.round(predictedHours / 24),
+          })
+        }
+      }
+    }
   }
 
   const openMtpCheckForm = () => {
