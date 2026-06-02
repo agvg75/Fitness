@@ -15913,8 +15913,8 @@ export default function App() {
     tdee: 2100,
     fat_loss_target: 1700,
     fat_loss_rate_monthly: 1.7,  // lb/month — no-KNR period Apr-Sep 2026; reassess when KNR resumes
-    mtp_ceiling_miles: 4.0,  // current MTP protocol ceiling — update when ceiling advances
-    mtp_next_milestone_miles: 4.4,  // next planned distance advance
+    mtp_ceiling_miles: 6.6,  // advanced from 4.0 — three consecutive score-0 sessions confirmed May 31 2026
+    mtp_next_milestone_miles: 7.26,  // next milestone: 6.6 * 1.10
 
     // Half marathon build
     hm_race_date:    "2026-09-19",
@@ -15973,6 +15973,7 @@ export default function App() {
     { date: "2026-05-03", name: "Unit 5 Foundation 5K",        city: "Normal",       dist_mi: 3.1,  recommended: false, note: "Day after Lake Run — too close. Skip." },
     { date: "2026-05-09", name: "Rivian 5K",                   city: "Normal",       dist_mi: 3.1,  recommended: true,  note: "Easy 5K training run. No racing." },
     { date: "2026-05-17", name: "Donut Run 5K",                city: "Bloomington IL", dist_mi: 3.1, recommended: true,  note: "Race-week option. Use as the primary Saturday run with Sunday full rest." },
+    { date: "2026-06-03", name: "The Big Run",                 city: "Bloomington IL", dist_mi: 3.1,  recommended: true,  note: "Global Running Day 5K. Wednesday evening race — counts as the weekly Wednesday run. Easy effort, not a time trial." },
     { date: "2026-06-06", name: "Steamboat Classic 4 Mile",    city: "Peoria",       dist_mi: 4.0,  recommended: true,  note: "Choose the 4-mile, not 15K. Use as long run." },
     { date: "2026-06-14", name: "Mackinaw Valley Wine Run",    city: "Mackinaw",     dist_mi: 3.1,  recommended: true,  note: "Easy 5K. Good aerobic session mid-build." },
     { date: "2026-07-04", name: "Park 2 Park",                 city: "Normal",       dist_mi: 5.0,  recommended: true,  note: "Ideal long run substitute at this phase." },
