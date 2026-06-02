@@ -4500,6 +4500,52 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
         </div>
       )}
 
+      {halfLifeCorrection && (
+        <div style={{
+          background: "#1a1b2e", border: "1px solid #f59e0b", borderRadius: "8px",
+          padding: "12px 16px", marginBottom: "16px", fontSize: "12px", color: "#ced2f0"
+        }}>
+          <div style={{ fontWeight: 700, color: "#f59e0b", marginBottom: "6px" }}>
+            Half-life correction available — {halfLifeCorrection.location}
+          </div>
+          <div style={{ marginBottom: "8px", lineHeight: 1.6 }}>
+            Episode resolved in {halfLifeCorrection.actualDays} days (score {halfLifeCorrection.initialScore}).
+            Model predicted {halfLifeCorrection.predictedDays} days using half-life {halfLifeCorrection.modelHalfLife}h.
+            Implied half-life from actual duration: {halfLifeCorrection.impliedHalfLife}h.
+            Consider updating the half-life for this tissue to {halfLifeCorrection.impliedHalfLife}h.
+          </div>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <button
+              onClick={() => {
+                const updated = ocItems.map(i =>
+                  i.id === halfLifeCorrection.itemId
+                    ? { ...i, halfLifeHours: halfLifeCorrection.impliedHalfLife }
+                    : i
+                )
+                setOcItems(updated)
+                saveOcItems(updated)
+                setHalfLifeCorrection(null)
+              }}
+              style={{
+                background: "none", border: "1px solid #f59e0b", borderRadius: "4px",
+                color: "#f59e0b", fontSize: "11px", cursor: "pointer", padding: "4px 10px"
+              }}
+            >
+              Apply {halfLifeCorrection.impliedHalfLife}h
+            </button>
+            <button
+              onClick={() => setHalfLifeCorrection(null)}
+              style={{
+                background: "none", border: "1px solid #444", borderRadius: "4px",
+                color: "#888", fontSize: "11px", cursor: "pointer", padding: "4px 10px"
+              }}
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
       {(() => {
         const activeEpisode = (Array.isArray(ocItems) ? ocItems : [])
           .filter(i => Number(i.currentScore || 0) > 0 && i.startDate)
