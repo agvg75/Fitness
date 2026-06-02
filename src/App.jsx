@@ -13460,7 +13460,12 @@ Return ONLY a JSON object with this exact structure, no explanation:
         })
         committed += biometricResult.length
         if (supabase && STORE_USER_ID) {
-          await upsertBiometricRecords(supabase, STORE_USER_ID, merged)
+          try {
+            await upsertBiometricRecords(supabase, STORE_USER_ID, merged)
+          } catch (bioSyncErr) {
+            console.warn("[biometricRecords/import-commit] Supabase sync failed, local save is authoritative", bioSyncErr?.message)
+            showToast("Biometrics saved locally — cloud sync failed: " + (bioSyncErr?.message || "unknown error"))
+          }
           const remoteBiometrics = await loadBiometricRecords(supabase, STORE_USER_ID)
           if (setBiometricRecords) setBiometricRecords(prev => {
             const dateKey = r => String(r.measured_date || r.date || r.timestamp || "").slice(0, 10)
