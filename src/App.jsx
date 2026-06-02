@@ -929,15 +929,23 @@ function normalizeLoggedExercise(ex) {
   }
 }
 
+const entryStamp = e => {
+  const u = e?.updatedAt ? Date.parse(e.updatedAt) : NaN
+  if (Number.isFinite(u)) return u
+  const idNum = Number(e?.id)
+  return Number.isFinite(idNum) ? idNum : 0
+}
+
 const mergeScheduleLogEntries = (...logs) => Object.values(
   logs
     .flatMap(log => Array.isArray(log) ? log : [])
     .reduce((acc, entry) => {
       if (entry?.id == null) return acc
-      acc[entry.id] = entry
+      const prev = acc[entry.id]
+      if (!prev || entryStamp(entry) >= entryStamp(prev)) acc[entry.id] = entry
       return acc
     }, {})
-).sort((a, b) => b.id - a.id)
+).sort((a, b) => entryStamp(b) - entryStamp(a))
 
 const SDAY_TYPES = {
   Mon: ["Running", "Traditional Strength Training"],
@@ -5970,6 +5978,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
 
     const entry = {
       id: Date.now(),
+      updatedAt: new Date().toISOString(),
       session_id: ts.replace(/\D/g, "").slice(0, 17),
       logged_at: ts, date: sessionDate,
       day, dayLabel: SCH_META[day]?.label || SMETA[day]?.label || day,
@@ -6100,8 +6109,9 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
 
   const updateConflictEntry = async updatedEntry => {
     const id = updatedEntry?.id
+    const stamped = { ...updatedEntry, updatedAt: new Date().toISOString() }
     const currentLog = await loadScheduleLogForMutation(schedLog)
-    const newLog = currentLog.map(entry => String(entry.id) === String(id) ? updatedEntry : entry)
+    const newLog = currentLog.map(entry => String(entry.id) === String(id) ? stamped : entry)
     setSchedLog(newLog)
     const savedLog = await saveScheduleKey("wt-log", newLog)
     if (Array.isArray(savedLog?.value ?? savedLog)) setSchedLog(savedLog?.value ?? savedLog)
@@ -6124,6 +6134,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     const mergedEntry = {
       ...baseEntry,
       id: Date.now(),
+      updatedAt: new Date().toISOString(),
       session_id: `merged_${Date.now()}`,
       date,
       day,
@@ -6173,6 +6184,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     const targetDate = reassignDate && /^\d{4}-\d{2}-\d{2}$/.test(reassignDate) ? reassignDate : null
     const targetDay = targetDate ? dayKeyFromScheduleDate(targetDate) : null
     const removedIds = new Set()
+    const updatedAt = new Date().toISOString()
 
     const nextLog = currentLog
       .filter(entry => {
@@ -6188,6 +6200,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
         const isCanonical = String(entry.id) === String(canonicalEntry.id)
         const updated = {
           ...entry,
+          updatedAt,
           conflict_cluster_key: clusterKey,
           conflict_canonical: isCanonical,
           conflict_ignored: !isCanonical && !deleteOthers,
@@ -12915,6 +12928,7 @@ Return ONLY a JSON object with this exact structure, no explanation:
 
     const entry = {
       id: Date.now(),
+      updatedAt: new Date().toISOString(),
       date: dateStr,
       logged_at: new Date().toISOString(),
       day: photoResult.day || "Thu",
@@ -12942,7 +12956,7 @@ Return ONLY a JSON object with this exact structure, no explanation:
     }
 
     const existing = JSON.parse(localStorage.getItem("wt-log") || "[]")
-    const updated = [entry, ...existing].sort((a, b) => b.id - a.id)
+    const updated = mergeScheduleLogEntries([entry], existing)
     localStorage.setItem("wt-log", JSON.stringify(updated))
 
     if (typeof setSchedLog === "function") setSchedLog(updated)
@@ -15073,6 +15087,7 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
         const { date, day, sessionType, exercises, cardio } = intent.payload
         const logEntry = {
           id: `trainer_session_${Date.now()}`,
+          updatedAt: new Date().toISOString(),
           session_id: `trainer_${Date.now()}`,
           logged_at: new Date().toISOString(),
           date, day, dayLabel: day,
@@ -15087,8 +15102,9 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
           const existing = JSON.parse(localStorage.getItem("wt-log") || "[]")
           const safe = Array.isArray(existing) ? existing : []
           const dupIdx = safe.findIndex(e => (e.date||"").slice(0,10) === date && e.source === "LIFT Trainer" && e.day === day)
+          const updatedAt = new Date().toISOString()
           updated = dupIdx >= 0
-            ? safe.map((e,i) => i === dupIdx ? { ...e, exercises: [...(e.exercises||[]), ...exercises], cardio: [...(e.cardio||[]), ...cardio] } : e)
+            ? safe.map((e,i) => i === dupIdx ? { ...e, updatedAt, exercises: [...(e.exercises||[]), ...exercises], cardio: [...(e.cardio||[]), ...cardio] } : e)
             : [...safe, logEntry]
           localStorage.setItem("wt-log", JSON.stringify(updated))
           if (supabase && session?.user?.id) {
@@ -15148,6 +15164,7 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
         const { date, day, sessionType, exercises, cardio } = action.payload
         const logEntry = {
           id: `trainer_session_${Date.now()}`,
+          updatedAt: new Date().toISOString(),
           session_id: `trainer_${Date.now()}`,
           logged_at: new Date().toISOString(),
           date,
@@ -15172,10 +15189,12 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
             (e.date||"").slice(0,10) === date && e.source === "LIFT Trainer" && e.day === day
           )
           let updated
+          const updatedAt = new Date().toISOString()
           if (existingIdx >= 0) {
             const prev = safeExisting[existingIdx]
             updated = safeExisting.map((e, i) => i === existingIdx ? {
               ...e,
+              updatedAt,
               exercises: [...(prev.exercises||[]), ...exercises],
               cardio: [...(prev.cardio||[]), ...cardio]
             } : e)
@@ -17544,19 +17563,13 @@ useEffect(() => {
     // Load from localStorage first
     const wo = await store.get("ufd-workouts")
     const lg = await store.get("wt-log")
-    // Merge remote wt-log with local — keep whichever has more entries
-    // This prevents Supabase from overwriting locally-written trainer sessions
+    // Merge remote wt-log with local by per-entry recency so stale remote copies
+    // do not overwrite newer local edits for the same id.
     const localLg = (() => { try { return JSON.parse(localStorage.getItem("wt-log") || "[]") } catch { return [] } })()
     const remoteLg = Array.isArray(lg) ? lg : []
-    const mergedLg = (() => {
-      const byId = new Map()
-      remoteLg.forEach(e => { if (e?.id) byId.set(String(e.id), e) })
-      localLg.forEach(e => { if (e?.id) byId.set(String(e.id), e) }) // local wins on conflict
-      return [...byId.values()].sort((a,b) => String(a.date||"").localeCompare(String(b.date||"")))
-    })()
-    const lgToUse = mergedLg.length >= remoteLg.length ? mergedLg : remoteLg
-    // Write merged back to localStorage and Supabase if we gained entries
-    if (lgToUse.length > remoteLg.length) {
+    const lgToUse = mergeScheduleLogEntries(localLg, remoteLg)
+    // Write merged back to localStorage and Supabase if merge changed the remote view.
+    if (JSON.stringify(lgToUse) !== JSON.stringify(remoteLg)) {
       try { localStorage.setItem("wt-log", JSON.stringify(lgToUse)) } catch {}
       if (supabase && session?.user?.id) {
         supabase.from("user_kv").upsert(
@@ -17646,9 +17659,7 @@ useEffect(() => {
           const sbLg = data.find(r => r.key === "wt-log")?.value
           if (Array.isArray(sbLg)) {
             const local = Array.isArray(lgToUse) ? lgToUse : []
-            const merged = Object.values(
-              [...local, ...sbLg].reduce((acc, e) => { acc[e.id] = e; return acc }, {})
-            ).sort((a, b) => b.id - a.id)
+            const merged = mergeScheduleLogEntries(local, sbLg)
             operationalWorkoutUpdateRef.current = {
               source: "remote:user_kv:wt-log",
               newestDate: getNewestWorkoutLikeDate(buildScheduleCardioWorkoutsFromLog(merged)),
@@ -21411,6 +21422,7 @@ const overviewExplainButton = (key) => (
 
     const logEntry = {
       id: `trainer_strength_${Date.now()}`,
+      updatedAt: today.toISOString(),
       session_id: `trainer_${Date.now()}`,
       logged_at: today.toISOString(),
       date: dateStr,
@@ -21442,7 +21454,7 @@ const overviewExplainButton = (key) => (
         const existing_session = safeExisting[todayTrainerIdx]
         const merged_exercises = [...(existing_session.exercises || []), exerciseEntry]
         updated = safeExisting.map((e, i) =>
-          i === todayTrainerIdx ? { ...e, exercises: merged_exercises } : e
+          i === todayTrainerIdx ? { ...e, updatedAt: today.toISOString(), exercises: merged_exercises } : e
         )
       } else {
         updated = [...safeExisting, logEntry]
@@ -21478,6 +21490,7 @@ const overviewExplainButton = (key) => (
 
     const logEntry = {
       id: `trainer_run_${Date.now()}`,
+      updatedAt: today.toISOString(),
       session_id: `trainer_${Date.now()}`,
       logged_at: today.toISOString(),
       date: dateStr,
@@ -21499,7 +21512,7 @@ const overviewExplainButton = (key) => (
       // Append to wt-log without displacing any existing manual entry for today
       const existing = await store.get("wt-log") || []
       const safeExisting = Array.isArray(existing) ? existing : []
-      const updated = [logEntry, ...safeExisting.filter(e => e.id !== logEntry.id)]
+      const updated = mergeScheduleLogEntries([logEntry], safeExisting)
       await store.set("wt-log", updated)
       if (supabase && session?.user?.id) {
         await supabase.from("user_kv").upsert(
