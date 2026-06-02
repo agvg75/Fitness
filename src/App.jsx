@@ -3406,6 +3406,24 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
             </svg>
           )
         })()}
+        <svg style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", overflow: "visible", pointerEvents: "none", zIndex: 6 }}>
+          {Object.keys(OC_REGION_COORDS).map(coordKey => {
+            const coords = OC_REGION_COORDS[coordKey]?.[ck]
+            if (!coords) return null
+            const loc = coordKey
+            const key = /Toe|MTP/.test(coordKey) ? "jointStatus"
+              : /Elbow|Wrist|Shoulder|AnkleFoot|Ankle|Knee|Forearm|IT Band/.test(coordKey) ? "tendonStatus"
+              : "muscleStatus"
+            return (
+              <circle key={`hit-${coordKey}`} cx={`${coords[0]}%`} cy={`${coords[1]}%`} r={16}
+                fill="transparent" style={{ pointerEvents: "auto", cursor: "pointer" }}
+                onClick={e => {
+                  e.stopPropagation()
+                  setDialSheet({ open: true, structureKey: key, location: loc })
+                }} />
+            )
+          }).filter(Boolean)}
+        </svg>
         {mapItems.map(item => {
           const hasActiveIssue = active.some(activeItem => activeItem.location === item.location && activeItem.currentScore > 0)
           if (!hasActiveIssue) return null
