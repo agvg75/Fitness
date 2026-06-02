@@ -1,0 +1,1157 @@
+[
+  {
+    "measured_date": "2024-12-14",
+    "weight_lb": 232,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2024-12-16",
+    "weight_lb": 226.2,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2024-12-17",
+    "weight_lb": 224.9,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2024-12-18",
+    "weight_lb": 223.4,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2024-12-19",
+    "weight_lb": 223,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2024-12-20",
+    "weight_lb": 222.4,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2024-12-21",
+    "weight_lb": 222.6,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2024-12-23",
+    "weight_lb": 222,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2024-12-24",
+    "weight_lb": 220.6,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2024-12-25",
+    "weight_lb": 220,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2024-12-26",
+    "weight_lb": 219.2,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2024-12-27",
+    "weight_lb": 220,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2024-12-28",
+    "weight_lb": 219.2,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2024-12-31",
+    "weight_lb": 219,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-01-04",
+    "weight_lb": 219.2,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-01-05",
+    "weight_lb": 218.7,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-01-06",
+    "weight_lb": 217.9,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-01-08",
+    "weight_lb": 217.6,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-01-09",
+    "weight_lb": 217.7,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-01-10",
+    "weight_lb": 216.9,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-01-11",
+    "weight_lb": 216.9,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-01-12",
+    "weight_lb": 216.8,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-01-13",
+    "weight_lb": 215.3,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-01-14",
+    "weight_lb": 214.4,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-01-16",
+    "weight_lb": 215.2,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-01-17",
+    "weight_lb": 215.6,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-01-18",
+    "weight_lb": 215.4,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-01-19",
+    "weight_lb": 213.6,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-01-20",
+    "weight_lb": 211.9,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-01-21",
+    "weight_lb": 210.2,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-01-22",
+    "weight_lb": 214.3,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-01-23",
+    "weight_lb": 212.2,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-01-25",
+    "weight_lb": 213.1,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-01-26",
+    "weight_lb": 213,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-01-27",
+    "weight_lb": 211.2,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-01-28",
+    "weight_lb": 210.6,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-01-29",
+    "weight_lb": 209.7,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-01-30",
+    "weight_lb": 209.4,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-01-31",
+    "weight_lb": 209.6,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-02-02",
+    "weight_lb": 210,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-02-03",
+    "weight_lb": 210,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-02-04",
+    "weight_lb": 209.9,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-02-05",
+    "weight_lb": 208.1,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-02-06",
+    "weight_lb": 207.6,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-02-07",
+    "weight_lb": 208,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-02-09",
+    "weight_lb": 209.1,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-02-10",
+    "weight_lb": 208.1,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-02-12",
+    "weight_lb": 205.6,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-02-13",
+    "weight_lb": 205.2,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-02-15",
+    "weight_lb": 205.7,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-02-16",
+    "weight_lb": 206.2,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-02-17",
+    "weight_lb": 205.4,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-02-18",
+    "weight_lb": 204.7,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-02-19",
+    "weight_lb": 203.7,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-02-20",
+    "weight_lb": 202.8,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-02-21",
+    "weight_lb": 203.4,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-02-22",
+    "weight_lb": 202.9,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-02-24",
+    "weight_lb": 202,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-02-26",
+    "weight_lb": 201.5,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-02-27",
+    "weight_lb": 202.4,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-02-28",
+    "weight_lb": 201.9,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-03-01",
+    "weight_lb": 201.2,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-03-02",
+    "weight_lb": 201.8,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-03-04",
+    "weight_lb": 198.9,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-03-05",
+    "weight_lb": 198.3,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-03-06",
+    "weight_lb": 197,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-03-07",
+    "weight_lb": 196.4,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-03-09",
+    "weight_lb": 196.3,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-03-10",
+    "weight_lb": 195.4,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-03-11",
+    "weight_lb": 195.4,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-03-12",
+    "weight_lb": 195.3,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-03-13",
+    "weight_lb": 196.3,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-03-15",
+    "weight_lb": 196.9,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-03-24",
+    "weight_lb": 194.1,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-03-25",
+    "weight_lb": 192.8,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-03-27",
+    "weight_lb": 191.2,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-03-28",
+    "weight_lb": 191.1,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-03-29",
+    "weight_lb": 190.8,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-03-30",
+    "weight_lb": 191.5,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-03-31",
+    "weight_lb": 192.1,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-04-01",
+    "weight_lb": 191.5,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-04-02",
+    "weight_lb": 191.1,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-04-04",
+    "weight_lb": 190,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-04-06",
+    "weight_lb": 189.6,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-04-07",
+    "weight_lb": 189.4,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-04-08",
+    "weight_lb": 189,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-04-09",
+    "weight_lb": 190,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-04-13",
+    "weight_lb": 189.9,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-04-14",
+    "weight_lb": 189.8,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-04-15",
+    "weight_lb": 188.8,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-04-16",
+    "weight_lb": 188.7,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-04-17",
+    "weight_lb": 187.5,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-04-18",
+    "weight_lb": 187.3,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-04-19",
+    "weight_lb": 188,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-04-22",
+    "weight_lb": 188,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-04-23",
+    "weight_lb": 186.6,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-04-24",
+    "weight_lb": 186.1,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-05-02",
+    "weight_lb": 187.1,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-05-03",
+    "weight_lb": 188,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-05-06",
+    "weight_lb": 185.1,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-05-07",
+    "weight_lb": 184.8,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-05-08",
+    "weight_lb": 184.6,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-05-09",
+    "weight_lb": 185.2,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-05-12",
+    "weight_lb": 186,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-05-14",
+    "weight_lb": 187,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-05-15",
+    "weight_lb": 186.5,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-05-16",
+    "weight_lb": 185.1,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-05-17",
+    "weight_lb": 183.9,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-05-18",
+    "weight_lb": 182.4,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-05-19",
+    "weight_lb": 182.9,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-05-20",
+    "weight_lb": 183.5,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-05-21",
+    "weight_lb": 182.8,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-05-29",
+    "weight_lb": 184.9,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-05-30",
+    "weight_lb": 183.9,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-06-01",
+    "weight_lb": 184.1,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-06-03",
+    "weight_lb": 184.6,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-06-10",
+    "weight_lb": 183.4,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-06-17",
+    "weight_lb": 183.8,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-06-18",
+    "weight_lb": 182.3,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-06-19",
+    "weight_lb": 182.2,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-06-20",
+    "weight_lb": 182.1,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-06-21",
+    "weight_lb": 182.6,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-06-24",
+    "weight_lb": 183.4,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-06-25",
+    "weight_lb": 182.3,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-06-26",
+    "weight_lb": 182.4,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-06-28",
+    "weight_lb": 180.7,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-07-03",
+    "weight_lb": 182.8,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-07-06",
+    "weight_lb": 182.4,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-07-07",
+    "weight_lb": 183.2,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-07-08",
+    "weight_lb": 182.8,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-07-09",
+    "weight_lb": 181.4,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-07-10",
+    "weight_lb": 180.6,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-07-11",
+    "weight_lb": 180.9,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-07-13",
+    "weight_lb": 181.8,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-07-15",
+    "weight_lb": 180.1,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-07-16",
+    "weight_lb": 179.8,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-07-19",
+    "weight_lb": 177.4,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-07-20",
+    "weight_lb": 177.4,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-07-21",
+    "weight_lb": 180.6,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-07-23",
+    "weight_lb": 178.6,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-07-24",
+    "weight_lb": 177,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-07-25",
+    "weight_lb": 177.4,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-07-26",
+    "weight_lb": 177.4,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-07-27",
+    "weight_lb": 177.1,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-07-28",
+    "weight_lb": 176.7,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-07-29",
+    "weight_lb": 176.5,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-07-30",
+    "weight_lb": 177,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-07-31",
+    "weight_lb": 176.8,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-08-02",
+    "weight_lb": 176.7,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-08-09",
+    "weight_lb": 176.5,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-08-10",
+    "weight_lb": 175.7,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-08-12",
+    "weight_lb": 175.8,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-08-13",
+    "weight_lb": 176.1,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-08-15",
+    "weight_lb": 176.8,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-08-18",
+    "weight_lb": 176.4,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-08-19",
+    "weight_lb": 175.3,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-08-20",
+    "weight_lb": 173.4,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-08-22",
+    "weight_lb": 175.2,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-08-24",
+    "weight_lb": 175.2,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-08-25",
+    "weight_lb": 174.5,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-08-26",
+    "weight_lb": 158.2,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-08-27",
+    "weight_lb": 174,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-08-28",
+    "weight_lb": 173.9,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-08-29",
+    "weight_lb": 173.3,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-08-30",
+    "weight_lb": 173,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-08-31",
+    "weight_lb": 173.8,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-09-01",
+    "weight_lb": 173.3,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-09-03",
+    "weight_lb": 173,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-09-04",
+    "weight_lb": 172.6,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-09-05",
+    "weight_lb": 172.3,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-09-06",
+    "weight_lb": 172.5,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-09-07",
+    "weight_lb": 174,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-09-09",
+    "weight_lb": 171.8,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-09-10",
+    "weight_lb": 170.5,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-09-16",
+    "weight_lb": 171.4,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-09-17",
+    "weight_lb": 170.3,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-09-18",
+    "weight_lb": 171.4,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-09-19",
+    "weight_lb": 171.6,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-09-21",
+    "weight_lb": 173.1,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-09-22",
+    "weight_lb": 173.4,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-09-23",
+    "weight_lb": 171.8,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-09-24",
+    "weight_lb": 170.6,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-09-26",
+    "weight_lb": 170.2,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-09-27",
+    "weight_lb": 171.1,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-09-30",
+    "weight_lb": 170.8,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-10-01",
+    "weight_lb": 169.3,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-10-02",
+    "weight_lb": 169.1,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-10-03",
+    "weight_lb": 170.2,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-10-05",
+    "weight_lb": 171.3,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-10-06",
+    "weight_lb": 171.8,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-10-07",
+    "weight_lb": 170.3,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-10-08",
+    "weight_lb": 168.7,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-10-13",
+    "weight_lb": 170.5,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-10-14",
+    "weight_lb": 170,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-10-15",
+    "weight_lb": 168.5,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-10-16",
+    "weight_lb": 169,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-10-17",
+    "weight_lb": 168.6,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-10-19",
+    "weight_lb": 169.5,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-10-21",
+    "weight_lb": 168,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-10-24",
+    "weight_lb": 168.2,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-10-27",
+    "weight_lb": 171,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-10-29",
+    "weight_lb": 169,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-10-30",
+    "weight_lb": 169.4,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-10-31",
+    "weight_lb": 167.2,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-11-04",
+    "weight_lb": 168.8,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-11-05",
+    "weight_lb": 169.6,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-11-08",
+    "weight_lb": 168.4,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-11-11",
+    "weight_lb": 168.5,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-11-12",
+    "weight_lb": 168.4,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-11-13",
+    "weight_lb": 167.6,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-11-14",
+    "weight_lb": 170,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-11-15",
+    "weight_lb": 169.2,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-11-16",
+    "weight_lb": 168,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-11-17",
+    "weight_lb": 169.9,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-11-18",
+    "weight_lb": 167.8,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-11-19",
+    "weight_lb": 166.1,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-11-26",
+    "weight_lb": 166.1,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-12-01",
+    "weight_lb": 169.1,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-12-03",
+    "weight_lb": 165.7,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-12-04",
+    "weight_lb": 166.8,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-12-05",
+    "weight_lb": 165.1,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-12-07",
+    "weight_lb": 167.1,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-12-08",
+    "weight_lb": 164.4,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-12-09",
+    "weight_lb": 163.8,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-12-10",
+    "weight_lb": 163.1,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-12-11",
+    "weight_lb": 162.6,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-12-12",
+    "weight_lb": 162.4,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-12-13",
+    "weight_lb": 163.1,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-12-15",
+    "weight_lb": 164.5,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-12-16",
+    "weight_lb": 162.3,
+    "source": "excel"
+  },
+  {
+    "measured_date": "2025-12-17",
+    "weight_lb": 161.8,
+    "source": "excel"
+  }
+]
