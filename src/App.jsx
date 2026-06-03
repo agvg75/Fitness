@@ -19281,42 +19281,122 @@ async function persistMealEntries(nextEntries, currentUserId) {
 
   async function deleteMealEntry(entryId) {
     const idStr = String(entryId)
+    console.log("[LIFT] deleteMealEntry:start", {
+      entryId: idStr,
+      mealEntriesCount: Array.isArray(mealEntries) ? mealEntries.length : 0,
+      trainerDerivedCount: Array.isArray(trainerDerivedDays) ? trainerDerivedDays.length : 0,
+      mealRecordsCount: Array.isArray(mealRecords) ? mealRecords.length : 0
+    })
+
     const matchedRow = [...mealEntries, ...trainerDerivedDays].find(row =>
       String(row?.id || "") === idStr || String(row?.source_meal_id || "") === idStr
     )
+    const prevMealRecords = Array.isArray(mealRecords) ? mealRecords : []
+    const matchedMealRecord = prevMealRecords.find(record => {
+      const candidates = [
+        record?.id,
+        record?.meal_id
+      ].map(value => String(value || "")).filter(Boolean)
+      return candidates.includes(idStr)
+    }) || null
     const targetMealRecordId = String(
       matchedRow?.source_meal_id ||
+      matchedMealRecord?.meal_id ||
+      matchedMealRecord?.id ||
       matchedRow?.meal_id ||
       matchedRow?.id ||
       entryId
     )
-    const targetDate = String(matchedRow?.date || "").slice(0, 10) || null
+    const targetDate = String(
+      matchedRow?.date ||
+      matchedMealRecord?.date ||
+      ""
+    ).slice(0, 10) || null
+    const targetIds = [...new Set([idStr, targetMealRecordId].map(value => String(value || "")).filter(Boolean))]
+
+    console.log("[LIFT] deleteMealEntry:resolved-target", {
+      entryId: idStr,
+      matchedRow,
+      matchedMealRecord,
+      targetMealRecordId,
+      targetDate,
+      targetIds
+    })
 
     // Remove from mealEntries (manually logged entries)
     const nextEntries = mealEntries.filter(row =>
-      ![idStr, targetMealRecordId].includes(String(row.id || "")) &&
-      ![idStr, targetMealRecordId].includes(String(row.source_meal_id || ""))
+      !targetIds.includes(String(row.id || "")) &&
+      !targetIds.includes(String(row.source_meal_id || ""))
     )
-    await persistMealEntries(nextEntries, session?.user?.id)
+    console.log("[LIFT] deleteMealEntry:mealEntries-filtered", {
+      entryId: idStr,
+      before: Array.isArray(mealEntries) ? mealEntries.length : 0,
+      after: nextEntries.length
+    })
+    try {
+      await persistMealEntries(nextEntries, session?.user?.id)
+    } catch (err) {
+      console.warn("[LIFT] deleteMealEntry:persistMealEntries failed, continuing trainer delete", {
+        entryId: idStr,
+        error: err?.message || String(err)
+      })
+    }
 
     // Remove from mealRecords (trainer-sourced entries in lift_meal_records)
-    const prevMealRecords = Array.isArray(mealRecords) ? mealRecords : []
     const nextMealRecords = prevMealRecords.filter(r => {
-      const rid = getMealRecordIdentity(r)
-      return rid === "" || ![idStr, targetMealRecordId].includes(rid)
+      const candidates = [
+        r?.id,
+        r?.meal_id,
+        getMealRecordIdentity(r)
+      ].map(value => String(value || "")).filter(Boolean)
+      return !candidates.some(value => targetIds.includes(value))
     })
     const trainerMealRemoved = nextMealRecords.length !== prevMealRecords.length
+    console.log("[LIFT] deleteMealEntry:mealRecords-filtered", {
+      entryId: idStr,
+      targetIds,
+      before: prevMealRecords.length,
+      after: nextMealRecords.length,
+      trainerMealRemoved
+    })
     const syncResult = trainerMealRemoved
       ? await syncLiftMealRecordsSnapshot(nextMealRecords)
       : { ok: true }
+    console.log("[LIFT] deleteMealEntry:sync-result", {
+      entryId: idStr,
+      trainerMealRemoved,
+      syncResult
+    })
 
     localStorage.setItem("lift_meal_records", JSON.stringify(nextMealRecords))
     setMealRecords(nextMealRecords)
-    if (targetDate) pruneLegacyMealLogDateKey(targetDate, [idStr, targetMealRecordId])
+    console.log("[LIFT] deleteMealEntry:local-state-updated", {
+      entryId: idStr,
+      targetIds,
+      targetDate,
+      nextMealRecordsCount: nextMealRecords.length
+    })
+    if (targetDate) {
+      console.log("[LIFT] deleteMealEntry:prune-legacy-date-key", { entryId: idStr, targetDate, targetIds })
+      pruneLegacyMealLogDateKey(targetDate, targetIds)
+    } else {
+      console.log("[LIFT] deleteMealEntry:no-legacy-date-key", { entryId: idStr, targetIds })
+    }
 
     if (syncResult.ok || !trainerMealRemoved) {
+      console.log("[LIFT] deleteMealEntry:clear-queue", {
+        entryId: idStr,
+        targetMealRecordId,
+        trainerMealRemoved
+      })
       clearPendingMealRecordDelete(targetMealRecordId)
     } else {
+      console.log("[LIFT] deleteMealEntry:queue-delete", {
+        entryId: idStr,
+        targetMealRecordId,
+        targetDate,
+        reason: syncResult.reason
+      })
       queuePendingMealRecordDelete({ mealRecordId: targetMealRecordId, date: targetDate, entryId: idStr })
       showToast("Meal deleted locally — cloud delete queued for retry")
       if (process.env.NODE_ENV === "development") {
