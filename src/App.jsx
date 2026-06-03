@@ -16841,6 +16841,101 @@ function buildUfdEntryFromQuickLog(entry) {
   }
 }
 
+const PENDING_MEAL_RECORD_DELETE_KEY = "lift_pending_meal_record_deletions"
+
+function getMealRecordIdentity(row) {
+  return String(row?.meal_id || row?.id || "")
+}
+
+function readPendingMealRecordDeletes() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(PENDING_MEAL_RECORD_DELETE_KEY) || "[]")
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+function writePendingMealRecordDeletes(queue) {
+  try {
+    if (Array.isArray(queue) && queue.length > 0) {
+      localStorage.setItem(PENDING_MEAL_RECORD_DELETE_KEY, JSON.stringify(queue))
+    } else {
+      localStorage.removeItem(PENDING_MEAL_RECORD_DELETE_KEY)
+    }
+  } catch {}
+}
+
+function queuePendingMealRecordDelete(entry) {
+  const mealRecordId = String(entry?.mealRecordId || "")
+  if (!mealRecordId) return
+
+  const existing = readPendingMealRecordDeletes()
+  const next = [
+    ...existing.filter(row => String(row?.mealRecordId || "") !== mealRecordId),
+    {
+      mealRecordId,
+      date: String(entry?.date || "").slice(0, 10) || null,
+      entryId: String(entry?.entryId || "") || null,
+      queuedAt: new Date().toISOString()
+    }
+  ]
+  writePendingMealRecordDeletes(next)
+}
+
+function clearPendingMealRecordDelete(mealRecordIds) {
+  const ids = new Set((Array.isArray(mealRecordIds) ? mealRecordIds : [mealRecordIds]).map(id => String(id || "")).filter(Boolean))
+  if (!ids.size) return
+  writePendingMealRecordDeletes(
+    readPendingMealRecordDeletes().filter(entry => !ids.has(String(entry?.mealRecordId || "")))
+  )
+}
+
+function pruneMealRecordsByIds(records, mealRecordIds) {
+  const ids = mealRecordIds instanceof Set
+    ? mealRecordIds
+    : new Set((Array.isArray(mealRecordIds) ? mealRecordIds : [mealRecordIds]).map(id => String(id || "")).filter(Boolean))
+
+  if (!ids.size) return Array.isArray(records) ? records : []
+
+  return (Array.isArray(records) ? records : []).filter(row => {
+    const recordId = getMealRecordIdentity(row)
+    return !recordId || !ids.has(recordId)
+  })
+}
+
+function pruneLegacyMealLogDateKey(isoDate, idsToRemove) {
+  const dateKey = String(isoDate || "").slice(0, 10)
+  if (!dateKey) return
+
+  const ids = new Set((Array.isArray(idsToRemove) ? idsToRemove : [idsToRemove]).map(id => String(id || "")).filter(Boolean))
+  if (!ids.size) return
+
+  try {
+    const storageKey = `meal-log-${dateKey}`
+    const raw = localStorage.getItem(storageKey)
+    if (!raw) return
+
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) {
+      localStorage.removeItem(storageKey)
+      return
+    }
+
+    const filtered = parsed.filter(row => {
+      const candidates = [
+        row?.id,
+        row?.meal_id,
+        row?.source_meal_id
+      ].map(value => String(value || "")).filter(Boolean)
+      return !candidates.some(value => ids.has(value))
+    })
+
+    if (filtered.length > 0) localStorage.setItem(storageKey, JSON.stringify(filtered))
+    else localStorage.removeItem(storageKey)
+  } catch {}
+}
+
 function getImputedSlots(isoDate, realEntries, templateTotals, mealPresets, skippedSlots = new Set()) {
   const bucket = getDayTypeBucket(isoDate)
 
@@ -17895,6 +17990,10 @@ useEffect(() => {
       const supabaseMeals = await store.get("ufd-meal-entries")
       // Load from localStorage (most recent writes from this device)
       const localMeals = (() => { try { return JSON.parse(localStorage.getItem("ufd-meal-entries") || "[]") } catch { return [] } })()
+      const pendingMealRecordDeletes = readPendingMealRecordDeletes()
+      const pendingMealRecordDeleteIds = new Set(
+        pendingMealRecordDeletes.map(entry => String(entry?.mealRecordId || "")).filter(Boolean)
+      )
 
       const mergedMeals = (() => {
         const remote = Array.isArray(supabaseMeals) ? supabaseMeals : []
@@ -17906,7 +18005,10 @@ useEffect(() => {
         local.forEach(e => { if (e?.id) byId.set(String(e.id), e) })
         return [...byId.values()].sort((a, b) => String(a.date).localeCompare(String(b.date)))
       })()
-      const storedMealRecords = await store.get("lift_meal_records") || []
+      const storedMealRecords = pruneMealRecordsByIds(
+        await store.get("lift_meal_records") || [],
+        pendingMealRecordDeleteIds
+      )
       const storedMeals = backfillMealRecordsToUfd(mergedMeals, storedMealRecords)
 
       if (storedMeals.length > 0) {
@@ -17932,7 +18034,41 @@ useEffect(() => {
       }
       setHydrated(true)
     })()
-  }, [session])
+}, [session])
+useEffect(() => {
+  if (!hydrated) return
+  if (!session?.user?.id) return
+
+  const pendingMealRecordDeletes = readPendingMealRecordDeletes()
+  if (!pendingMealRecordDeletes.length) return
+
+  let cancelled = false
+
+  ;(async () => {
+    const pendingIds = new Set(
+      pendingMealRecordDeletes.map(entry => String(entry?.mealRecordId || "")).filter(Boolean)
+    )
+    const nextMealRecords = pruneMealRecordsByIds(mealRecords, pendingIds)
+
+    if (!cancelled && JSON.stringify(nextMealRecords) !== JSON.stringify(mealRecords)) {
+      localStorage.setItem("lift_meal_records", JSON.stringify(nextMealRecords))
+      setMealRecords(nextMealRecords)
+    }
+
+    const syncResult = await syncLiftMealRecordsSnapshot(nextMealRecords, session.user.id)
+    if (cancelled || !syncResult.ok) {
+      if (!cancelled && process.env.NODE_ENV === "development") {
+        console.warn("[LIFT] Pending meal delete retry failed:", syncResult.reason)
+      }
+      return
+    }
+
+    clearPendingMealRecordDelete([...pendingIds])
+    pendingMealRecordDeletes.forEach(entry => pruneLegacyMealLogDateKey(entry?.date, [entry?.entryId, entry?.mealRecordId]))
+  })()
+
+  return () => { cancelled = true }
+}, [hydrated, mealRecords, session?.user?.id, supabase])
   useEffect(() => {
   ;(async () => {
     try {
@@ -18108,16 +18244,25 @@ useEffect(() => {
           // lift_meal_records — union by meal_id||id, Supabase wins on conflict
           const sbMr = data.find(r => r.key === "lift_meal_records")?.value
           if (Array.isArray(sbMr)) {
-            const local = Array.isArray(mealRecords) ? mealRecords : []
-            const merged = Object.values(
+            const local = Array.isArray(storedMealRecords) ? storedMealRecords : []
+            const merged = pruneMealRecordsByIds(Object.values(
               [...local, ...sbMr].reduce((acc, r) => {
-                const key = r.meal_id || r.id
+                const key = getMealRecordIdentity(r)
                 if (key) acc[key] = r
                 return acc
               }, {})
-            ).sort((a, b) => String(a.date).localeCompare(String(b.date)))
+            ).sort((a, b) => String(a.date).localeCompare(String(b.date))), pendingMealRecordDeleteIds)
             localStorage.setItem("lift_meal_records", JSON.stringify(merged))
             setMealRecords(merged)
+            if (pendingMealRecordDeleteIds.size && session?.user?.id) {
+              const syncResult = await syncLiftMealRecordsSnapshot(merged, session.user.id)
+              if (syncResult.ok) {
+                clearPendingMealRecordDelete([...pendingMealRecordDeleteIds])
+                pendingMealRecordDeletes.forEach(entry => pruneLegacyMealLogDateKey(entry?.date, [entry?.entryId, entry?.mealRecordId]))
+              } else if (process.env.NODE_ENV === "development") {
+                console.warn("[LIFT] Pending meal delete flush failed:", syncResult.reason)
+              }
+            }
           }
         }
       } catch (err) {
@@ -19043,6 +19188,33 @@ async function persistMealEntries(nextEntries, currentUserId) {
     await store.set("ufd-meal-presets", nextPresets)
   }
 
+  async function syncLiftMealRecordsSnapshot(nextMealRecords, currentUserId = session?.user?.id) {
+    if (!currentUserId) {
+      return { ok: false, reason: "missing-user-id" }
+    }
+
+    if (!supabase) {
+      return { ok: false, reason: "missing-supabase" }
+    }
+
+    try {
+      const { error } = await supabase.from("user_kv").upsert(
+        {
+          user_id: currentUserId,
+          key: "lift_meal_records",
+          value: nextMealRecords,
+          updated_at: new Date().toISOString()
+        },
+        { onConflict: "user_id,key" }
+      )
+
+      if (error) return { ok: false, reason: error.message || "supabase-upsert-failed" }
+      return { ok: true }
+    } catch (err) {
+      return { ok: false, reason: err?.message || "supabase-network-failed" }
+    }
+  }
+
   async function addPresetMeal(preset) {
     const entry = {
       id: crypto.randomUUID(),
@@ -19109,31 +19281,48 @@ async function persistMealEntries(nextEntries, currentUserId) {
 
   async function deleteMealEntry(entryId) {
     const idStr = String(entryId)
+    const matchedRow = [...mealEntries, ...trainerDerivedDays].find(row =>
+      String(row?.id || "") === idStr || String(row?.source_meal_id || "") === idStr
+    )
+    const targetMealRecordId = String(
+      matchedRow?.source_meal_id ||
+      matchedRow?.meal_id ||
+      matchedRow?.id ||
+      entryId
+    )
+    const targetDate = String(matchedRow?.date || "").slice(0, 10) || null
 
     // Remove from mealEntries (manually logged entries)
     const nextEntries = mealEntries.filter(row =>
-      String(row.id) !== idStr && String(row.source_meal_id || "") !== idStr
+      ![idStr, targetMealRecordId].includes(String(row.id || "")) &&
+      ![idStr, targetMealRecordId].includes(String(row.source_meal_id || ""))
     )
     await persistMealEntries(nextEntries, session?.user?.id)
 
     // Remove from mealRecords (trainer-sourced entries in lift_meal_records)
     const prevMealRecords = Array.isArray(mealRecords) ? mealRecords : []
     const nextMealRecords = prevMealRecords.filter(r => {
-      const rid = String(r.meal_id || r.id || "")
-      return rid === "" || rid !== idStr
+      const rid = getMealRecordIdentity(r)
+      return rid === "" || ![idStr, targetMealRecordId].includes(rid)
     })
-    // Always write - even if length is unchanged, a trainer-derived row
-    // may have matched via trainerDerivedDays but not via mealRecords directly
+    const trainerMealRemoved = nextMealRecords.length !== prevMealRecords.length
+    const syncResult = trainerMealRemoved
+      ? await syncLiftMealRecordsSnapshot(nextMealRecords)
+      : { ok: true }
+
     localStorage.setItem("lift_meal_records", JSON.stringify(nextMealRecords))
     setMealRecords(nextMealRecords)
-    try {
-      if (supabase && session?.user?.id) {
-        await supabase.from("user_kv").upsert(
-          { user_id: session.user.id, key: "lift_meal_records", value: nextMealRecords, updated_at: new Date().toISOString() },
-          { onConflict: "user_id,key" }
-        )
+    if (targetDate) pruneLegacyMealLogDateKey(targetDate, [idStr, targetMealRecordId])
+
+    if (syncResult.ok || !trainerMealRemoved) {
+      clearPendingMealRecordDelete(targetMealRecordId)
+    } else {
+      queuePendingMealRecordDelete({ mealRecordId: targetMealRecordId, date: targetDate, entryId: idStr })
+      showToast("Meal deleted locally — cloud delete queued for retry")
+      if (process.env.NODE_ENV === "development") {
+        console.warn("[LIFT] lift_meal_records delete sync queued:", syncResult.reason)
       }
-    } catch (e) { /* sync best-effort */ }
+    }
   }
 
   const todayMeals = useMemo(() => {
@@ -21375,27 +21564,19 @@ const bodyWeightForecastChart = useMemo(() => {
 }, [biometricRecords, bodyForecast])
 
 const bodyWeightRecentTrendChart = useMemo(() => {
-  if (!bodyForecast) return []
-
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const cutoff = new Date(today)
-  cutoff.setDate(cutoff.getDate() - 90)
-
-  const bio90 = (Array.isArray(biometricRecords) ? biometricRecords : [])
-    .map(r => {
-      const date = String(r.measured_date || r.date || r.timestamp || "").slice(0, 10)
-      const lb = Number(r.weight_lb)
+  const rows = (Array.isArray(mergedDailyWeights) ? mergedDailyWeights : [])
+    .map(row => {
+      const date = String(row?.date || row?.measured_date || "").slice(0, 10)
+      const lb = Number(row?.weight_lb ?? row?.weight ?? row?.weight_lbs_mean)
       if (!date || !Number.isFinite(lb) || lb <= 0) return null
       return { date, lb }
     })
     .filter(Boolean)
     .sort((a, b) => a.date.localeCompare(b.date))
-    .filter(r => new Date(r.date + "T12:00:00") >= cutoff)
 
-  return bio90.map((r, i) => {
+  return rows.map((r, i) => {
     const start = Math.max(0, i - 6)
-    const subset = bio90.slice(start, i + 1).map(x => x.lb)
+    const subset = rows.slice(start, i + 1).map(x => x.lb)
     const avg = subset.reduce((a, b) => a + b, 0) / subset.length
     const dateMs = new Date(`${r.date}T12:00:00`).getTime()
     return {
@@ -21405,7 +21586,7 @@ const bodyWeightRecentTrendChart = useMemo(() => {
       actual: Number(avg.toFixed(1))
     }
   })
-}, [biometricRecords, bodyForecast])
+}, [mergedDailyWeights])
 
 const bodyWeightProjectionChart = useMemo(() => {
   if (!bodyForecast) return []
@@ -21427,7 +21608,7 @@ const bodyWeightProjectionChart = useMemo(() => {
       dateMs: pointDate.getTime(),
       daysFromNow,
       daysFromNowLog: daysFromNow + 1,
-      projectedWeight: Number(point.baseline)
+      baselineWeight: Number(point.baseline)
     }
   })
 }, [bodyForecast, mergedDailyWeights, nutritionSeries])
@@ -21465,7 +21646,7 @@ const bodyWeightProjectionTicks = useMemo(() => {
 // (230+ lb) does not compress the current-weight range.
 const forecastYDomain = useMemo(() => {
   const recentActuals = bodyWeightRecentTrendChart.filter(r => r.actual != null).map(r => r.actual)
-  const projected = bodyWeightProjectionChart.filter(r => r.projectedWeight != null).map(r => r.projectedWeight)
+  const projected = bodyWeightProjectionChart.filter(r => r.baselineWeight != null).map(r => r.baselineWeight)
   const allVals = [...recentActuals, ...projected].filter(Number.isFinite)
   if (!allVals.length) return ["auto", "auto"]
   const upper = recentActuals.length
@@ -25014,6 +25195,7 @@ return (
               />
               <YAxis
                 type="number"
+                scale="linear"
                 domain={forecastYDomain}
                 label={{ value: "Weight (lb)", angle: -90, position: "insideLeft", offset: 15, fill: "#ced2f0", style: { textAnchor: "middle" } }}
               />
@@ -25051,6 +25233,7 @@ return (
               />
               <YAxis
                 type="number"
+                scale="linear"
                 domain={forecastYDomain}
                 label={{ value: "Weight (lb)", angle: -90, position: "insideLeft", offset: 15, fill: "#ced2f0", style: { textAnchor: "middle" } }}
               />
@@ -25062,7 +25245,7 @@ return (
                 formatter={(v) => [v != null ? `${v} lb` : "—", "Projected"]}
               />
               <Legend verticalAlign="top" height={28} />
-              <Line type="monotone" dataKey="projectedWeight" name="Projected" stroke="#ffd166" strokeWidth={2} dot={false} connectNulls={false} />
+              <Line type="monotone" dataKey="baselineWeight" name="Projected" stroke="#ffd166" strokeWidth={2} dot={false} connectNulls={false} />
               {bodyForecast && <ReferenceLine y={bodyForecast.phase1TargetWeight} stroke="#ffd166" strokeDasharray="3 3" label={{ value: "Phase 1", fill: "#ffd166", fontSize: 11 }} />}
               {bodyForecast && <ReferenceLine y={bodyForecast.finalTargetWeight} stroke="#4ade80" strokeDasharray="3 3" label={{ value: "Target", fill: "#4ade80", fontSize: 11 }} />}
             </LineChart>
