@@ -8193,13 +8193,40 @@ function rollingAverage(rows, key, window = 7) {
 function projectWeightTrend(weights, nutritionSeries, weeks = 12) {
   if (!weights.length) return []
 
-  const lastWeights = weights.slice(-21)
-  if (lastWeights.length < 2) return []
+  const validWeights = weights
+    .map(row => ({
+      date: String(row?.date || row?.measured_date || "").slice(0, 10),
+      weight_lb: Number(row?.weight_lb ?? row?.weight ?? row?.weight_lbs_mean)
+    }))
+    .filter(row => row.date && Number.isFinite(row.weight_lb) && row.weight_lb > 0)
+    .sort((a, b) => a.date.localeCompare(b.date))
 
-  const first = toNum(lastWeights[0].weight_lb)
-  const last = toNum(lastWeights[lastWeights.length - 1].weight_lb)
-  const days = Math.max(1, lastWeights.length - 1)
-  let weeklySlope = ((last - first) / days) * 7
+  if (validWeights.length < 2) return []
+
+  const smoothedWeights = rollingAverage(validWeights, "weight_lb", 7)
+    .map(row => ({
+      ...row,
+      avgWeight: Number(row.weight_lb_7d)
+    }))
+    .filter(row => Number.isFinite(row.avgWeight) && row.avgWeight > 0)
+
+  const longWindow = smoothedWeights.slice(-84)
+  if (longWindow.length < 2) return []
+
+  const first = Number(longWindow[0].avgWeight)
+  const last = Number(longWindow[longWindow.length - 1].avgWeight)
+  const startMs = new Date(`${longWindow[0].date}T12:00:00`).getTime()
+  const endMs = new Date(`${longWindow[longWindow.length - 1].date}T12:00:00`).getTime()
+  const days = Math.max(1, Math.round((endMs - startMs) / 86400000))
+  const observedWeeklySlope = ((last - first) / days) * 7
+  const configuredWeeklySlope = -Number(LIFT_CONFIG.fat_loss_rate_monthly || 0) / 4.345
+  const isFatLossPhase = configuredWeeklySlope < 0
+
+  let weeklySlope = observedWeeklySlope <= 0
+    ? (observedWeeklySlope * 0.7) + (configuredWeeklySlope * 0.3)
+    : (observedWeeklySlope * 0.15) + (configuredWeeklySlope * 0.85)
+
+  if (isFatLossPhase) weeklySlope = Math.min(weeklySlope, -0.05)
 
   if (weeklySlope < -1.5) weeklySlope = -1.5
   if (weeklySlope > 1.5) weeklySlope = 1.5
@@ -8215,8 +8242,8 @@ function projectWeightTrend(weights, nutritionSeries, weeks = 12) {
   const conservativeSlope = weeklySlope * 0.6
   const optimisticSlope = weeklySlope * (0.9 + 0.2 * proteinHitRate)
 
-  const latestDate = lastWeights[lastWeights.length - 1].date
-  const latestWeight = toNum(lastWeights[lastWeights.length - 1].weight_lb)
+  const latestDate = longWindow[longWindow.length - 1].date
+  const latestWeight = Number(longWindow[longWindow.length - 1].avgWeight)
   const baseDate = new Date(`${latestDate}T00:00:00`)
 
   const out = []
@@ -8224,13 +8251,21 @@ function projectWeightTrend(weights, nutritionSeries, weeks = 12) {
     const d = new Date(baseDate)
     d.setDate(d.getDate() + w * 7)
     const date = d.toISOString().slice(0, 10)
+    const baseline = latestWeight + weeklySlope * w
+    const conservative = latestWeight + conservativeSlope * w
+    const optimistic = latestWeight + optimisticSlope * w
+    const clampCutPhase = value => (
+      isFatLossPhase
+        ? Math.min(latestWeight, value)
+        : value
+    )
 
     out.push({
       date,
       label: w === 0 ? "Now" : `+${w}w`,
-      baseline: Number((latestWeight + weeklySlope * w).toFixed(1)),
-      conservative: Number((latestWeight + conservativeSlope * w).toFixed(1)),
-      optimistic: Number((latestWeight + optimisticSlope * w).toFixed(1)),
+      baseline: Number(clampCutPhase(baseline).toFixed(1)),
+      conservative: Number(clampCutPhase(conservative).toFixed(1)),
+      optimistic: Number(clampCutPhase(optimistic).toFixed(1)),
       confidence_pct: Math.round(confidence * 100)
     })
   }
