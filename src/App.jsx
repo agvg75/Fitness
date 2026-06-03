@@ -573,6 +573,16 @@ function fmtShortDate(dateStr) {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" })
 }
 
+function fmtMonthYear(dateStr) {
+  if (!dateStr) return "NA"
+  const normalized = /^\d{4}-\d{2}-\d{2}$/.test(String(dateStr))
+    ? `${dateStr}T12:00:00`
+    : String(dateStr)
+  const d = new Date(normalized)
+  if (Number.isNaN(d.getTime())) return String(dateStr)
+  return d.toLocaleDateString(undefined, { month: "short", year: "numeric" })
+}
+
 function todayISO() {
   return new Date().toISOString().slice(0, 10)
 }
@@ -19281,13 +19291,6 @@ async function persistMealEntries(nextEntries, currentUserId) {
 
   async function deleteMealEntry(entryId) {
     const idStr = String(entryId)
-    console.log("[LIFT] deleteMealEntry:start", {
-      entryId: idStr,
-      mealEntriesCount: Array.isArray(mealEntries) ? mealEntries.length : 0,
-      trainerDerivedCount: Array.isArray(trainerDerivedDays) ? trainerDerivedDays.length : 0,
-      mealRecordsCount: Array.isArray(mealRecords) ? mealRecords.length : 0
-    })
-
     const matchedRow = [...mealEntries, ...trainerDerivedDays].find(row =>
       String(row?.id || "") === idStr || String(row?.source_meal_id || "") === idStr
     )
@@ -19314,29 +19317,15 @@ async function persistMealEntries(nextEntries, currentUserId) {
     ).slice(0, 10) || null
     const targetIds = [...new Set([idStr, targetMealRecordId].map(value => String(value || "")).filter(Boolean))]
 
-    console.log("[LIFT] deleteMealEntry:resolved-target", {
-      entryId: idStr,
-      matchedRow,
-      matchedMealRecord,
-      targetMealRecordId,
-      targetDate,
-      targetIds
-    })
-
     // Remove from mealEntries (manually logged entries)
     const nextEntries = mealEntries.filter(row =>
       !targetIds.includes(String(row.id || "")) &&
       !targetIds.includes(String(row.source_meal_id || ""))
     )
-    console.log("[LIFT] deleteMealEntry:mealEntries-filtered", {
-      entryId: idStr,
-      before: Array.isArray(mealEntries) ? mealEntries.length : 0,
-      after: nextEntries.length
-    })
     try {
       await persistMealEntries(nextEntries, session?.user?.id)
     } catch (err) {
-      console.warn("[LIFT] deleteMealEntry:persistMealEntries failed, continuing trainer delete", {
+      console.warn("[LIFT] Meal entry persistence failed; continuing trainer meal delete", {
         entryId: idStr,
         error: err?.message || String(err)
       })
@@ -19352,51 +19341,19 @@ async function persistMealEntries(nextEntries, currentUserId) {
       return !candidates.some(value => targetIds.includes(value))
     })
     const trainerMealRemoved = nextMealRecords.length !== prevMealRecords.length
-    console.log("[LIFT] deleteMealEntry:mealRecords-filtered", {
-      entryId: idStr,
-      targetIds,
-      before: prevMealRecords.length,
-      after: nextMealRecords.length,
-      trainerMealRemoved
-    })
     const syncResult = trainerMealRemoved
       ? await syncLiftMealRecordsSnapshot(nextMealRecords)
       : { ok: true }
-    console.log("[LIFT] deleteMealEntry:sync-result", {
-      entryId: idStr,
-      trainerMealRemoved,
-      syncResult
-    })
 
     localStorage.setItem("lift_meal_records", JSON.stringify(nextMealRecords))
     setMealRecords(nextMealRecords)
-    console.log("[LIFT] deleteMealEntry:local-state-updated", {
-      entryId: idStr,
-      targetIds,
-      targetDate,
-      nextMealRecordsCount: nextMealRecords.length
-    })
     if (targetDate) {
-      console.log("[LIFT] deleteMealEntry:prune-legacy-date-key", { entryId: idStr, targetDate, targetIds })
       pruneLegacyMealLogDateKey(targetDate, targetIds)
-    } else {
-      console.log("[LIFT] deleteMealEntry:no-legacy-date-key", { entryId: idStr, targetIds })
     }
 
     if (syncResult.ok || !trainerMealRemoved) {
-      console.log("[LIFT] deleteMealEntry:clear-queue", {
-        entryId: idStr,
-        targetMealRecordId,
-        trainerMealRemoved
-      })
       clearPendingMealRecordDelete(targetMealRecordId)
     } else {
-      console.log("[LIFT] deleteMealEntry:queue-delete", {
-        entryId: idStr,
-        targetMealRecordId,
-        targetDate,
-        reason: syncResult.reason
-      })
       queuePendingMealRecordDelete({ mealRecordId: targetMealRecordId, date: targetDate, entryId: idStr })
       showToast("Meal deleted locally — cloud delete queued for retry")
       if (process.env.NODE_ENV === "development") {
@@ -21644,29 +21601,13 @@ const bodyWeightForecastChart = useMemo(() => {
 }, [biometricRecords, bodyForecast])
 
 const bodyWeightRecentTrendChart = useMemo(() => {
-  const rows = (Array.isArray(mergedDailyWeights) ? mergedDailyWeights : [])
-    .map(row => {
-      const date = String(row?.date || row?.measured_date || "").slice(0, 10)
-      const lb = Number(row?.weight_lb ?? row?.weight ?? row?.weight_lbs_mean)
-      if (!date || !Number.isFinite(lb) || lb <= 0) return null
-      return { date, lb }
-    })
-    .filter(Boolean)
-    .sort((a, b) => a.date.localeCompare(b.date))
-
-  return rows.map((r, i) => {
-    const start = Math.max(0, i - 6)
-    const subset = rows.slice(start, i + 1).map(x => x.lb)
-    const avg = subset.reduce((a, b) => a + b, 0) / subset.length
-    const dateMs = new Date(`${r.date}T12:00:00`).getTime()
-    return {
-      date: r.date,
-      dateMs,
-      label: fmtShortDate(r.date),
-      actual: Number(avg.toFixed(1))
-    }
-  })
-}, [mergedDailyWeights])
+  return (Array.isArray(weightChartData) ? weightChartData : []).map(row => ({
+    date: row.date,
+    dateMs: new Date(`${row.date}T12:00:00`).getTime(),
+    label: fmtMonthYear(row.date),
+    actual: Number(row.avg)
+  }))
+}, [weightChartData])
 
 const bodyWeightProjectionChart = useMemo(() => {
   if (!bodyForecast) return []
@@ -21679,32 +21620,39 @@ const bodyWeightProjectionChart = useMemo(() => {
     : 365
   const forecastWeeks = Math.max(12, Math.ceil(finalEtaDays / 7))
   const weeklyProjection = projectWeightTrend(mergedDailyWeights, nutritionSeries, forecastWeeks)
-
-  return weeklyProjection.map(point => {
+  const projected = weeklyProjection.map(point => {
     const pointDate = new Date(`${point.date}T12:00:00`)
     const daysFromNow = Math.max(0, Math.round((pointDate.getTime() - today.getTime()) / 86400000))
     return {
-      ...point,
-      dateMs: pointDate.getTime(),
+      date: point.date,
       daysFromNow,
       daysFromNowLog: daysFromNow + 1,
-      baselineWeight: Number(point.baseline)
+      baselineWeight: Number(point.baseline),
+      label: point.label
     }
   })
+
+  if (process.env.NODE_ENV === "development" && projected.length) {
+    console.log("[LIFT] bodyWeightProjectionChart first/last", {
+      first: projected[0],
+      last: projected[projected.length - 1]
+    })
+  }
+
+  return projected
 }, [bodyForecast, mergedDailyWeights, nutritionSeries])
 
 const bodyWeightProjectionAxisMode = useMemo(() => {
   const lastPoint = bodyWeightProjectionChart[bodyWeightProjectionChart.length - 1]
   const spanDays = Number(lastPoint?.daysFromNow || 0)
   return {
-    isLog: spanDays >= 120,
+    isLog: true,
     spanDays: Math.max(spanDays, 90)
   }
 }, [bodyWeightProjectionChart])
 
 const bodyWeightProjectionTicks = useMemo(() => {
   const monthTicks = [
-    { days: 0, label: "Now" },
     { days: 30, label: "1mo" },
     { days: 90, label: "3mo" },
     { days: 180, label: "6mo" },
@@ -21722,19 +21670,13 @@ const bodyWeightProjectionTicks = useMemo(() => {
     .map(t => ({ value: t.days, label: t.label }))
 }, [bodyWeightProjectionAxisMode])
 
-// Y-axis domain: cap top at max of recent 90d actuals + 5 lb so history
-// (230+ lb) does not compress the current-weight range.
 const forecastYDomain = useMemo(() => {
-  const recentActuals = bodyWeightRecentTrendChart.filter(r => r.actual != null).map(r => r.actual)
-  const projected = bodyWeightProjectionChart.filter(r => r.baselineWeight != null).map(r => r.baselineWeight)
-  const allVals = [...recentActuals, ...projected].filter(Number.isFinite)
-  if (!allVals.length) return ["auto", "auto"]
-  const upper = recentActuals.length
-    ? Math.min(Math.max(...recentActuals) + 5, 200)
-    : Math.min(Math.max(...allVals) + 5, 200)
-  const lower = Math.min(...allVals) - 3
-  return [Math.floor(lower), Math.ceil(upper)]
-}, [bodyWeightProjectionChart, bodyWeightRecentTrendChart])
+  const upperAnchor = Math.max(
+    Number(bodyForecast?.currentWeight || 0),
+    ...bodyWeightRecentTrendChart.map(r => Number(r.actual || 0)).filter(Number.isFinite)
+  )
+  return [140, Math.max(165, Math.ceil(upperAnchor + 2))]
+}, [bodyForecast, bodyWeightRecentTrendChart])
 
 // Per-modality volume forecast charts (actuals from weeklyBuckets + projected points)
 const makeVolumeForecastChart = (field, forecastKeys) => {
@@ -25271,7 +25213,14 @@ return (
                 scale="time"
                 domain={["dataMin", "dataMax"]}
                 tick={{ fontSize: 11 }}
-                tickFormatter={value => fmtShortDate(new Date(value).toISOString().slice(0, 10))}
+                tickFormatter={value => fmtMonthYear(new Date(value).toISOString().slice(0, 10))}
+                label={{
+                  value: "Date",
+                  position: "insideBottom",
+                  offset: -10,
+                  fill: "#ced2f0",
+                  style: { textAnchor: "middle" }
+                }}
               />
               <YAxis
                 type="number"
@@ -25280,7 +25229,7 @@ return (
                 label={{ value: "Weight (lb)", angle: -90, position: "insideLeft", offset: 15, fill: "#ced2f0", style: { textAnchor: "middle" } }}
               />
               <Tooltip
-                labelFormatter={value => fmtShortDate(new Date(value).toISOString().slice(0, 10))}
+                labelFormatter={value => fmtMonthYear(new Date(value).toISOString().slice(0, 10))}
                 formatter={(v) => [v != null ? `${v} lb` : "—", "Actual (7d avg)"]}
               />
               <Legend verticalAlign="top" height={28} />
@@ -25304,7 +25253,7 @@ return (
                 tick={{ fontSize: 11 }}
                 tickFormatter={value => bodyWeightProjectionTicks.find(t => t.value === value)?.label || ""}
                 label={{
-                  value: bodyWeightProjectionAxisMode.isLog ? "Time (log scale)" : "Time (linear)",
+                  value: "Time from today (log scale)",
                   position: "insideBottom",
                   offset: -10,
                   fill: "#ced2f0",
