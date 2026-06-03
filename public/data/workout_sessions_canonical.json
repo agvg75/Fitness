@@ -152235,11 +152235,11 @@
         "elevation_m": null,
         "workout_type": "Strength Training",
         "source_device": "Andres’s Apple Watch",
-        "synced_at": "2026-06-03T01:46:12.128Z"
+        "synced_at": "2026-06-03T02:46:13.320Z"
       },
       "overlap_summary": null,
       "created_at": "2026-05-21T18:11:53.018522+00:00",
-      "updated_at": "2026-06-03T01:46:12.248488+00:00",
+      "updated_at": "2026-06-03T02:46:13.384467+00:00",
       "avg_hr": 93,
       "trimp": 52
     },
@@ -152271,11 +152271,11 @@
         "elevation_m": 257.213,
         "workout_type": "Outdoor Running",
         "source_device": "Andres’s Apple Watch",
-        "synced_at": "2026-06-03T01:46:10.891Z"
+        "synced_at": "2026-06-03T02:46:11.819Z"
       },
       "overlap_summary": null,
       "created_at": "2026-05-22T14:45:20.13261+00:00",
-      "updated_at": "2026-06-03T01:46:11.069907+00:00",
+      "updated_at": "2026-06-03T02:46:11.940462+00:00",
       "avg_hr": 126,
       "trimp": 31
     },
@@ -152307,11 +152307,11 @@
         "elevation_m": null,
         "workout_type": "Strength Training",
         "source_device": "Andres’s Apple Watch",
-        "synced_at": "2026-06-03T01:46:09.753Z"
+        "synced_at": "2026-06-03T02:46:10.739Z"
       },
       "overlap_summary": null,
       "created_at": "2026-05-22T14:45:19.014343+00:00",
-      "updated_at": "2026-06-03T01:46:09.913622+00:00",
+      "updated_at": "2026-06-03T02:46:10.824215+00:00",
       "avg_hr": 101,
       "trimp": 42
     },
@@ -152343,11 +152343,11 @@
         "elevation_m": null,
         "workout_type": "Pool Swim",
         "source_device": "Andres’s Apple Watch",
-        "synced_at": "2026-06-03T01:46:08.759Z"
+        "synced_at": "2026-06-03T02:46:09.533Z"
       },
       "overlap_summary": null,
       "created_at": "2026-05-24T08:00:07.140321+00:00",
-      "updated_at": "2026-06-03T01:46:08.915979+00:00",
+      "updated_at": "2026-06-03T02:46:09.729245+00:00",
       "avg_hr": 116,
       "trimp": 20
     },
@@ -152379,11 +152379,11 @@
         "elevation_m": 252.224,
         "workout_type": "Outdoor Running",
         "source_device": "Andres’s Apple Watch",
-        "synced_at": "2026-06-03T01:46:07.799Z"
+        "synced_at": "2026-06-03T02:46:08.739Z"
       },
       "overlap_summary": null,
       "created_at": "2026-05-25T08:00:06.961471+00:00",
-      "updated_at": "2026-06-03T01:46:07.943236+00:00",
+      "updated_at": "2026-06-03T02:46:08.832818+00:00",
       "avg_hr": 143,
       "trimp": 61
     },
@@ -152415,11 +152415,11 @@
         "elevation_m": null,
         "workout_type": "Strength Training",
         "source_device": "Andres’s Apple Watch",
-        "synced_at": "2026-06-03T01:46:06.422Z"
+        "synced_at": "2026-06-03T02:46:07.759Z"
       },
       "overlap_summary": null,
       "created_at": "2026-05-26T08:00:06.800269+00:00",
-      "updated_at": "2026-06-03T01:46:06.559619+00:00",
+      "updated_at": "2026-06-03T02:46:07.8292+00:00",
       "avg_hr": 83,
       "trimp": 51
     },
@@ -152451,11 +152451,11 @@
         "elevation_m": 240.402,
         "workout_type": "Outdoor Cycling",
         "source_device": "Andres’s Apple Watch",
-        "synced_at": "2026-06-03T01:46:05.308Z"
+        "synced_at": "2026-06-03T02:46:06.743Z"
       },
       "overlap_summary": null,
       "created_at": "2026-05-26T19:45:52.897985+00:00",
-      "updated_at": "2026-06-03T01:46:05.442119+00:00",
+      "updated_at": "2026-06-03T02:46:06.815266+00:00",
       "avg_hr": 93,
       "trimp": 41
     },
@@ -152487,11 +152487,11 @@
         "elevation_m": 251.639,
         "workout_type": "Outdoor Cycling",
         "source_device": "Andres’s Apple Watch",
-        "synced_at": "2026-06-03T01:46:03.915Z"
+        "synced_at": "2026-06-03T02:46:05.748Z"
       },
       "overlap_summary": null,
       "created_at": "2026-05-27T08:42:23.406084+00:00",
-      "updated_at": "2026-06-03T01:46:04.226237+00:00",
+      "updated_at": "2026-06-03T02:46:05.816478+00:00",
       "avg_hr": 115,
       "trimp": 16
     },
@@ -152523,11 +152523,11 @@
         "elevation_m": 252.146,
         "workout_type": "Outdoor Cycling",
         "source_device": "Andres’s Apple Watch",
-        "synced_at": "2026-06-03T01:46:02.762Z"
+        "synced_at": "2026-06-03T02:46:04.551Z"
       },
       "overlap_summary": null,
       "created_at": "2026-05-27T15:18:00.100209+00:00",
-      "updated_at": "2026-06-03T01:46:02.910144+00:00",
+      "updated_at": "2026-06-03T02:46:04.609681+00:00",
       "avg_hr": 77,
       "trimp": 1
     },
@@ -152559,11 +152559,11 @@
         "elevation_m": 252.081,
         "workout_type": "Outdoor Cycling",
         "source_device": "Cadence",
-        "synced_at": "2026-06-03T01:46:01.857Z"
+        "synced_at": "2026-06-03T02:46:03.789Z"
       },
       "overlap_summary": null,
       "created_at": "2026-05-27T15:17:58.971977+00:00",
-      "updated_at": "2026-06-03T01:46:02.049189+00:00",
+      "updated_at": "2026-06-03T02:46:03.859782+00:00",
       "avg_hr": 119,
       "trimp": 40
     },
@@ -152595,11 +152595,11 @@
         "elevation_m": 251.287,
         "workout_type": "Outdoor Running",
         "source_device": "Andres’s Apple Watch",
-        "synced_at": "2026-06-03T01:46:00.885Z"
+        "synced_at": "2026-06-03T02:46:02.877Z"
       },
       "overlap_summary": null,
       "created_at": "2026-05-27T22:18:14.519329+00:00",
-      "updated_at": "2026-06-03T01:46:01.025926+00:00",
+      "updated_at": "2026-06-03T02:46:02.944564+00:00",
       "avg_hr": 137,
       "trimp": 23
     },
@@ -152631,11 +152631,11 @@
         "elevation_m": null,
         "workout_type": "Strength Training",
         "source_device": "Andres’s Apple Watch",
-        "synced_at": "2026-06-03T01:45:59.893Z"
+        "synced_at": "2026-06-03T02:46:02.013Z"
       },
       "overlap_summary": null,
       "created_at": "2026-05-27T22:18:13.361109+00:00",
-      "updated_at": "2026-06-03T01:46:00.027476+00:00",
+      "updated_at": "2026-06-03T02:46:02.07462+00:00",
       "avg_hr": 95,
       "trimp": 27
     },
@@ -152667,11 +152667,11 @@
         "elevation_m": null,
         "workout_type": "Pool Swim",
         "source_device": "Andres’s Apple Watch",
-        "synced_at": "2026-06-03T01:45:59.002Z"
+        "synced_at": "2026-06-03T02:46:01.065Z"
       },
       "overlap_summary": null,
       "created_at": "2026-05-28T14:53:14.922464+00:00",
-      "updated_at": "2026-06-03T01:45:59.110112+00:00",
+      "updated_at": "2026-06-03T02:46:01.133146+00:00",
       "avg_hr": 112,
       "trimp": 15
     },
@@ -152703,11 +152703,11 @@
         "elevation_m": null,
         "workout_type": "Strength Training",
         "source_device": "Andres’s Apple Watch",
-        "synced_at": "2026-06-03T01:45:58.003Z"
+        "synced_at": "2026-06-03T02:46:00.120Z"
       },
       "overlap_summary": null,
       "created_at": "2026-05-28T14:53:13.859783+00:00",
-      "updated_at": "2026-06-03T01:45:58.190299+00:00",
+      "updated_at": "2026-06-03T02:46:00.204217+00:00",
       "avg_hr": 95,
       "trimp": 56
     },
@@ -152739,11 +152739,11 @@
         "elevation_m": 241.811,
         "workout_type": "Outdoor Cycling",
         "source_device": "Cadence",
-        "synced_at": "2026-06-03T01:45:56.936Z"
+        "synced_at": "2026-06-03T02:45:58.993Z"
       },
       "overlap_summary": null,
       "created_at": "2026-05-28T14:53:12.575468+00:00",
-      "updated_at": "2026-06-03T01:45:57.062865+00:00",
+      "updated_at": "2026-06-03T02:45:59.138143+00:00",
       "avg_hr": 123,
       "trimp": 25
     },
@@ -152775,11 +152775,11 @@
         "elevation_m": 256.611,
         "workout_type": "Outdoor Cycling",
         "source_device": "Cadence",
-        "synced_at": "2026-06-03T01:45:56.032Z"
+        "synced_at": "2026-06-03T02:45:57.997Z"
       },
       "overlap_summary": null,
       "created_at": "2026-05-29T08:48:32.495295+00:00",
-      "updated_at": "2026-06-03T01:45:56.194704+00:00",
+      "updated_at": "2026-06-03T02:45:58.124606+00:00",
       "avg_hr": 121,
       "trimp": 28
     },
@@ -152811,11 +152811,11 @@
         "elevation_m": 258.412,
         "workout_type": "Outdoor Running",
         "source_device": "Andres’s Apple Watch",
-        "synced_at": "2026-06-03T01:45:54.888Z"
+        "synced_at": "2026-06-03T02:45:57.098Z"
       },
       "overlap_summary": null,
       "created_at": "2026-05-29T14:42:00.687815+00:00",
-      "updated_at": "2026-06-03T01:45:55.021343+00:00",
+      "updated_at": "2026-06-03T02:45:57.165931+00:00",
       "avg_hr": 121,
       "trimp": 11
     },
@@ -152847,11 +152847,11 @@
         "elevation_m": null,
         "workout_type": "Strength Training",
         "source_device": "Andres’s Apple Watch",
-        "synced_at": "2026-06-03T01:45:53.854Z"
+        "synced_at": "2026-06-03T02:45:56.186Z"
       },
       "overlap_summary": null,
       "created_at": "2026-05-29T14:41:59.404763+00:00",
-      "updated_at": "2026-06-03T01:45:54.091411+00:00",
+      "updated_at": "2026-06-03T02:45:56.283334+00:00",
       "avg_hr": 88,
       "trimp": 55
     },
@@ -152883,11 +152883,11 @@
         "elevation_m": 242.855,
         "workout_type": "Outdoor Cycling",
         "source_device": "Cadence",
-        "synced_at": "2026-06-03T01:45:52.750Z"
+        "synced_at": "2026-06-03T02:45:54.920Z"
       },
       "overlap_summary": null,
       "created_at": "2026-05-29T20:45:50.288634+00:00",
-      "updated_at": "2026-06-03T01:45:52.908113+00:00",
+      "updated_at": "2026-06-03T02:45:55.104876+00:00",
       "avg_hr": 116,
       "trimp": 30
     },
@@ -152919,11 +152919,11 @@
         "elevation_m": 252.352,
         "workout_type": "Outdoor Running",
         "source_device": "Andres’s Apple Watch",
-        "synced_at": "2026-06-03T01:45:51.641Z"
+        "synced_at": "2026-06-03T02:45:53.816Z"
       },
       "overlap_summary": null,
       "created_at": "2026-05-31T20:45:50.801134+00:00",
-      "updated_at": "2026-06-03T01:45:51.903605+00:00",
+      "updated_at": "2026-06-03T02:45:53.953727+00:00",
       "avg_hr": 129,
       "trimp": 71
     },
@@ -152955,13 +152955,85 @@
         "elevation_m": null,
         "workout_type": "Strength Training",
         "source_device": "Andres’s Apple Watch",
-        "synced_at": "2026-06-03T01:45:49.489Z"
+        "synced_at": "2026-06-03T02:45:52.573Z"
       },
       "overlap_summary": null,
       "created_at": "2026-06-01T12:45:51.648198+00:00",
-      "updated_at": "2026-06-03T01:45:50.514973+00:00",
+      "updated_at": "2026-06-03T02:45:52.653161+00:00",
       "avg_hr": 92,
       "trimp": 51
+    },
+    {
+      "id": "7049f5f3-3036-4d8b-897a-4118f0068ab9",
+      "session_id": "healthfit_20260602_054534_strength",
+      "user_id": "9ec703fb-9e9e-4a57-a365-6222b1a822f5",
+      "start_date": "2026-06-02T05:45:34.000Z",
+      "end_date": "2026-06-02T07:15:34.000Z",
+      "duration_min": 90,
+      "canonical_type": "strength",
+      "match_confidence": "1",
+      "relationship": "single",
+      "sources": [
+        {
+          "type": "healthfit",
+          "activity": "Strength Training",
+          "device": "Fitness",
+          "file": "2026-06-02-054534-Strength Training-Fitness.csv"
+        }
+      ],
+      "preferred_metrics": {
+        "avg_hr": null,
+        "max_hr": null,
+        "distance_mi": 0,
+        "distance_km": 0,
+        "calories": null,
+        "vo2_max": null,
+        "elevation_m": null,
+        "workout_type": "Strength Training",
+        "source_device": "Fitness",
+        "synced_at": "2026-06-03T02:45:49.208Z"
+      },
+      "overlap_summary": null,
+      "created_at": "2026-06-03T02:45:50.210412+00:00",
+      "updated_at": "2026-06-03T02:45:50.210412+00:00",
+      "avg_hr": null,
+      "trimp": null
+    },
+    {
+      "id": "019c6bca-f5b4-4352-b5d9-ad4997719ded",
+      "session_id": "healthfit_20260602_203907_swim",
+      "user_id": "9ec703fb-9e9e-4a57-a365-6222b1a822f5",
+      "start_date": "2026-06-02T20:39:07.000Z",
+      "end_date": "2026-06-02T21:04:07.000Z",
+      "duration_min": 25,
+      "canonical_type": "swim",
+      "match_confidence": "1",
+      "relationship": "single",
+      "sources": [
+        {
+          "type": "healthfit",
+          "activity": "Pool Swim",
+          "device": "Fitness",
+          "file": "2026-06-02-203907-Pool Swim-Fitness.csv"
+        }
+      ],
+      "preferred_metrics": {
+        "avg_hr": 74,
+        "max_hr": 74,
+        "distance_mi": null,
+        "distance_km": null,
+        "calories": null,
+        "vo2_max": null,
+        "elevation_m": null,
+        "workout_type": "Pool Swim",
+        "source_device": "Fitness",
+        "synced_at": "2026-06-03T02:45:51.408Z"
+      },
+      "overlap_summary": null,
+      "created_at": "2026-06-03T02:45:51.573149+00:00",
+      "updated_at": "2026-06-03T02:45:51.573149+00:00",
+      "avg_hr": 74,
+      "trimp": 12
     }
   ]
 }
