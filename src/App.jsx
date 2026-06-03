@@ -13682,7 +13682,7 @@ Return ONLY a JSON object with this exact structure, no explanation:
       if (nutritionResult.length && supabase && STORE_USER_ID) {
         const existing = await store.get("ufd-meal-entries") || []
         const merged = [...(Array.isArray(existing) ? existing : []), ...nutritionResult.map(n => ({
-          id: makeSessionId("cron", n), date: n.date, meal: n.meal_group || "Other",
+          id: makeSessionId("cron", n), date: (n.date || "").slice(0, 10), meal: n.meal_group || "Other",
           name: n.food_name, calories: n.calories_kcal || 0,
           protein_g: n.protein_g, carbs_g: n.carbs_g, fat_g: n.fat_g, fiber_g: n.fiber_g,
           source: "Cronometer"
@@ -16748,7 +16748,7 @@ function buildUfdEntriesFromTrainerMeal(newMeal) {
   const mealSlot = normalizeMealSlotLabel(newMeal?.meal)
   return (newMeal?.items || []).map((item, idx) => ({
     id: `${baseId}_item${idx}`,
-    date: newMeal.date,
+    date: (newMeal.date || new Date().toISOString()).slice(0, 10),
     meal: newMeal.meal,
     meal_type: mealSlot,
     name: item.name,
@@ -17810,8 +17810,8 @@ useEffect(() => {
 
         try {
           await syncMealsToSupabase(localMeals, sess.user.id)
-          // Only remove from localStorage after confirmed Supabase write
-          localStorage.removeItem("ufd-meal-entries")
+          // Do not remove - merge deduplication by id handles duplicates safely
+          // localStorage.removeItem("ufd-meal-entries")
         } catch (mealSyncErr) {
           console.warn("[LIFT] Meal sync to Supabase failed, keeping localStorage copy", mealSyncErr)
           if (process.env.NODE_ENV === "development") console.error("Meal migration failed:", mealSyncErr)
@@ -17870,7 +17870,7 @@ useEffect(() => {
         // Write merged set back to localStorage so this device has everything
         try { localStorage.setItem("ufd-meal-entries", JSON.stringify(storedMeals)) } catch {}
         // Write merged set back to Supabase user_kv if we have a session
-        if (session?.user?.id && supabase) {
+        if (session?.user?.id && supabase && storedMeals.length > (Array.isArray(supabaseMeals) ? supabaseMeals.length : 0)) {
           supabase.from("user_kv").upsert(
             { user_id: session.user.id, key: "ufd-meal-entries", value: storedMeals, updated_at: new Date().toISOString() },
             { onConflict: "user_id,key" }
@@ -19073,8 +19073,11 @@ async function persistMealEntries(nextEntries, currentUserId) {
     await persistMealEntries(nextEntries, session?.user?.id)
     // Also remove from mealRecords (trainer-sourced meals stored in lift_meal_records)
     const prevMealRecords = Array.isArray(mealRecords) ? mealRecords : []
-    const nextMealRecords = prevMealRecords.filter(r => String(r.meal_id || r.id) !== idStr)
-    if (nextMealRecords.length !== prevMealRecords.length) {
+    const nextMealRecords = prevMealRecords.filter(r => {
+      const rid = String(r.meal_id || r.id || "")
+      return rid === "" || rid !== idStr
+    })
+    if (nextMealRecords.length !== prevMealRecords.length || trainerDerivedDays.some(d => String(d.id) === idStr)) {
       localStorage.setItem("lift_meal_records", JSON.stringify(nextMealRecords))
       setMealRecords(nextMealRecords)
       try {
@@ -21714,19 +21717,23 @@ const overviewExplainButton = (key) => (
   }, [setBiometricRecords, session, supabase])
 
   const trainerLogMeal = React.useCallback(async (mealRecord) => {
+    const normalizedMealRecord = {
+      ...mealRecord,
+      date: (mealRecord?.date || new Date().toISOString()).slice(0, 10)
+    }
     const existing = JSON.parse(localStorage.getItem("lift_meal_records") || "[]")
-    const merged = [...existing.filter(r => r.meal_id !== mealRecord.meal_id), mealRecord]
+    const merged = [...existing.filter(r => r.meal_id !== normalizedMealRecord.meal_id), normalizedMealRecord]
       .sort((a, b) => String(a.timestamp || "").localeCompare(String(b.timestamp || "")))
     localStorage.setItem("lift_meal_records", JSON.stringify(merged))
     setMealRecords(merged)
     try {
       // Bridge to ufd-meal-entries so Calories tab sees Coach meals
-      const baseId = String(mealRecord.id || mealRecord.meal_id || "")
+      const baseId = String(normalizedMealRecord.id || normalizedMealRecord.meal_id || "")
       const existingUfd = await store.get("ufd-meal-entries") || []
       const deduped = (Array.isArray(existingUfd) ? existingUfd : []).filter(entry =>
         baseId ? !String(entry.id).startsWith(baseId) : true
       )
-      const bridgeEntries = buildUfdEntriesFromTrainerMeal(mealRecord)
+      const bridgeEntries = buildUfdEntriesFromTrainerMeal(normalizedMealRecord)
       const mergedUfd = [...deduped, ...bridgeEntries]
       await store.set("ufd-meal-entries", mergedUfd)
       setMealEntries(mergedUfd)
