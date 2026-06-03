@@ -18887,7 +18887,7 @@ const overviewWeightDomain = useMemo(() => {
 
   const trajectoryAnalysis = useMemo(() => {
     try {
-      const trajectoryConfig = typeof window !== "undefined" ? window.__liftConfig : null
+      const trajectoryConfig = (typeof LIFT_CONFIG !== "undefined" && LIFT_CONFIG) ? LIFT_CONFIG : null
       const trajectoryEvents = Array.isArray(trajectoryConfig?.trajectory_events) && trajectoryConfig.trajectory_events.length
         ? trajectoryConfig.trajectory_events
         : trajectoryFallbackEvents
