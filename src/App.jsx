@@ -867,22 +867,6 @@ function renderTrajectoryPoint(props) {
   const fill = payload?.isManuallyFlagged ? "#f59e0b" : "#e2e8f0"
   return <circle cx={cx} cy={cy} r={3} fill={fill} stroke="#0d0e1c" strokeWidth={1} />
 }
-
-class TrajectoryPanelBoundary extends React.Component {
-  constructor(props) {
-    super(props)
-    this.state = { hasError: false }
-  }
-
-  static getDerivedStateFromError() {
-    return { hasError: true }
-  }
-
-  render() {
-    if (this.state.hasError) return this.props.fallback
-    return this.props.children
-  }
-}
 const SDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 const SMETA = {
@@ -18878,226 +18862,208 @@ const overviewWeightDomain = useMemo(() => {
     })
   }, [])
 
-  const trajectoryFallbackEvents = [
-    { id: "seven_five_hold", date: "2025-02-15", label: "7.5 hold", shortLabel: "7.5 hold", kind: "breakpoint" },
-    { id: "strength_phase", date: "2025-09-01", label: "Strength", shortLabel: "Strength", kind: "breakpoint" },
-    { id: "aerobic_phase", date: "2025-11-01", label: "Aerobic", shortLabel: "Aerobic", kind: "breakpoint" },
-    { id: "ten_mg", date: "2026-04-19", label: "10mg", shortLabel: "10mg", kind: "breakpoint" }
-  ]
-
   const trajectoryAnalysis = useMemo(() => {
-    try {
-      const trajectoryConfig = (typeof LIFT_CONFIG !== "undefined" && LIFT_CONFIG) ? LIFT_CONFIG : null
-      const trajectoryEvents = Array.isArray(trajectoryConfig?.trajectory_events) && trajectoryConfig.trajectory_events.length
-        ? trajectoryConfig.trajectory_events
-        : trajectoryFallbackEvents
-      const anchorDate = "2024-11-01"
-      const horizonDate = new Date()
-      horizonDate.setHours(12, 0, 0, 0)
-      horizonDate.setMonth(horizonDate.getMonth() + 6)
-      const horizonIso = horizonDate.toISOString().slice(0, 10)
-      const rawWeights = (Array.isArray(biometricRecords) ? biometricRecords : [])
-        .map((record, index) => {
-          const date = String(record?.measured_date || record?.date || "").slice(0, 10)
-          const weight = Number(record?.weight_lb ?? record?.weight ?? record?.weight_lbs_mean)
-          if (!date || date < anchorDate || !Number.isFinite(weight) || weight <= 0) return null
-          return {
-            id: String(record?.id ?? record?.record_id ?? `${date}_${index}`),
-            date,
-            dateMs: parseDateAtNoon(date)?.getTime() ?? null,
-            weight,
-            sourceIndex: index
-          }
-        })
-        .filter(row => row?.dateMs != null)
-        .sort((a, b) => a.dateMs - b.dateMs || a.sourceIndex - b.sourceIndex)
-
-      const retainedForGross = []
-      const autoFlagged = []
-      rawWeights.forEach(row => {
-        const trailingMedian = median(
-          retainedForGross
-            .filter(prev => (row.dateMs - prev.dateMs) <= 6 * 86400000)
-            .map(prev => prev.weight)
-        )
-        const isGross = row.weight < 100
-          || row.weight > 250
-          || (trailingMedian != null && Math.abs(row.weight - trailingMedian) > 15)
-
-        if (isGross) autoFlagged.push({ ...row, flagKind: "gross", trailingMedian })
-        else retainedForGross.push(row)
-      })
-
-      const manualFlags = []
-      const cleanedRaw = retainedForGross.filter(row => {
-        const isManual = trajectoryManualFlagIds.has(String(row.id))
-        if (isManual) manualFlags.push({ ...row, flagKind: "manual" })
-        return !isManual
-      })
-
-      const smoothedCleaned = cleanedRaw.map((row, index) => {
-        const windowRows = cleanedRaw.filter(candidate =>
-          candidate.dateMs <= row.dateMs && (row.dateMs - candidate.dateMs) <= 6 * 86400000
-        )
-        const avg = windowRows.length
-          ? windowRows.reduce((sum, candidate) => sum + candidate.weight, 0) / windowRows.length
-          : null
-        const t = trajectoryDaysBetween(anchorDate, row.date)
+    const anchorDate = "2024-11-01"
+    const horizonDate = new Date()
+    horizonDate.setHours(12, 0, 0, 0)
+    horizonDate.setMonth(horizonDate.getMonth() + 6)
+    const horizonIso = horizonDate.toISOString().slice(0, 10)
+    const rawWeights = (Array.isArray(biometricRecords) ? biometricRecords : [])
+      .map((record, index) => {
+        const date = String(record?.measured_date || record?.date || "").slice(0, 10)
+        const weight = Number(record?.weight_lb ?? record?.weight ?? record?.weight_lbs_mean)
+        if (!date || date < anchorDate || !Number.isFinite(weight) || weight <= 0) return null
         return {
-          id: row.id,
-          date: row.date,
-          dateMs: row.dateMs,
-          index,
-          rawWeight: row.weight,
-          smoothedWeight: Number.isFinite(avg) ? Number(avg.toFixed(2)) : null,
-          t
+          id: String(record?.id ?? record?.record_id ?? `${date}_${index}`),
+          date,
+          dateMs: parseDateAtNoon(date)?.getTime() ?? null,
+          weight,
+          sourceIndex: index
         }
-      }).filter(point => Number.isFinite(point.smoothedWeight) && Number.isFinite(point.t))
-
-      const fitPoints = smoothedCleaned.map(point => ({ t: point.t, y: point.smoothedWeight, date: point.date }))
-      const breakpointEvents = trajectoryEvents
-        .filter(event => event.kind === "breakpoint")
-        .map(event => ({
-          ...event,
-          t: trajectoryDaysBetween(anchorDate, event.date),
-          dateMs: parseDateAtNoon(event.date)?.getTime() ?? null
-        }))
-        .filter(event => Number.isFinite(event.t) && event.dateMs != null)
-      const infoEvents = trajectoryEvents
-        .filter(event => event.kind === "marker")
-        .map(event => ({
-          ...event,
-          t: trajectoryDaysBetween(anchorDate, event.date),
-          dateMs: parseDateAtNoon(event.date)?.getTime() ?? null
-        }))
-        .filter(event => Number.isFinite(event.t) && event.dateMs != null)
-
-      const linearModel = fitLinearTrajectory(fitPoints)
-      const exponentialModel = fitExponentialDecayTrajectory(fitPoints, {
-        currentWeight: fitPoints.length ? fitPoints[fitPoints.length - 1].y : null
       })
-      const segmentedModel = fitSegmentedLinearTrajectory(fitPoints, breakpointEvents.map(event => event.t))
+      .filter(row => row?.dateMs != null)
+      .sort((a, b) => a.dateMs - b.dateMs || a.sourceIndex - b.sourceIndex)
 
-      const fittedModels = [linearModel, exponentialModel, segmentedModel].filter(Boolean)
-      const rankedModels = fittedModels
-        .filter(model => model?.stats?.aic != null && (model.key !== "exponential" || model.converged))
-        .sort((a, b) => a.stats.aic - b.stats.aic)
-      const bestAic = rankedModels[0]?.stats?.aic
-      const winningKeys = new Set(
-        rankedModels
-          .filter(model => bestAic != null && (model.stats.aic - bestAic) < 2)
-          .map(model => model.key)
+    const retainedForGross = []
+    const autoFlagged = []
+    rawWeights.forEach(row => {
+      const trailingMedian = median(
+        retainedForGross
+          .filter(prev => (row.dateMs - prev.dateMs) <= 6 * 86400000)
+          .map(prev => prev.weight)
       )
-      const comparableModels = rankedModels.filter(model => bestAic != null && (model.stats.aic - bestAic) < 2)
+      const isGross = row.weight < 100
+        || row.weight > 250
+        || (trailingMedian != null && Math.abs(row.weight - trailingMedian) > 15)
 
-      const chartRows = []
-      const anchor = parseDateAtNoon(anchorDate)
-      const horizonMs = parseDateAtNoon(horizonIso)?.getTime() ?? null
-      if (anchor && horizonMs != null) {
-        for (let cursor = anchor.getTime(); cursor <= horizonMs; cursor += 86400000) {
-          const iso = new Date(cursor).toISOString().slice(0, 10)
-          const t = trajectoryDaysBetween(anchorDate, iso)
-          chartRows.push({
-            date: iso,
-            dateMs: cursor,
-            linearFit: linearModel ? Number(linearModel.predict(t).toFixed(2)) : null,
-            exponentialFit: exponentialModel?.converged ? Number(exponentialModel.predict(t).toFixed(2)) : null,
-            segmentedFit: segmentedModel ? Number(segmentedModel.predict(t).toFixed(2)) : null,
-            actual: null
-          })
-        }
+      if (isGross) autoFlagged.push({ ...row, flagKind: "gross", trailingMedian })
+      else retainedForGross.push(row)
+    })
+
+    const manualFlags = []
+    const cleanedRaw = retainedForGross.filter(row => {
+      const isManual = trajectoryManualFlagIds.has(String(row.id))
+      if (isManual) manualFlags.push({ ...row, flagKind: "manual" })
+      return !isManual
+    })
+
+    const smoothedCleaned = cleanedRaw.map((row, index) => {
+      const windowRows = cleanedRaw.filter(candidate =>
+        candidate.dateMs <= row.dateMs && (row.dateMs - candidate.dateMs) <= 6 * 86400000
+      )
+      const avg = windowRows.length
+        ? windowRows.reduce((sum, candidate) => sum + candidate.weight, 0) / windowRows.length
+        : null
+      const t = trajectoryDaysBetween(anchorDate, row.date)
+      return {
+        id: row.id,
+        date: row.date,
+        dateMs: row.dateMs,
+        index,
+        rawWeight: row.weight,
+        smoothedWeight: Number.isFinite(avg) ? Number(avg.toFixed(2)) : null,
+        t
       }
+    }).filter(point => Number.isFinite(point.smoothedWeight) && Number.isFinite(point.t))
 
-      const actualByDate = new Map(smoothedCleaned.map(point => [point.date, point]))
-      chartRows.forEach(row => {
-        const actualPoint = actualByDate.get(row.date)
-        if (actualPoint) row.actual = actualPoint.smoothedWeight
-      })
-
-      const flaggedPoints = [...autoFlagged, ...manualFlags].map(point => ({
-        ...point,
-        dateMs: point.dateMs,
-        value: point.weight
+    const fitPoints = smoothedCleaned.map(point => ({ t: point.t, y: point.smoothedWeight, date: point.date }))
+    const breakpointEvents = (Array.isArray(LIFT_CONFIG.trajectory_events) ? LIFT_CONFIG.trajectory_events : [])
+      .filter(event => event.kind === "breakpoint")
+      .map(event => ({
+        ...event,
+        t: trajectoryDaysBetween(anchorDate, event.date),
+        dateMs: parseDateAtNoon(event.date)?.getTime() ?? null
       }))
+      .filter(event => Number.isFinite(event.t) && event.dateMs != null)
+    const infoEvents = (Array.isArray(LIFT_CONFIG.trajectory_events) ? LIFT_CONFIG.trajectory_events : [])
+      .filter(event => event.kind === "marker")
+      .map(event => ({
+        ...event,
+        t: trajectoryDaysBetween(anchorDate, event.date),
+        dateMs: parseDateAtNoon(event.date)?.getTime() ?? null
+      }))
+      .filter(event => Number.isFinite(event.t) && event.dateMs != null)
 
-      const yValues = [
-        ...chartRows.flatMap(row => [row.linearFit, row.exponentialFit, row.segmentedFit, row.actual]),
-        ...flaggedPoints.map(point => point.value)
-      ].filter(Number.isFinite)
-      const yDomain = yValues.length
-        ? [Math.floor(Math.min(...yValues)) - 3, Math.ceil(Math.max(...yValues)) + 3]
-        : [140, 235]
+    const linearModel = fitLinearTrajectory(fitPoints)
+    const exponentialModel = fitExponentialDecayTrajectory(fitPoints, {
+      currentWeight: fitPoints.length ? fitPoints[fitPoints.length - 1].y : null
+    })
+    const segmentedModel = fitSegmentedLinearTrajectory(fitPoints, breakpointEvents.map(event => event.t))
 
-      const postTenMgCount = smoothedCleaned.filter(point => point.date >= "2026-04-19").length
-      const segmentedParameters = segmentedModel
-        ? segmentedModel.segmentSlopes.map((slope, idx) => ({
-            label: `S${idx + 1}`,
-            slopePerWeek: slope * 7,
-            preliminary: idx === segmentedModel.segmentSlopes.length - 1 && postTenMgCount < 6
-          }))
-        : []
+    const fittedModels = [linearModel, exponentialModel, segmentedModel].filter(Boolean)
+    const rankedModels = fittedModels
+      .filter(model => model?.stats?.aic != null && (model.key !== "exponential" || model.converged))
+      .sort((a, b) => a.stats.aic - b.stats.aic)
+    const bestAic = rankedModels[0]?.stats?.aic
+    const winningKeys = new Set(
+      rankedModels
+        .filter(model => bestAic != null && (model.stats.aic - bestAic) < 2)
+        .map(model => model.key)
+    )
+    const comparableModels = rankedModels.filter(model => bestAic != null && (model.stats.aic - bestAic) < 2)
 
-      const modelRows = [
-        linearModel && {
-          key: "linear",
-          label: "Linear",
-          highlighted: winningKeys.has("linear"),
-          comparable: comparableModels.some(model => model.key === "linear"),
-          stats: linearModel.stats,
-          parameterText: `a ${linearModel.coefficients.a.toFixed(1)} · slope ${(linearModel.coefficients.b * 7).toFixed(2)} lb/wk`
-        },
-        exponentialModel && {
-          key: "exponential",
-          label: "Exponential",
-          highlighted: winningKeys.has("exponential") && exponentialModel.converged,
-          comparable: comparableModels.some(model => model.key === "exponential"),
-          stats: exponentialModel.stats,
-          parameterText: exponentialModel.converged
-            ? `implied floor ${exponentialModel.parameters.Wf.toFixed(1)} lb · tau ${exponentialModel.parameters.tau.toFixed(0)} d`
-            : "fit did not converge",
-          note: exponentialModel.converged
-            ? "implied floor (extrapolated, uncertainty quantified in v2)"
-            : null
-        },
-        segmentedModel && {
-          key: "segmented",
-          label: "Segmented",
-          highlighted: winningKeys.has("segmented"),
-          comparable: comparableModels.some(model => model.key === "segmented"),
-          stats: segmentedModel.stats,
-          parameterText: segmentedParameters
-            .map(segment => `${segment.label} ${segment.slopePerWeek.toFixed(2)} lb/wk${segment.preliminary ? " preliminary" : ""}`)
-            .join(" · ")
-        }
-      ].filter(Boolean)
-
-      return {
-        chartRows,
-        fitPoints,
-        smoothedCleaned,
-        flaggedPoints,
-        breakpointEvents,
-        infoEvents,
-        yDomain,
-        models: {
-          linear: linearModel,
-          exponential: exponentialModel,
-          segmented: segmentedModel
-        },
-        modelRows,
-        comparableModels,
-        winningKeys,
-        note: comparableModels.length >= 2
-          ? `Models ${comparableModels.map(model => model.label).join(" and ")} are statistically comparable (ΔAIC < 2).`
-          : null
-      }
-    } catch (error) {
-      console.warn("[LIFT] trajectory analysis failed", error)
-      return {
-        error: error?.message || "could not compute trajectory"
+    const chartRows = []
+    const anchor = parseDateAtNoon(anchorDate)
+    const horizonMs = parseDateAtNoon(horizonIso)?.getTime() ?? null
+    if (anchor && horizonMs != null) {
+      for (let cursor = anchor.getTime(); cursor <= horizonMs; cursor += 86400000) {
+        const iso = new Date(cursor).toISOString().slice(0, 10)
+        const t = trajectoryDaysBetween(anchorDate, iso)
+        chartRows.push({
+          date: iso,
+          dateMs: cursor,
+          linearFit: linearModel ? Number(linearModel.predict(t).toFixed(2)) : null,
+          exponentialFit: exponentialModel?.converged ? Number(exponentialModel.predict(t).toFixed(2)) : null,
+          segmentedFit: segmentedModel ? Number(segmentedModel.predict(t).toFixed(2)) : null,
+          actual: null
+        })
       }
     }
-  }, [biometricRecords, trajectoryManualFlagIds])
+
+    const actualByDate = new Map(smoothedCleaned.map(point => [point.date, point]))
+    chartRows.forEach(row => {
+      const actualPoint = actualByDate.get(row.date)
+      if (actualPoint) row.actual = actualPoint.smoothedWeight
+    })
+
+    const flaggedPoints = [...autoFlagged, ...manualFlags].map(point => ({
+      ...point,
+      dateMs: point.dateMs,
+      value: point.weight
+    }))
+
+    const yValues = [
+      ...chartRows.flatMap(row => [row.linearFit, row.exponentialFit, row.segmentedFit, row.actual]),
+      ...flaggedPoints.map(point => point.value)
+    ].filter(Number.isFinite)
+    const yDomain = yValues.length
+      ? [Math.floor(Math.min(...yValues)) - 3, Math.ceil(Math.max(...yValues)) + 3]
+      : [140, 235]
+
+    const postTenMgCount = smoothedCleaned.filter(point => point.date >= "2026-04-19").length
+    const segmentedParameters = segmentedModel
+      ? segmentedModel.segmentSlopes.map((slope, idx) => ({
+          label: `S${idx + 1}`,
+          slopePerWeek: slope * 7,
+          preliminary: idx === segmentedModel.segmentSlopes.length - 1 && postTenMgCount < 6
+        }))
+      : []
+
+    const modelRows = [
+      linearModel && {
+        key: "linear",
+        label: "Linear",
+        highlighted: winningKeys.has("linear"),
+        comparable: comparableModels.some(model => model.key === "linear"),
+        stats: linearModel.stats,
+        parameterText: `a ${linearModel.coefficients.a.toFixed(1)} · slope ${(linearModel.coefficients.b * 7).toFixed(2)} lb/wk`
+      },
+      exponentialModel && {
+        key: "exponential",
+        label: "Exponential",
+        highlighted: winningKeys.has("exponential") && exponentialModel.converged,
+        comparable: comparableModels.some(model => model.key === "exponential"),
+        stats: exponentialModel.stats,
+        parameterText: exponentialModel.converged
+          ? `implied floor ${exponentialModel.parameters.Wf.toFixed(1)} lb · tau ${exponentialModel.parameters.tau.toFixed(0)} d`
+          : "fit did not converge",
+        note: exponentialModel.converged
+          ? "implied floor (extrapolated, uncertainty quantified in v2)"
+          : null
+      },
+      segmentedModel && {
+        key: "segmented",
+        label: "Segmented",
+        highlighted: winningKeys.has("segmented"),
+        comparable: comparableModels.some(model => model.key === "segmented"),
+        stats: segmentedModel.stats,
+        parameterText: segmentedParameters
+          .map(segment => `${segment.label} ${segment.slopePerWeek.toFixed(2)} lb/wk${segment.preliminary ? " preliminary" : ""}`)
+          .join(" · ")
+      }
+    ].filter(Boolean)
+
+    return {
+      chartRows,
+      fitPoints,
+      smoothedCleaned,
+      flaggedPoints,
+      breakpointEvents,
+      infoEvents,
+      yDomain,
+      models: {
+        linear: linearModel,
+        exponential: exponentialModel,
+        segmented: segmentedModel
+      },
+      modelRows,
+      comparableModels,
+      winningKeys,
+      note: comparableModels.length >= 2
+        ? `Models ${comparableModels.map(model => model.label).join(" and ")} are statistically comparable (ΔAIC < 2).`
+        : null
+    }
+  }, [biometricRecords, LIFT_CONFIG, trajectoryManualFlagIds])
   const dexaSeries = useMemo(() => {
     return DEXA_REGIONAL.map(s => ({
       date: s.date,
@@ -25807,41 +25773,22 @@ return (
     <h3>Forecast</h3>
 
     {/* ── Body Weight ─────────────────────────────────────────── */}
-    <TrajectoryPanelBoundary fallback={(
-      <div style={{ ...cardStyle(), marginBottom: "20px" }}>
-        <div style={{ fontWeight: "bold", marginBottom: "8px" }}>Trajectory Analysis</div>
-        <div style={{ fontSize: "12px", color: "#fca5a5" }}>Could not compute trajectory. The rest of the app is still available.</div>
-      </div>
-    )}>
     <div style={{ ...cardStyle(), marginBottom: "20px" }}>
-      {(() => {
-        try {
-          if (trajectoryAnalysis?.error) {
-            return (
-              <div>
-                <div style={{ fontWeight: "bold", marginBottom: "8px" }}>Trajectory Analysis</div>
-                <div style={{ fontSize: "12px", color: "#fca5a5" }}>Could not compute trajectory: {trajectoryAnalysis.error}</div>
-              </div>
-            )
-          }
-
-          return (
-            <>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "10px", marginBottom: "12px" }}>
-                <div>
-                  <div style={{ fontWeight: "bold" }}>Trajectory Analysis</div>
-                  <div style={{ fontSize: "11px", opacity: 0.72, marginTop: "4px", maxWidth: "760px", lineHeight: 1.5 }}>
-                    Fits use cleaned raw scale readings since Nov 2024, then a 7-day rolling average. Click a white point to manually exclude or restore a gray-zone reading.
-                  </div>
-                </div>
-                {trajectoryAnalysis.note && (
-                  <div style={{ fontSize: "11px", color: "#fcd34d", maxWidth: "420px", lineHeight: 1.5 }}>
-                    {trajectoryAnalysis.note}
-                  </div>
-                )}
-              </div>
-              {trajectoryAnalysis.fitPoints.length >= 2 ? (
-                <>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "10px", marginBottom: "12px" }}>
+        <div>
+          <div style={{ fontWeight: "bold" }}>Trajectory Analysis</div>
+          <div style={{ fontSize: "11px", opacity: 0.72, marginTop: "4px", maxWidth: "760px", lineHeight: 1.5 }}>
+            Fits use cleaned raw scale readings since Nov 2024, then a 7-day rolling average. Click a white point to manually exclude or restore a gray-zone reading.
+          </div>
+        </div>
+        {trajectoryAnalysis.note && (
+          <div style={{ fontSize: "11px", color: "#fcd34d", maxWidth: "420px", lineHeight: 1.5 }}>
+            {trajectoryAnalysis.note}
+          </div>
+        )}
+      </div>
+      {trajectoryAnalysis.fitPoints.length >= 2 ? (
+        <>
           <ResponsiveContainer width="100%" height={420}>
             <ComposedChart data={trajectoryAnalysis.chartRows} margin={{ top: 18, right: 22, left: 45, bottom: 28 }}>
               <CartesianGrid stroke="#1a1b2e" />
@@ -26016,24 +25963,11 @@ return (
                 ))}
             </div>
           )}
-                </>
-              ) : (
-                <div style={{ fontSize: "12px", opacity: 0.7 }}>Not enough cleaned weight data since 2024-11-01 to fit trajectory models yet.</div>
-              )}
-            </>
-          )
-        } catch (error) {
-          console.warn("[LIFT] trajectory panel render failed", error)
-          return (
-            <div>
-              <div style={{ fontWeight: "bold", marginBottom: "8px" }}>Trajectory Analysis</div>
-              <div style={{ fontSize: "12px", color: "#fca5a5" }}>Could not compute trajectory. The rest of the app is still available.</div>
-            </div>
-          )
-        }
-      })()}
+        </>
+      ) : (
+        <div style={{ fontSize: "12px", opacity: 0.7 }}>Not enough cleaned weight data since 2024-11-01 to fit trajectory models yet.</div>
+      )}
     </div>
-    </TrajectoryPanelBoundary>
 
     {vo2TrendChartData.length > 1 && (
       <div style={{ ...cardStyle(), marginBottom: "20px" }}>
