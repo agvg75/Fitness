@@ -53,6 +53,105 @@ const ANTHROPIC_API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY
 const SUPABASE_AUTH_STORAGE_KEY = "sb-rjirurdpluknrwnxlcox-auth-token"
 const SIGN_OUT_TIMEOUT_MS = 8000
 const MODALITY_COEFF = { running: 0.65, cycling: 0.45, swimming: 0.55, strength: 0.35 }
+// Static app-wide config. Keep this at module scope so helper functions and
+// component useMemo callbacks all share the same binding.
+const LIFT_CONFIG = {
+  // Banister model constants — fitted via grid search on 466 days, R²=0.887
+  tau1: 27,          // fitness decay (days) — HealthFit default is 42
+  tau2: 18,          // fatigue decay (days) — HealthFit default is 7
+  tsbModerateRiskThreshold: -7,
+  tsbHighRiskThreshold: -9,
+  ocHalfLifeOverrides: {
+    // Empirical half-lives from actual resolution times (Andrés, 2025-2026)
+    // Shoulder: Nov 10 onset, lingered to ~Feb 2026 = ~90 days observed
+    "Shoulder R":   1440,   // 60 days — conservative empirical fit
+    "Shoulder L":   1440,
+    // Left MTP: three episodes, each 4-6 weeks to resolve
+    "Toe L":        1008,   // 42 days = 6 weeks — mid-range empirical
+    "Toe R":        1008,
+    "MTP L":        1008,
+    "MTP R":        1008,
+    "Foot L":        840,   // 35 days — less specific forefoot issues
+    "Foot R":        840,
+    foot:            672,
+    toe:            1008,
+  },
+
+  // Body composition — update after each DEXA scan
+  ffm_lb: 115.8,             // lean mass (excl. BMC), April 2026 DEXA
+  lean_bmc_lb: 121.0,        // lean + BMC, April 2026 DEXA
+  fat_lb: 41.3,              // fat mass, April 2026 DEXA
+  pct_fat: 25.4,             // body fat %, April 2026 DEXA
+  scale_bias_pp: 0.6,        // DEXA BF% (25.4) minus scale-derived estimate at ~159 lb; update Sep 2026
+  protein_target_g: 140,     // g/day — ~2.7 g/kg lean mass
+  dexa_anchor_date: "2026-04-27",  // date of last DEXA scan (April 2026)
+  next_dexa_date:   "2026-09-19",  // next planned scan — St. Jude 10K context
+
+  // Calorie targets — empirically calibrated, scale-derived, April 2026
+  bmr: 1520,
+  tdee: 2100,
+  fat_loss_target: 1700,
+  fat_loss_rate_monthly: 1.7,  // lb/month — no-KNR period Apr-Sep 2026; reassess when KNR resumes
+  mtp_ceiling_miles: 6.6,  // advanced from 4.0 — three consecutive score-0 sessions confirmed May 31 2026
+  mtp_next_milestone_miles: 7.26,  // next milestone: 6.6 * 1.10
+
+  // Half marathon build
+  hm_race_date:    "2026-09-19",
+  hm_taper_start:  "2026-08-31",
+  hm_peak_mi_week: 9,
+  hm_taper_factor: 0.90,
+  hm_weekly_build: 1.10,
+
+  trajectory_events: [
+    { id: "tirzepatide_2_5", date: "2024-11-01", label: "2.5", shortLabel: "2.5", kind: "marker" },
+    { id: "tirzepatide_5", date: "2024-12-01", label: "5", shortLabel: "5", kind: "marker" },
+    { id: "tirzepatide_7_5", date: "2025-01-01", label: "7.5", shortLabel: "7.5", kind: "marker" },
+    { id: "failed_10mg_attempt", date: "2025-02-01", label: "10mg attempt", shortLabel: "10mg try", kind: "marker" },
+    { id: "seven_five_hold", date: "2025-02-15", label: "7.5 hold", shortLabel: "7.5 hold", kind: "breakpoint" },
+    { id: "strength_phase", date: "2025-09-01", label: "Strength", shortLabel: "Strength", kind: "breakpoint" },
+    { id: "aerobic_phase", date: "2025-11-01", label: "Aerobic", shortLabel: "Aerobic", kind: "breakpoint" },
+    { id: "ten_mg", date: "2026-04-19", label: "10mg", shortLabel: "10mg", kind: "breakpoint" }
+  ],
+
+  // Compartment TRIMP allocation vectors — { lower, upper, cardio }
+  // Tune these after 4 to 6 weeks of per-compartment episode data.
+  // All three values in each vector must sum to 1.0.
+  COMPARTMENT_SPLITS: {
+    running:        { lower: 0.25, upper: 0.00, cardio: 0.75 },
+    swimming:       { lower: 0.00, upper: 0.30, cardio: 0.70 },
+    cycling:        { lower: 0.15, upper: 0.00, cardio: 0.85 },
+    rowing:         { lower: 0.20, upper: 0.10, cardio: 0.70 },
+    walking:        { lower: 0.15, upper: 0.00, cardio: 0.85 },
+    lower_strength: { lower: 0.85, upper: 0.00, cardio: 0.15 },
+    upper_strength: { lower: 0.00, upper: 0.85, cardio: 0.15 },
+    mixed_strength: { lower: 0.45, upper: 0.35, cardio: 0.20 },
+    lower_cardio:   { lower: 0.40, upper: 0.00, cardio: 0.60 },
+    upper_cardio:   { lower: 0.00, upper: 0.40, cardio: 0.60 },
+    other:          { lower: 0.20, upper: 0.20, cardio: 0.60 },
+  },
+
+  // Fixed meal presets — log with "usual breakfast" etc, never re-describe
+  MEAL_PRESETS: {
+    breakfast: {
+      label: "Usual breakfast",
+      meal: "breakfast",
+      items: ["low-fat cottage cheese 1/2 cup", "banana", "strawberry", "raw honey 1 tsp"],
+      total_calories: 228, total_protein_g: 15, total_carbs_g: 38, total_fat_g: 2, total_fiber_g: 3,
+    },
+    lunch: {
+      label: "Usual lunch",
+      meal: "lunch",
+      items: ["2x Lean & Fit yogurt (80 cal, 14g protein each)", "protein bar (210 cal, 20g protein)"],
+      total_calories: 370, total_protein_g: 48, total_carbs_g: 28, total_fat_g: 6, total_fiber_g: 2,
+    },
+    snack: {
+      label: "Usual snack",
+      meal: "snack",
+      items: ["Muscle Milk (160 cal, 30g protein)"],
+      total_calories: 160, total_protein_g: 30, total_carbs_g: 7, total_fat_g: 5, total_fiber_g: 1,
+    },
+  },
+}
 const supabase = SUPABASE_URL && SUPABASE_ANON_KEY
   ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       auth: {
@@ -15999,96 +16098,6 @@ const EXPLAIN_FNS = {
 }
 
 export default function App() {
-
-  // ── LIFT Calibration Config ─────────────────────────────────────────────
-  // Update these after each DEXA scan. All derived constants read from here.
-  // Last updated: April 2026 DEXA anchor. Next update: September 2026 scan.
-  const LIFT_CONFIG = {
-    // Banister model constants — fitted via grid search on 466 days, R²=0.887
-    tau1: 27,          // fitness decay (days) — HealthFit default is 42
-    tau2: 18,          // fatigue decay (days) — HealthFit default is 7
-    tsbModerateRiskThreshold: -7,
-    tsbHighRiskThreshold: -9,
-    ocHalfLifeOverrides: {
-      // Empirical half-lives from actual resolution times (Andrés, 2025-2026)
-      // Shoulder: Nov 10 onset, lingered to ~Feb 2026 = ~90 days observed
-      "Shoulder R":   1440,   // 60 days — conservative empirical fit
-      "Shoulder L":   1440,
-      // Left MTP: three episodes, each 4-6 weeks to resolve
-      "Toe L":        1008,   // 42 days = 6 weeks — mid-range empirical
-      "Toe R":        1008,
-      "MTP L":        1008,
-      "MTP R":        1008,
-      "Foot L":        840,   // 35 days — less specific forefoot issues
-      "Foot R":        840,
-      foot:            672,
-      toe:            1008,
-    },
-
-    // Body composition — update after each DEXA scan
-    ffm_lb: 115.8,             // lean mass (excl. BMC), April 2026 DEXA
-    lean_bmc_lb: 121.0,        // lean + BMC, April 2026 DEXA
-    fat_lb: 41.3,              // fat mass, April 2026 DEXA
-    pct_fat: 25.4,             // body fat %, April 2026 DEXA
-    scale_bias_pp: 0.6,        // DEXA BF% (25.4) minus scale-derived estimate at ~159 lb; update Sep 2026
-    protein_target_g: 140,     // g/day — ~2.7 g/kg lean mass
-    dexa_anchor_date: "2026-04-27",  // date of last DEXA scan (April 2026)
-    next_dexa_date:   "2026-09-19",  // next planned scan — St. Jude 10K context
-
-    // Calorie targets — empirically calibrated, scale-derived, April 2026
-    bmr: 1520,
-    tdee: 2100,
-    fat_loss_target: 1700,
-    fat_loss_rate_monthly: 1.7,  // lb/month — no-KNR period Apr-Sep 2026; reassess when KNR resumes
-    mtp_ceiling_miles: 6.6,  // advanced from 4.0 — three consecutive score-0 sessions confirmed May 31 2026
-    mtp_next_milestone_miles: 7.26,  // next milestone: 6.6 * 1.10
-
-    // Half marathon build
-    hm_race_date:    "2026-09-19",
-    hm_taper_start:  "2026-08-31",
-    hm_peak_mi_week: 9,
-    hm_taper_factor: 0.90,
-    hm_weekly_build: 1.10,
-
-    // Compartment TRIMP allocation vectors — { lower, upper, cardio }
-    // Tune these after 4 to 6 weeks of per-compartment episode data.
-    // All three values in each vector must sum to 1.0.
-    COMPARTMENT_SPLITS: {
-      running:        { lower: 0.25, upper: 0.00, cardio: 0.75 },
-      swimming:       { lower: 0.00, upper: 0.30, cardio: 0.70 },
-      cycling:        { lower: 0.15, upper: 0.00, cardio: 0.85 },
-      rowing:         { lower: 0.20, upper: 0.10, cardio: 0.70 },
-      walking:        { lower: 0.15, upper: 0.00, cardio: 0.85 },
-      lower_strength: { lower: 0.85, upper: 0.00, cardio: 0.15 },
-      upper_strength: { lower: 0.00, upper: 0.85, cardio: 0.15 },
-      mixed_strength: { lower: 0.45, upper: 0.35, cardio: 0.20 },
-      lower_cardio:   { lower: 0.40, upper: 0.00, cardio: 0.60 },
-      upper_cardio:   { lower: 0.00, upper: 0.40, cardio: 0.60 },
-      other:          { lower: 0.20, upper: 0.20, cardio: 0.60 },
-    },
-
-    // Fixed meal presets — log with "usual breakfast" etc, never re-describe
-    MEAL_PRESETS: {
-      breakfast: {
-        label: "Usual breakfast",
-        meal: "breakfast",
-        items: ["low-fat cottage cheese 1/2 cup", "banana", "strawberry", "raw honey 1 tsp"],
-        total_calories: 228, total_protein_g: 15, total_carbs_g: 38, total_fat_g: 2, total_fiber_g: 3,
-      },
-      lunch: {
-        label: "Usual lunch",
-        meal: "lunch",
-        items: ["2x Lean & Fit yogurt (80 cal, 14g protein each)", "protein bar (210 cal, 20g protein)"],
-        total_calories: 370, total_protein_g: 48, total_carbs_g: 28, total_fat_g: 6, total_fiber_g: 2,
-      },
-      snack: {
-        label: "Usual snack",
-        meal: "snack",
-        items: ["Muscle Milk (160 cal, 30g protein)"],
-        total_calories: 160, total_protein_g: 30, total_carbs_g: 7, total_fat_g: 5, total_fiber_g: 1,
-      },
-    },
-  }
   if (typeof window !== "undefined") window.__liftConfig = LIFT_CONFIG
   // ────────────────────────────────────────────────────────────────────────
 
