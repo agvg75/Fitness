@@ -163,6 +163,28 @@ function cleanAuthRedirectUrl() {
   window.history.replaceState({}, document.title, nextUrl)
 }
 
+function normalizeBiometricRecordDate(record) {
+  const date = String(
+    record?.date ||
+    record?.measured_date ||
+    record?.timestamp ||
+    record?.measured_at ||
+    record?.recorded_at ||
+    ""
+  ).slice(0, 10) || null
+
+  return {
+    ...record,
+    date
+  }
+}
+
+function backfillBiometricRecordDates(records) {
+  return (Array.isArray(records) ? records : [])
+    .map(normalizeBiometricRecordDate)
+    .filter(record => record?.date)
+}
+
 const SYNC_KEYS = new Set([
   "ufd-meal-entries",
   "ufd-meal-presets",
@@ -13753,14 +13775,14 @@ Return ONLY a JSON object with this exact structure, no explanation:
           if (trainerHoldsDate && r.source !== "trainer") return
           byKey[k] = r
         })
-        const merged = Object.values(byKey).sort((a, b) => String(a.timestamp || a.date || "").localeCompare(String(b.timestamp || b.date || "")))
+        const merged = backfillBiometricRecordDates(Object.values(byKey)).sort((a, b) => String(a.timestamp || a.date || "").localeCompare(String(b.timestamp || b.date || "")))
         if (setBiometricRecords) setBiometricRecords(prev => {
           const dateKey = r => String(r.measured_date || r.date || r.timestamp || "").slice(0, 10)
           const hasWeight = r => r.weight_lb != null && Number.isFinite(Number(r.weight_lb)) && Number(r.weight_lb) > 0
           const byDate = {}
           ;(Array.isArray(prev) ? prev : []).forEach(r => { const d = dateKey(r); if (d && (!byDate[d] || (!hasWeight(byDate[d]) && hasWeight(r)))) byDate[d] = r })
           merged.forEach(r => { const d = dateKey(r); if (!d) return; const cur = byDate[d]; if (!cur) { byDate[d] = r; return } if (cur.source === "trainer" && r.source !== "trainer") return; if (!hasWeight(cur) && hasWeight(r)) byDate[d] = r })
-          const result = Object.values(byDate).sort((a, b) => dateKey(a).localeCompare(dateKey(b)))
+          const result = backfillBiometricRecordDates(Object.values(byDate)).sort((a, b) => dateKey(a).localeCompare(dateKey(b)))
           const prevLen = Array.isArray(prev) ? prev.length : 0
           const out = result.length >= prevLen ? result : (Array.isArray(prev) ? prev : [])
           console.log(`[biometricRecords/import-commit] prev=${prevLen} import=${merged.length} → ${out.length} rows`)
@@ -13775,14 +13797,14 @@ Return ONLY a JSON object with this exact structure, no explanation:
             console.warn("[biometricRecords/import-commit] Supabase sync failed, local save is authoritative", bioSyncErr?.message)
             showToast("Biometrics saved locally — cloud sync failed: " + (bioSyncErr?.message || "unknown error"))
           }
-          const remoteBiometrics = await loadBiometricRecords(supabase, STORE_USER_ID)
+          const remoteBiometrics = backfillBiometricRecordDates(await loadBiometricRecords(supabase, STORE_USER_ID))
           if (setBiometricRecords) setBiometricRecords(prev => {
             const dateKey = r => String(r.measured_date || r.date || r.timestamp || "").slice(0, 10)
             const hasWeight = r => r.weight_lb != null && Number.isFinite(Number(r.weight_lb)) && Number(r.weight_lb) > 0
             const byDate = {}
             ;(Array.isArray(prev) ? prev : []).forEach(r => { const d = dateKey(r); if (d && (!byDate[d] || (!hasWeight(byDate[d]) && hasWeight(r)))) byDate[d] = r })
             remoteBiometrics.forEach(r => { const d = dateKey(r); if (!d) return; const cur = byDate[d]; if (!cur) { byDate[d] = r; return } if (!hasWeight(cur) && hasWeight(r)) byDate[d] = r })
-            const result = Object.values(byDate).sort((a, b) => dateKey(a).localeCompare(dateKey(b)))
+            const result = backfillBiometricRecordDates(Object.values(byDate)).sort((a, b) => dateKey(a).localeCompare(dateKey(b)))
             const prevLen = Array.isArray(prev) ? prev.length : 0
             const out = result.length >= prevLen ? result : (Array.isArray(prev) ? prev : [])
             console.log(`[biometricRecords/import-supabase-confirm] prev=${prevLen} remote=${remoteBiometrics.length} → ${out.length} rows`)
@@ -16178,7 +16200,24 @@ useEffect(() => {
   if (!weeklyLossTargetHydrated) return
   store.set("weekly-loss-target", weeklyLossTarget).catch(() => {})
 }, [weeklyLossTarget, weeklyLossTargetHydrated])
-const [biometricRecords, setBiometricRecords] = useState(() => { try { return JSON.parse(localStorage.getItem("lift_biometric_records") || "[]") } catch { return [] } })
+const [biometricRecords, setBiometricRecords] = useState(() => {
+  try {
+    return backfillBiometricRecordDates(JSON.parse(localStorage.getItem("lift_biometric_records") || "[]"))
+  } catch {
+    return []
+  }
+})
+useEffect(() => {
+  try {
+    const raw = JSON.parse(localStorage.getItem("lift_biometric_records") || "[]")
+    const repaired = backfillBiometricRecordDates(raw)
+    if (JSON.stringify(raw) !== JSON.stringify(repaired)) {
+      localStorage.setItem("lift_biometric_records", JSON.stringify(repaired))
+      setBiometricRecords(repaired)
+      console.log(`[biometricRecords/backfill] repaired=${repaired.length} rows`)
+    }
+  } catch {}
+}, [])
 useEffect(() => {
   fetch("/data/weight_daily.json")
     .then(r => r.json())
@@ -16193,7 +16232,7 @@ useEffect(() => {
         fetched.forEach(r => {
           if (r.measured_date) map[r.measured_date] = r;
         });
-        const merged = Object.values(map).sort((a, b) =>
+        const merged = backfillBiometricRecordDates(Object.values(map)).sort((a, b) =>
           String(a.measured_date || a.date).localeCompare(String(b.measured_date || b.date))
         );
         try { localStorage.setItem("lift_biometric_records", JSON.stringify(merged)); } catch {}
@@ -17667,7 +17706,7 @@ useEffect(() => {
             // Prefer the row that carries weight_lb
             if (!hasWeight(cur) && hasWeight(r)) { byDate[d] = r; return }
           })
-          const result = Object.values(byDate).sort((a, b) => dateKey(a).localeCompare(dateKey(b)))
+          const result = backfillBiometricRecordDates(Object.values(byDate)).sort((a, b) => dateKey(a).localeCompare(dateKey(b)))
           const prevLen = Array.isArray(prev) ? prev.length : 0
           const out = result.length >= prevLen ? result : (Array.isArray(prev) ? prev : [])
           console.log(`[biometricRecords/supabase-remote] prev=${prevLen} remote=${remoteBiometricRecords.length} → ${out.length} rows`)
@@ -18361,19 +18400,15 @@ const overviewWeightDomain = useMemo(() => {
   // Both are combined by date — trainer entries are lower fidelity per item
   // but correct at the daily total level.
   const trainerMealEntries = useMemo(() => {
-    const raw = (() => { try { return JSON.parse(localStorage.getItem("lift_meal_records") || "[]") } catch { return [] } })()
-    // Also include mealRecords from state if available (reactive updates)
-    const stateMeals = typeof mealRecords !== "undefined" && Array.isArray(mealRecords) ? mealRecords : []
-    const combined = [...raw, ...stateMeals]
-    // Deduplicate by meal_id
+    const stateMeals = Array.isArray(mealRecords) ? mealRecords : []
     const seen = new Set()
-    return combined.filter(m => {
+    return stateMeals.filter(m => {
       const k = m.meal_id || m.id || `${m.date}_${m.meal}`
       if (seen.has(k)) return false
       seen.add(k)
       return true
     })
-  }, [typeof mealRecords !== "undefined" ? mealRecords : null])
+  }, [mealRecords])
 
   const trainerDerivedDays = useMemo(() => {
     const bridgedMealIds = new Set((Array.isArray(mealEntries) ? mealEntries : []).map(entry => String(entry.id)))
@@ -21699,8 +21734,8 @@ const overviewExplainButton = (key) => (
       body_fat_pct: null,
       bmi: null
     }
-    const existing = JSON.parse(localStorage.getItem("lift_biometric_records") || "[]")
-    const merged = [...existing.filter(r => (r.date || r.measured_date) !== today || r.source !== "trainer"), entry]
+    const existing = backfillBiometricRecordDates(JSON.parse(localStorage.getItem("lift_biometric_records") || "[]"))
+    const merged = backfillBiometricRecordDates([...existing.filter(r => (r.date || r.measured_date) !== today || r.source !== "trainer"), entry])
       .sort((a, b) => String(a.measured_date || a.timestamp || a.date || "").localeCompare(String(b.measured_date || b.timestamp || b.date || "")))
     localStorage.setItem("lift_biometric_records", JSON.stringify(merged))
     console.log(`[biometricRecords/trainer-log-weight] existing=${existing.length} → ${merged.length} rows`)
