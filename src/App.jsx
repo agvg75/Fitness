@@ -16946,6 +16946,23 @@ function pruneLegacyMealLogDateKey(isoDate, idsToRemove) {
   } catch {}
 }
 
+function mergeMealEntriesById(...sources) {
+  const byId = new Map()
+
+  sources.forEach(source => {
+    ;(Array.isArray(source) ? source : []).forEach(entry => {
+      if (!entry?.id) return
+      byId.set(String(entry.id), entry)
+    })
+  })
+
+  return [...byId.values()].sort((a, b) => {
+    const dateCmp = String(a?.date || "").localeCompare(String(b?.date || ""))
+    if (dateCmp !== 0) return dateCmp
+    return String(a?.created_at || "").localeCompare(String(b?.created_at || ""))
+  })
+}
+
 function getImputedSlots(isoDate, realEntries, templateTotals, mealPresets, skippedSlots = new Set()) {
   const bucket = getDayTypeBucket(isoDate)
 
@@ -17447,7 +17464,14 @@ useEffect(() => {
   isRecoveryModeRef.current = isRecoveryMode
 }, [isRecoveryMode])
 
-  const [mealEntries, setMealEntries] = useState([])
+  const [mealEntries, setMealEntries] = useState(() => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem("ufd-meal-entries") || "[]")
+      return Array.isArray(parsed) ? parsed : []
+    } catch {
+      return []
+    }
+  })
   const pendingMealSyncRef = useRef({ entries: null, userId: null, promise: null })
   const [mealPresets, setMealPresets] = useState(defaultMealPresets)
   const [dailyTemplate, setDailyTemplate] = useState(() => {
@@ -18005,21 +18029,20 @@ useEffect(() => {
         pendingMealRecordDeletes.map(entry => String(entry?.mealRecordId || "")).filter(Boolean)
       )
 
-      const mergedMeals = (() => {
-        const remote = Array.isArray(supabaseMeals) ? supabaseMeals : []
-        const local = Array.isArray(localMeals) ? localMeals : []
-        const byId = new Map()
-        // Remote first (Supabase has cross-device writes)
-        remote.forEach(e => { if (e?.id) byId.set(String(e.id), e) })
-        // Local overwrites remote on conflict (most recent device write wins)
-        local.forEach(e => { if (e?.id) byId.set(String(e.id), e) })
-        return [...byId.values()].sort((a, b) => String(a.date).localeCompare(String(b.date)))
-      })()
+      const mergedMeals = mergeMealEntriesById(supabaseMeals, localMeals)
       const storedMealRecords = pruneMealRecordsByIds(
         await store.get("lift_meal_records") || [],
         pendingMealRecordDeleteIds
       )
       const storedMeals = backfillMealRecordsToUfd(mergedMeals, storedMealRecords)
+
+      if (process.env.NODE_ENV === "development") {
+        console.log("[LIFT] mealEntries hydration", {
+          localStorageCount: Array.isArray(localMeals) ? localMeals.length : 0,
+          supabaseUserKvCount: Array.isArray(supabaseMeals) ? supabaseMeals.length : 0,
+          finalMergedCount: Array.isArray(storedMeals) ? storedMeals.length : 0
+        })
+      }
 
       if (storedMeals.length > 0) {
         setMealEntries(storedMeals)
@@ -19110,7 +19133,7 @@ useEffect(() => {
   }
 }, [supabase])
 
-async function loadMealsFromSupabase(userId) {
+async function loadMealsFromSupabase(userId, existingEntries = []) {
   if (!supabase || !userId) return
 
   const { data, error } = await supabase
@@ -19137,7 +19160,20 @@ async function loadMealsFromSupabase(userId) {
     created_at: r.logged_at
   }))
 
-  setMealEntries(rows)
+  const localMeals = (() => { try { return JSON.parse(localStorage.getItem("ufd-meal-entries") || "[]") } catch { return [] } })()
+  const merged = mergeMealEntriesById(rows, localMeals, existingEntries)
+
+  if (process.env.NODE_ENV === "development") {
+    console.log("[LIFT] meals table hydration", {
+      localStorageCount: Array.isArray(localMeals) ? localMeals.length : 0,
+      supabaseMealsTableCount: rows.length,
+      existingStateCount: Array.isArray(existingEntries) ? existingEntries.length : 0,
+      finalMergedCount: merged.length
+    })
+  }
+
+  try { localStorage.setItem("ufd-meal-entries", JSON.stringify(merged)) } catch {}
+  setMealEntries(merged)
 }
 async function persistMealEntries(nextEntries, currentUserId) {
   // Step 1: write to localStorage immediately — always succeeds, zero latency
@@ -19364,13 +19400,13 @@ async function persistMealEntries(nextEntries, currentUserId) {
 
   const todayMeals = useMemo(() => {
     return [...mealEntries, ...trainerDerivedDays]
-      .filter(row => row.date === calendarSelectedDate)
+      .filter(row => String(row?.date || "").slice(0, 10) === calendarSelectedDate)
       .sort((a, b) => String(a.created_at || "").localeCompare(String(b.created_at || "")))
   }, [mealEntries, trainerDerivedDays, calendarSelectedDate])
 
   const mealDateMeals = useMemo(() => {
     return [...mealEntries, ...trainerDerivedDays]
-      .filter(row => row.date === mealDate)
+      .filter(row => String(row?.date || "").slice(0, 10) === mealDate)
       .sort((a, b) => String(a.created_at || "").localeCompare(String(b.created_at || "")))
   }, [mealEntries, trainerDerivedDays, mealDate])
 
