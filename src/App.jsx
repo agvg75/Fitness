@@ -15474,7 +15474,18 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
     const action = pendingAction || pendingActionRef.current
     if (!action) return
     const confirmed = userInput.trim().toUpperCase() === "Y"
-    if (confirmed) {
+    
+    // Clear pending state immediately so no other input path can re-trigger it
+    pendingActionRef.current = null
+    setPendingAction(null)
+    setInputValue("")
+
+    if (!confirmed) {
+      saveMessages([...messages, { role: "assistant", content: "Cancelled. Nothing was written.", ts: Date.now() }])
+      return
+    }
+
+    try {
       if (action.type === "mtp" && onLogMtp) {
         await onLogMtp(action.payload.score)
         const confirmMsg = { role: "assistant", content: `MTP score ${action.payload.score} logged.`, ts: Date.now() }
@@ -15591,9 +15602,6 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
           try { localStorage.setItem(TRAINER_STORAGE_KEY, JSON.stringify(updated.slice(-60))) } catch {}
           return updated
         })
-        pendingActionRef.current = null
-        setPendingAction(null)
-        setInputValue("")
         return
       } else if (action.type === "meal_lookup") {
         // Nutrition lookup — fetch then confirm
@@ -15602,8 +15610,6 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
         setIsLoading(false)
         if (!items.length) {
           saveMessages([...messages, { role: "assistant", content: "Could not look up nutrition for that description. Try being more specific.", ts: Date.now() }])
-          pendingActionRef.current = null
-          setPendingAction(null)
           return
         }
         const today = new Date().toISOString().slice(0, 10)
@@ -15629,12 +15635,10 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
         setPendingAction(lookupAction)
         return
       }
-    } else {
-      const cancelMsg = { role: "assistant", content: "Cancelled. Nothing was written.", ts: Date.now() }
-      saveMessages([...messages, cancelMsg])
+    } catch (e) {
+      console.warn("[LIFT] confirm action failed", e)
+      saveMessages([...messages, { role: "assistant", content: "Log failed to save. Try again.", ts: Date.now() }])
     }
-    pendingActionRef.current = null
-    setPendingAction(null)
   }
 
   const handleKey = (e) => {
@@ -16787,6 +16791,7 @@ function buildUfdEntriesFromTrainerMeal(newMeal) {
   const mealSlot = normalizeMealSlotLabel(newMeal?.meal)
   return (newMeal?.items || []).map((item, idx) => ({
     id: `${baseId}_item${idx}`,
+    source_meal_id: String(newMeal?.meal_id || newMeal?.id || ""),
     date: (newMeal.date || new Date().toISOString()).slice(0, 10),
     meal: newMeal.meal,
     meal_type: mealSlot,
@@ -19106,7 +19111,9 @@ async function persistMealEntries(nextEntries, currentUserId) {
     const idStr = String(entryId)
 
     // Remove from mealEntries (manually logged entries)
-    const nextEntries = mealEntries.filter(row => String(row.id) !== idStr)
+    const nextEntries = mealEntries.filter(row =>
+      String(row.id) !== idStr && String(row.source_meal_id || "") !== idStr
+    )
     await persistMealEntries(nextEntries, session?.user?.id)
 
     // Remove from mealRecords (trainer-sourced entries in lift_meal_records)
@@ -21367,12 +21374,98 @@ const bodyWeightForecastChart = useMemo(() => {
   return [...actuals, ...projected]
 }, [biometricRecords, bodyForecast])
 
+const bodyWeightRecentTrendChart = useMemo(() => {
+  if (!bodyForecast) return []
+
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const cutoff = new Date(today)
+  cutoff.setDate(cutoff.getDate() - 90)
+
+  const bio90 = (Array.isArray(biometricRecords) ? biometricRecords : [])
+    .map(r => {
+      const date = String(r.measured_date || r.date || r.timestamp || "").slice(0, 10)
+      const lb = Number(r.weight_lb)
+      if (!date || !Number.isFinite(lb) || lb <= 0) return null
+      return { date, lb }
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .filter(r => new Date(r.date + "T12:00:00") >= cutoff)
+
+  return bio90.map((r, i) => {
+    const start = Math.max(0, i - 6)
+    const subset = bio90.slice(start, i + 1).map(x => x.lb)
+    const avg = subset.reduce((a, b) => a + b, 0) / subset.length
+    const dateMs = new Date(`${r.date}T12:00:00`).getTime()
+    return {
+      date: r.date,
+      dateMs,
+      label: fmtShortDate(r.date),
+      actual: Number(avg.toFixed(1))
+    }
+  })
+}, [biometricRecords, bodyForecast])
+
+const bodyWeightProjectionChart = useMemo(() => {
+  if (!bodyForecast) return []
+
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const finalEtaDate = bodyForecast.eta145 ? new Date(`${bodyForecast.eta145}T12:00:00`) : null
+  const finalEtaDays = finalEtaDate && Number.isFinite(finalEtaDate.getTime())
+    ? Math.max(84, Math.ceil((finalEtaDate.getTime() - today.getTime()) / 86400000))
+    : 365
+  const forecastWeeks = Math.max(12, Math.ceil(finalEtaDays / 7))
+  const weeklyProjection = projectWeightTrend(mergedDailyWeights, nutritionSeries, forecastWeeks)
+
+  return weeklyProjection.map(point => {
+    const pointDate = new Date(`${point.date}T12:00:00`)
+    const daysFromNow = Math.max(0, Math.round((pointDate.getTime() - today.getTime()) / 86400000))
+    return {
+      ...point,
+      dateMs: pointDate.getTime(),
+      daysFromNow,
+      daysFromNowLog: daysFromNow + 1,
+      projectedWeight: Number(point.baseline)
+    }
+  })
+}, [bodyForecast, mergedDailyWeights, nutritionSeries])
+
+const bodyWeightProjectionAxisMode = useMemo(() => {
+  const lastPoint = bodyWeightProjectionChart[bodyWeightProjectionChart.length - 1]
+  const spanDays = Number(lastPoint?.daysFromNow || 0)
+  return {
+    isLog: spanDays >= 120,
+    spanDays: Math.max(spanDays, 90)
+  }
+}, [bodyWeightProjectionChart])
+
+const bodyWeightProjectionTicks = useMemo(() => {
+  const monthTicks = [
+    { days: 0, label: "Now" },
+    { days: 30, label: "1mo" },
+    { days: 90, label: "3mo" },
+    { days: 180, label: "6mo" },
+    { days: 365, label: "1yr" }
+  ]
+
+  if (bodyWeightProjectionAxisMode.isLog) {
+    return monthTicks
+      .filter(t => t.days > 0 && t.days <= bodyWeightProjectionAxisMode.spanDays)
+      .map(t => ({ value: t.days + 1, label: t.label }))
+  }
+
+  return monthTicks
+    .filter(t => t.days <= bodyWeightProjectionAxisMode.spanDays)
+    .map(t => ({ value: t.days, label: t.label }))
+}, [bodyWeightProjectionAxisMode])
+
 // Y-axis domain: cap top at max of recent 90d actuals + 5 lb so history
 // (230+ lb) does not compress the current-weight range.
 const forecastYDomain = useMemo(() => {
-  if (!bodyWeightForecastChart.length) return ["auto", "auto"]
-  const recentActuals = bodyWeightForecastChart.filter(r => r.actual != null).map(r => r.actual)
-  const projected    = bodyWeightForecastChart.filter(r => r.forecast != null).map(r => r.forecast)
+  const recentActuals = bodyWeightRecentTrendChart.filter(r => r.actual != null).map(r => r.actual)
+  const projected = bodyWeightProjectionChart.filter(r => r.projectedWeight != null).map(r => r.projectedWeight)
   const allVals = [...recentActuals, ...projected].filter(Number.isFinite)
   if (!allVals.length) return ["auto", "auto"]
   const upper = recentActuals.length
@@ -21380,7 +21473,7 @@ const forecastYDomain = useMemo(() => {
     : Math.min(Math.max(...allVals) + 5, 200)
   const lower = Math.min(...allVals) - 3
   return [Math.floor(lower), Math.ceil(upper)]
-}, [bodyWeightForecastChart])
+}, [bodyWeightProjectionChart, bodyWeightRecentTrendChart])
 
 // Per-modality volume forecast charts (actuals from weeklyBuckets + projected points)
 const makeVolumeForecastChart = (field, forecastKeys) => {
@@ -24898,21 +24991,86 @@ return (
           </div>
         )}
       </div>
-      <ResponsiveContainer width="100%" height={280}>
-        <ComposedChart data={bodyWeightForecastChart} margin={{ top: 10, right: 20, left: 55, bottom: 20 }}>
-          <CartesianGrid stroke="#1a1b2e" />
-          <XAxis dataKey="label" tick={{ fontSize: 11 }} interval={Math.max(1, Math.floor((bodyWeightForecastChart.length - 1) / 7))} />
-          <YAxis domain={forecastYDomain} label={{ value: "Weight (lb)", angle: -90, position: "insideLeft", offset: 15, fill: "#ced2f0", style: { textAnchor: "middle" } }} />
-          <Tooltip formatter={(v, n) => [v != null ? `${v} lb` : "—", n === "actual" ? "Actual (7d avg)" : "Projected"]} />
-          <Legend verticalAlign="top" height={28} />
-          <Line type="monotone" dataKey="actual"   name="Actual (7d avg)" stroke="#4a9ee8" strokeWidth={2} dot={false} connectNulls={false} />
-          <Line type="monotone" dataKey="forecast" name="Projected"       stroke="#ffd166" strokeWidth={2} strokeDasharray="6 4" dot={{ r: 4 }} connectNulls={false} />
-          {bodyForecast && <ReferenceLine y={bodyForecast.phase1TargetWeight} stroke="#ffd166" strokeDasharray="3 3" label={{ value: "Phase 1", fill: "#ffd166", fontSize: 11 }} />}
-          {bodyForecast && <ReferenceLine y={bodyForecast.finalTargetWeight}  stroke="#4ade80" strokeDasharray="3 3" label={{ value: "Target",  fill: "#4ade80",  fontSize: 11 }} />}
-        </ComposedChart>
-      </ResponsiveContainer>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: typeof window !== "undefined" && window.innerWidth < 700 ? "1fr" : "repeat(2, minmax(0, 1fr))",
+          gap: "16px",
+          alignItems: "stretch"
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: "12px", fontWeight: "700", letterSpacing: "0.04em", opacity: 0.7, marginBottom: "8px" }}>Recent Trend</div>
+          <ResponsiveContainer width="100%" height={280}>
+            <LineChart data={bodyWeightRecentTrendChart} margin={{ top: 10, right: 20, left: 55, bottom: 20 }}>
+              <CartesianGrid stroke="#1a1b2e" />
+              <XAxis
+                type="number"
+                dataKey="dateMs"
+                scale="time"
+                domain={["dataMin", "dataMax"]}
+                tick={{ fontSize: 11 }}
+                tickFormatter={value => fmtShortDate(new Date(value).toISOString().slice(0, 10))}
+              />
+              <YAxis
+                type="number"
+                domain={forecastYDomain}
+                label={{ value: "Weight (lb)", angle: -90, position: "insideLeft", offset: 15, fill: "#ced2f0", style: { textAnchor: "middle" } }}
+              />
+              <Tooltip
+                labelFormatter={value => fmtShortDate(new Date(value).toISOString().slice(0, 10))}
+                formatter={(v) => [v != null ? `${v} lb` : "—", "Actual (7d avg)"]}
+              />
+              <Legend verticalAlign="top" height={28} />
+              <Line type="monotone" dataKey="actual" name="Actual (7d avg)" stroke="#4a9ee8" strokeWidth={2} dot={false} connectNulls={false} />
+              {bodyForecast && <ReferenceLine y={bodyForecast.phase1TargetWeight} stroke="#ffd166" strokeDasharray="3 3" label={{ value: "Phase 1", fill: "#ffd166", fontSize: 11 }} />}
+              {bodyForecast && <ReferenceLine y={bodyForecast.finalTargetWeight} stroke="#4ade80" strokeDasharray="3 3" label={{ value: "Target", fill: "#4ade80", fontSize: 11 }} />}
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: "12px", fontWeight: "700", letterSpacing: "0.04em", opacity: 0.7, marginBottom: "8px" }}>Projection to Targets</div>
+          <ResponsiveContainer width="100%" height={280}>
+            <LineChart data={bodyWeightProjectionChart} margin={{ top: 10, right: 20, left: 55, bottom: 28 }}>
+              <CartesianGrid stroke="#1a1b2e" />
+              <XAxis
+                type="number"
+                dataKey={bodyWeightProjectionAxisMode.isLog ? "daysFromNowLog" : "daysFromNow"}
+                scale={bodyWeightProjectionAxisMode.isLog ? "log" : "linear"}
+                domain={bodyWeightProjectionAxisMode.isLog ? [1, "dataMax"] : [0, "dataMax"]}
+                ticks={bodyWeightProjectionTicks.map(t => t.value)}
+                tick={{ fontSize: 11 }}
+                tickFormatter={value => bodyWeightProjectionTicks.find(t => t.value === value)?.label || ""}
+                label={{
+                  value: bodyWeightProjectionAxisMode.isLog ? "Time (log scale)" : "Time (linear)",
+                  position: "insideBottom",
+                  offset: -10,
+                  fill: "#ced2f0",
+                  style: { textAnchor: "middle" }
+                }}
+              />
+              <YAxis
+                type="number"
+                domain={forecastYDomain}
+                label={{ value: "Weight (lb)", angle: -90, position: "insideLeft", offset: 15, fill: "#ced2f0", style: { textAnchor: "middle" } }}
+              />
+              <Tooltip
+                labelFormatter={value => {
+                  const dayCount = bodyWeightProjectionAxisMode.isLog ? Math.max(0, Number(value) - 1) : Number(value)
+                  return dayCount === 0 ? "Now" : `${Math.round(dayCount)} days`
+                }}
+                formatter={(v) => [v != null ? `${v} lb` : "—", "Projected"]}
+              />
+              <Legend verticalAlign="top" height={28} />
+              <Line type="monotone" dataKey="projectedWeight" name="Projected" stroke="#ffd166" strokeWidth={2} dot={false} connectNulls={false} />
+              {bodyForecast && <ReferenceLine y={bodyForecast.phase1TargetWeight} stroke="#ffd166" strokeDasharray="3 3" label={{ value: "Phase 1", fill: "#ffd166", fontSize: 11 }} />}
+              {bodyForecast && <ReferenceLine y={bodyForecast.finalTargetWeight} stroke="#4ade80" strokeDasharray="3 3" label={{ value: "Target", fill: "#4ade80", fontSize: 11 }} />}
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
       {bodyForecast && (
-        <div style={{ display: "flex", gap: "20px", fontSize: "12px", opacity: 0.7, marginTop: "8px", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: "20px", fontSize: "12px", opacity: 0.7, marginTop: "12px", flexWrap: "wrap", width: "100%" }}>
           <span>1 month: {bodyForecast.weight1m.toFixed(1)} lb</span>
           <span>3 months: {bodyForecast.weight3m.toFixed(1)} lb</span>
           <span>6 months: {bodyForecast.weight6m.toFixed(1)} lb</span>
@@ -24951,8 +25109,8 @@ return (
               formatter={(v, n) => [v != null ? `${v} mL/kg/min` : "NA", n === "apple" ? "Apple VO2max" : "LIFT economy"]}
               contentStyle={{ background: "#0a0a14", border: "1px solid #1a1b2e", fontSize: 11 }}
             />
-            <Line yAxisId="apple" dataKey="apple" name="apple" stroke="#4a9ee8" strokeWidth={2} dot={{ r: 3, fill: "#4a9ee8" }} connectNulls={false} />
-            <Line yAxisId="proxy" dataKey="proxy" name="proxy" stroke="#94a3b8" strokeWidth={1.5} dot={{ r: 2, fill: "#94a3b8" }} connectNulls={false} />
+            <Line yAxisId="apple" dataKey="apple" name="apple" stroke="#4a9ee8" strokeWidth={2} dot={{ r: 1.5, fill: "#4a9ee8" }} connectNulls={false} />
+            <Line yAxisId="proxy" dataKey="proxy" name="proxy" stroke="#94a3b8" strokeWidth={1.5} dot={{ r: 1, fill: "#94a3b8" }} connectNulls={false} />
           </ComposedChart>
         </ResponsiveContainer>
         <div style={{ display: "flex", gap: "20px", marginTop: "8px", fontSize: "10px" }}>
@@ -25078,7 +25236,7 @@ return (
         <LineChart data={readinessProjectionData} margin={{ top: 10, right: 20, left: 55, bottom: 20 }}>
           <CartesianGrid stroke="#1a1b2e" />
           <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-          <YAxis domain={[0, 100]} allowDataOverflow={false} tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} label={{ value: "Readiness score", angle: -90, position: "insideLeft", offset: 15, fill: "#ced2f0", style: { textAnchor: "middle" } }} />
+          <YAxis domain={[75, 100]} allowDataOverflow={false} tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} label={{ value: "Readiness score", angle: -90, position: "insideLeft", offset: 15, fill: "#ced2f0", style: { textAnchor: "middle" } }} />
           <Tooltip />
           <Legend verticalAlign="top" height={28} />
           <Line type="monotone" dataKey="baseReadiness" name="Readiness"      stroke="#4a9ee8" strokeWidth={2} dot={{ r: 3 }} isAnimationActive={false} allowDataOverflow={false} />
