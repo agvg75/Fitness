@@ -19069,26 +19069,29 @@ async function persistMealEntries(nextEntries, currentUserId) {
 
   async function deleteMealEntry(entryId) {
     const idStr = String(entryId)
+
+    // Remove from mealEntries (manually logged entries)
     const nextEntries = mealEntries.filter(row => String(row.id) !== idStr)
     await persistMealEntries(nextEntries, session?.user?.id)
-    // Also remove from mealRecords (trainer-sourced meals stored in lift_meal_records)
+
+    // Remove from mealRecords (trainer-sourced entries in lift_meal_records)
     const prevMealRecords = Array.isArray(mealRecords) ? mealRecords : []
     const nextMealRecords = prevMealRecords.filter(r => {
       const rid = String(r.meal_id || r.id || "")
       return rid === "" || rid !== idStr
     })
-    if (nextMealRecords.length !== prevMealRecords.length || trainerDerivedDays.some(d => String(d.id) === idStr)) {
-      localStorage.setItem("lift_meal_records", JSON.stringify(nextMealRecords))
-      setMealRecords(nextMealRecords)
-      try {
-        if (supabase && session?.user?.id) {
-          await supabase.from("user_kv").upsert(
-            { user_id: session.user.id, key: "lift_meal_records", value: nextMealRecords, updated_at: new Date().toISOString() },
-            { onConflict: "user_id,key" }
-          )
-        }
-      } catch (e) { /* sync best-effort */ }
-    }
+    // Always write - even if length is unchanged, a trainer-derived row
+    // may have matched via trainerDerivedDays but not via mealRecords directly
+    localStorage.setItem("lift_meal_records", JSON.stringify(nextMealRecords))
+    setMealRecords(nextMealRecords)
+    try {
+      if (supabase && session?.user?.id) {
+        await supabase.from("user_kv").upsert(
+          { user_id: session.user.id, key: "lift_meal_records", value: nextMealRecords, updated_at: new Date().toISOString() },
+          { onConflict: "user_id,key" }
+        )
+      }
+    } catch (e) { /* sync best-effort */ }
   }
 
   const todayMeals = useMemo(() => {
