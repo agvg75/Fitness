@@ -21624,11 +21624,11 @@ const bodyWeightProjectionChart = useMemo(() => {
     const pointDate = new Date(`${point.date}T12:00:00`)
     const daysFromNow = Math.max(0, Math.round((pointDate.getTime() - today.getTime()) / 86400000))
     return {
-      date: point.date,
-      daysFromNow,
-      daysFromNowLog: daysFromNow + 1,
-      baselineWeight: Number(point.baseline),
-      label: point.label
+      projectionDate: point.date,
+      projectionDaysFromNow: daysFromNow,
+      projectionDaysFromNowLog: daysFromNow + 1,
+      projectionWeightY: Number(point.baseline),
+      projectionLabel: point.label
     }
   })
 
@@ -21644,7 +21644,7 @@ const bodyWeightProjectionChart = useMemo(() => {
 
 const bodyWeightProjectionAxisMode = useMemo(() => {
   const lastPoint = bodyWeightProjectionChart[bodyWeightProjectionChart.length - 1]
-  const spanDays = Number(lastPoint?.daysFromNow || 0)
+  const spanDays = Number(lastPoint?.projectionDaysFromNow || 0)
   return {
     isLog: true,
     spanDays: Math.max(spanDays, 90)
@@ -25226,6 +25226,7 @@ return (
                 type="number"
                 scale="linear"
                 domain={forecastYDomain}
+                allowDataOverflow={true}
                 label={{ value: "Weight (lb)", angle: -90, position: "insideLeft", offset: 15, fill: "#ced2f0", style: { textAnchor: "middle" } }}
               />
               <Tooltip
@@ -25246,7 +25247,7 @@ return (
               <CartesianGrid stroke="#1a1b2e" />
               <XAxis
                 type="number"
-                dataKey={bodyWeightProjectionAxisMode.isLog ? "daysFromNowLog" : "daysFromNow"}
+                dataKey={bodyWeightProjectionAxisMode.isLog ? "projectionDaysFromNowLog" : "projectionDaysFromNow"}
                 scale={bodyWeightProjectionAxisMode.isLog ? "log" : "linear"}
                 domain={bodyWeightProjectionAxisMode.isLog ? [1, "dataMax"] : [0, "dataMax"]}
                 ticks={bodyWeightProjectionTicks.map(t => t.value)}
@@ -25264,6 +25265,7 @@ return (
                 type="number"
                 scale="linear"
                 domain={forecastYDomain}
+                allowDataOverflow={true}
                 label={{ value: "Weight (lb)", angle: -90, position: "insideLeft", offset: 15, fill: "#ced2f0", style: { textAnchor: "middle" } }}
               />
               <Tooltip
@@ -25274,7 +25276,7 @@ return (
                 formatter={(v) => [v != null ? `${v} lb` : "—", "Projected"]}
               />
               <Legend verticalAlign="top" height={28} />
-              <Line type="monotone" dataKey="baselineWeight" name="Projected" stroke="#ffd166" strokeWidth={2} dot={false} connectNulls={false} />
+              <Line type="monotone" dataKey="projectionWeightY" name="Projected" stroke="#ffd166" strokeWidth={2} dot={false} connectNulls={false} />
               {bodyForecast && <ReferenceLine y={bodyForecast.phase1TargetWeight} stroke="#ffd166" strokeDasharray="3 3" label={{ value: "Phase 1", fill: "#ffd166", fontSize: 11 }} />}
               {bodyForecast && <ReferenceLine y={bodyForecast.finalTargetWeight} stroke="#4ade80" strokeDasharray="3 3" label={{ value: "Target", fill: "#4ade80", fontSize: 11 }} />}
             </LineChart>
