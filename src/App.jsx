@@ -4889,18 +4889,27 @@ function DailyReadinessPanel({ readinessScore, latestHealthFit, ocItems, compute
   )
 }
 
-function RaceHistoryPanel({ results, raceCalendar }) {
+function RaceHistoryPanel({ results, raceCalendar, skippedRaces }) {
   const [selected, setSelected] = React.useState(results[0]?.id || null)
   const race = results.find(r => r.id === selected)
+  const primaryTime = race ? (race.official_time || race.watch_time || race.garmin_time || "—") : "—"
+  const primaryPace = race ? (race.official_pace || race.avg_pace || "—") : "—"
+  const primaryTimeLabel = race?.official_time ? "official chip time" : "watch time"
 
   if (!results.length) return null
 
-  const overallPct = race ? Math.round((1 - race.overall_place / race.overall_total) * 100) : null
-  const agPct = race ? Math.round((1 - race.ag_place / race.ag_total) * 100) : null
-  const genderPct = race ? Math.round((1 - race.gender_place / race.gender_total) * 100) : null
+  const overallPct = race?.overall_place != null && race?.overall_total != null
+    ? Math.round((1 - race.overall_place / race.overall_total) * 100)
+    : null
+  const agPct = race?.ag_place != null && race?.ag_total != null
+    ? Math.round((1 - race.ag_place / race.ag_total) * 100)
+    : null
+  const genderPct = race?.gender_place != null && race?.gender_total != null
+    ? Math.round((1 - race.gender_place / race.gender_total) * 100)
+    : null
 
   const upcoming = (raceCalendar || [])
-    .filter(r => r.date > new Date().toISOString().slice(0, 10))
+    .filter(r => r.date > new Date().toISOString().slice(0, 10) && !skippedRaces?.has(r.date + "|" + r.name))
     .sort((a, b) => a.date.localeCompare(b.date))
     .slice(0, 3)
 
@@ -4929,14 +4938,29 @@ function RaceHistoryPanel({ results, raceCalendar }) {
         <>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
             <div>
-              <div style={{ fontSize: 16, fontWeight: 800, color: "#e0e0e0" }}>{race.name}</div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: "#e0e0e0" }}>
+                {race.name}
+                {RACE_PR_MAP.has(race.id) && (
+                  <span style={{
+                    marginLeft: 8,
+                    background: "#854d0e",
+                    color: "#fde68a",
+                    fontSize: 9,
+                    fontWeight: 800,
+                    padding: "2px 6px",
+                    borderRadius: 4,
+                    letterSpacing: "0.05em",
+                    verticalAlign: "middle",
+                  }}>PR</span>
+                )}
+              </div>
               <div style={{ fontSize: 11, color: "#555" }}>{race.date} · {race.location}</div>
             </div>
             <div style={{ textAlign: "right" }}>
               <div style={{ fontSize: 22, fontWeight: 800, color: "#4ade80", fontFamily: "'IBM Plex Mono', monospace" }}>
-                {race.official_time}
+                {primaryTime}
               </div>
-              <div style={{ fontSize: 10, color: "#444" }}>official chip time</div>
+              <div style={{ fontSize: 10, color: "#444" }}>{primaryTimeLabel}</div>
             </div>
           </div>
 
@@ -4949,26 +4973,26 @@ function RaceHistoryPanel({ results, raceCalendar }) {
               <div key={label} style={{ background: "#0f1a0f", borderRadius: 6, padding: "8px 10px" }}>
                 <div style={{ fontSize: 10, color: "#555", marginBottom: 4 }}>{label}</div>
                 <div style={{ fontSize: 14, fontWeight: 700, color: "#e0e0e0" }}>
-                  {place}<span style={{ fontSize: 10, color: "#444" }}>/{total}</span>
+                  {place != null ? place : "—"}<span style={{ fontSize: 10, color: "#444" }}>{total != null ? `/${total}` : ""}</span>
                 </div>
                 <div style={{ height: 4, background: "#1a1a1a", borderRadius: 2, margin: "6px 0 4px" }}>
-                  <div style={{ height: "100%", width: `${pct}%`, background: "#4ade80", borderRadius: 2 }} />
+                  <div style={{ height: "100%", width: `${pct ?? 0}%`, background: "#4ade80", borderRadius: 2 }} />
                 </div>
-                <div style={{ fontSize: 10, color: "#4ade80" }}>top {100 - pct}%</div>
+                <div style={{ fontSize: 10, color: "#4ade80" }}>{pct != null ? `top ${100 - pct}%` : "no placement data"}</div>
               </div>
             ))}
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6, marginBottom: 10 }}>
             {[
-              { label: "Avg Pace", value: race.official_pace + "/mi" },
-              { label: "Best Pace", value: race.best_pace + "/mi" },
-              { label: "Avg HR", value: race.avg_hr + " bpm" },
-              { label: "Max HR", value: race.max_hr + " bpm" },
-              { label: "Avg Power", value: race.avg_power_w + " W" },
-              { label: "Cadence", value: race.avg_cadence_spm + " spm" },
-              { label: "GCT", value: race.avg_gct_ms + " ms" },
-              { label: "VO₂ Est.", value: race.vo2_estimate },
+              { label: "Avg Pace", value: primaryPace !== "—" ? primaryPace + "/mi" : "—" },
+              { label: "Best Pace", value: race.best_pace ? race.best_pace + "/mi" : "—" },
+              { label: "Avg HR", value: race.avg_hr != null ? race.avg_hr + " bpm" : "—" },
+              { label: "Max HR", value: race.max_hr != null ? race.max_hr + " bpm" : "—" },
+              { label: "Avg Power", value: race.avg_power_w != null ? race.avg_power_w + " W" : "—" },
+              { label: "Cadence", value: race.avg_cadence_spm != null ? race.avg_cadence_spm + " spm" : "—" },
+              { label: "GCT", value: race.avg_gct_ms != null ? race.avg_gct_ms + " ms" : "—" },
+              { label: "VO₂ Est.", value: race.vo2_estimate != null ? race.vo2_estimate : "—" },
             ].map(({ label, value }) => (
               <div key={label} style={{ background: "#0f0f14", borderRadius: 5, padding: "6px 8px" }}>
                 <div style={{ fontSize: 9, color: "#444", marginBottom: 2 }}>{label}</div>
@@ -16127,7 +16151,6 @@ export default function App() {
     { date: "2026-05-09", name: "Rivian 5K",                   city: "Normal",       dist_mi: 3.1,  recommended: true,  note: "Easy 5K training run. No racing." },
     { date: "2026-05-17", name: "Donut Run 5K",                city: "Bloomington IL", dist_mi: 3.1, recommended: true,  note: "Race-week option. Use as the primary Saturday run with Sunday full rest." },
     { date: "2026-06-03", name: "The Big Run",                 city: "Bloomington IL", dist_mi: 3.1,  recommended: true,  note: "Global Running Day 5K. Wednesday evening race — counts as the weekly Wednesday run. Easy effort, not a time trial." },
-    { date: "2026-06-06", name: "Steamboat Classic 4 Mile",    city: "Peoria",       dist_mi: 4.0,  recommended: true,  note: "Choose the 4-mile, not 15K. Use as long run." },
     { date: "2026-06-14", name: "Mackinaw Valley Wine Run",    city: "Mackinaw",     dist_mi: 3.1,  recommended: true,  note: "Easy 5K. Good aerobic session mid-build." },
     { date: "2026-07-04", name: "Park 2 Park",                 city: "Normal",       dist_mi: 5.0,  recommended: true,  note: "Ideal long run substitute at this phase." },
     { date: "2026-07-04", name: "Major Reid Memorial 5K",      city: "Hopedale",     dist_mi: 3.1,  recommended: false, note: "Same day as Park 2 Park — choose one." },
@@ -16142,6 +16165,37 @@ export default function App() {
   // RACE_RESULTS: completed races with official and Garmin data
   // Add each race after it is run. Official time takes precedence over Garmin time.
   const RACE_RESULTS = [
+    {
+      id: "miles_of_smiles_5k_2026",
+      name: "Miles of Smiles 5K",
+      date: "2026-04-11",
+      distance_km: 5,
+      distance_label: "5K",
+      location: "Bloomington, IL",
+      official_time: null,
+      official_pace: null,
+      watch_time: "35:00",
+      avg_pace: "11:20",
+      best_pace: "9:31",
+      avg_power_w: 174,
+      avg_cadence_spm: 179,
+      max_cadence_spm: 232,
+      avg_gct_ms: 295,
+      flight_time_ms: null,
+      vert_ratio_pct: null,
+      avg_hr: 144,
+      max_hr: 155,
+      vo2_estimate: 41.1,
+      calories: 307,
+      overall_place: null,
+      overall_total: null,
+      gender_place: null,
+      gender_total: null,
+      ag_place: null,
+      ag_total: null,
+      ag_label: null,
+      notes: "First 5K of 2026. Non-competitive community event (Miles of Smiles, Fleet Feet sponsored). No chip time recorded. White Oak Park loop. Moderate effort — 30 min cardio zone, 3 min peak. MTP protocol active at this date. Baseline for 2026 season: 11:20 avg pace at 144 bpm avg HR. 29 days before Rivian, 53 days before Fleet Feet PR.",
+    },
     {
       id: "rivian_5k_2026",
       name: "Rivian 5K",
@@ -16187,15 +16241,15 @@ export default function App() {
       official_pace: "9:44",
       watch_time: "30:47",
       avg_pace: "9:54",
-      best_pace: null,
+      best_pace: "8:15",
       avg_power_w: 203,
       avg_cadence_spm: 177,
-      avg_gct_ms: null,
+      avg_gct_ms: 273,
       flight_time_ms: null,
       vert_ratio_pct: null,
       avg_hr: 165,
-      max_hr: null,
-      vo2_estimate: null,
+      max_hr: 186,
+      vo2_estimate: 40.8,
       calories: 314,
       overall_place: 70,
       overall_total: 184,
@@ -16207,6 +16261,25 @@ export default function App() {
       notes: "PR. First genuine race effort (not protected). 165 bpm avg — near ceiling, winded at finish. MTP score 0 throughout. Wednesday protocol slot. Watch elapsed 30:47 vs chip 30:10 (start mat gap). +14 mi cycling on day (commute + tow). Prior 5K: Rivian 32:07 (10:21/mi). Improvement: 1:57 net, 37 sec/mi.",
     },
   ]
+
+  const RACE_PR_MAP = (() => {
+    const byDistance = {}
+    const sorted = [...RACE_RESULTS]
+      .filter(r => r.official_time || r.watch_time)
+      .sort((a, b) => a.date.localeCompare(b.date))
+    sorted.forEach(r => {
+      const key = r.distance_label || r.distance_km
+      const timeStr = r.official_time || r.watch_time
+      const parts = timeStr.split(":").map(Number)
+      const secs = parts.length === 3
+        ? parts[0] * 3600 + parts[1] * 60 + parts[2]
+        : parts[0] * 60 + (parts[1] || 0)
+      if (!byDistance[key] || secs < byDistance[key].secs) {
+        byDistance[key] = { id: r.id, secs }
+      }
+    })
+    return new Set(Object.values(byDistance).map(v => v.id))
+  })()
 
   // ── ChatGPT Plan: weekly long run targets (week-start Monday → miles) ───
   const HM_PLAN_LONG_RUN = {
@@ -16239,6 +16312,19 @@ export default function App() {
       const next = new Set(prev)
       next.add(iso)
       localStorage.setItem("lift-urd-days", JSON.stringify([...next]))
+      return next
+    })
+  }
+  const [skippedRaces, setSkippedRaces] = React.useState(() => {
+    try {
+      return new Set(JSON.parse(localStorage.getItem("lift_skipped_races") || "[]"))
+    } catch { return new Set() }
+  })
+  const toggleSkipRace = (key) => {
+    setSkippedRaces(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) { next.delete(key) } else { next.add(key) }
+      localStorage.setItem("lift_skipped_races", JSON.stringify([...next]))
       return next
     })
   }
@@ -20488,14 +20574,16 @@ const formDecayReadinessPenalty = useMemo(() => {
 }, [schedLog])
 
 const [formDecayDraftModal, setFormDecayDraftModal] = useState(null)
-const handledDraftRegionsRef = useRef(new Set())
+const handledDraftRegionsRef = useRef(new Set(
+  (() => { try { return JSON.parse(localStorage.getItem("lift_fd_handled") || "[]") } catch { return [] } })()
+))
 useEffect(() => {
   const pending = Object.entries(formDecayAccumulation)
     .filter(([region, info]) => {
       if (info.watchState !== "draft" && info.watchState !== "escalated") return false
       if (handledDraftRegionsRef.current.has(region)) return false
       const alreadyActive = (Array.isArray(ocItems) ? ocItems : []).some(
-        i => i.location === region && Number(i.currentScore || 0) > 0 && i.source === "form_decay_accumulation"
+        i => i.location === region
       )
       return !alreadyActive
     })
@@ -25688,7 +25776,7 @@ return (
     <RaceHistoryPanel results={RACE_RESULTS} raceCalendar={[
       ...(Array.isArray(RACE_CALENDAR) ? RACE_CALENDAR : []),
       ...(Array.isArray(userRaces) ? userRaces : [])
-    ].sort((a, b) => a.date.localeCompare(b.date))} />
+    ].sort((a, b) => a.date.localeCompare(b.date))} skippedRaces={skippedRaces} />
 
     {/* ── Race Calendar ─────────────────────────────────────────── */}
     {(() => {
@@ -25697,7 +25785,10 @@ return (
         ...(Array.isArray(RACE_CALENDAR) ? RACE_CALENDAR : []),
         ...(Array.isArray(userRaces) ? userRaces : [])
       ].sort((a, b) => a.date.localeCompare(b.date))
-      const upcoming = allRaces.filter(r => new Date(r.date + "T12:00:00") >= today)
+      const upcoming = allRaces.filter(r => {
+        const key = r.date + "|" + r.name
+        return new Date(r.date + "T12:00:00") >= today && !skippedRaces.has(key)
+      })
 
       // Current long run capacity: max distance of runs in last 6 weeks
       const sixWeeksAgo = new Date(today)
@@ -25815,6 +25906,20 @@ return (
                       <span style={{ fontSize: 13, fontWeight: 700, color: isGoalRace ? "#ffd166" : "#e0e0e0" }}>
                         {race.name} {isGoalRace ? "★" : ""}
                       </span>
+                      <button
+                        onClick={() => toggleSkipRace(race.date + "|" + race.name)}
+                        style={{
+                          background: "none",
+                          border: "1px solid #444",
+                          borderRadius: 4,
+                          color: "#888",
+                          fontSize: 10,
+                          padding: "1px 6px",
+                          cursor: "pointer",
+                          marginLeft: 8,
+                          flexShrink: 0,
+                        }}
+                      >Remove</button>
                       <span style={{ fontSize: 10, color: "#555" }}>{race.city}</span>
                     </div>
                     <div style={{ fontSize: 11, color: "#667" }}>{race.note}</div>
@@ -25844,6 +25949,19 @@ return (
               )
             })}
           </div>
+
+          {skippedRaces.size > 0 && (
+            <div style={{ marginTop: 10, fontSize: 10, color: "#888" }}>
+              {skippedRaces.size} race{skippedRaces.size > 1 ? "s" : ""} hidden.{" "}
+              <span
+                style={{ color: "#60a5fa", cursor: "pointer", textDecoration: "underline" }}
+                onClick={() => {
+                  setSkippedRaces(new Set())
+                  localStorage.removeItem("lift_skipped_races")
+                }}
+              >Restore all</span>
+            </div>
+          )}
 
           <div style={{ marginTop: 12, fontSize: "10px", color: "#445", lineHeight: 1.6 }}>
             Ready = race distance ≤ 85% of planned long run · On target = within 5% · Stretch = up to 25% above · Skip = not recommended
@@ -25908,6 +26026,7 @@ return (
           <button
             onClick={() => {
               formDecayDraftModal.forEach(({ region }) => handledDraftRegionsRef.current.add(region))
+              localStorage.setItem("lift_fd_handled", JSON.stringify([...handledDraftRegionsRef.current]))
               setFormDecayDraftModal(null)
             }}
             style={{ fontSize: 12, padding: "7px 16px", background: "rgba(100,100,120,0.2)", border: "1px solid #334155", borderRadius: 7, color: "#94a3b8", cursor: "pointer" }}
@@ -25915,34 +26034,45 @@ return (
             Dismiss
           </button>
           <button
-            onClick={() => {
+            onClick={async () => {
               const nowIso = new Date().toISOString()
-              setOcItems(prev => {
-                const existingLocations = new Set((prev || []).map(i => (i.location || "").toLowerCase()))
-                const toAdd = formDecayDraftModal
-                  .filter(({ region }) => !existingLocations.has(region.toLowerCase()))
-                  .map(({ region, score }, idx) => ({
-                    id: `fd_draft_${Date.now()}_${idx}`,
-                    key: "muscleStatus",
-                    location: region,
-                    label: `Form decay watch — ${region}`,
-                    currentScore: score,
-                    initialScore: score,
-                    startDate: nowIso,
-                    halfLifeHours: 168,
-                    episodeCount: 1,
-                    lastResolvedDate: nowIso,
-                    chronicity: "acute",
-                    note: "Auto-generated from repeated compensatory load alerts in form decay accumulation.",
-                    source: "form_decay_accumulation",
-                  }))
-                if (toAdd.length === 0) return prev
-                const updated = [...(prev || []), ...toAdd]
-                localStorage.setItem("oc-items", JSON.stringify(updated))
-                return updated
-              })
+              const existingLocations = new Set((ocItems || []).map(i => (i.location || "").toLowerCase()))
+              const toAdd = formDecayDraftModal
+                .filter(({ region }) => !existingLocations.has(region.toLowerCase()))
+                .map(({ region, score }, idx) => ({
+                  id: `fd_draft_${Date.now()}_${idx}`,
+                  key: "muscleStatus",
+                  location: region,
+                  label: `Form decay watch — ${region}`,
+                  currentScore: score,
+                  initialScore: score,
+                  startDate: nowIso,
+                  halfLifeHours: 168,
+                  episodeCount: 1,
+                  lastResolvedDate: nowIso,
+                  chronicity: "acute",
+                  note: "Auto-generated from repeated compensatory load alerts.",
+                  source: "form_decay_accumulation",
+                }))
+              if (toAdd.length > 0) {
+                const updated = [...(ocItems || []), ...toAdd]
+                setOcItems(updated)
+                try {
+                  await store.set("oc-items", updated)
+                  if (supabase && session?.user?.id) {
+                    await supabase.from("user_kv").upsert(
+                      { user_id: session.user.id, key: "oc-items", value: updated, updated_at: nowIso },
+                      { onConflict: "user_id,key" }
+                    )
+                  }
+                } catch (e) {
+                  console.warn("[FormDecay] OC save error", e)
+                }
+              }
               formDecayDraftModal.forEach(({ region }) => handledDraftRegionsRef.current.add(region))
+              localStorage.setItem("lift_fd_handled", JSON.stringify([...handledDraftRegionsRef.current]))
               setFormDecayDraftModal(null)
+              setTab("Capacity")
             }}
             style={{ fontSize: 12, padding: "7px 16px", background: "rgba(251,191,36,0.18)", border: "1px solid #fbbf24", borderRadius: 7, color: "#fbbf24", cursor: "pointer", fontWeight: 600 }}
           >
