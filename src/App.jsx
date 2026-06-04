@@ -4889,7 +4889,7 @@ function DailyReadinessPanel({ readinessScore, latestHealthFit, ocItems, compute
   )
 }
 
-function RaceHistoryPanel({ results, raceCalendar, skippedRaces }) {
+function RaceHistoryPanel({ results, raceCalendar, skippedRaces, racePrMap }) {
   const [selected, setSelected] = React.useState(results[0]?.id || null)
   const race = results.find(r => r.id === selected)
   const primaryTime = race ? (race.official_time || race.watch_time || race.garmin_time || "—") : "—"
@@ -4940,7 +4940,7 @@ function RaceHistoryPanel({ results, raceCalendar, skippedRaces }) {
             <div>
               <div style={{ fontSize: 16, fontWeight: 800, color: "#e0e0e0" }}>
                 {race.name}
-                {RACE_PR_MAP.has(race.id) && (
+                {racePrMap?.has(race.id) && (
                   <span style={{
                     marginLeft: 8,
                     background: "#854d0e",
@@ -25796,7 +25796,7 @@ return (
     <RaceHistoryPanel results={RACE_RESULTS} raceCalendar={[
       ...(Array.isArray(RACE_CALENDAR) ? RACE_CALENDAR : []),
       ...(Array.isArray(userRaces) ? userRaces : [])
-    ].sort((a, b) => a.date.localeCompare(b.date))} skippedRaces={skippedRaces} />
+    ].sort((a, b) => a.date.localeCompare(b.date))} skippedRaces={skippedRaces} racePrMap={RACE_PR_MAP} />
 
     {/* ── Race Calendar ─────────────────────────────────────────── */}
     {(() => {
