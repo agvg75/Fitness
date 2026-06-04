@@ -16222,7 +16222,8 @@ export default function App() {
     "2026-07-27": 3.5,  "2026-08-03": 8.0,
     "2026-08-10": 8.5,  "2026-08-17": 4.1,
     "2026-08-24": 9.0,  "2026-08-31": 4.0,
-    "2026-09-07": 8.0,  "2026-09-14": 4.0,
+    "2026-09-07": 8.0,  "2026-09-14": 6.2,
+    "2026-09-19": 6.2,
   }
 
   const [tab, setTab] = useState("Overview")
@@ -25706,9 +25707,10 @@ return (
         w.distance > 0 &&
         new Date(String(w.date || w.dateTime || "").slice(0, 10) + "T12:00:00") >= sixWeeksAgo
       )
-      const currentLongRun = recentRuns.length
+      const rawLongest = recentRuns.length
         ? Math.max(...recentRuns.map(w => w.distance || 0))
-        : 3.0
+        : 0
+      const currentLongRun = Math.max(rawLongest, LIFT_CONFIG.mtp_ceiling_miles ?? 6.6)
 
       // Projected long run at a future date using HM_PLAN_LONG_RUN
       const getProjectedLongRun = (raceDateStr) => {
@@ -25747,7 +25749,7 @@ return (
               {addRaceFormOpen ? "Cancel" : "+ Add race"}
             </button>
             <div style={{ fontSize: "11px", color: "#555" }}>
-              Current long run capacity: <strong style={{ color: "#ced2f0" }}>{currentLongRun.toFixed(2)} mi</strong>
+              Current long run capacity: <strong style={{ color: "#ced2f0" }}>{currentLongRun.toFixed(1)} mi</strong>
             </div>
           </div>
 
