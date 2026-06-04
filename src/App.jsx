@@ -5026,6 +5026,18 @@ function RaceHistoryPanel({ results, raceCalendar, skippedRaces }) {
   )
 }
 
+function useIsMobile() {
+  const [mobile, setMobile] = React.useState(
+    () => typeof window !== "undefined" ? window.innerWidth < 768 : true
+  )
+  React.useEffect(() => {
+    const handler = () => setMobile(window.innerWidth < 768)
+    window.addEventListener("resize", handler)
+    return () => window.removeEventListener("resize", handler)
+  }, [])
+  return mobile
+}
+
 // ─── TabSchedule ──────────────────────────────────────────────────────────────
 
 // ── Exercise Guide: Free Exercise DB (Unlicense / public domain) ─────────────
@@ -5292,6 +5304,7 @@ function SubstituteDrawer({ flag, onSelectSubstitute, onClose }) {
 
 function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, setSchedLog, readinessScore, latestHealthFit = null, ocItems = [], computedTSB = null, tsbV2Panel = null, progressionReadiness = "progress", progressionReasons = [], tendonStatus = { painScore: 0, stiffness: false, override: null }, scheduleFeedback = [], sleepRecords = [], setSleepRecords = () => {}, scheduleTarget = null, clearScheduleTarget = () => {}, ocConstraintState = null, canonicalSessions = [], formDecayPenalty = null, formDecayAccumulation = {}, tissueLoadIndex = {} }) {
   const safeScheduleFeedback = Array.isArray(scheduleFeedback) ? scheduleFeedback : []
+  const isMobileLayout = useIsMobile()
   const [activeDay, setActiveDay] = useState(todayDayKey())
   const [schedView, setSchedView] = useState("schedule")
   const [logView, setLogView] = useState("list")
@@ -5367,7 +5380,6 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     next.has(id) ? next.delete(id) : next.add(id)
     return next
   })
-  const [isMobileLayout, setIsMobileLayout] = useState(() => typeof window !== "undefined" ? window.innerWidth < 768 : true)
   const [scheduleInfoOpen, setScheduleInfoOpen] = useState({ tendon: false })
   const logEntryRefs = useRef({})
   const historicalExerciseNames = useMemo(
@@ -5419,14 +5431,6 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     })
     if (Object.keys(newFields).length) setFields(prev => ({ ...prev, ...newFields }))
     if (Object.keys(newVariants).length) setVariants(prev => ({ ...prev, ...newVariants }))
-  }, [])
-
-  useEffect(() => {
-    if (typeof window === "undefined") return undefined
-    const onResize = () => setIsMobileLayout(window.innerWidth < 768)
-    onResize()
-    window.addEventListener("resize", onResize)
-    return () => window.removeEventListener("resize", onResize)
   }, [])
 
   useEffect(() => {
@@ -16123,6 +16127,7 @@ const EXPLAIN_FNS = {
 
 export default function App() {
   if (typeof window !== "undefined") window.__liftConfig = LIFT_CONFIG
+  const isMobileLayout = useIsMobile()
   // ────────────────────────────────────────────────────────────────────────
 
   // User-added races: persisted in localStorage under "lift_user_races".
@@ -23271,7 +23276,7 @@ return (
                   <ComposedChart data={panel.rows} margin={{ top:8, right:14, left:12, bottom:14 }}>
                     <CartesianGrid stroke="#1a1b2e" />
                     <XAxis dataKey="label" tick={{ fontSize:10 }} interval={Math.max(1, Math.floor((panel.rows.length || 1) / (isLongWindow ? 10 : 12)) - 1)} />
-                    <YAxis domain={panel.tsbDomain || [dataMin => Math.min(Math.floor(dataMin - 3), -5), dataMax => Math.max(Math.ceil(dataMax + 3), 5)]} tick={{ fontSize:10 }} width={30} tickFormatter={value => Number(value).toFixed(0)} />
+                    <YAxis domain={panel.tsbDomain || [dataMin => Math.min(Math.floor(dataMin - 3), -5), dataMax => Math.max(Math.ceil(dataMax + 3), 5)]} tick={{ fontSize:10 }} width={36} tickFormatter={value => Number(value).toFixed(0)} label={{ value: "TSB (AU)", angle: -90, position: "insideLeft", offset: 10, style: { fontSize: 8, fill: "#667" } }} />
                     <ReferenceLine y={0} stroke="#444" strokeDasharray="3 3" />
                     <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: "#0f172a" }} formatter={(v, n) => [Number(v).toFixed(2), n]} />
                     <Line type="monotone" dataKey="runningTsb" name="Running TSB" stroke="#ef4444" strokeWidth={modalityStrokeWidth} strokeOpacity={isLongWindow ? 0.78 : 1} dot={false} connectNulls isAnimationActive={false} />
@@ -23311,7 +23316,7 @@ return (
                   <ComposedChart data={panel.rows} margin={{ top:8, right:14, left:12, bottom:14 }}>
                     <CartesianGrid stroke="#1a1b2e" />
                     <XAxis dataKey="label" tick={{ fontSize:10 }} interval={Math.max(1, Math.floor((panel.rows.length || 1) / (isLongWindow ? 10 : 12)) - 1)} />
-                    <YAxis domain={panel.tsbDomain || [dataMin => Math.min(Math.floor(dataMin - 3), -5), dataMax => Math.max(Math.ceil(dataMax + 3), 5)]} tick={{ fontSize:10 }} width={30} tickFormatter={value => Number(value).toFixed(0)} />
+                    <YAxis domain={panel.tsbDomain || [dataMin => Math.min(Math.floor(dataMin - 3), -5), dataMax => Math.max(Math.ceil(dataMax + 3), 5)]} tick={{ fontSize:10 }} width={36} tickFormatter={value => Number(value).toFixed(0)} label={{ value: "TSB (AU)", angle: -90, position: "insideLeft", offset: 10, style: { fontSize: 8, fill: "#667" } }} />
                     <ReferenceLine y={0} stroke="#444" strokeDasharray="3 3" />
                     <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: "#0f172a" }} formatter={(v, n) => [Number(v).toFixed(2), n]} />
                     <Line type="monotone" dataKey="strengthTsb" name="Strength TSB" stroke="#ffd166" strokeWidth={2.2} dot={false} connectNulls isAnimationActive={false} />
@@ -23345,7 +23350,7 @@ return (
                   <ComposedChart data={panel.rows} margin={{ top:10, right:20, left:8, bottom:18 }}>
                     <CartesianGrid stroke="#1a1b2e" />
                     <XAxis dataKey="label" tick={{ fontSize:10 }} interval={Math.max(1, Math.floor((panel.rows.length || 1) / (isLongWindow ? 10 : 12)) - 1)} />
-                    <YAxis domain={[0, 2.5]} tick={{ fontSize:10 }} width={30} tickFormatter={v => Number(v).toFixed(1)} />
+                    <YAxis domain={[0, 2.5]} tick={{ fontSize:10 }} width={36} tickFormatter={v => Number(v).toFixed(1)} label={{ value: "ACWR", angle: -90, position: "insideLeft", offset: 10, style: { fontSize: 8, fill: "#667" } }} />
                     <ReferenceLine y={1.5} stroke="#ef4444" strokeDasharray="3 2" strokeOpacity={0.6} label={{ value:"high 1.5", position:"insideTopRight", fontSize:8, fill:"#ef4444" }} />
                     <ReferenceLine y={0.8} stroke="#3b82f6" strokeDasharray="3 2" strokeOpacity={0.6} label={{ value:"low 0.8", position:"insideBottomRight", fontSize:8, fill:"#3b82f6" }} />
                     <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: "#0f172a" }} formatter={v => [v != null ? Number(v).toFixed(2) : "—", "ACWR"]} />
@@ -23603,10 +23608,10 @@ return (
         {readinessChartsReady ? (
           <div style={{ position:"relative" }}>
             <ResponsiveContainer width="100%" height={290}>
-              <LineChart data={readinessProjectionData} margin={{ top:20, right:14, left:window.innerWidth < 768 ? 8 : 12, bottom:18 }}>
+              <LineChart data={readinessProjectionData} margin={{ top:20, right:14, left:isMobileLayout ? 8 : 12, bottom:18 }}>
                 <CartesianGrid stroke="#1a1b2e" />
                 <XAxis type="number" dataKey="month" domain={[0, readinessProjectionMaxMonth]} allowDecimals={false} tickCount={Math.min(readinessProjectionMaxMonth + 1, 8)} tick={{ fontSize:10 }} />
-                <YAxis domain={[0, 100]} tick={{ fontSize:10 }} width={30} />
+                <YAxis domain={[0, 100]} tick={{ fontSize:10 }} width={36} label={{ value: "Readiness (%)", angle: -90, position: "insideLeft", offset: 10, style: { fontSize: 8, fill: "#667" } }} />
                 <Tooltip formatter={(value, name) => [`${Number(value).toFixed(1)}%`, name]} labelFormatter={value => `${value} months`} />
                 <Line type="monotone" dataKey="fiveK" stroke="#ef4444" strokeWidth={2} dot={false} name="5K" isAnimationActive={false} />
                 <Line type="monotone" dataKey="tenK" stroke="#22c55e" strokeWidth={2} dot={false} name="10K" isAnimationActive={false} />
@@ -23627,7 +23632,7 @@ return (
                       angle: -90,
                       position: "insideBottomLeft",
                       fill: "#94a3b8",
-                      fontSize: window.innerWidth < 768 ? 8 : 9,
+                      fontSize: isMobileLayout ? 8 : 9,
                       offset: 4 + ((index % 2) * 10)
                     }}
                   />
@@ -23646,7 +23651,7 @@ return (
       )}
     </div>
 
-    <div style={{ display:"grid", gridTemplateColumns: window.innerWidth < 1024 ? "1fr" : "1.05fr 0.95fr", gap:16, marginBottom:20, alignItems:"stretch" }}>
+    <div style={{ display:"grid", gridTemplateColumns: isMobileLayout ? "1fr" : "1.05fr 0.95fr", gap:16, marginBottom:20, alignItems:"stretch" }}>
       <div
         style={{ ...cardStyle(), minWidth:0, height:"100%", display:"grid", gridTemplateRows:"auto auto 1fr auto", cursor:"pointer" }}
         onClick={() => toggleOverviewExplain("compliance")}
@@ -23671,7 +23676,7 @@ return (
           </div>
         ) : (
           <>
-            <div style={{ display:"grid", gridTemplateColumns: window.innerWidth < 768 ? "60px repeat(4, minmax(0, 1fr))" : "72px repeat(4, minmax(0, 1fr))", gap:6, marginBottom:6 }}>
+            <div style={{ display:"grid", gridTemplateColumns: isMobileLayout ? "60px repeat(4, minmax(0, 1fr))" : "72px repeat(4, minmax(0, 1fr))", gap:6, marginBottom:6 }}>
               <div />
               {["PLAN", "COMP", "ABS", "%COMP"].map(label => (
                 <div key={label} style={{ fontSize:10, color:"#667", fontWeight:800, letterSpacing:"0.08em", textAlign:"center", padding:"0 2px" }}>{label}</div>
@@ -23679,7 +23684,7 @@ return (
             </div>
             <div style={{ display:"grid", gap:6, alignContent:"stretch" }}>
               {complianceOverviewRows.map(row => (
-                <div key={row.domain} style={{ display:"grid", gridTemplateColumns: window.innerWidth < 768 ? "60px repeat(4, minmax(0, 1fr))" : "72px repeat(4, minmax(0, 1fr))", gap:6, alignItems:"stretch" }}>
+                <div key={row.domain} style={{ display:"grid", gridTemplateColumns: isMobileLayout ? "60px repeat(4, minmax(0, 1fr))" : "72px repeat(4, minmax(0, 1fr))", gap:6, alignItems:"stretch" }}>
                   <div style={{ display:"flex", alignItems:"center", justifyContent:"flex-start", fontSize:11, fontWeight:"bold", color:"#cbd5e1", padding:"0 2px", textTransform:"uppercase", letterSpacing:"0.12em" }}>
                     {row.domain === "running" ? "Running" : row.domain === "tendon" ? "Tendon" : row.domain === "strength" ? "Strength" : "Cardio"}
                   </div>
@@ -23850,7 +23855,7 @@ return (
       </div>
     </div>
 
-    <div style={{ display: "grid", gridTemplateColumns: window.innerWidth < 768 ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: "16px", marginBottom: "20px", alignItems: "start" }}>
+    <div style={{ display: "grid", gridTemplateColumns: isMobileLayout ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: "16px", marginBottom: "20px", alignItems: "start" }}>
       <div style={{ ...cardStyle(), minWidth: "0" }}>
         <div style={{ fontWeight: "bold", marginBottom: "12px" }}>Weight Trend, actual and 7 day average ({rangeOptions.find(r => r.key === rangeKey)?.label ?? rangeKey})</div>
         <div style={{ fontSize: 11, color: "#667", marginBottom: 10 }}>Daily scale weight and 7-day smoothing.</div>
@@ -24000,7 +24005,7 @@ return (
       </div>
 </div>
 
-    <div style={{ display: "grid", gridTemplateColumns: window.innerWidth < 768 ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: "16px", marginBottom: "20px", alignItems: "start" }}>
+    <div style={{ display: "grid", gridTemplateColumns: isMobileLayout ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: "16px", marginBottom: "20px", alignItems: "start" }}>
 <div style={{ ...cardStyle(), minWidth: "0" }}>
   <div style={{ fontWeight: "bold", marginBottom: "12px", minHeight: "20px" }}>
     Body Composition
@@ -24256,7 +24261,7 @@ return (
                 <BarChart data={dexaSeries}>
                   <CartesianGrid stroke="#1a1b2e" />
                   <XAxis dataKey="label" />
-                  <YAxis domain={[100, "dataMax + 5"]} />
+                  <YAxis domain={[100, "dataMax + 5"]} width={38} tick={{ fontSize: 10 }} label={{ value: "bpm", angle: -90, position: "insideLeft", offset: 8, style: { fontSize: 9, fill: "#667" } }} />
                   <Tooltip />
                   <Legend verticalAlign="top" height={36} />
                   <Bar dataKey="lean_lb" name="Lean (lb)" stackId="a" fill="#4a9ee8" />
@@ -24271,7 +24276,7 @@ return (
                 <LineChart data={dexaSeries}>
                   <CartesianGrid stroke="#1a1b2e" />
                   <XAxis dataKey="label" />
-                  <YAxis domain={[20, "dataMax + 3"]} />
+                  <YAxis domain={[20, "dataMax + 3"]} width={38} tick={{ fontSize: 10 }} label={{ value: "bpm", angle: -90, position: "insideLeft", offset: 8, style: { fontSize: 9, fill: "#667" } }} />
                   <Tooltip />
                   <Line type="monotone" dataKey="pct_fat" stroke="#ffd166" strokeWidth={3} dot />
                 </LineChart>
@@ -24290,7 +24295,7 @@ return (
               <LineChart data={dexaRegionalPct} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
                 <CartesianGrid stroke="#1a1b2e" />
                 <XAxis dataKey="label" />
-                <YAxis tickFormatter={v => `${v > 0 ? "+" : ""}${v}%`} />
+                <YAxis tickFormatter={v => `${v > 0 ? "+" : ""}${v}%`} width={38} tick={{ fontSize: 10 }} label={{ value: "Δ%", angle: -90, position: "insideLeft", offset: 8, style: { fontSize: 9, fill: "#667" } }} />
                 <Tooltip formatter={(v, name) => [`${v > 0 ? "+" : ""}${v}%`, name]} />
                 <Legend verticalAlign="top" height={32} />
                 <ReferenceLine y={0} stroke="#444" strokeDasharray="3 3" />
@@ -24313,7 +24318,7 @@ return (
               <LineChart data={dexaRegionalPct} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
                 <CartesianGrid stroke="#1a1b2e" />
                 <XAxis dataKey="label" />
-                <YAxis tickFormatter={v => `${v > 0 ? "+" : ""}${v}%`} />
+                <YAxis tickFormatter={v => `${v > 0 ? "+" : ""}${v}%`} width={38} tick={{ fontSize: 10 }} label={{ value: "Δ%", angle: -90, position: "insideLeft", offset: 8, style: { fontSize: 9, fill: "#667" } }} />
                 <Tooltip formatter={(v, name) => [`${v > 0 ? "+" : ""}${v}%`, name]} />
                 <Legend verticalAlign="top" height={32} />
                 <ReferenceLine y={0} stroke="#444" strokeDasharray="3 3" />
@@ -24796,7 +24801,7 @@ return (
 >
                 <CartesianGrid stroke="#1a1b2e" />
                 <XAxis dataKey="label" />
-                <YAxis domain={[0, chartMaxCalories]} />
+                <YAxis domain={[0, chartMaxCalories]} width={38} tick={{ fontSize: 10 }} label={{ value: "kcal", angle: -90, position: "insideLeft", offset: 8, style: { fontSize: 9, fill: "#667" } }} />
                 <Tooltip
                   formatter={(value, name) => {
                     if (value == null) return null
@@ -24867,8 +24872,8 @@ return (
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={filteredNutrition}>
                   <CartesianGrid stroke="#1a1b2e" />
-                  <XAxis dataKey="label" />
-                  <YAxis />
+                  <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                  <YAxis width={38} tick={{ fontSize: 10 }} label={{ value: "value", angle: -90, position: "insideLeft", offset: 8, style: { fontSize: 9, fill: "#667" } }} />
                   <Tooltip />
                   <Legend verticalAlign="top" height={36} />
                   <Bar dataKey="protein_g" name="Protein (g)" stackId="a" fill="#4ae890" />
@@ -24883,8 +24888,8 @@ return (
               <ResponsiveContainer width="100%" height={300}>
   <ComposedChart data={filteredNutrition}>
     <CartesianGrid stroke="#1a1b2e" />
-    <XAxis dataKey="label" />
-    <YAxis />
+    <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+    <YAxis width={38} tick={{ fontSize: 10 }} label={{ value: "value", angle: -90, position: "insideLeft", offset: 8, style: { fontSize: 9, fill: "#667" } }} />
     <Tooltip />
     <Legend verticalAlign="top" height={36} />
     <Bar dataKey="protein_g" name="Protein (g)" fill="#4ae890" />
@@ -25436,6 +25441,21 @@ return (
               <Line type="monotone" dataKey="actual" name="Actual (7d avg)" stroke="#4a9ee8" strokeWidth={2} dot={false} connectNulls={false} />
               {bodyForecast && <ReferenceLine y={bodyForecast.phase1TargetWeight} stroke="#ffd166" strokeDasharray="3 3" label={{ value: "Phase 1", fill: "#ffd166", fontSize: 11 }} />}
               {bodyForecast && <ReferenceLine y={bodyForecast.finalTargetWeight} stroke="#4ade80" strokeDasharray="3 3" label={{ value: "Target", fill: "#4ade80", fontSize: 11 }} />}
+              {/* Titration end ~Feb 2025 */}
+              <ReferenceLine x={new Date("2025-02-15T12:00:00").getTime()} stroke="#64748b" strokeDasharray="3 3"
+                label={{ value: "Dose stable", position: "insideTopRight", fill: "#64748b", fontSize: 9 }} />
+              {/* Strength program start Sep 2025 */}
+              <ReferenceLine x={new Date("2025-09-01T12:00:00").getTime()} stroke="#a78bfa" strokeDasharray="3 3"
+                label={{ value: "Strength", position: "insideTopRight", fill: "#a78bfa", fontSize: 9 }} />
+              {/* Aerobic program start Nov 2025 */}
+              <ReferenceLine x={new Date("2025-11-01T12:00:00").getTime()} stroke="#34d399" strokeDasharray="3 3"
+                label={{ value: "Aerobic", position: "insideTopRight", fill: "#34d399", fontSize: 9 }} />
+              {/* 10mg dose escalation Apr 19 2026 */}
+              <ReferenceLine x={new Date("2026-04-19T12:00:00").getTime()} stroke="#fb923c" strokeDasharray="3 3"
+                label={{ value: "10mg", position: "insideTopRight", fill: "#fb923c", fontSize: 9 }} />
+              {/* KNR suspension ~Apr 2026 */}
+              <ReferenceLine x={new Date("2026-04-26T12:00:00").getTime()} stroke="#f87171" strokeDasharray="2 4"
+                label={{ value: "KNR pause", position: "insideTopLeft", fill: "#f87171", fontSize: 9 }} />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -25684,7 +25704,7 @@ return (
 
     {/* ── Per-modality volume charts ───────────────────────────── */}
     {trainingForecast && (
-      <div style={{ display: "grid", gridTemplateColumns: window.innerWidth < 768 ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: "16px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobileLayout ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: "16px" }}>
 
         {/* ── Running Volume with half marathon build curve ── */}
         {(() => {
