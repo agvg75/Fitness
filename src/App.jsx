@@ -1008,6 +1008,225 @@ const dayKeyFromScheduleDate = dateValue => {
   return Number.isNaN(parsed.getTime()) ? null : DAY_KEYS_BY_JS_DAY[parsed.getDay()]
 }
 
+const CUSTOM_EXERCISE_REGISTRY_KEY = "lift_custom_exercise_registry"
+const CUSTOM_EXERCISE_MIGRATION_KEY = "lift_custom_registry_migrated_v1"
+const SCHEDULE_OVERRIDES_KEY = "lift_schedule_overrides"
+const OC_CHECKIN_SNOOZE_KEY = "lift_oc_checkin_snoozed"
+
+function readLocalJson(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key)
+    if (!raw) return fallback
+    const parsed = JSON.parse(raw)
+    return parsed == null ? fallback : parsed
+  } catch {
+    return fallback
+  }
+}
+
+function makeStableId(name) {
+  const slug = String(name || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_|_$/g, "")
+    .slice(0, 40)
+  return `custom_${slug || "exercise"}`
+}
+
+function findStableIdForName(name, registry = {}) {
+  const exerciseName = String(name || "").trim()
+  if (!exerciseName) return null
+  const exactMatch = Object.values(registry || {}).find(entry =>
+    String(entry?.exercise_name || "").trim().toLowerCase() === exerciseName.toLowerCase()
+  )
+  return exactMatch?.stable_id || null
+}
+
+function getUniqueStableId(name, registry = {}) {
+  const exactMatch = findStableIdForName(name, registry)
+  if (exactMatch) return exactMatch
+  const baseId = makeStableId(name)
+  const existing = registry?.[baseId]
+  if (!existing) return baseId
+  if (String(existing?.exercise_name || "").trim().toLowerCase() === String(name || "").trim().toLowerCase()) {
+    return baseId
+  }
+  let suffix = 2
+  let candidate = `${baseId}_${suffix}`
+  while (
+    registry?.[candidate] &&
+    String(registry[candidate]?.exercise_name || "").trim().toLowerCase() !== String(name || "").trim().toLowerCase()
+  ) {
+    suffix += 1
+    candidate = `${baseId}_${suffix}`
+  }
+  return candidate
+}
+
+function inferCustomExerciseMovementPattern(name) {
+  const normalized = String(name || "").toLowerCase()
+  if (/leg press|leg ext|squat|lunge|step up/.test(normalized)) return "lower_push_quad"
+  if (/leg curl|rdl|deadlift|hip thrust|glute|hamstring/.test(normalized)) return "posterior_chain"
+  if (/hip ab|hip add|abduct|adduct|calf|shin/.test(normalized)) return "hip_accessory"
+  if (/row|pull|chin|lat|face pull|rear delt/.test(normalized)) return "upper_pull"
+  if (/press|fly|push|chest|shoulder|tricep|dip/.test(normalized)) return "upper_push"
+  if (/curl|bicep|hammer/.test(normalized)) return "arm_flexion"
+  if (/plank|pallof|crunch|twist|carry|deadbug/.test(normalized)) return "core"
+  return "other"
+}
+
+function inferCustomExerciseMuscleGroup(nameOrPattern) {
+  const movementPattern = String(nameOrPattern || "").includes("_") || nameOrPattern === "other"
+    ? String(nameOrPattern || "")
+    : inferCustomExerciseMovementPattern(nameOrPattern)
+  if (["lower_push_quad", "posterior_chain", "hip_accessory"].includes(movementPattern)) return "lower"
+  if (["upper_pull", "upper_push", "arm_flexion"].includes(movementPattern)) return "upper"
+  if (movementPattern === "core") return "core"
+  return "other"
+}
+
+function buildCustomExerciseRegistryEntry(name, overrides = {}) {
+  const exerciseName = String(name || "").trim()
+  const movementPattern = overrides.movement_pattern || inferCustomExerciseMovementPattern(exerciseName)
+  return {
+    stable_id: overrides.stable_id || makeStableId(exerciseName),
+    exercise_name: exerciseName,
+    movement_pattern: movementPattern,
+    muscle_group: overrides.muscle_group || inferCustomExerciseMuscleGroup(movementPattern),
+    created_at: overrides.created_at || new Date().toISOString().slice(0, 10),
+    program_days: Array.isArray(overrides.program_days) ? [...new Set(overrides.program_days.filter(Boolean))] : [],
+    default_sets: overrides.default_sets ?? 3,
+    default_reps: overrides.default_reps ?? "8-12",
+    default_load: overrides.default_load ?? null,
+    notes: overrides.notes || "",
+  }
+}
+
+function readCustomExerciseRegistry() {
+  const value = readLocalJson(CUSTOM_EXERCISE_REGISTRY_KEY, {})
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {}
+}
+
+function readScheduleOverrides() {
+  const value = readLocalJson(SCHEDULE_OVERRIDES_KEY, {})
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {}
+}
+
+function resolveStableCustomExerciseId(exerciseId, exerciseName, customRegistry = readCustomExerciseRegistry()) {
+  const explicit = String(exerciseId || "").trim()
+  const byName = findStableIdForName(exerciseName, customRegistry)
+  if (!explicit) {
+    return byName || (exerciseName ? makeStableId(exerciseName) : explicit)
+  }
+  if (!/^custom_\d{10,}$/.test(explicit)) return explicit
+  const stableId = byName || makeStableId(exerciseName || explicit)
+  return customRegistry?.[stableId] ? stableId : stableId
+}
+
+function getCustomProgramDaySuggestions(movementPattern, currentDay = null) {
+  const suggestionsByPattern = {
+    lower_push_quad: ["Tue", "Fri"],
+    posterior_chain: ["Tue", "Fri"],
+    hip_accessory: ["Tue", "Fri"],
+    upper_pull: ["Mon", "Thu"],
+    upper_push: ["Mon", "Thu"],
+    arm_flexion: ["Mon", "Thu"],
+    core: ["Tue", "Thu", "Fri"],
+    other: SDAYS,
+  }
+  return [...new Set([currentDay, ...(suggestionsByPattern[movementPattern] || SDAYS)].filter(Boolean))]
+}
+
+function getDefaultSectionHeadingForMovement(day, movementPattern, fallbackSections = []) {
+  const lowerPatterns = ["lower_push_quad", "posterior_chain", "hip_accessory"]
+  const sectionMatchers = lowerPatterns.includes(movementPattern)
+    ? [/quad/i, /glute/i, /posterior/i, /hip/i, /leg/i]
+    : movementPattern === "upper_pull"
+      ? [/pull/i, /back/i]
+      : movementPattern === "upper_push"
+        ? [/chest/i, /press/i, /shoulder/i, /tricep/i]
+        : movementPattern === "arm_flexion"
+          ? [/bicep/i, /arm/i]
+          : movementPattern === "core"
+            ? [/core/i, /stability/i]
+            : []
+  const match = fallbackSections.find(section =>
+    sectionMatchers.some(pattern => pattern.test(String(section?.h || "")))
+  )
+  if (match?.h) return match.h
+  if (fallbackSections.length > 0) return fallbackSections[fallbackSections.length - 1]?.h || null
+  return day || null
+}
+
+function buildCustomExerciseDef(sets, reps, load) {
+  const setCount = Math.max(1, parseInt(sets, 10) || 1)
+  return Array.from({ length: setCount }, () => ({ r: reps ?? "", w: load ?? "" }))
+}
+
+function buildProgramCustomExercise(registryEntry, sectionHeading = null) {
+  const sets = String(registryEntry?.default_sets ?? 3)
+  const reps = String(registryEntry?.default_reps ?? "8-12")
+  const load = registryEntry?.default_load == null ? "" : String(registryEntry.default_load)
+  const name = registryEntry?.exercise_name || "Custom Exercise"
+  return {
+    id: registryEntry?.stable_id,
+    n: name,
+    fi: null,
+    _def: buildCustomExerciseDef(sets, reps, load),
+    _sectionH: sectionHeading,
+    isProgramCustom: true,
+    variants: {
+      machine: {
+        n: name,
+        sets,
+        reps,
+        load,
+        note: registryEntry?.notes || "",
+      },
+    },
+  }
+}
+
+function ensureCustomRegistryMigrationFromLogEntries(entries) {
+  if (typeof window === "undefined") return readCustomExerciseRegistry()
+  const registry = readCustomExerciseRegistry()
+  let changed = false
+  ;(Array.isArray(entries) ? entries : []).forEach(entry => {
+    ;(Array.isArray(entry?.exercises) ? entry.exercises : []).forEach(exercise => {
+      const exerciseId = String(exercise?.exercise_id || "")
+      if (!/^custom_\d{10,}$/.test(exerciseId)) return
+      const exerciseName = String(exercise?.exercise_name || exercise?.name || "").trim()
+      if (!exerciseName) return
+      const stableId = getUniqueStableId(exerciseName, registry)
+      if (!registry[stableId]) {
+        const actual = exercise?.actual || {}
+        const prescribed = exercise?.prescribed || {}
+        registry[stableId] = buildCustomExerciseRegistryEntry(exerciseName, {
+          stable_id: stableId,
+          default_sets: actual.sets ?? prescribed.sets ?? 3,
+          default_reps: actual.reps ?? prescribed.reps ?? "8-12",
+          default_load: actual.load ?? prescribed.load ?? null,
+          notes: exercise?.notes || "",
+        })
+        changed = true
+      }
+    })
+  })
+  if (changed) {
+    try { localStorage.setItem(CUSTOM_EXERCISE_REGISTRY_KEY, JSON.stringify(registry)) } catch {}
+  }
+  return registry
+}
+
+function getOcCheckinSnooze(location = null) {
+  const snooze = readLocalJson(OC_CHECKIN_SNOOZE_KEY, null)
+  if (!snooze || typeof snooze !== "object") return null
+  const until = Number(snooze.until || 0)
+  if (!Number.isFinite(until) || until <= Date.now()) return null
+  if (location && snooze.location && String(snooze.location) !== String(location)) return null
+  return snooze
+}
+
 const STALENESS_THRESHOLDS = {
   upper_pull: 3,
   upper_push: 3,
@@ -1135,8 +1354,12 @@ function getLatestScheduleSessionForDate(entries, dateStr) {
   return dedupeSchedLogByDate(entries).find(entry => getScheduleLogEntryDate(entry) === dateStr) || null
 }
 
-function getExerciseKey(exercise) {
-  const explicit = String(exercise?.exercise_id || exercise?.id || "").trim()
+function getExerciseKey(exercise, customRegistry = readCustomExerciseRegistry()) {
+  const explicit = resolveStableCustomExerciseId(
+    exercise?.exercise_id || exercise?.id || "",
+    exercise?.exercise_name || exercise?.name || exercise?.n || "",
+    customRegistry
+  )
   if (explicit) return explicit
   const name = String(exercise?.exercise_name || exercise?.name || exercise?.n || "").trim()
   return name ? `name:${normalizeExerciseToken(name)}` : null
@@ -1467,6 +1690,7 @@ function computeSuggestion(record, currentSessionRole) {
 
 function computeProgressionState(schedLog, ocItems, exerciseLibrary = EXERCISE_LIBRARY) {
   try {
+    const customRegistry = ensureCustomRegistryMigrationFromLogEntries(schedLog)
     const dedupedLog = dedupeSchedLogByDate(schedLog)
     const todayStr = new Date().toISOString().slice(0, 10)
     const todayDayKey = DAY_KEYS_BY_JS_DAY[new Date().getDay()]
@@ -1489,19 +1713,26 @@ function computeProgressionState(schedLog, ocItems, exerciseLibrary = EXERCISE_L
       })
 
       exerciseContexts.forEach(({ exercise, libEntry, movement_pattern, summary }, index) => {
-        const key = getExerciseKey(exercise)
+        const resolvedExerciseId = resolveStableCustomExerciseId(
+          exercise?.exercise_id || exercise?.id || "",
+          exercise?.exercise_name || exercise?.name || exercise?.n || "",
+          customRegistry
+        )
+        const registryEntry = customRegistry?.[resolvedExerciseId] || null
+        const key = getExerciseKey({ ...exercise, exercise_id: resolvedExerciseId }, customRegistry)
         if (!key) return
 
         const planMatches = getPlanMatchesForExercise(libEntry, exercise)
         const dayKeys = [...new Set([
+          ...(Array.isArray(registryEntry?.program_days) ? registryEntry.program_days : []),
           ...(Array.isArray(libEntry?.days) ? libEntry.days : []),
           ...planMatches.map(match => match.dayKey),
         ].filter(Boolean))]
 
         if (!records.has(key)) {
           records.set(key, {
-            exercise_id: String(exercise?.exercise_id || libEntry?.id || key),
-            exercise_name: String(exercise?.exercise_name || exercise?.name || exercise?.n || libEntry?.name || key).trim(),
+            exercise_id: String(resolvedExerciseId || libEntry?.id || key),
+            exercise_name: String(exercise?.exercise_name || exercise?.name || exercise?.n || registryEntry?.exercise_name || libEntry?.name || key).trim(),
             movement_pattern,
             oc_regions: [...new Set((libEntry?.loads || []).map(load => load.region).filter(Boolean))],
             sessions: [],
@@ -1511,7 +1742,7 @@ function computeProgressionState(schedLog, ocItems, exerciseLibrary = EXERCISE_L
         }
 
         const record = records.get(key)
-        record.exercise_name = record.exercise_name || String(exercise?.exercise_name || exercise?.name || exercise?.n || libEntry?.name || key).trim()
+        record.exercise_name = record.exercise_name || String(exercise?.exercise_name || exercise?.name || exercise?.n || registryEntry?.exercise_name || libEntry?.name || key).trim()
         record.movement_pattern = record.movement_pattern || movement_pattern
         record.oc_regions = record.oc_regions?.length ? record.oc_regions : [...new Set((libEntry?.loads || []).map(load => load.region).filter(Boolean))]
         record.planned_days = [...new Set([...(record.planned_days || []), ...dayKeys])]
@@ -6014,6 +6245,9 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const [checkedItems, setCheckedItems] = useState({})   // { "day_section_index": bool }
   const [customItems, setCustomItems] = useState({})     // { "day_stretch": [{n,d}], "day_warmup": [...], "day_core": [...] }
   const [customExercises, setCustomExercises] = useState({}) // { day: [{id,n,sets,reps,load,notes}] }
+  const [customExerciseRegistry, setCustomExerciseRegistry] = useState(() => readCustomExerciseRegistry())
+  const [scheduleOverrides, setScheduleOverrides] = useState(() => readScheduleOverrides())
+  const [programPromptState, setProgramPromptState] = useState({})
   const [tendonEntries, setTendonEntries] = useState({}) // { day: [{id,name,sets,reps,load,notes}] }
   const [savedEntries, setSavedEntries] = useState({})   // { day: { ymca: entry|null, knr: entry|null } }
   const [justUndone, setJustUndone] = useState(null)    // "ymca" | "knr" | null
@@ -6145,6 +6379,116 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     return { value, synced: false, pending: true }
   }
 
+  const persistCustomExerciseRegistry = nextRegistry => {
+    setCustomExerciseRegistry(nextRegistry)
+    saveScheduleKey(CUSTOM_EXERCISE_REGISTRY_KEY, nextRegistry)
+  }
+
+  const persistScheduleOverrides = nextOverrides => {
+    setScheduleOverrides(nextOverrides)
+    saveScheduleKey(SCHEDULE_OVERRIDES_KEY, nextOverrides)
+  }
+
+  const ensureRegistryEntry = (name, overrides = {}) => {
+    const exerciseName = String(name || "").trim()
+    if (!exerciseName) return { stableId: null, entry: null, registry: customExerciseRegistry }
+    const stableId = overrides.stable_id || getUniqueStableId(exerciseName, customExerciseRegistry)
+    const existing = customExerciseRegistry?.[stableId]
+    const entry = existing
+      ? {
+          ...existing,
+          exercise_name: existing.exercise_name || exerciseName,
+          movement_pattern: existing.movement_pattern || inferCustomExerciseMovementPattern(exerciseName),
+          muscle_group: existing.muscle_group || inferCustomExerciseMuscleGroup(existing.movement_pattern || exerciseName),
+          notes: existing.notes || overrides.notes || "",
+        }
+      : buildCustomExerciseRegistryEntry(exerciseName, { ...overrides, stable_id: stableId })
+    const nextRegistry = existing ? customExerciseRegistry : { ...customExerciseRegistry, [stableId]: entry }
+    if (!existing) persistCustomExerciseRegistry(nextRegistry)
+    return { stableId, entry, registry: nextRegistry }
+  }
+
+  const getProgramPositionOptions = (day, movementPattern, includeCurrentProgram = true) => {
+    const dayPlan = PLAN[day]
+    const sections = Array.isArray(dayPlan?.sections) ? dayPlan.sections : []
+    const baseExercises = sections.flatMap(section =>
+      (section.ex || []).map(exercise => ({ id: exercise.id, name: exercise.name, section: section.h }))
+    )
+    const registryExercises = includeCurrentProgram
+      ? Object.values(customExerciseRegistry || {})
+          .filter(entry => Array.isArray(entry?.program_days) && entry.program_days.includes(day))
+          .map(entry => {
+            const dayOverride = scheduleOverrides?.[day]?.[entry.stable_id] || {}
+            return {
+              id: entry.stable_id,
+              name: entry.exercise_name,
+              section: dayOverride.section_heading || getDefaultSectionHeadingForMovement(day, entry.movement_pattern, sections),
+            }
+          })
+      : []
+    const exercises = [...baseExercises, ...registryExercises]
+    const defaultSection = getDefaultSectionHeadingForMovement(day, movementPattern, sections)
+    const sectionOptions = [...new Set(
+      [
+        defaultSection,
+        ...sections.map(section => section.h),
+        ...registryExercises.map(exercise => exercise.section).filter(Boolean),
+      ].filter(Boolean)
+    )]
+    const afterOptions = exercises.map(exercise => ({
+      value: `after:${exercise.id}`,
+      label: `After ${exercise.name}`,
+      section: exercise.section || defaultSection,
+      anchorId: exercise.id,
+    }))
+    const endOptions = sectionOptions.map(sectionHeading => ({
+      value: `section-end:${sectionHeading}`,
+      label: `End of ${sectionHeading}`,
+      section: sectionHeading,
+      anchorId: null,
+    }))
+    const options = [...afterOptions, ...endOptions]
+    const defaultOption = options.find(option => option.value === `section-end:${defaultSection}`) || options[0] || {
+      value: "section-end:Program",
+      label: "End of section",
+      section: defaultSection || "Program",
+      anchorId: null,
+    }
+    return { options, defaultOption }
+  }
+
+  const buildExerciseOrderForInsertion = (day, stableId, positionValue, movementPattern) => {
+    const currentIds = getProgDay(day).exercises.map(exercise => exercise.id).filter(id => String(id) !== String(stableId))
+    const { options, defaultOption } = getProgramPositionOptions(day, movementPattern, false)
+    const chosen = options.find(option => option.value === positionValue) || defaultOption
+    const next = [...currentIds]
+    if (chosen?.value?.startsWith("after:") && chosen.anchorId) {
+      const idx = next.findIndex(id => String(id) === String(chosen.anchorId))
+      if (idx >= 0) next.splice(idx + 1, 0, stableId)
+      else next.push(stableId)
+      return next
+    }
+    if (chosen?.section) {
+      const targetSection = chosen.section
+      const lastIdx = getProgDay(day).exercises.reduce((result, exercise, index) =>
+        exercise._sectionH === targetSection ? index : result
+      , -1)
+      if (lastIdx >= 0) next.splice(lastIdx + 1, 0, stableId)
+      else next.push(stableId)
+      return next
+    }
+    next.push(stableId)
+    return next
+  }
+
+  const dismissProgramPrompt = exerciseId => {
+    setProgramPromptState(prev => {
+      const next = { ...prev }
+      delete next[exerciseId]
+      return next
+    })
+  }
+
   const loadScheduleLogForMutation = async fallbackLog => {
     try {
       const remoteLog = await readScheduleKeyFromSupabase("wt-log")
@@ -6162,6 +6506,8 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       const ss = await store.get("wt-sessions")
       const ci = await store.get("wt-custom-items")
       const cx = await store.get("wt-custom-exercises")
+      const cr = await store.get(CUSTOM_EXERCISE_REGISTRY_KEY)
+      const so = await store.get(SCHEDULE_OVERRIDES_KEY)
       const tw = await store.get("wt-tendon-work")
       const ck = await store.get("wt-checked-items")
       // Fetch wt-log from Supabase and merge with localStorage
@@ -6188,6 +6534,8 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       }
       if (ci && typeof ci === "object") setCustomItems(ci)
       if (cx && typeof cx === "object") setCustomExercises(cx)
+      if (cr && typeof cr === "object" && !Array.isArray(cr)) setCustomExerciseRegistry(cr)
+      if (so && typeof so === "object" && !Array.isArray(so)) setScheduleOverrides(so)
       if (tw && typeof tw === "object") setTendonEntries(tw)
       if (ck && typeof ck === "object") setCheckedItems(ck)
     })()
@@ -6429,6 +6777,33 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
           }
         })
       )
+      const programCustomEntries = Object.values(customExerciseRegistry || {})
+        .filter(entry => Array.isArray(entry?.program_days) && entry.program_days.includes(day))
+      programCustomEntries.forEach(entry => {
+        const dayOverride = scheduleOverrides?.[day]?.[entry.stable_id] || {}
+        const sectionHeading = dayOverride.section_heading || getDefaultSectionHeadingForMovement(day, entry.movement_pattern, schDay.sections || [])
+        const customExercise = buildProgramCustomExercise(entry, sectionHeading)
+        if (!customExercise?.id) return
+        const insertAfterId = String(dayOverride.after_exercise_id || "")
+        if (insertAfterId) {
+          const anchorIdx = exercises.findIndex(exercise => String(exercise.id) === insertAfterId)
+          if (anchorIdx >= 0) {
+            exercises.splice(anchorIdx + 1, 0, customExercise)
+            return
+          }
+        }
+        if (sectionHeading) {
+          let lastSectionIdx = -1
+          exercises.forEach((exercise, idx) => {
+            if (exercise._sectionH === sectionHeading) lastSectionIdx = idx
+          })
+          if (lastSectionIdx >= 0) {
+            exercises.splice(lastSectionIdx + 1, 0, customExercise)
+            return
+          }
+        }
+        exercises.push(customExercise)
+      })
       // Apply saved custom order for this day if present.
       const savedOrder = exerciseOrder?.[day]
       if (Array.isArray(savedOrder) && savedOrder.length) {
@@ -6630,6 +7005,22 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   // ── Custom exercises ───────────────────────────────────────────────────
   const getCustomExercises = (day) => customExercises[day] || []
 
+  const openProgramPrompt = (exercise, day, registryEntry = null) => {
+    const entry = registryEntry || customExerciseRegistry?.[exercise?.id] || null
+    const movementPattern = entry?.movement_pattern || inferCustomExerciseMovementPattern(exercise?.n || exercise?.exercise_name || "")
+    const dayOptions = getCustomProgramDaySuggestions(movementPattern, day)
+    const selectedDay = dayOptions[0] || day
+    const { defaultOption } = getProgramPositionOptions(selectedDay, movementPattern)
+    setProgramPromptState(prev => ({
+      ...prev,
+      [exercise.id]: {
+        selectedDay,
+        selectedPosition: defaultOption?.value || "section-end:Program",
+        movementPattern,
+      },
+    }))
+  }
+
   const addCustomExercise = (day) => {
     setInlineExForm(day)
     setInlineExName("")
@@ -6649,15 +7040,24 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const commitCustomExercise = () => {
     if (!inlineExForm || !inlineExName.trim()) return
     const day = inlineExForm
+    const exerciseName = inlineExName.trim()
+    const { stableId, entry } = ensureRegistryEntry(exerciseName)
+    const lastValues = getLastLoggedExerciseValues(exerciseName, stableId)
     const newEx = {
-      id: `custom_${Date.now()}`,
-      n: inlineExName.trim(),
+      id: stableId,
+      n: exerciseName,
       dbId: inlineExDbId || null,  // stored so guide panel works without fuzzy matching
-      sets: "3", reps: "10", load: "", notes: ""
+      sets: String(lastValues?.sets ?? entry?.default_sets ?? "3"),
+      reps: String(lastValues?.reps ?? entry?.default_reps ?? "8-12"),
+      load: String(lastValues?.load ?? entry?.default_load ?? ""),
+      notes: entry?.notes || "",
     }
     const updated = { ...customExercises, [day]: [...getCustomExercises(day), newEx] }
     setCustomExercises(updated)
     saveScheduleKey("wt-custom-exercises", updated)
+    if (!(entry?.program_days || []).includes(day)) {
+      openProgramPrompt(newEx, day, entry)
+    }
     setInlineExForm(null)
     setInlineExName("")
     setExSuggestions([])
@@ -6666,10 +7066,69 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     setInlineExResults([])
   }
 
+  const addCustomExerciseToProgram = async (exercise, promptState) => {
+    if (!exercise?.id || !promptState?.selectedDay) return
+    const stableId = resolveStableCustomExerciseId(exercise.id, exercise.n || exercise.exercise_name || "", customExerciseRegistry)
+    const { stableId: ensuredStableId, entry } = ensureRegistryEntry(exercise.n || exercise.exercise_name || "", {
+      stable_id: stableId,
+      default_sets: exercise.sets || 3,
+      default_reps: exercise.reps || "8-12",
+      default_load: exercise.load || null,
+      notes: exercise.notes || "",
+    })
+    const chosenDay = promptState.selectedDay
+    const movementPattern = entry?.movement_pattern || promptState.movementPattern || inferCustomExerciseMovementPattern(exercise.n || "")
+    const { options, defaultOption } = getProgramPositionOptions(chosenDay, movementPattern, false)
+    const chosenPosition = options.find(option => option.value === promptState.selectedPosition) || defaultOption
+
+    const nextRegistry = {
+      ...customExerciseRegistry,
+      [ensuredStableId]: {
+        ...entry,
+        stable_id: ensuredStableId,
+        exercise_name: entry?.exercise_name || exercise.n,
+        movement_pattern: movementPattern,
+        muscle_group: entry?.muscle_group || inferCustomExerciseMuscleGroup(movementPattern),
+        default_sets: exercise.sets || entry?.default_sets || 3,
+        default_reps: exercise.reps || entry?.default_reps || "8-12",
+        default_load: exercise.load || entry?.default_load || null,
+        notes: exercise.notes || entry?.notes || "",
+        program_days: [...new Set([...(entry?.program_days || []), chosenDay])],
+      },
+    }
+    const nextOverrides = {
+      ...scheduleOverrides,
+      [chosenDay]: {
+        ...(scheduleOverrides?.[chosenDay] || {}),
+        [ensuredStableId]: {
+          after_exercise_id: chosenPosition?.anchorId || null,
+          section_heading: chosenPosition?.section || getDefaultSectionHeadingForMovement(chosenDay, movementPattern, PLAN[chosenDay]?.sections || []),
+          updated_at: new Date().toISOString(),
+        },
+      },
+    }
+
+    persistCustomExerciseRegistry(nextRegistry)
+    persistScheduleOverrides(nextOverrides)
+    const nextCustomExercises = {
+      ...customExercises,
+      [activeDay]: getCustomExercises(activeDay).filter(item => String(item.id) !== String(exercise.id)),
+    }
+    setCustomExercises(nextCustomExercises)
+    saveScheduleKey("wt-custom-exercises", nextCustomExercises)
+    dismissProgramPrompt(exercise.id)
+    await saveExerciseOrder({
+      ...exerciseOrder,
+      [chosenDay]: buildExerciseOrderForInsertion(chosenDay, ensuredStableId, chosenPosition?.value, movementPattern),
+    })
+    showToast(`Added ${exercise.n} to ${chosenDay}`)
+  }
+
   const removeCustomExercise = (day, exId) => {
     const updated = { ...customExercises, [day]: getCustomExercises(day).filter(e => e.id !== exId) }
     setCustomExercises(updated)
     saveScheduleKey("wt-custom-exercises", updated)
+    dismissProgramPrompt(exId)
   }
 
   const setCustomExF = (day, exId, fKey, val) => {
@@ -6683,18 +7142,24 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
 
   const addSubstituteCustomExercise = (day, profile, sourceExerciseName, flag) => {
     if (!day || !profile?.name) return
+    const { stableId, entry } = ensureRegistryEntry(profile.name, {
+      notes: `Substituted for ${sourceExerciseName} — OC flag: ${flag?.ocLocation || "unknown region"}`,
+    })
     const newEx = {
-      id: `sub_${Date.now()}`,
+      id: stableId,
       dbId: null,
       n: profile.name,
-      sets: "3",
-      reps: "10",
-      load: "",
+      sets: String(entry?.default_sets ?? "3"),
+      reps: String(entry?.default_reps ?? "8-12"),
+      load: String(entry?.default_load ?? ""),
       notes: `Substituted for ${sourceExerciseName} — OC flag: ${flag?.ocLocation || "unknown region"}`
     }
     const updated = { ...customExercises, [day]: [...getCustomExercises(day), newEx] }
     setCustomExercises(updated)
     saveScheduleKey("wt-custom-exercises", updated)
+    if (!(entry?.program_days || []).includes(day)) {
+      openProgramPrompt(newEx, day, entry)
+    }
   }
 
   const getLastLoggedExerciseValues = (exerciseName, exerciseId = null) => {
@@ -6922,7 +7387,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     })
 
     const customExs = getCustomExercises(day).map(e => ({
-      exercise_id: e.id, exercise_name: e.n, variant: "custom", variant_name: e.n,
+      exercise_id: resolveStableCustomExerciseId(e.id, e.n, customExerciseRegistry), exercise_name: e.n, variant: "custom", variant_name: e.n,
       prescribed: { sets: e.sets, reps: e.reps, load: e.load },
       actual: { sets: e.sets, reps: e.reps, load: e.load },
       notes: e.notes || "", changed: false,
@@ -7044,6 +7509,28 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
           : [{ r: userReps, w: userLoad }]
         return [ex.exercise_id, sets]
       })),
+    }
+
+    const loggedCustomRegistryUpdates = entry.exercises.reduce((acc, exercise) => {
+      const exerciseId = String(exercise?.exercise_id || "")
+      if (!exerciseId.startsWith("custom_")) return acc
+      const existing = acc[exerciseId] || customExerciseRegistry?.[exerciseId] || buildCustomExerciseRegistryEntry(exercise.exercise_name || exerciseId, { stable_id: exerciseId })
+      const actual = exercise?.actual || {}
+      acc[exerciseId] = {
+        ...existing,
+        stable_id: exerciseId,
+        exercise_name: existing.exercise_name || exercise.exercise_name || exerciseId,
+        movement_pattern: existing.movement_pattern || inferCustomExerciseMovementPattern(exercise.exercise_name || exerciseId),
+        muscle_group: existing.muscle_group || inferCustomExerciseMuscleGroup(existing.movement_pattern || exercise.exercise_name || exerciseId),
+        default_sets: actual.sets ?? existing.default_sets ?? 3,
+        default_reps: actual.reps ?? existing.default_reps ?? "8-12",
+        default_load: actual.load ?? existing.default_load ?? null,
+        notes: exercise?.notes || existing.notes || "",
+      }
+      return acc
+    }, {})
+    if (Object.keys(loggedCustomRegistryUpdates).length > 0) {
+      persistCustomExerciseRegistry({ ...customExerciseRegistry, ...loggedCustomRegistryUpdates })
     }
 
     const newLog = [entry, ...currentLog.filter(e => e.id !== entry.id)]
@@ -7919,6 +8406,73 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     )
   }
 
+  const renderProgramPrompt = (exercise, day) => {
+    const prompt = programPromptState?.[exercise.id]
+    if (!prompt) return null
+    const dayOptions = getCustomProgramDaySuggestions(prompt.movementPattern, day)
+    const { options, defaultOption } = getProgramPositionOptions(prompt.selectedDay, prompt.movementPattern, false)
+    const selectedPosition = options.some(option => option.value === prompt.selectedPosition)
+      ? prompt.selectedPosition
+      : (defaultOption?.value || "section-end:Program")
+    return (
+      <div style={{ margin: "-2px 0 10px", padding: "10px 12px", background: "rgba(15,110,86,0.12)", border: "1px solid rgba(16,185,129,0.28)", borderRadius: 8 }}>
+        <div style={{ fontSize: 12, color: "#a7f3d0", fontWeight: 700 }}>{exercise.n} added to today&apos;s session.</div>
+        <div style={{ fontSize: 11, color: "#cbd5e1", marginTop: 4 }}>Make this a permanent part of your program?</div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8, alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <div style={{ fontSize: 10, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em" }}>Day</div>
+            <select
+              value={prompt.selectedDay}
+              onChange={e => {
+                const nextDay = e.target.value
+                const nextPosition = getProgramPositionOptions(nextDay, prompt.movementPattern, false).defaultOption?.value || "section-end:Program"
+                setProgramPromptState(prev => ({
+                  ...prev,
+                  [exercise.id]: {
+                    ...prev[exercise.id],
+                    selectedDay: nextDay,
+                    selectedPosition: nextPosition,
+                  },
+                }))
+              }}
+              style={{ ...inputStyle(), padding: "5px 8px", fontSize: 12 }}
+            >
+              {dayOptions.map(optionDay => <option key={optionDay} value={optionDay}>{optionDay}</option>)}
+            </select>
+          </div>
+          <div style={{ display: "flex", gap: 6, alignItems: "center", flex: 1, minWidth: 220 }}>
+            <div style={{ fontSize: 10, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em" }}>Position</div>
+            <select
+              value={selectedPosition}
+              onChange={e => setProgramPromptState(prev => ({
+                ...prev,
+                [exercise.id]: {
+                  ...prev[exercise.id],
+                  selectedPosition: e.target.value,
+                },
+              }))}
+              style={{ ...inputStyle(), padding: "5px 8px", fontSize: 12, flex: 1 }}
+            >
+              {options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          </div>
+          <button
+            onClick={() => addCustomExerciseToProgram(exercise, { ...prompt, selectedPosition })}
+            style={{ padding: "6px 10px", background: "#0F6E56", color: "#fff", border: "none", borderRadius: 6, fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}
+          >
+            Add to program
+          </button>
+          <button
+            onClick={() => dismissProgramPrompt(exercise.id)}
+            style={{ padding: "6px 10px", background: "transparent", color: "#94a3b8", border: "1px solid #2a2d45", borderRadius: 6, fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}
+          >
+            Just today
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   // ── Log bar ────────────────────────────────────────────────────────────
   const logBar = () => {
     const day = activeDay
@@ -8412,7 +8966,12 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
                       })
                     })()
                     : <div style={{ textAlign: "center", padding: 16, color: "#444", fontSize: 13 }}>Active recovery — no resistance training today.</div>}
-                  {getCustomExercises(activeDay).map(ex => exCard(ex, activeDay, true))}
+                  {getCustomExercises(activeDay).map(ex => (
+                    <React.Fragment key={ex.id}>
+                      {exCard(ex, activeDay, true)}
+                      {renderProgramPrompt(ex, activeDay)}
+                    </React.Fragment>
+                  ))}
                   {inlineExForm === activeDay ? (
                   <div style={{ marginTop: 8, padding: "8px", background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: 6, position: "static" }}>
                     <input
@@ -9218,7 +9777,10 @@ function ProgressTab({ progressionState, schedLog }) {
   const [sortBy, setSortBy] = useState("stale")
   const todayStr = new Date().toISOString().slice(0, 10)
   const todaySession = getLatestScheduleSessionForDate(schedLog, todayStr)
-  const todayIds = new Set((todaySession?.exercises || []).map(exercise => exercise.exercise_id).filter(Boolean))
+  const customRegistry = readCustomExerciseRegistry()
+  const todayIds = new Set((todaySession?.exercises || []).map(exercise =>
+    resolveStableCustomExerciseId(exercise.exercise_id, exercise.exercise_name, customRegistry)
+  ).filter(Boolean))
   const visibleRecords = (Array.isArray(progressionState) ? progressionState : []).filter(record => record.sessions.length >= 2)
   const todayNudges = visibleRecords.filter(record => todayIds.has(record.exercise_id) && record.suggestion?.type !== "none")
   const reorderItems = visibleRecords.filter(record => record.suggestion?.type === "reorder_then_load")
@@ -15789,8 +16351,11 @@ function buildPoeContextSection(progressionState, schedLog) {
 
   const todayStr = new Date().toISOString().slice(0, 10)
   const todaySession = getLatestScheduleSessionForDate(schedLog, todayStr)
+  const customRegistry = readCustomExerciseRegistry()
   const todayExerciseIds = todaySession
-    ? (todaySession.exercises || []).map(exercise => exercise.exercise_id).filter(Boolean)
+    ? (todaySession.exercises || []).map(exercise =>
+        resolveStableCustomExerciseId(exercise.exercise_id, exercise.exercise_name, customRegistry)
+      ).filter(Boolean)
     : []
 
   const todayFlagged = progressionState
@@ -17360,6 +17925,13 @@ const [ocItems, setOcItems] = useState(() => { try { return JSON.parse(localStor
 const [ocLoadOverrides, setOcLoadOverrides] = useState(() => { try { return JSON.parse(localStorage.getItem("oc-load-overrides") || "{}") } catch { return {} } })
 const [followupDismissedDate, setFollowupDismissedDate] = useState(null)
 useEffect(() => {
+  if (typeof window === "undefined") return
+  if (localStorage.getItem(CUSTOM_EXERCISE_MIGRATION_KEY)) return
+  if (!Array.isArray(schedLog) || schedLog.length === 0) return
+  ensureCustomRegistryMigrationFromLogEntries(schedLog)
+  try { localStorage.setItem(CUSTOM_EXERCISE_MIGRATION_KEY, "1") } catch {}
+}, [schedLog])
+useEffect(() => {
   let cancelled = false
   ;(async () => {
     try {
@@ -17392,6 +17964,8 @@ const followupsDue = React.useMemo(() => {
     return []
   }
 }, [ocItems, followupDismissedDate])
+const ocCheckinPendingLocation = followupsDue[0]?.location || null
+const showOcCheckinBanner = followupsDue.length > 0 && !getOcCheckinSnooze(ocCheckinPendingLocation)
 useEffect(() => {
   try {
     const raw = localStorage.getItem("injuries")
@@ -23812,14 +24386,17 @@ return (
       </div>
 
       <style>{`.lift-tab-bar::-webkit-scrollbar { display: none; }`}</style>
-      {followupsDue.length > 0 && (
+      {showOcCheckinBanner && (
         <div style={{ background: "#1a1206", border: "1px solid #f59e0b55", borderRadius: 8, padding: "10px 14px", margin: "0 0 12px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
           <div style={{ fontSize: 12, color: "#f3c77a" }}>
             How {followupsDue.length === 1 ? `is your ${followupsDue[0]?.location || "open issue"}` : `are your ${followupsDue.length} open issues`} today? Quick check helps the model learn.
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button
-              onClick={() => setTab("Capacity")}
+              onClick={() => {
+                try { localStorage.removeItem(OC_CHECKIN_SNOOZE_KEY) } catch {}
+                setTab("Capacity")
+              }}
               style={{ ...buttonStyle(true), fontSize: 11, padding: "5px 10px" }}
             >
               Check now
@@ -23829,6 +24406,12 @@ return (
                 const t = todayISO()
                 setFollowupDismissedDate(t)
                 store.set("followup-dismissed", t).catch(() => {})
+                try {
+                  localStorage.setItem(OC_CHECKIN_SNOOZE_KEY, JSON.stringify({
+                    until: Date.now() + 20 * 60 * 60 * 1000,
+                    location: ocCheckinPendingLocation,
+                  }))
+                } catch {}
               }}
               style={{ ...buttonStyle(false), fontSize: 11, padding: "5px 10px" }}
             >
