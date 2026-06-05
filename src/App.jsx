@@ -11368,6 +11368,108 @@ function estimateBMR({ weightLb, leanMassLb = null, heightCm = 167.6, age = 51, 
   return 10 * wKg + 6.25 * heightCm - 5 * age + (sex === "male" ? 5 : -161)
 }
 
+function computeHistoricalIntakeEstimate(weightLog, fitnessData, age = 51, heightCm = 175) {
+  if (!Array.isArray(weightLog) || weightLog.length < 8) return []
+
+  const weightRows = weightLog
+    .map(row => ({
+      date: String(row?.date || "").slice(0, 10),
+      weight_lb: Number(row?.weight_lb)
+    }))
+    .filter(row => row.date && Number.isFinite(row.weight_lb) && row.weight_lb > 100 && row.weight_lb < 300)
+    .sort((a, b) => a.date.localeCompare(b.date))
+
+  if (weightRows.length < 8) return []
+
+  const activeRows = (Array.isArray(fitnessData) ? fitnessData : [])
+    .map(row => ({
+      date: String(row?.date || row?.metric_date || "").slice(0, 10),
+      active_energy_cal: Number(row?.active_energy_cal)
+    }))
+    .filter(row => row.date && Number.isFinite(row.active_energy_cal) && row.active_energy_cal > 0)
+    .sort((a, b) => a.date.localeCompare(b.date))
+
+  const globalActiveMedian = (() => {
+    const vals = activeRows.map(row => row.active_energy_cal).sort((a, b) => a - b)
+    if (!vals.length) return 400
+    const mid = Math.floor(vals.length / 2)
+    return vals.length % 2 === 0 ? (vals[mid - 1] + vals[mid]) / 2 : vals[mid]
+  })()
+
+  const median = values => {
+    const vals = values.filter(v => Number.isFinite(v)).sort((a, b) => a - b)
+    if (!vals.length) return null
+    const mid = Math.floor(vals.length / 2)
+    return vals.length % 2 === 0 ? (vals[mid - 1] + vals[mid]) / 2 : vals[mid]
+  }
+
+  const trailingActiveMedian = currentDate => {
+    const endTs = new Date(`${currentDate}T12:00:00`).getTime()
+    const startTs = endTs - (29 * 86400000)
+    const vals = activeRows
+      .filter(row => {
+        const ts = new Date(`${row.date}T12:00:00`).getTime()
+        return Number.isFinite(ts) && ts >= startTs && ts <= endTs
+      })
+      .map(row => row.active_energy_cal)
+    return median(vals) ?? globalActiveMedian
+  }
+
+  const rollingWeightAtIndex = index => {
+    const window = weightRows
+      .slice(Math.max(0, index - 6), index + 1)
+      .map(row => row.weight_lb)
+      .filter(Number.isFinite)
+    if (!window.length) return null
+    return window.reduce((sum, value) => sum + value, 0) / window.length
+  }
+
+  const rollingActiveAtIndex = index => {
+    const window = weightRows.slice(Math.max(0, index - 6), index + 1)
+    const vals = window.map(row => trailingActiveMedian(row.date)).filter(Number.isFinite)
+    if (!vals.length) return globalActiveMedian
+    return vals.reduce((sum, value) => sum + value, 0) / vals.length
+  }
+
+  const estimates = []
+
+  for (let i = 7; i < weightRows.length; i++) {
+    const currentDate = weightRows[i].date
+    const currentWeight = rollingWeightAtIndex(i)
+    const previousWeight = rollingWeightAtIndex(i - 7)
+    if (!Number.isFinite(currentWeight) || !Number.isFinite(previousWeight)) continue
+
+    const weightDelta = currentWeight - previousWeight
+    const caloricBalance = (weightDelta * 3500) / 7
+    const bmr = Math.round(10 * (currentWeight * 0.453592) + 6.25 * heightCm - 5 * age + 5)
+    const active = Math.round(rollingActiveAtIndex(i))
+    const tdee = bmr + active
+    const impliedIntake = Math.round(tdee + caloricBalance)
+
+    if (impliedIntake < 800 || impliedIntake > 4000) continue
+
+    estimates.push({
+      date: currentDate,
+      value: impliedIntake,
+      bmr,
+      active,
+      tdee,
+      weightDelta
+    })
+  }
+
+  return estimates.map((row, index) => {
+    const window = estimates.slice(Math.max(0, index - 13), index + 1)
+    const smoothed = Math.round(window.reduce((sum, item) => sum + item.value, 0) / window.length)
+    return {
+      ...row,
+      smoothed,
+      inferred_low: smoothed - 200,
+      inferred_high: smoothed + 200
+    }
+  })
+}
+
 function estimateMaintenanceCalories({ currentWeight, recentCardioMinutes, bmr, leanMassLb = null, activeEnergyKcal = null }) {
   const estimatedBmr = Number(bmr) > 0 ? Number(bmr)
     : estimateBMR({ weightLb: currentWeight, leanMassLb })
@@ -24082,6 +24184,88 @@ const calorieChartDataSplit = useMemo(() => {
   }))
 }, [calorieChartData])
 
+const historicalIntake = useMemo(() => {
+  const weightEntries = (Array.isArray(biometricRecords) ? biometricRecords : [])
+    .map(row => ({
+      date: String(row?.measured_date || row?.date || "").slice(0, 10),
+      weight_lb: Number(row?.weight_lb)
+    }))
+    .filter(row => row.date && Number.isFinite(row.weight_lb) && row.weight_lb > 100 && row.weight_lb < 300)
+
+  const fitnessRows = Object.values(fitnessDailyByDate || {})
+
+  return computeHistoricalIntakeEstimate(weightEntries, fitnessRows)
+}, [biometricRecords, fitnessDailyByDate])
+
+const calorieChartDataWithInference = useMemo(() => {
+  const byDate = {}
+  const cutoff = (() => {
+    if (selectedRangePoints == null) return null
+    const d = new Date()
+    d.setDate(d.getDate() - selectedRangePoints)
+    d.setHours(0, 0, 0, 0)
+    return d
+  })()
+
+  calorieChartDataSplit.forEach(row => {
+    const date = String(row?.date || "").slice(0, 10)
+    if (!date) return
+    byDate[date] = {
+      ...row,
+      date,
+      label: row.label || date.slice(5),
+      inferred_kcal: null,
+      inferred_low: null,
+      inferred_high: null
+    }
+  })
+
+  historicalIntake.forEach(row => {
+    const date = String(row?.date || "").slice(0, 10)
+    if (!date) return
+    const dateObj = new Date(`${date}T12:00:00`)
+    if (cutoff && (!Number.isFinite(dateObj.getTime()) || dateObj < cutoff)) return
+    byDate[date] = {
+      ...(byDate[date] || {
+        date,
+        label: date.slice(5),
+        target: calorieTarget?.targetCalories ?? null,
+        calories_real: null,
+        calories_aug: null,
+        calories_est: null,
+        calories_tmpl: null,
+        calories_7d: null
+      }),
+      inferred_kcal: row.smoothed,
+      inferred_low: row.inferred_low,
+      inferred_high: row.inferred_high
+    }
+  })
+
+  return Object.values(byDate).sort((a, b) => String(a.date).localeCompare(String(b.date)))
+}, [calorieChartDataSplit, historicalIntake, selectedRangePoints, calorieTarget])
+
+const caloriesTabDomain = useMemo(() => {
+  const vals = calorieChartDataWithInference
+    .flatMap(row => [
+      Number(row.calories_real),
+      Number(row.calories_aug),
+      Number(row.calories_est),
+      Number(row.calories_tmpl),
+      Number(row.calories_7d),
+      Number(row.target),
+      Number(row.inferred_kcal),
+      Number(row.inferred_low),
+      Number(row.inferred_high)
+    ])
+    .filter(v => Number.isFinite(v) && v > 0)
+
+  if (!vals.length) return [1200, 3000]
+
+  const upper = Math.max(3000, Math.ceil(Math.max(...vals) / 250) * 250)
+  return [1200, upper]
+}, [calorieChartDataWithInference])
+
 const overviewCaloriesDomain = useMemo(() => {
   const vals = calorieChartData
     .flatMap(row => [Number(row.calories), Number(row.target), Number(row.calories_7d)])
@@ -26890,40 +27074,51 @@ return (
     }}>Save to {newPresetSlot} presets</button>
   </div>
 )}
-          <div style={{ ...cardStyle(), marginBottom: "20px", maxWidth: "1000px" }}>
-            <div style={{ fontWeight: "bold", marginBottom: "12px" }}>Calories Trend ({rangeKey})</div>
-           <ResponsiveContainer width="100%" height={260}>
-  <LineChart
-  data={calorieChartDataSplit}
-  margin={{ top: 20, right: 20, left: 55, bottom: 35 }}
->
-                <CartesianGrid stroke="#1a1b2e" />
-                <XAxis dataKey="label" />
-                <YAxis domain={[0, chartMaxCalories]} width={54} tick={{ fontSize: 10 }} tickFormatter={value => `${Number(value).toFixed(0)} kcal`} label={{ value: "Energy (kcal)", angle: -90, position: "insideLeft", offset: 8, style: { fontSize: 9, fill: "#667" } }} />
-                <Tooltip
-                  formatter={(value, name) => {
-                    if (value == null) return null
-                    const labels = {
-                      calories_real: "Calories (logged)",
-                      calories_aug: "Calories (logged + estimated missing slots)",
-                      calories_est: "Calories (estimated)",
-                      calories_tmpl: "Calories (template)",
-                      target: "Target",
-                      calories7: "7-day avg"
-                    }
-                    return [`${Math.round(value)} kcal`, labels[name] || name]
-                  }}
-                />
-                <Legend verticalAlign="top" height={36} />
-                <Line type="monotone" dataKey="calories_real" stroke="#4acfe8" strokeWidth={2} dot={false} name="Logged" connectNulls={false} />
+	          <div style={{ ...cardStyle(), marginBottom: "20px", maxWidth: "1000px" }}>
+	            <div style={{ fontWeight: "bold", marginBottom: "4px" }}>Calories Trend ({rangeKey})</div>
+	            <div style={{ fontSize: 11, color: "#667", marginBottom: "12px", lineHeight: 1.5 }}>
+	              Inferred from weight trend + activity data. Accuracy improves with more Apple Watch sync history.
+	            </div>
+	           <ResponsiveContainer width="100%" height={260}>
+	  <LineChart
+	  data={calorieChartDataWithInference}
+	  margin={{ top: 20, right: 20, left: 55, bottom: 35 }}
+	>
+	                <CartesianGrid stroke="#1a1b2e" />
+	                <XAxis dataKey="label" />
+	                <YAxis domain={caloriesTabDomain} width={54} tick={{ fontSize: 10 }} tickFormatter={value => `${Number(value).toFixed(0)} kcal`} label={{ value: "Energy (kcal)", angle: -90, position: "insideLeft", offset: 8, style: { fontSize: 9, fill: "#667" } }} />
+	                <Tooltip
+	                  formatter={(value, name) => {
+	                    if (value == null) return null
+	                    if (name === "Inferred range high" || name === "Inferred range low") return null
+	                    const labels = {
+	                      calories_real: "Calories (logged)",
+	                      calories_aug: "Calories (logged + estimated missing slots)",
+	                      calories_est: "Calories (estimated)",
+	                      calories_tmpl: "Calories (template)",
+	                      target: "Target",
+	                      calories7: "7-day avg",
+	                      inferred_kcal: "Inferred (weight-derived)"
+	                    }
+	                    if (name === "Inferred (weight-derived)") {
+	                      return [`~${Math.round(value)} kcal (weight-derived estimate, ±200 kcal)`, name]
+	                    }
+	                    return [`${Math.round(value)} kcal`, labels[name] || name]
+	                  }}
+	                />
+	                <Legend verticalAlign="top" height={36} />
+	                <Area type="monotone" dataKey="inferred_high" name="Inferred range high" stroke="none" fill="rgba(155,127,213,0.14)" connectNulls legendType="none" isAnimationActive={false} />
+	                <Area type="monotone" dataKey="inferred_low" name="Inferred range low" stroke="none" fill="#0d0e1c" connectNulls legendType="none" isAnimationActive={false} />
+	                <Line type="monotone" dataKey="calories_real" stroke="#4acfe8" strokeWidth={2} dot={false} name="Logged" connectNulls={false} />
 <Line type="monotone" dataKey="calories_aug" stroke="#f97316" strokeWidth={2} dot={false} name="Partial+Est" connectNulls={false} />
 <Line type="monotone" dataKey="calories_est" stroke="#E05C5C" strokeWidth={2} dot={false} name="Estimated" connectNulls={false} strokeDasharray="4 3" />
 <Line type="monotone" dataKey="calories_tmpl" stroke="#d97706" strokeWidth={1} dot={false} name="Template" connectNulls={false} strokeDasharray="2 4" />
 <Line type="monotone" dataKey="target" stroke="#ffd166" strokeDasharray="6 6" dot={false} name="Target" />
 <Line type="monotone" dataKey="calories7" stroke="#ffffff" strokeWidth={2} dot={false} name="7-day avg" />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+	                <Line type="monotone" dataKey="inferred_kcal" stroke="#9b7fd5" strokeWidth={1.5} dot={false} name="Inferred (weight-derived)" connectNulls strokeDasharray="4 4" isAnimationActive={false} />
+	              </LineChart>
+	            </ResponsiveContainer>
+	          </div>
 
           {/* ── Energy Balance (30d) ── */}
           {(() => {
