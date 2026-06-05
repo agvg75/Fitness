@@ -21882,6 +21882,209 @@ const forecastYDomain = useMemo(() => {
   return [140, Math.max(165, Math.ceil(upperAnchor + 2))]
 }, [bodyForecast, bodyWeightRecentTrendChart])
 
+// ── Trajectory Analysis ───────────────────────────────────────────────────
+const trajectoryData = useMemo(() => {
+  try {
+    // Pull all weight records since Nov 1 2024
+    const raw = (Array.isArray(biometricRecords) ? biometricRecords : [])
+      .map(r => {
+        const date = String(r.measured_date || r.date || "").slice(0, 10)
+        const lb = Number(r.weight_lb)
+        if (!date || !Number.isFinite(lb) || lb <= 0) return null
+        return { date, lb }
+      })
+      .filter(Boolean)
+      .filter(r => r.date >= "2024-11-01")
+      .sort((a, b) => a.date.localeCompare(b.date))
+
+    console.log('[trajectory] raw count:', raw.length, 'sample:', raw.slice(0, 2))
+    if (raw.length < 10) {
+      console.warn('[trajectory] insufficient data, raw:', raw.length)
+      return null
+    }
+
+    // 7-day rolling average
+    const rolled = raw.map((r, i) => {
+      const start = Math.max(0, i - 6)
+      const sub = raw.slice(start, i + 1).map(x => x.lb)
+      return { date: r.date, lb: sub.reduce((a, b) => a + b, 0) / sub.length, rawLb: r.lb }
+    })
+
+    // Outlier detection: exclude gross outliers from fit (keep visible as flagged)
+    const manualFlags = (() => {
+      try { return new Set(JSON.parse(localStorage.getItem("lift_trajectory_manual_flags") || "[]")) }
+      catch { return new Set() }
+    })()
+
+    const t0 = new Date(rolled[0].date).getTime()
+    const points = rolled.map((r, i) => {
+      const t = (new Date(r.date).getTime() - t0) / 86400000
+      const trailingMedian = (() => {
+        const sub = rolled.slice(Math.max(0, i - 6), i + 1).map(x => x.rawLb).sort((a, b) => a - b)
+        return sub[Math.floor(sub.length / 2)]
+      })()
+      const grossOutlier = r.rawLb < 100 || r.rawLb > 250 || Math.abs(r.rawLb - trailingMedian) > 15
+      const manualFlag = manualFlags.has(r.date)
+      return { t, lb: r.lb, date: r.date, rawLb: r.rawLb, excluded: grossOutlier || manualFlag, flagged: grossOutlier || manualFlag }
+    })
+
+    const fitPoints = points.filter(p => !p.excluded)
+    const n = fitPoints.length
+    if (n < 8) return null
+
+    const xs = fitPoints.map(p => p.t)
+    const ys = fitPoints.map(p => p.lb)
+    const xMean = xs.reduce((a, b) => a + b, 0) / n
+    const yMean = ys.reduce((a, b) => a + b, 0) / n
+
+    // ── Linear OLS ──
+    const ssXX = xs.reduce((a, x) => a + (x - xMean) ** 2, 0)
+    if (!Number.isFinite(ssXX) || ssXX <= 0) return null
+    const ssXY = xs.reduce((a, x, i) => a + (x - xMean) * (ys[i] - yMean), 0)
+    const linSlope = ssXY / ssXX
+    const linIntercept = yMean - linSlope * xMean
+    const linResid = fitPoints.map((p, i) => ys[i] - (linIntercept + linSlope * xs[i]))
+    const linSSR = Math.max(1e-9, linResid.reduce((a, r) => a + r * r, 0))
+    const linAIC = n * Math.log(linSSR / n) + 2 * 2
+
+    // ── Exponential decay to asymptote: W(t) = Wf + (W0 - Wf) * exp(-k * t) ──
+    // Gauss-Newton with 50 iterations
+    let W0 = ys[0], Wf = Math.min(...ys) - 2, k = 0.003
+    for (let iter = 0; iter < 50; iter++) {
+      const JtJ = [[0,0,0],[0,0,0],[0,0,0]]
+      const Jtr = [0,0,0]
+      for (let i = 0; i < n; i++) {
+        const t = xs[i], y = ys[i]
+        const e = Math.exp(-k * t)
+        const pred = Wf + (W0 - Wf) * e
+        const res = y - pred
+        const dW0 = e, dWf = 1 - e, dk = -(W0 - Wf) * t * e
+        const J = [dW0, dWf, dk]
+        for (let a = 0; a < 3; a++) {
+          Jtr[a] += J[a] * res
+          for (let b = 0; b < 3; b++) JtJ[a][b] += J[a] * J[b]
+        }
+      }
+      // Solve 3x3 via Cramer (add damping)
+      const lam = 0.01
+      for (let a = 0; a < 3; a++) JtJ[a][a] += lam
+      const det = JtJ[0][0] * (JtJ[1][1] * JtJ[2][2] - JtJ[1][2] * JtJ[2][1])
+                - JtJ[0][1] * (JtJ[1][0] * JtJ[2][2] - JtJ[1][2] * JtJ[2][0])
+                + JtJ[0][2] * (JtJ[1][0] * JtJ[2][1] - JtJ[1][1] * JtJ[2][0])
+      if (Math.abs(det) < 1e-12) break
+      const inv = (r, c) => {
+        const m = JtJ
+        const signs = [[1, -1, 1], [-1, 1, -1], [1, -1, 1]]
+        const minor = (ri, ci) => {
+          const rows = [0, 1, 2].filter(x => x !== ri)
+          const cols = [0, 1, 2].filter(x => x !== ci)
+          return m[rows[0]][cols[0]] * m[rows[1]][cols[1]] - m[rows[0]][cols[1]] * m[rows[1]][cols[0]]
+        }
+        return signs[r][c] * minor(c, r) / det
+      }
+      const delta = [0, 1, 2].map(r => [0, 1, 2].reduce((s, c) => s + inv(r, c) * Jtr[c], 0))
+      W0 = Math.max(150, Math.min(240, W0 + delta[0]))
+      Wf = Math.max(100, Math.min(W0 - 5, Wf + delta[1]))
+      k = Math.max(0.0001, Math.min(0.05, k + delta[2]))
+    }
+    const expPred = xs.map(t => Wf + (W0 - Wf) * Math.exp(-k * t))
+    const expSSR = Math.max(1e-9, expPred.reduce((a, p, i) => a + (ys[i] - p) ** 2, 0))
+    const expAIC = n * Math.log(expSSR / n) + 2 * 3
+
+    // ── Segmented linear (two slopes, continuous hinge) ──
+    // Find best breakpoint by grid search
+    let bestSegAIC = Infinity, bestBp = xs[Math.floor(n * 0.4)]
+    let segA = linIntercept, segB = linSlope, segC = 0
+    const tMin = xs[Math.floor(n * 0.2)], tMax = xs[Math.floor(n * 0.8)]
+    const steps = 20
+    for (let s = 0; s <= steps; s++) {
+      const bp = tMin + (tMax - tMin) * s / steps
+      // OLS with design matrix [1, t, max(t-bp,0)]
+      const sumX = [[0,0,0],[0,0,0],[0,0,0]]
+      const sumY = [0,0,0]
+      for (let i = 0; i < n; i++) {
+        const t = xs[i], y = ys[i]
+        const x1 = t, x2 = Math.max(0, t - bp)
+        const row = [1, x1, x2]
+        for (let a = 0; a < 3; a++) {
+          sumY[a] += row[a] * y
+          for (let b = 0; b < 3; b++) sumX[a][b] += row[a] * row[b]
+        }
+      }
+      // 3x3 solve (reuse pattern above)
+      const M = sumX, rhs = sumY
+      const d = M[0][0] * (M[1][1] * M[2][2] - M[1][2] * M[2][1])
+              - M[0][1] * (M[1][0] * M[2][2] - M[1][2] * M[2][0])
+              + M[0][2] * (M[1][0] * M[2][1] - M[1][1] * M[2][0])
+      if (Math.abs(d) < 1e-10) continue
+      const invM = (r, c) => {
+        const signs = [[1, -1, 1], [-1, 1, -1], [1, -1, 1]]
+        const rows = [0, 1, 2].filter(x => x !== c)
+        const cols = [0, 1, 2].filter(x => x !== r)
+        return signs[r][c] * (M[rows[0]][cols[0]] * M[rows[1]][cols[1]] - M[rows[0]][cols[1]] * M[rows[1]][cols[0]]) / d
+      }
+      const coef = [0, 1, 2].map(r => [0, 1, 2].reduce((s2, c) => s2 + invM(r, c) * rhs[c], 0))
+      const ssr = Math.max(1e-9, xs.reduce((a, t, i) => {
+        const pred = coef[0] + coef[1] * t + coef[2] * Math.max(0, t - bp)
+        return a + (ys[i] - pred) ** 2
+      }, 0))
+      const aic = n * Math.log(ssr / n) + 2 * 4
+      if (aic < bestSegAIC) {
+        bestSegAIC = aic
+        bestBp = bp
+        segA = coef[0]
+        segB = coef[1]
+        segC = coef[2]
+      }
+    }
+
+    // ── AIC winner ──
+    const aics = { linear: linAIC, exponential: expAIC, segmented: bestSegAIC }
+    const minAIC = Math.min(...Object.values(aics))
+    const winners = Object.entries(aics).filter(([, v]) => v - minAIC <= 2).map(([k]) => k)
+
+    // ── Build chart data (daily from t0 to 18 months out) ──
+    const tMax2 = Math.max(...xs) + 180
+    const rolledByDate = new Map(rolled.map(r => [r.date, r.lb]))
+    const chartPoints = []
+    for (let t = 0; t <= tMax2; t += 7) {
+      const date = new Date(t0 + t * 86400000).toISOString().slice(0, 10)
+      const actual = rolledByDate.get(date) ?? null
+      chartPoints.push({
+        date,
+        label: date.slice(0, 7),
+        t,
+        actual: actual != null ? Number(actual.toFixed(1)) : null,
+        linear: Number((linIntercept + linSlope * t).toFixed(1)),
+        exponential: Number((Wf + (W0 - Wf) * Math.exp(-k * t)).toFixed(1)),
+        segmented: Number((segA + segB * t + segC * Math.max(0, t - bestBp)).toFixed(1)),
+      })
+    }
+
+    // Events (t in days from t0)
+    const tEvent = dateStr => (new Date(dateStr).getTime() - t0) / 86400000
+    const events = [
+      { t: tEvent("2025-02-15"), label: "Dose stable", color: "#64748b", weight: "heavy" },
+      { t: tEvent("2025-09-01"), label: "Strength", color: "#a78bfa", weight: "heavy" },
+      { t: tEvent("2025-11-01"), label: "Aerobic", color: "#34d399", weight: "heavy" },
+      { t: tEvent("2026-04-19"), label: "10mg", color: "#fb923c", weight: "heavy" },
+      { t: tEvent("2026-04-19"), label: "KNR pause", color: "#f87171", weight: "light" },
+    ]
+
+    return {
+      chartPoints, events, winners, aics,
+      linear: { slope: linSlope, intercept: linIntercept, aic: linAIC },
+      exponential: { W0, Wf, k, aic: expAIC },
+      segmented: { a: segA, b: segB, c: segC, bp: bestBp, bpDate: new Date(t0 + bestBp * 86400000).toISOString().slice(0, 10), aic: bestSegAIC },
+      outliers: points.filter(p => p.flagged),
+      t0,
+    }
+  } catch (e) {
+    console.error('[trajectory] fit error:', e)
+    return null
+  }
+}, [biometricRecords])
+
 // Per-modality volume forecast charts (actuals from weeklyBuckets + projected points)
 const makeVolumeForecastChart = (field, forecastKeys) => {
   if (!weeklyTrainingBuckets?.length || !trainingForecast) return []
@@ -25400,13 +25603,12 @@ return (
       </div>
       <div
         style={{
-          display: "grid",
-          gridTemplateColumns: typeof window !== "undefined" && window.innerWidth < 700 ? "1fr" : "repeat(2, minmax(0, 1fr))",
-          gap: "16px",
-          alignItems: "stretch"
+          display: "flex",
+          gap: 16,
+          flexWrap: "wrap"
         }}
       >
-        <div style={{ minWidth: 0 }}>
+        <div style={{ flex: 1, minWidth: 280 }}>
           <div style={{ fontSize: "12px", fontWeight: "700", letterSpacing: "0.04em", opacity: 0.7, marginBottom: "8px" }}>Recent Trend</div>
           <ResponsiveContainer width="100%" height={280}>
             <LineChart data={bodyWeightRecentTrendChart} margin={{ top: 10, right: 20, left: 55, bottom: 20 }}>
@@ -25459,47 +25661,60 @@ return (
             </LineChart>
           </ResponsiveContainer>
         </div>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: "12px", fontWeight: "700", letterSpacing: "0.04em", opacity: 0.7, marginBottom: "8px" }}>Projection to Targets</div>
-          <ResponsiveContainer width="100%" height={280}>
-            <LineChart data={bodyWeightProjectionChart} margin={{ top: 10, right: 20, left: 55, bottom: 28 }}>
-              <CartesianGrid stroke="#1a1b2e" />
-              <XAxis
-                type="number"
-                dataKey={bodyWeightProjectionAxisMode.isLog ? "projectionDaysFromNowLog" : "projectionDaysFromNow"}
-                scale={bodyWeightProjectionAxisMode.isLog ? "log" : "linear"}
-                domain={bodyWeightProjectionAxisMode.isLog ? [1, "dataMax"] : [0, "dataMax"]}
-                ticks={bodyWeightProjectionTicks.map(t => t.value)}
-                tick={{ fontSize: 11 }}
-                tickFormatter={value => bodyWeightProjectionTicks.find(t => t.value === value)?.label || ""}
-                label={{
-                  value: "Time from today (log scale)",
-                  position: "insideBottom",
-                  offset: -10,
-                  fill: "#ced2f0",
-                  style: { textAnchor: "middle" }
-                }}
-              />
-              <YAxis
-                type="number"
-                scale="linear"
-                domain={forecastYDomain}
-                allowDataOverflow={true}
-                label={{ value: "Weight (lb)", angle: -90, position: "insideLeft", offset: 15, fill: "#ced2f0", style: { textAnchor: "middle" } }}
-              />
-              <Tooltip
-                labelFormatter={value => {
-                  const dayCount = bodyWeightProjectionAxisMode.isLog ? Math.max(0, Number(value) - 1) : Number(value)
-                  return dayCount === 0 ? "Now" : `${Math.round(dayCount)} days`
-                }}
-                formatter={(v) => [v != null ? `${v} lb` : "—", "Projected"]}
-              />
-              <Legend verticalAlign="top" height={28} />
-              <Line type="monotone" dataKey="projectionWeightY" name="Projected" stroke="#ffd166" strokeWidth={2} dot={false} connectNulls={false} />
-              {bodyForecast && <ReferenceLine y={bodyForecast.phase1TargetWeight} stroke="#ffd166" strokeDasharray="3 3" label={{ value: "Phase 1", fill: "#ffd166", fontSize: 11 }} />}
-              {bodyForecast && <ReferenceLine y={bodyForecast.finalTargetWeight} stroke="#4ade80" strokeDasharray="3 3" label={{ value: "Target", fill: "#4ade80", fontSize: 11 }} />}
-            </LineChart>
-          </ResponsiveContainer>
+        <div style={{ flex: 1, minWidth: 280 }}>
+          <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 6, opacity: 0.8 }}>Trajectory Analysis</div>
+          {trajectoryData ? (() => {
+            const { chartPoints, events, winners, aics, exponential, segmented, linear, t0 } = trajectoryData
+            const lineProps = (model) => ({
+              strokeWidth: winners.includes(model) ? 2.5 : 1,
+              strokeOpacity: winners.includes(model) ? 1 : 0.35,
+              strokeDasharray: model === "linear" ? "4 3" : model === "segmented" ? "2 2" : undefined,
+            })
+            return (
+              <>
+                <ResponsiveContainer width="100%" height={220}>
+                  <ComposedChart data={chartPoints} margin={{ top: 8, right: 16, left: 8, bottom: 16 }}>
+                    <CartesianGrid stroke="#1a1b2e" />
+                    <XAxis dataKey="label" tick={{ fontSize: 9 }} interval={Math.max(1, Math.floor(chartPoints.length / 8) - 1)} />
+                    <YAxis domain={[130, 240]} tick={{ fontSize: 9 }} width={32} label={{ value: "lb", angle: -90, position: "insideLeft", offset: 6, style: { fontSize: 8, fill: "#667" } }} />
+                    <Tooltip formatter={(v, n) => [v != null ? `${v} lb` : "—", n]} contentStyle={{ background: "#0a0a14", border: "1px solid #1a1b2e", fontSize: 10 }} />
+                    <Line dataKey="actual" name="Actual" stroke="#4a9ee8" strokeWidth={2} dot={false} connectNulls={false} />
+                    <Line dataKey="exponential" name={`Exp decay${winners.includes("exponential") ? " ★" : ""}`} stroke="#ffd166" {...lineProps("exponential")} dot={false} connectNulls />
+                    <Line dataKey="linear" name={`Linear${winners.includes("linear") ? " ★" : ""}`} stroke="#94a3b8" {...lineProps("linear")} dot={false} connectNulls />
+                    <Line dataKey="segmented" name={`Segmented${winners.includes("segmented") ? " ★" : ""}`} stroke="#f472b6" {...lineProps("segmented")} dot={false} connectNulls />
+                    {events.map((ev, i) => (
+                      <ReferenceLine key={i} x={new Date(t0 + ev.t * 86400000).toISOString().slice(0, 7)}
+                        stroke={ev.color} strokeDasharray={ev.weight === "light" ? "2 4" : "3 3"} strokeWidth={ev.weight === "heavy" ? 1.5 : 1}
+                        label={{ value: ev.label, position: "insideTopRight", fill: ev.color, fontSize: 8 }} />
+                    ))}
+                    <ReferenceLine y={150} stroke="#ffd166" strokeDasharray="3 3" label={{ value: "Phase 1", fill: "#ffd166", fontSize: 8 }} />
+                    <ReferenceLine y={145} stroke="#4ade80" strokeDasharray="3 3" label={{ value: "Target", fill: "#4ade80", fontSize: 8 }} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginTop: 8, fontSize: 9, opacity: 0.8 }}>
+                  <div style={{ background: "#0d1117", padding: "6px 8px", borderRadius: 4, borderLeft: `2px solid ${winners.includes("exponential") ? "#ffd166" : "#333"}` }}>
+                    <div style={{ fontWeight: 700, color: "#ffd166" }}>Exp decay{winners.includes("exponential") ? " ★" : ""}</div>
+                    <div>W0 {exponential.W0.toFixed(1)} lb</div>
+                    <div>Wf {exponential.Wf.toFixed(1)} lb</div>
+                    <div>k {exponential.k.toFixed(4)}/day</div>
+                    <div style={{ opacity: 0.6 }}>AIC {exponential.aic.toFixed(1)}</div>
+                  </div>
+                  <div style={{ background: "#0d1117", padding: "6px 8px", borderRadius: 4, borderLeft: `2px solid ${winners.includes("linear") ? "#94a3b8" : "#333"}` }}>
+                    <div style={{ fontWeight: 700, color: "#94a3b8" }}>Linear{winners.includes("linear") ? " ★" : ""}</div>
+                    <div>slope {(linear.slope * 30).toFixed(2)} lb/mo</div>
+                    <div style={{ opacity: 0.6 }}>AIC {linear.aic.toFixed(1)}</div>
+                  </div>
+                  <div style={{ background: "#0d1117", padding: "6px 8px", borderRadius: 4, borderLeft: `2px solid ${winners.includes("segmented") ? "#f472b6" : "#333"}` }}>
+                    <div style={{ fontWeight: 700, color: "#f472b6" }}>Segmented{winners.includes("segmented") ? " ★" : ""}</div>
+                    <div>break {segmented.bpDate.slice(0, 7)}</div>
+                    <div>s1 {(segmented.b * 30).toFixed(2)} lb/mo</div>
+                    <div>s2 {((segmented.b + segmented.c) * 30).toFixed(2)} lb/mo</div>
+                    <div style={{ opacity: 0.6 }}>AIC {segmented.aic.toFixed(1)}</div>
+                  </div>
+                </div>
+              </>
+            )
+          })() : <div style={{ fontSize: 11, opacity: 0.5, padding: 20 }}>Insufficient data for trajectory fit.</div>}
         </div>
       </div>
       {bodyForecast && (
