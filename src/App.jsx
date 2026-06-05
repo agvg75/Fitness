@@ -152,6 +152,45 @@ const LIFT_CONFIG = {
     },
   },
 }
+
+const ANTHROPOMETRIC_HISTORY = [
+  {
+    date: "2026-05-16",
+    weight_lb: 158,
+    resting_hr_bpm: 63,
+    height_in: 66,
+    circumferences_in: {
+      neck: 15.0,
+      shoulders: 46.0,
+      chest: 40.0,
+      waist_navel: 33.0,
+      waist_below_navel: 33.5,
+      hips: 37.7,
+      thigh: 21.0,
+      forearm_relaxed: 11.0,
+      forearm_flexed: 11.5,
+      upper_arm_relaxed: 12.2,
+      upper_arm_flexed: 13.2,
+    },
+    segment_lengths_in: {
+      ankle_to_kneecap: 16.0,
+      kneecap_to_hip: 16.0,
+      wrist_to_elbow: 11.0,
+      elbow_to_shoulder: 13.0,
+    },
+  },
+]
+
+const latestAnthro = ANTHROPOMETRIC_HISTORY[ANTHROPOMETRIC_HISTORY.length - 1] ?? null
+const anthroRatios = latestAnthro ? (() => {
+  const c = latestAnthro.circumferences_in
+  const whr = c.waist_navel / c.hips
+  const whtr = c.waist_navel / latestAnthro.height_in
+  const armDelta = c.upper_arm_flexed - c.upper_arm_relaxed
+  const forearmDelta = c.forearm_flexed - c.forearm_relaxed
+  return { whr, whtr, armDelta, forearmDelta }
+})() : null
+
 const supabase = SUPABASE_URL && SUPABASE_ANON_KEY
   ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       auth: {
@@ -24463,6 +24502,67 @@ return (
               )
             })()}
           </div>
+
+          {/* ── Anthropometric Measurements ─────────────────────────── */}
+          {latestAnthro && (
+            <div style={{ ...cardStyle(), marginBottom: 20 }}>
+              <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 12 }}>
+                Anthropometric Measurements
+                <span style={{ fontWeight: 400, fontSize: 10, opacity: 0.6, marginLeft: 10 }}>
+                  {latestAnthro.date} · update every 4–6 weeks
+                </span>
+              </div>
+
+              {anthroRatios && (
+                <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
+                  {[
+                    { label: "Waist-to-Hip", value: anthroRatios.whr.toFixed(3), threshold: 0.90, unit: "", note: "risk threshold 0.90" },
+                    { label: "Waist-to-Height", value: anthroRatios.whtr.toFixed(3), threshold: 0.50, unit: "", note: "risk threshold 0.50" },
+                    { label: "Arm Flex Delta", value: `+${anthroRatios.armDelta.toFixed(1)}`, threshold: null, unit: "\"", note: "hypertrophy proxy" },
+                    { label: "Forearm Delta", value: `+${anthroRatios.forearmDelta.toFixed(1)}`, threshold: null, unit: "\"", note: "hypertrophy proxy" },
+                  ].map(m => (
+                    <div key={m.label} style={{ background: "#0d1117", borderRadius: 6, padding: "8px 12px", minWidth: 110 }}>
+                      <div style={{ fontSize: 9, opacity: 0.6, marginBottom: 4 }}>{m.label}</div>
+                      <div style={{
+                        fontSize: 20, fontWeight: 700,
+                        color: m.threshold != null
+                          ? (parseFloat(m.value) >= m.threshold ? "#f87171" : "#4ade80")
+                          : "#4a9ee8"
+                      }}>
+                        {m.value}{m.unit}
+                      </div>
+                      <div style={{ fontSize: 9, opacity: 0.5, marginTop: 2 }}>{m.note}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 8, marginBottom: 14 }}>
+                {Object.entries(latestAnthro.circumferences_in).map(([key, val]) => (
+                  <div key={key} style={{ background: "#0d1117", borderRadius: 5, padding: "6px 10px" }}>
+                    <div style={{ fontSize: 9, opacity: 0.55, marginBottom: 2, textTransform: "capitalize" }}>
+                      {key.replace(/_/g, " ")}
+                    </div>
+                    <div style={{ fontSize: 14, fontWeight: 600 }}>{val.toFixed(1)}"</div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ fontSize: 10, opacity: 0.5, marginBottom: 6 }}>Segment lengths (skeletal, fixed)</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {Object.entries(latestAnthro.segment_lengths_in).map(([key, val]) => (
+                  <div key={key} style={{ background: "#0d1117", borderRadius: 5, padding: "4px 10px", fontSize: 10 }}>
+                    <span style={{ opacity: 0.6 }}>{key.replace(/_/g, " ")}: </span>
+                    <span style={{ fontWeight: 600 }}>{val.toFixed(1)}"</span>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ fontSize: 9, opacity: 0.4, marginTop: 10 }}>
+                Next measurement due: mid to late June 2026. Align with DEXA scan when possible.
+              </div>
+            </div>
+          )}
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "20px" }}>
             <div style={{ ...cardStyle(), minWidth: "0" }}>
