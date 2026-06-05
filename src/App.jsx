@@ -9808,7 +9808,12 @@ function VolumeIndexChart({ data }) {
       <LineChart data={rows} margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>
         <CartesianGrid stroke="rgba(42,47,62,0.8)" />
         <XAxis dataKey="label" tick={{ fill: "#6b7290", fontSize: 10 }} minTickGap={24} />
-        <YAxis tick={{ fill: "#6b7290", fontSize: 10 }} tickFormatter={value => `${value}%`} width={42} />
+        <YAxis
+          tick={{ fill: "#6b7290", fontSize: 10 }}
+          tickFormatter={value => `${value}%`}
+          width={42}
+          label={{ value: "% of Baseline", angle: -90, position: "insideLeft", offset: 2, fill: "#6b7290", style: { textAnchor: "middle" }, fontSize: 10 }}
+        />
         <Tooltip
           contentStyle={{ background: "#1c2030", border: "1px solid #2a2f3e", borderRadius: 6, color: "#cbd5e1" }}
           formatter={(value, name) => [value != null ? `${value}%` : "—", name]}
@@ -9840,7 +9845,12 @@ function VolumeRawBarChart({ data }) {
       <BarChart data={rows} margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>
         <CartesianGrid stroke="rgba(42,47,62,0.8)" />
         <XAxis dataKey="label" tick={{ fill: "#6b7290", fontSize: 10 }} />
-        <YAxis tick={{ fill: "#6b7290", fontSize: 10 }} tickFormatter={value => `${(Number(value) / 1000).toFixed(0)}k`} width={42} />
+        <YAxis
+          tick={{ fill: "#6b7290", fontSize: 10 }}
+          tickFormatter={value => `${(Number(value) / 1000).toFixed(0)}k lb`}
+          width={42}
+          label={{ value: "Volume (lb)", angle: -90, position: "insideLeft", offset: 2, fill: "#6b7290", style: { textAnchor: "middle" }, fontSize: 10 }}
+        />
         <Tooltip
           contentStyle={{ background: "#1c2030", border: "1px solid #2a2f3e", borderRadius: 6, color: "#cbd5e1" }}
           formatter={(value, name) => [value ? `${Number(value).toLocaleString()} lb` : "—", name]}
@@ -10612,7 +10622,7 @@ if (w.category === "Strength") {
   <BarChart data={chartData}>
     <CartesianGrid stroke="#1a1b2e" />
     <XAxis dataKey="label" tick={renderTimelineTick} height={38} />
-    <YAxis unit="" />
+    <YAxis tickFormatter={value => `${Number(value).toFixed(0)} mi`} label={{ value: "Distance (mi)", angle: -90, position: "insideLeft", offset: 8, style: { fontSize: 9, fill: "#667" } }} />
     <Tooltip formatter={(value) => [fmt1(value), "Distance (mi)"]} />
 <Bar dataKey="cardioDistance" name="Cardio Distance (logged)" fill="#4a9ee8" stackId="dist" />
 <Bar dataKey="cardioDistanceEst" name="Cardio Distance (estimated)" fill="#4a9ee8" fillOpacity={0.35} stackId="dist" />
@@ -10628,7 +10638,7 @@ if (w.category === "Strength") {
             <BarChart data={chartData}>
               <CartesianGrid stroke="#1a1b2e" />
               <XAxis dataKey="label" tick={renderTimelineTick} height={38} />
-              <YAxis />
+              <YAxis tickFormatter={value => `${Number(value).toFixed(0)} kcal`} label={{ value: "Energy (kcal)", angle: -90, position: "insideLeft", offset: 8, style: { fontSize: 9, fill: "#667" } }} />
               <Tooltip />
               <Bar dataKey="cardioCalories" name="Cardio Calories (logged)" fill="#ff9f6e" stackId="cal" />
               <Bar dataKey="cardioCaloriesEst" name="Cardio Calories (estimated)" fill="#ff9f6e" fillOpacity={0.35} stackId="cal" />
@@ -10644,7 +10654,7 @@ if (w.category === "Strength") {
             <BarChart data={chartData}>
               <CartesianGrid stroke="#1a1b2e" />
               <XAxis dataKey="label" tick={renderTimelineTick} height={38} />
-              <YAxis />
+              <YAxis tickFormatter={value => `${Number(value).toFixed(0)} min`} label={{ value: "Time (min)", angle: -90, position: "insideLeft", offset: 8, style: { fontSize: 9, fill: "#667" } }} />
               <Tooltip />
               <Bar dataKey="cardioMinutes" name="Cardio Minutes" fill="#4ae890" />
             </BarChart>
@@ -10659,7 +10669,7 @@ if (w.category === "Strength") {
             <BarChart data={chartData}>
               <CartesianGrid stroke="#1a1b2e" />
               <XAxis dataKey="label" tick={renderTimelineTick} height={38} />
-              <YAxis allowDecimals={false} />
+              <YAxis allowDecimals={false} tickFormatter={value => `${Number(value).toFixed(0)} sessions`} label={{ value: "Sessions", angle: -90, position: "insideLeft", offset: 8, style: { fontSize: 9, fill: "#667" } }} />
               <Tooltip />
               <Bar dataKey="strengthSessions" name="Strength Sessions" fill="#ffd166" />
             </BarChart>
@@ -25295,7 +25305,7 @@ return (
                   <ComposedChart data={panel.rows} margin={{ top:8, right:14, left:12, bottom:14 }}>
                     <CartesianGrid stroke="#1a1b2e" />
                     <XAxis dataKey="label" tick={{ fontSize:10 }} interval={Math.max(1, Math.floor((panel.rows.length || 1) / (isLongWindow ? 10 : 12)) - 1)} />
-                    <YAxis domain={panel.tsbDomain || [dataMin => Math.min(Math.floor(dataMin - 3), -5), dataMax => Math.max(Math.ceil(dataMax + 3), 5)]} tick={{ fontSize:10 }} width={36} tickFormatter={value => Number(value).toFixed(0)} label={{ value: "TSB (AU)", angle: -90, position: "insideLeft", offset: 10, style: { fontSize: 8, fill: "#667" } }} />
+                    <YAxis domain={panel.tsbDomain || [dataMin => Math.min(Math.floor(dataMin - 3), -5), dataMax => Math.max(Math.ceil(dataMax + 3), 5)]} tick={{ fontSize:10 }} width={36} tickFormatter={value => `${Number(value).toFixed(0)} AU`} label={{ value: "TSB (AU)", angle: -90, position: "insideLeft", offset: 10, style: { fontSize: 8, fill: "#667" } }} />
                     <ReferenceLine y={0} stroke="#444" strokeDasharray="3 3" />
                     <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: "#0f172a" }} formatter={(v, n) => [Number(v).toFixed(2), n]} />
                     <Line type="monotone" dataKey="runningTsb" name="Running TSB" stroke="#ef4444" strokeWidth={modalityStrokeWidth} strokeOpacity={isLongWindow ? 0.78 : 1} dot={false} connectNulls isAnimationActive={false} />
@@ -25335,7 +25345,7 @@ return (
                   <ComposedChart data={panel.rows} margin={{ top:8, right:14, left:12, bottom:14 }}>
                     <CartesianGrid stroke="#1a1b2e" />
                     <XAxis dataKey="label" tick={{ fontSize:10 }} interval={Math.max(1, Math.floor((panel.rows.length || 1) / (isLongWindow ? 10 : 12)) - 1)} />
-                    <YAxis domain={panel.tsbDomain || [dataMin => Math.min(Math.floor(dataMin - 3), -5), dataMax => Math.max(Math.ceil(dataMax + 3), 5)]} tick={{ fontSize:10 }} width={36} tickFormatter={value => Number(value).toFixed(0)} label={{ value: "TSB (AU)", angle: -90, position: "insideLeft", offset: 10, style: { fontSize: 8, fill: "#667" } }} />
+                    <YAxis domain={panel.tsbDomain || [dataMin => Math.min(Math.floor(dataMin - 3), -5), dataMax => Math.max(Math.ceil(dataMax + 3), 5)]} tick={{ fontSize:10 }} width={36} tickFormatter={value => `${Number(value).toFixed(0)} AU`} label={{ value: "TSB (AU)", angle: -90, position: "insideLeft", offset: 10, style: { fontSize: 8, fill: "#667" } }} />
                     <ReferenceLine y={0} stroke="#444" strokeDasharray="3 3" />
                     <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: "#0f172a" }} formatter={(v, n) => [Number(v).toFixed(2), n]} />
                     <Line type="monotone" dataKey="strengthTsb" name="Strength TSB" stroke="#ffd166" strokeWidth={2.2} dot={false} connectNulls isAnimationActive={false} />
@@ -25369,7 +25379,7 @@ return (
                   <ComposedChart data={panel.rows} margin={{ top:10, right:20, left:8, bottom:18 }}>
                     <CartesianGrid stroke="#1a1b2e" />
                     <XAxis dataKey="label" tick={{ fontSize:10 }} interval={Math.max(1, Math.floor((panel.rows.length || 1) / (isLongWindow ? 10 : 12)) - 1)} />
-                    <YAxis domain={[0, 2.5]} tick={{ fontSize:10 }} width={36} tickFormatter={v => Number(v).toFixed(1)} label={{ value: "ACWR", angle: -90, position: "insideLeft", offset: 10, style: { fontSize: 8, fill: "#667" } }} />
+                    <YAxis domain={[0, 2.5]} tick={{ fontSize:10 }} width={36} tickFormatter={v => `${Number(v).toFixed(1)} AU`} label={{ value: "Load Risk (AU)", angle: -90, position: "insideLeft", offset: 10, style: { fontSize: 8, fill: "#667" } }} />
                     <ReferenceLine y={1.5} stroke="#ef4444" strokeDasharray="3 2" strokeOpacity={0.6} label={{ value:"high 1.5", position:"insideTopRight", fontSize:8, fill:"#ef4444" }} />
                     <ReferenceLine y={0.8} stroke="#3b82f6" strokeDasharray="3 2" strokeOpacity={0.6} label={{ value:"low 0.8", position:"insideBottomRight", fontSize:8, fill:"#3b82f6" }} />
                     <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: "#0f172a" }} formatter={v => [v != null ? Number(v).toFixed(2) : "—", "ACWR"]} />
@@ -25408,7 +25418,7 @@ return (
                   <ComposedChart data={panel.tendonRows || []} margin={{ top:10, right:20, left:8, bottom:18 }}>
                     <CartesianGrid stroke="#1a1b2e" />
                     <XAxis dataKey="label" tick={{ fontSize:10 }} interval={Math.max(1, Math.floor(((panel.tendonRows || []).length || 1) / (isLongWindow ? 10 : 12)) - 1)} />
-                    <YAxis domain={[0, dataMax => Math.max(1.5, Math.ceil((Number(dataMax) || 1.2) * 10) / 10)]} tick={{ fontSize:10 }} width={30} tickFormatter={v => Number(v).toFixed(1)} />
+                    <YAxis domain={[0, dataMax => Math.max(1.5, Math.ceil((Number(dataMax) || 1.2) * 10) / 10)]} tick={{ fontSize:10 }} width={44} tickFormatter={v => `${Number(v).toFixed(1)} AU`} label={{ value: "Load Risk (AU)", angle: -90, position: "insideLeft", offset: 10, style: { fontSize: 8, fill: "#667" } }} />
                     <ReferenceLine y={1} stroke="#ef4444" strokeDasharray="3 2" strokeOpacity={0.75} label={{ value:"onset 1.0", position:"insideTopRight", fontSize:8, fill:"#ef4444" }} />
                     <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: "#0f172a" }} formatter={(v, n) => [v != null ? Number(v).toFixed(2) : "—", n]} />
                     <Line type="monotone" dataKey="achillesRisk" name="Achilles risk" stroke="#f59e0b" strokeWidth={1.8} dot={false} connectNulls isAnimationActive={false} />
@@ -25483,7 +25493,7 @@ return (
             <ResponsiveContainer width="100%" height={130}>
               <BarChart data={panel.rows} margin={{ top:0, right:4, left:2, bottom:0 }} barCategoryGap="2%" barGap={1}>
                 <XAxis dataKey="label" hide />
-                <YAxis hide domain={[0, 100]} />
+                <YAxis domain={[0, 100]} tick={{ fontSize: 9 }} tickFormatter={value => `${Number(value).toFixed(0)}%`} width={32} label={{ value: "Relative Load (%)", angle: -90, position: "insideLeft", offset: 4, style: { fontSize: 8, fill: "#667" } }} />
                 <Tooltip formatter={(value, name) => {
                   if (name === "Zero logged strength") return ["0", "Zero logged strength"]
                   return [`${Number(value).toFixed(0)}`, "Relative strength load"]
@@ -25551,7 +25561,7 @@ return (
               <ComposedChart data={acwrOverviewData} margin={{ top:8, right:10, left:2, bottom:8 }}>
                 <CartesianGrid stroke="#1a1b2e" />
                 <XAxis dataKey="label" tick={{ fontSize:9 }} interval="preserveStartEnd" minTickGap={20} />
-                <YAxis domain={acwrOverviewDomain} tick={{ fontSize:10 }} width={24} />
+                <YAxis domain={acwrOverviewDomain} tick={{ fontSize:10 }} width={44} tickFormatter={v => `${Number(v).toFixed(1)} AU`} label={{ value: "Load Risk (AU)", angle: -90, position: "insideLeft", offset: 8, style: { fontSize: 8, fill: "#667" } }} />
                 <Tooltip
                   contentStyle={{
                     backgroundColor: "rgba(248, 250, 252, 0.96)",
@@ -25670,11 +25680,11 @@ return (
       )}
     </div>
 
-    <div style={{ display:"grid", gridTemplateColumns: isMobileLayout ? "1fr" : "1.05fr 0.95fr", gap:16, marginBottom:20, alignItems:"stretch" }}>
-      <div
-        style={{ ...cardStyle(), minWidth:0, height:"100%", display:"grid", gridTemplateRows:"auto auto 1fr auto", cursor:"pointer" }}
-        onClick={() => toggleOverviewExplain("compliance")}
-      >
+	    <div style={{ display:"grid", gridTemplateColumns: isMobileLayout ? "1fr" : "1.05fr 0.95fr", gap:16, marginBottom:20, alignItems:"start" }}>
+	      <div
+	        style={{ ...cardStyle(), minWidth:0, height:"100%", display:"grid", gridTemplateRows:"auto auto 1fr auto", cursor:"pointer", overflow:"hidden" }}
+	        onClick={() => toggleOverviewExplain("compliance")}
+	      >
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:8, marginBottom:6 }}>
           <div>
             <div style={{ fontWeight:"bold" }}>Compliance and Adaptation</div>
@@ -25704,7 +25714,7 @@ return (
             <div style={{ display:"grid", gap:6, alignContent:"stretch" }}>
               {complianceOverviewRows.map(row => (
                 <div key={row.domain} style={{ display:"grid", gridTemplateColumns: isMobileLayout ? "60px repeat(4, minmax(0, 1fr))" : "72px repeat(4, minmax(0, 1fr))", gap:6, alignItems:"stretch" }}>
-                  <div style={{ display:"flex", alignItems:"center", justifyContent:"flex-start", fontSize:11, fontWeight:"bold", color:"#cbd5e1", padding:"0 2px", textTransform:"uppercase", letterSpacing:"0.12em" }}>
+	                  <div style={{ display:"flex", alignItems:"center", justifyContent:"flex-start", fontSize:11, fontWeight:"bold", color:"#cbd5e1", padding:"0 2px", textTransform:"uppercase", letterSpacing:"0.12em", minHeight:80 }}>
                     {row.domain === "running" ? "Running" : row.domain === "tendon" ? "Tendon" : row.domain === "strength" ? "Strength" : "Cardio"}
                   </div>
                   {[
@@ -25713,7 +25723,7 @@ return (
                     row.absorbed,
                     `${row.compliancePct} / ${row.absorptionPct}`
                   ].map((value, idx) => (
-                    <div key={`${row.domain}_${idx}`} style={{ background:"#07080e", border:"1px solid #1a1b2e", borderRadius:6, padding:"6px 10px", display:"flex", alignItems:"center", justifyContent:"center", textAlign:"center" }}>
+	                    <div key={`${row.domain}_${idx}`} style={{ background:"#07080e", border:"1px solid #1a1b2e", borderRadius:6, padding:"6px 10px", display:"flex", alignItems:"center", justifyContent:"center", textAlign:"center", minHeight:80 }}>
                       <div style={{ fontSize: Math.min(complianceValueFontSize, 18), fontWeight:700, lineHeight:0.95, width:"100%", whiteSpace:"nowrap" }}>{value}</div>
                     </div>
                   ))}
@@ -25731,7 +25741,7 @@ return (
         </div>
       </div>
 
-      <div style={{ display:"grid", gap:16, height:"100%", gridTemplateRows:"auto 1fr" }}>
+	      <div style={{ display:"grid", gap:16, height:"100%", gridTemplateRows:"auto 1fr", minWidth:0, overflow:"hidden" }}>
         <div
           style={{ ...cardStyle(), minWidth:0, cursor:"pointer" }}
           onClick={() => toggleOverviewExplain("capital")}
@@ -25758,7 +25768,7 @@ return (
                 <LineChart data={trainingCapitalChartData} margin={{ top:6, right:8, left:2, bottom:8 }}>
                   <CartesianGrid stroke="#1a1b2e" />
                   <XAxis dataKey="label" tick={{ fontSize:10 }} />
-                  <YAxis tick={{ fontSize:10 }} width={24} />
+                  <YAxis tick={{ fontSize:10 }} width={42} tickFormatter={value => `${Number(value).toFixed(0)} AU`} label={{ value: "Capital (AU)", angle: -90, position: "insideLeft", offset: 4, style: { fontSize: 8, fill: "#667" } }} />
                   <Tooltip formatter={(value, name) => [Number(value).toFixed(1), name]} />
                   <Line type="monotone" dataKey="runCapital" stroke="#ef4444" dot={false} name="Run capital" />
                   <Line type="monotone" dataKey="tendonCapital" stroke="#f59e0b" dot={false} name="Tendon capital" />
@@ -25813,7 +25823,7 @@ return (
                 <ComposedChart data={safeTendonSeries} margin={{ top:8, right:12, left:2, bottom:8 }}>
                   <CartesianGrid stroke="#1a1b2e" />
                   <XAxis dataKey="label" tick={{ fontSize:10 }} />
-                  <YAxis tick={{ fontSize:10 }} width={24} />
+                  <YAxis tick={{ fontSize:10 }} width={44} tickFormatter={value => `${Number(value).toFixed(0)} AU`} label={{ value: "Load (AU)", angle: -90, position: "insideLeft", offset: 4, style: { fontSize: 8, fill: "#667" } }} />
                   <Tooltip formatter={(value, name) => [Number(value).toFixed(2), name]} />
                   <ReferenceArea y1={0} y2={TENDON_GROUP_META[selectedTendonGroup].safe * (currentTendonSnapshot?.capacity || 1)} fill="rgba(34,197,94,0.08)" />
                   <ReferenceArea y1={TENDON_GROUP_META[selectedTendonGroup].safe * (currentTendonSnapshot?.capacity || 1)} y2={TENDON_GROUP_META[selectedTendonGroup].caution * (currentTendonSnapshot?.capacity || 1)} fill="rgba(245,158,11,0.08)" />
@@ -25893,7 +25903,9 @@ return (
             <YAxis
               domain={overviewWeightDomain}
               tick={{ fontSize: 10 }}
-              width={38}
+              tickFormatter={value => `${Number(value).toFixed(0)} lb`}
+              width={50}
+              label={{ value: "Weight (lb)", angle: -90, position: "insideLeft", offset: 8, style: { fontSize: 9, fill: "#667" } }}
             />
             <Tooltip
               formatter={(value, name) => [`${Number(value).toFixed(1)} lb`, name]}
@@ -25952,15 +25964,19 @@ return (
               orientation="left"
               domain={[0, trainingLoadDistanceMax]}
               tick={{ fontSize: 10 }}
-              width={34}
+              tickFormatter={value => `${Number(value).toFixed(0)} mi`}
+              width={42}
+              label={{ value: "Distance (mi)", angle: -90, position: "insideLeft", offset: 8, style: { fontSize: 9, fill: "#667" } }}
             />
             <YAxis
               yAxisId="loadpct"
               orientation="right"
               domain={[0, 100]}
               tick={{ fontSize: 10 }}
-              width={30}
+              tickFormatter={value => `${Number(value).toFixed(0)}%`}
+              width={38}
               allowDecimals={false}
+              label={{ value: "Load (%)", angle: 90, position: "insideRight", offset: 8, style: { fontSize: 9, fill: "#667" } }}
             />
             <Tooltip formatter={(v, name) => {
               if (name === "Normalized training load") return [Math.round(v) + "%", name]
@@ -26041,7 +26057,9 @@ return (
       <YAxis
         domain={bodyCompositionOverviewDomain}
         tick={{ fontSize: 10 }}
-        width={34}
+        tickFormatter={value => `${Number(value).toFixed(0)}%`}
+        width={42}
+        label={{ value: "Body Fat (%)", angle: -90, position: "insideLeft", offset: 8, style: { fontSize: 9, fill: "#667" } }}
       />
       <Tooltip
         formatter={(value, name) => {
@@ -26083,7 +26101,7 @@ return (
             <LineChart data={calorieChartDataSplit} margin={{ top: 8, right: 14, left: 10, bottom: 18 }}>
               <CartesianGrid stroke="#1a1b2e" />
               <XAxis dataKey="label" interval="preserveStartEnd" tickCount={6} tick={{ fontSize: 10 }} />
-              <YAxis domain={overviewCaloriesDomain} tick={{ fontSize: 10 }} width={36} />
+	              <YAxis domain={overviewCaloriesDomain} tick={{ fontSize: 10 }} tickFormatter={value => `${Number(value).toFixed(0)} kcal`} width={54} label={{ value: "Energy (kcal)", angle: -90, position: "insideLeft", offset: 8, style: { fontSize: 9, fill: "#667" } }} />
               <Tooltip
                 formatter={(value, name) => {
                   if (value == null) return null
@@ -26141,7 +26159,7 @@ return (
           >
             <CartesianGrid stroke="#1a1b2e" />
             <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-            <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} width={34} />
+	            <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} tickFormatter={value => `${Number(value).toFixed(0)}%`} width={42} label={{ value: "Operational Capacity (%)", angle: -90, position: "insideLeft", offset: 8, style: { fontSize: 9, fill: "#667" } }} />
             <Tooltip
               content={({ active, payload, label }) => {
                 if (!active || !payload?.length) return null
@@ -26341,7 +26359,7 @@ return (
                 <BarChart data={dexaSeries}>
                   <CartesianGrid stroke="#1a1b2e" />
                   <XAxis dataKey="label" />
-                  <YAxis domain={[100, "dataMax + 5"]} width={38} tick={{ fontSize: 10 }} label={{ value: "bpm", angle: -90, position: "insideLeft", offset: 8, style: { fontSize: 9, fill: "#667" } }} />
+                  <YAxis domain={[100, "dataMax + 5"]} width={44} tick={{ fontSize: 10 }} tickFormatter={value => `${Number(value).toFixed(0)} lb`} label={{ value: "Weight (lb)", angle: -90, position: "insideLeft", offset: 8, style: { fontSize: 9, fill: "#667" } }} />
                   <Tooltip />
                   <Legend verticalAlign="top" height={36} />
                   <Bar dataKey="lean_lb" name="Lean (lb)" stackId="a" fill="#4a9ee8" />
@@ -26356,7 +26374,7 @@ return (
                 <LineChart data={dexaSeries}>
                   <CartesianGrid stroke="#1a1b2e" />
                   <XAxis dataKey="label" />
-                  <YAxis domain={[20, "dataMax + 3"]} width={38} tick={{ fontSize: 10 }} label={{ value: "bpm", angle: -90, position: "insideLeft", offset: 8, style: { fontSize: 9, fill: "#667" } }} />
+                  <YAxis domain={[20, "dataMax + 3"]} width={42} tick={{ fontSize: 10 }} tickFormatter={value => `${Number(value).toFixed(0)}%`} label={{ value: "Body Fat (%)", angle: -90, position: "insideLeft", offset: 8, style: { fontSize: 9, fill: "#667" } }} />
                   <Tooltip />
                   <Line type="monotone" dataKey="pct_fat" stroke="#ffd166" strokeWidth={3} dot />
                 </LineChart>
@@ -26881,7 +26899,7 @@ return (
 >
                 <CartesianGrid stroke="#1a1b2e" />
                 <XAxis dataKey="label" />
-                <YAxis domain={[0, chartMaxCalories]} width={38} tick={{ fontSize: 10 }} label={{ value: "kcal", angle: -90, position: "insideLeft", offset: 8, style: { fontSize: 9, fill: "#667" } }} />
+                <YAxis domain={[0, chartMaxCalories]} width={54} tick={{ fontSize: 10 }} tickFormatter={value => `${Number(value).toFixed(0)} kcal`} label={{ value: "Energy (kcal)", angle: -90, position: "insideLeft", offset: 8, style: { fontSize: 9, fill: "#667" } }} />
                 <Tooltip
                   formatter={(value, name) => {
                     if (value == null) return null
@@ -26926,7 +26944,7 @@ return (
                   <BarChart data={netEnergyBalance} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                     <CartesianGrid stroke="#1a1b2e" vertical={false} />
                     <XAxis dataKey="label" tick={{ fontSize: 9 }} interval={4} />
-                    <YAxis tick={{ fontSize: 9 }} width={38} />
+                    <YAxis tick={{ fontSize: 9 }} width={52} tickFormatter={value => `${Number(value).toFixed(0)} kcal`} label={{ value: "Energy (kcal)", angle: -90, position: "insideLeft", offset: 8, style: { fontSize: 9, fill: "#667" } }} />
                     <Tooltip formatter={(v, n) => [v != null ? `${v > 0 ? "+" : ""}${v} kcal` : "—", "Balance"]} labelFormatter={l => `Date: ${l}`} />
                     <ReferenceLine y={0} stroke="#444" />
                     <Bar dataKey="balance" radius={[2, 2, 0, 0]}>
@@ -26953,7 +26971,7 @@ return (
                 <BarChart data={filteredNutrition}>
                   <CartesianGrid stroke="#1a1b2e" />
                   <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-                  <YAxis width={38} tick={{ fontSize: 10 }} label={{ value: "value", angle: -90, position: "insideLeft", offset: 8, style: { fontSize: 9, fill: "#667" } }} />
+                  <YAxis width={42} tick={{ fontSize: 10 }} tickFormatter={value => `${Number(value).toFixed(0)} g`} label={{ value: "Macros (g)", angle: -90, position: "insideLeft", offset: 8, style: { fontSize: 9, fill: "#667" } }} />
                   <Tooltip />
                   <Legend verticalAlign="top" height={36} />
                   <Bar dataKey="protein_g" name="Protein (g)" stackId="a" fill="#4ae890" />
@@ -26969,7 +26987,7 @@ return (
   <ComposedChart data={filteredNutrition}>
     <CartesianGrid stroke="#1a1b2e" />
     <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-    <YAxis width={38} tick={{ fontSize: 10 }} label={{ value: "value", angle: -90, position: "insideLeft", offset: 8, style: { fontSize: 9, fill: "#667" } }} />
+    <YAxis width={42} tick={{ fontSize: 10 }} tickFormatter={value => `${Number(value).toFixed(0)} g`} label={{ value: "Protein (g)", angle: -90, position: "insideLeft", offset: 8, style: { fontSize: 9, fill: "#667" } }} />
     <Tooltip />
     <Legend verticalAlign="top" height={36} />
     <Bar dataKey="protein_g" name="Protein (g)" fill="#4ae890" />
@@ -26998,7 +27016,7 @@ return (
               <AreaChart data={filteredNutrition}>
                 <CartesianGrid stroke="#1a1b2e" />
                 <XAxis dataKey="label" />
-                <YAxis domain={[0, 100]} />
+                <YAxis domain={[0, 100]} tickFormatter={value => `${Number(value).toFixed(0)}%`} label={{ value: "Calories (%)", angle: -90, position: "insideLeft", offset: 8, style: { fontSize: 9, fill: "#667" } }} />
                 <Tooltip />
                 <Legend verticalAlign="top" height={36} />
                 <Area type="monotone" dataKey="protein_pct" stackId="1" stroke="#4ae890" fill="#4ae890" name="Protein %" />
@@ -27519,6 +27537,7 @@ return (
                   scale="linear"
                   domain={forecastYDomain}
                   allowDataOverflow={true}
+                  tickFormatter={value => `${Number(value).toFixed(0)} lb`}
                   label={{ value: "Weight (lb)", angle: -90, position: "insideLeft", offset: 15, fill: "#ced2f0", style: { textAnchor: "middle" } }}
                 />
                 <Tooltip
@@ -27563,7 +27582,7 @@ return (
                   <ComposedChart data={chartPoints} margin={{ top: 8, right: 16, left: 8, bottom: 16 }}>
                     <CartesianGrid stroke="#1a1b2e" />
                     <XAxis dataKey="label" tick={{ fontSize: 9 }} interval={Math.max(1, Math.floor(chartPoints.length / 8) - 1)} />
-                    <YAxis domain={[130, 240]} tick={{ fontSize: 9 }} width={32} label={{ value: "lb", angle: -90, position: "insideLeft", offset: 6, style: { fontSize: 8, fill: "#667" } }} />
+                    <YAxis domain={[130, 240]} tick={{ fontSize: 9 }} width={46} tickFormatter={value => `${Number(value).toFixed(0)} lb`} label={{ value: "Weight (lb)", angle: -90, position: "insideLeft", offset: 6, style: { fontSize: 8, fill: "#667" } }} />
                     <Tooltip formatter={(v, n) => [v != null ? `${v} lb` : "—", n]} contentStyle={{ background: "#0a0a14", border: "1px solid #1a1b2e", fontSize: 10 }} />
                     <Line dataKey="actual" name="Actual" stroke="#4a9ee8" strokeWidth={2} dot={false} connectNulls={false} />
                     <Line dataKey="exponential" name={`Exp decay${winners.includes("exponential") ? " ★" : ""}`} stroke="#ffd166" {...lineProps("exponential")} dot={false} connectNulls />
