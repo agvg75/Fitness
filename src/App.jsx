@@ -27490,12 +27490,12 @@ return (
           display: "grid",
           gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
           gap: 16,
-          alignItems: "stretch"
+          alignItems: "start"
         }}
       >
         <div style={{ minWidth: 280, display: "flex", flexDirection: "column" }}>
           <div style={{ fontSize: "12px", fontWeight: "700", letterSpacing: "0.04em", opacity: 0.7, marginBottom: "8px" }}>Recent Trend</div>
-          <div style={{ flex: 1, minHeight: 280 }}>
+          <div style={{ height: 320 }}>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={bodyWeightRecentTrendChart} margin={{ top: 10, right: 20, left: 55, bottom: 20 }}>
                 <CartesianGrid stroke="#1a1b2e" />
@@ -27558,7 +27558,7 @@ return (
               strokeDasharray: model === "linear" ? "4 3" : model === "segmented" ? "2 2" : undefined,
             })
             return (
-              <div style={{ position: "relative", flex: 1, minHeight: 280 }}>
+              <div style={{ position: "relative", height: 320 }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={chartPoints} margin={{ top: 8, right: 16, left: 8, bottom: 16 }}>
                     <CartesianGrid stroke="#1a1b2e" />
