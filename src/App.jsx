@@ -573,6 +573,7 @@ function getExerciseHistory(exerciseName, wtSessions, canonicalSessions = []) {
 
 const tabs = [
   "Overview",
+  "Progress",
   "Schedule",
   "Forecast",
   "Capacity",
@@ -1005,6 +1006,641 @@ const dayKeyFromScheduleDate = dateValue => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null
   const parsed = new Date(`${date}T12:00:00`)
   return Number.isNaN(parsed.getTime()) ? null : DAY_KEYS_BY_JS_DAY[parsed.getDay()]
+}
+
+const STALENESS_THRESHOLDS = {
+  upper_pull: 3,
+  upper_push: 3,
+  lower_push_quad: 3,
+  posterior_chain: 3,
+  arm_flexion: 4,
+  hip_accessory: 4,
+  core: 4,
+  other: 4,
+}
+
+const SCHEDULE_DAY_KEY_MAP = {
+  Monday: "Mon", Tuesday: "Tue", Wednesday: "Wed",
+  Thursday: "Thu", Friday: "Fri", Saturday: "Sat", Sunday: "Sun",
+  Mon: "Mon", Tue: "Tue", Wed: "Wed", Thu: "Thu",
+  Fri: "Fri", Sat: "Sat", Sun: "Sun",
+}
+
+function normalizeExerciseToken(value) {
+  return String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "")
+}
+
+function normalizeScheduleDayKey(value) {
+  const raw = String(value || "").trim()
+  return SCHEDULE_DAY_KEY_MAP[raw] || null
+}
+
+function inferSessionRole(schedLogEntry, WEEKLY_SCHEDULE = PLAN) {
+  const dayKey = schedLogEntry?.day || schedLogEntry?.dayLabel
+  const key = normalizeScheduleDayKey(dayKey)
+  if (!key || !WEEKLY_SCHEDULE?.[key]) return "unknown"
+
+  const topNote = String(WEEKLY_SCHEDULE[key].topNote || "").toLowerCase()
+  const heavySignals = ["heavy day", "4–8 rep", "4-8 rep", "heavy (", "(heavy)"]
+  const volumeSignals = ["volume day", "8–15 rep", "8-15 rep", "volume (", "(volume)", "lighter than", "2nd frequency"]
+  const accessorySignals = ["accessory", "hypertrophy", "activation", "primer", "light upper", "hips / light"]
+
+  if (heavySignals.some(s => topNote.includes(s))) return "heavy"
+  if (volumeSignals.some(s => topNote.includes(s))) return "volume"
+  if (accessorySignals.some(s => topNote.includes(s))) return "accessory"
+
+  const sections = WEEKLY_SCHEDULE[key].sections || []
+  const repNums = []
+  sections.forEach(sec => {
+    ;(sec.ex || []).forEach(ex => {
+      ;(ex.def || []).forEach(set => {
+        const raw = String(set.r || set.reps || "")
+        const num = parseInt(raw, 10)
+        if (!Number.isNaN(num)) repNums.push(num)
+      })
+    })
+  })
+  if (repNums.length === 0) return "unknown"
+  const avgReps = repNums.reduce((a, b) => a + b, 0) / repNums.length
+  if (avgReps <= 8) return "heavy"
+  if (avgReps <= 12) return "volume"
+  return "accessory"
+}
+
+function parseProgressionLoad(value) {
+  const raw = String(value ?? "").trim()
+  if (!raw) return null
+  const lower = raw.toLowerCase()
+  if (
+    lower.includes("bw") ||
+    lower.includes("bodyweight") ||
+    lower.includes("band") ||
+    lower.includes("lap") ||
+    lower.includes("yard") ||
+    lower.includes("sec") ||
+    lower.includes("min")
+  ) return null
+  const match = raw.match(/-?\d+(?:\.\d+)?/)
+  if (!match) return null
+  const parsed = Number(match[0])
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+}
+
+function parseProgressionReps(value) {
+  const raw = String(value ?? "").trim().toLowerCase()
+  if (!raw || raw.includes("lap") || /s(ec)?$/.test(raw)) return null
+  const match = raw.match(/\d+/)
+  if (!match) return null
+  const parsed = Number(match[0])
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+}
+
+function roundToGymIncrement(value, step = 2.5) {
+  if (!Number.isFinite(Number(value))) return null
+  return Math.round(Number(value) / step) * step
+}
+
+function getScheduleLogEntryDate(entry) {
+  return String(entry?.date || entry?.session_date || entry?.logged_at || "").slice(0, 10)
+}
+
+function getScheduleLogExerciseCount(entry) {
+  const direct = Array.isArray(entry?.exercises) ? entry.exercises.length : 0
+  const dataCount = entry?.data && typeof entry.data === "object" ? Object.keys(entry.data).length : 0
+  return Math.max(direct, dataCount)
+}
+
+function dedupeSchedLogByDate(entries) {
+  const byDate = new Map()
+  ;(Array.isArray(entries) ? entries : []).forEach(entry => {
+    const date = getScheduleLogEntryDate(entry)
+    if (!date) return
+    const current = byDate.get(date)
+    if (!current) {
+      byDate.set(date, entry)
+      return
+    }
+    const currentCount = getScheduleLogExerciseCount(current)
+    const nextCount = getScheduleLogExerciseCount(entry)
+    const currentStamp = String(current?.updatedAt || current?.logged_at || "")
+    const nextStamp = String(entry?.updatedAt || entry?.logged_at || "")
+    if (nextCount > currentCount || (nextCount === currentCount && nextStamp > currentStamp)) {
+      byDate.set(date, entry)
+    }
+  })
+  return [...byDate.values()].sort((a, b) => getScheduleLogEntryDate(a).localeCompare(getScheduleLogEntryDate(b)))
+}
+
+function getLatestScheduleSessionForDate(entries, dateStr) {
+  return dedupeSchedLogByDate(entries).find(entry => getScheduleLogEntryDate(entry) === dateStr) || null
+}
+
+function getExerciseKey(exercise) {
+  const explicit = String(exercise?.exercise_id || exercise?.id || "").trim()
+  if (explicit) return explicit
+  const name = String(exercise?.exercise_name || exercise?.name || exercise?.n || "").trim()
+  return name ? `name:${normalizeExerciseToken(name)}` : null
+}
+
+function resolveExerciseLibraryEntry(exercise, exerciseLibrary = EXERCISE_LIBRARY) {
+  const explicitId = String(exercise?.exercise_id || exercise?.id || "").trim()
+  if (explicitId) {
+    const direct = getExerciseProfile(explicitId)
+    if (direct) return direct
+  }
+
+  const nameToken = normalizeExerciseToken(exercise?.exercise_name || exercise?.name || exercise?.n)
+  if (!nameToken) return null
+
+  return (exerciseLibrary || []).find(entry => {
+    const entryName = normalizeExerciseToken(entry?.name)
+    if (entryName && (entryName === nameToken || entryName.includes(nameToken) || nameToken.includes(entryName))) return true
+    return Array.isArray(entry?.scheduleIds) && entry.scheduleIds.some(id => normalizeExerciseToken(id) === nameToken)
+  }) || null
+}
+
+function inferMovementPattern(libEntry, exercise) {
+  const token = `${libEntry?.id || ""} ${exercise?.exercise_id || ""} ${exercise?.exercise_name || exercise?.name || exercise?.n || ""}`.toLowerCase()
+
+  if (/(bicep|hammer curl|reverse bicep|reverse curl|d2 flexion|eccentric bicep)/.test(token)) return "arm_flexion"
+  if (/(pallof|plank|deadbug|dead bug|russian twist|leg raise|pushup plank|suitcase carry)/.test(token)) return "core"
+  if (/(hip abduction|hip adduction|lateral band walk|hip drive march|hip drive|mtp balance|tibialis|hip flexor)/.test(token)) return "hip_accessory"
+  if (/(leg press|leg extension|terminal knee extension|tke)/.test(token)) return "lower_push_quad"
+  if (/(hip thrust|rdl|deadlift|hamstring|leg curl|kb swing|calf raise|back extension)/.test(token)) return "posterior_chain"
+  if (/(chin|pull-up|pull up|lat pulldown|pull down|cable row|row|straight arm pulldown|inverted row)/.test(token)) return "upper_pull"
+  if (/(chest press|incline|fly|crossover|tricep|shoulder press|lateral raise|rear delt|face pull)/.test(token)) return "upper_push"
+
+  const fallbackKey = String(exercise?.exercise_id || exercise?.id || "").toLowerCase()
+  if (fallbackKey.startsWith("th")) return "upper_pull"
+  if (fallbackKey.startsWith("m")) return "upper_push"
+  if (fallbackKey.startsWith("t")) return "lower_push_quad"
+  if (fallbackKey.startsWith("f")) return "hip_accessory"
+  return "other"
+}
+
+function getPlanMatchesForExercise(libEntry, exercise) {
+  const scheduleIds = new Set([
+    libEntry?.id,
+    exercise?.exercise_id,
+    exercise?.id,
+    ...(Array.isArray(libEntry?.scheduleIds) ? libEntry.scheduleIds : []),
+  ].filter(Boolean).map(String))
+  const exerciseNameToken = normalizeExerciseToken(exercise?.exercise_name || exercise?.name || exercise?.n)
+
+  const matches = []
+  Object.entries(PLAN).forEach(([dayKey, dayPlan]) => {
+    ;(dayPlan?.sections || []).forEach(section => {
+      ;(section.ex || []).forEach(planExercise => {
+        const planToken = normalizeExerciseToken(planExercise?.name)
+        if (
+          scheduleIds.has(String(planExercise?.id || "")) ||
+          (exerciseNameToken && planToken && (exerciseNameToken === planToken || exerciseNameToken.includes(planToken) || planToken.includes(exerciseNameToken)))
+        ) {
+          matches.push({ dayKey, exercise: planExercise })
+        }
+      })
+    })
+  })
+  return matches
+}
+
+function getPrescribedRepRanges(libEntry, exercise) {
+  const byRole = {}
+  const matches = getPlanMatchesForExercise(libEntry, exercise)
+  matches.forEach(({ dayKey, exercise: planExercise }) => {
+    const reps = (planExercise?.def || []).map(set => parseProgressionReps(set?.r ?? set?.reps)).filter(Number.isFinite)
+    if (!reps.length) return
+    const role = inferSessionRole({ day: dayKey }, PLAN)
+    const min = Math.min(...reps)
+    const max = Math.max(...reps)
+    const current = byRole[role]
+    byRole[role] = current
+      ? { min: Math.min(current.min, min), max: Math.max(current.max, max) }
+      : { min, max }
+  })
+  return byRole
+}
+
+function extractExerciseSetRows(exercise, sessionEntry) {
+  const dataRows = sessionEntry?.data?.[exercise?.exercise_id || exercise?.id]
+  if (Array.isArray(dataRows) && dataRows.length) {
+    return dataRows.map(row => ({
+      reps: row?.r ?? row?.reps ?? null,
+      load: row?.w ?? row?.weight ?? row?.load ?? null,
+    }))
+  }
+  if (Array.isArray(exercise?.sets) && exercise.sets.length) {
+    return exercise.sets.map(row => ({
+      reps: row?.reps ?? row?.r ?? null,
+      load: row?.weight ?? row?.load ?? row?.w ?? null,
+    }))
+  }
+  return [{
+    reps: exercise?.actual?.reps ?? exercise?.reps ?? exercise?.r ?? null,
+    load: exercise?.actual?.load ?? exercise?.load ?? exercise?.w ?? null,
+  }]
+}
+
+function summarizeExercisePerformance(exercise, sessionEntry) {
+  const setRows = extractExerciseSetRows(exercise, sessionEntry)
+  let maxLoad = null
+  let maxReps = null
+  let totalVolume = 0
+  let volumeValid = false
+  let maxE1rm = null
+
+  setRows.forEach(row => {
+    const load = parseProgressionLoad(row?.load)
+    const reps = parseProgressionReps(row?.reps)
+    if (load != null) maxLoad = maxLoad == null ? load : Math.max(maxLoad, load)
+    if (reps != null) maxReps = maxReps == null ? reps : Math.max(maxReps, reps)
+    if (load != null && reps != null) {
+      totalVolume += load * reps
+      volumeValid = true
+      if (reps < 30) {
+        const e1rm = load * (1 + reps / 30)
+        maxE1rm = maxE1rm == null ? e1rm : Math.max(maxE1rm, e1rm)
+      }
+    }
+  })
+
+  const setCount = Number(exercise?.actual?.sets ?? exercise?.sets?.length ?? setRows.length ?? 0) || null
+  return {
+    load_lb: maxLoad,
+    reps: maxReps,
+    sets: setCount,
+    volume_load: volumeValid ? Number(totalVolume.toFixed(1)) : null,
+    e1rm_epley: maxE1rm != null ? Number(maxE1rm.toFixed(1)) : null,
+  }
+}
+
+function computeE1rmTrend(e1rmSessions) {
+  const recent = (Array.isArray(e1rmSessions) ? e1rmSessions : []).slice(-4)
+  if (recent.length < 2) return "insufficient_data"
+  const slope = (recent[recent.length - 1].e1rm - recent[0].e1rm) / (recent.length - 1)
+  if (slope > 1) return "rising"
+  if (slope < -1) return "declining"
+  return "flat"
+}
+
+function computeOcGate(exercise_id, ocItems, exerciseLibrary, exercise = null) {
+  const libEntry = resolveExerciseLibraryEntry({ ...(exercise || {}), exercise_id }, exerciseLibrary)
+  if (!libEntry) return { gate: "clear", reason: null }
+
+  const loadedRegions = (libEntry.loads || []).map(load => load.region)
+  let maxScore = 0
+  let worstRegion = null
+
+  loadedRegions.forEach(region => {
+    const activeItem = (Array.isArray(ocItems) ? ocItems : []).find(item =>
+      String(item?.location || "") === String(region) &&
+      Number(item?.currentScore || 0) > 0
+    )
+    const score = Number(activeItem?.currentScore || 0)
+    if (score > maxScore) {
+      maxScore = score
+      worstRegion = region
+    }
+  })
+
+  if (maxScore === 0) return { gate: "clear", reason: null }
+  if (maxScore >= 4) return { gate: "block", reason: `${worstRegion} score ${maxScore}` }
+  if (maxScore >= 3) return { gate: "modulate_technique", reason: `${worstRegion} score ${maxScore} — technique/ROM focus only, no load increase` }
+  if (maxScore >= 2) return { gate: "modulate_reps", reason: `${worstRegion} score ${maxScore} — rep progression only, hold load` }
+  return { gate: "clear", reason: `${worstRegion} score ${maxScore} — monitor, no restriction` }
+}
+
+function computeLoadSuggestion(record, roleData, currentSessionRole) {
+  const roleSessions = record.sessions.filter(session => session.role === currentSessionRole)
+  const lastRoleSession = roleSessions[roleSessions.length - 1] || record.sessions[record.sessions.length - 1]
+  const lastLoad = lastRoleSession?.load_lb ?? null
+  const lastReps = lastRoleSession?.reps ?? null
+  const isCompound = ["upper_pull", "upper_push", "lower_push_quad", "posterior_chain"].includes(record.movement_pattern)
+  const increment = isCompound ? 10 : 5
+
+  if (lastLoad == null) {
+    return {
+      type: "none",
+      next_load_lb: null,
+      next_load_range: null,
+      next_reps: null,
+      rationale: "Insufficient load data to suggest progression.",
+      confidence: "low",
+    }
+  }
+
+  if (record.oc_gate === "modulate_reps" || record.oc_gate === "modulate_technique") {
+    const nextReps = lastReps != null ? lastReps + 1 : null
+    return {
+      type: "rep_increase",
+      next_load_lb: lastLoad,
+      next_load_range: null,
+      next_reps: nextReps,
+      rationale: `${record.oc_gate_reason}. Add 1 rep at current load ${lastLoad} lb rather than increasing weight.`,
+      confidence: "medium",
+    }
+  }
+
+  if (record.load_headroom_pct != null && record.load_headroom_pct > 15) {
+    const nextLoad = roundToGymIncrement(lastLoad + increment, 2.5)
+    return {
+      type: "load_increase",
+      next_load_lb: nextLoad,
+      next_load_range: [roundToGymIncrement(lastLoad + increment * 0.5, 2.5), roundToGymIncrement(lastLoad + increment * 2, 2.5)],
+      next_reps: lastReps,
+      rationale: `Flat for ${roleData.sessions_since_load_increase} ${currentSessionRole} sessions at ${lastLoad} lb. e1RM headroom ${record.load_headroom_pct.toFixed(0)}%. Try ${nextLoad} lb.`,
+      confidence: "high",
+    }
+  }
+
+  const cautiousLoad = roundToGymIncrement(lastLoad + increment * 0.5, 2.5)
+  return {
+    type: "load_increase",
+    next_load_lb: cautiousLoad,
+    next_load_range: [roundToGymIncrement(lastLoad + 2.5, 2.5), roundToGymIncrement(lastLoad + increment, 2.5)],
+    next_reps: lastReps,
+    rationale: `Flat for ${roleData.sessions_since_load_increase} ${currentSessionRole} sessions. Near estimated ceiling — try ${cautiousLoad} lb or add 1 rep at ${lastLoad} lb first.`,
+    confidence: "medium",
+  }
+}
+
+function computeRepSuggestion(record, roleData, currentSessionRole) {
+  const roleSessions = record.sessions.filter(session => session.role === currentSessionRole)
+  const lastRoleSession = roleSessions[roleSessions.length - 1] || record.sessions[record.sessions.length - 1]
+  const lastLoad = lastRoleSession?.load_lb ?? null
+  const lastReps = lastRoleSession?.reps ?? null
+  const repRange = record.prescribed_reps_by_role?.[currentSessionRole] || null
+  const repCap = repRange?.max ?? null
+
+  if (lastReps == null) {
+    return {
+      type: "none",
+      next_load_lb: null,
+      next_load_range: null,
+      next_reps: null,
+      rationale: "Insufficient rep data to suggest progression.",
+      confidence: "low",
+    }
+  }
+
+  if (record.oc_gate === "modulate_reps" || record.oc_gate === "modulate_technique") {
+    const nextReps = repCap != null ? Math.min(repCap, lastReps + 1) : lastReps + 1
+    return {
+      type: "rep_increase",
+      next_load_lb: lastLoad,
+      next_load_range: null,
+      next_reps: nextReps,
+      rationale: `${record.oc_gate_reason}. Hold load and add 1 rep if technique stays clean.`,
+      confidence: "medium",
+    }
+  }
+
+  const isAccessory = currentSessionRole === "accessory"
+  const repStep = isAccessory ? 1 : 2
+  const nextReps = repCap != null ? Math.min(repCap, lastReps + repStep) : lastReps + repStep
+  const isAtTop = repCap != null && lastReps >= repCap
+  const canLoadAfterTop = isAtTop && roleData.sessions_since_reps_increase >= (isAccessory ? 3 : 1) && lastLoad != null
+
+  if (canLoadAfterTop) {
+    const increment = ["upper_pull", "upper_push", "lower_push_quad", "posterior_chain"].includes(record.movement_pattern) ? 10 : 5
+    const nextLoad = roundToGymIncrement(lastLoad + increment, 2.5)
+    const resetReps = record.prescribed_reps_by_role?.[currentSessionRole]?.min ?? Math.max(1, lastReps - 2)
+    return {
+      type: "load_increase",
+      next_load_lb: nextLoad,
+      next_load_range: [roundToGymIncrement(nextLoad - 2.5, 2.5), nextLoad],
+      next_reps: resetReps,
+      rationale: `You've been pinned at the top of the ${currentSessionRole} rep range at ${lastLoad} lb. Increase load to ${nextLoad} lb and reset reps toward ${resetReps}.`,
+      confidence: "medium",
+    }
+  }
+
+  return {
+    type: "rep_increase",
+    next_load_lb: null,
+    next_load_range: null,
+    next_reps: nextReps,
+    rationale: `You've been at ${lastReps} reps${lastLoad != null ? ` × ${lastLoad} lb` : ""} for ${roleData.sessions_since_reps_increase} ${currentSessionRole} sessions. Try ${nextReps} reps today before adding load.`,
+    confidence: "high",
+  }
+}
+
+function computeSuggestion(record, currentSessionRole) {
+  const roleData = record.staleness_by_role?.[currentSessionRole]
+  const isStaleInThisRole = roleData?.stale ?? false
+
+  if (record.oc_gate === "block") {
+    return { type: "none", next_load_lb: null, next_load_range: null, next_reps: null, rationale: "Blocked by active OC constraint.", confidence: "high" }
+  }
+
+  if (!isStaleInThisRole) {
+    const otherStaleRole = record.stale_roles?.find(role => role !== currentSessionRole)
+    if (otherStaleRole) {
+      return {
+        type: "none",
+        next_load_lb: null,
+        next_load_range: null,
+        next_reps: null,
+        rationale: `Not stale in today's ${currentSessionRole} role. Note: ${otherStaleRole} role is stale — address on that day.`,
+        confidence: "high",
+      }
+    }
+    return { type: "none", next_load_lb: null, next_load_range: null, next_reps: null, rationale: "Progressing normally.", confidence: "high" }
+  }
+
+  if (record.position_concern) {
+    return {
+      type: "reorder_then_load",
+      next_load_lb: null,
+      next_load_range: null,
+      next_reps: null,
+      rationale: record.reorder_suggestion || "Move this exercise earlier in the session before pushing load again.",
+      confidence: "high",
+    }
+  }
+
+  if (currentSessionRole === "heavy") {
+    return computeLoadSuggestion(record, roleData, currentSessionRole)
+  }
+  return computeRepSuggestion(record, roleData, currentSessionRole)
+}
+
+function computeProgressionState(schedLog, ocItems, exerciseLibrary = EXERCISE_LIBRARY) {
+  try {
+    const dedupedLog = dedupeSchedLogByDate(schedLog)
+    const todayStr = new Date().toISOString().slice(0, 10)
+    const todayDayKey = DAY_KEYS_BY_JS_DAY[new Date().getDay()]
+    const records = new Map()
+
+    dedupedLog.forEach(sessionEntry => {
+      const date = getScheduleLogEntryDate(sessionEntry)
+      if (!date) return
+      const role = inferSessionRole(sessionEntry, PLAN)
+      const exercises = Array.isArray(sessionEntry?.exercises) ? sessionEntry.exercises : []
+      const exerciseContexts = exercises.map(exercise => {
+        const libEntry = resolveExerciseLibraryEntry(exercise, exerciseLibrary)
+        const movement_pattern = inferMovementPattern(libEntry, exercise)
+        return {
+          exercise,
+          libEntry,
+          movement_pattern,
+          summary: summarizeExercisePerformance(exercise, sessionEntry),
+        }
+      })
+
+      exerciseContexts.forEach(({ exercise, libEntry, movement_pattern, summary }, index) => {
+        const key = getExerciseKey(exercise)
+        if (!key) return
+
+        const planMatches = getPlanMatchesForExercise(libEntry, exercise)
+        const dayKeys = [...new Set([
+          ...(Array.isArray(libEntry?.days) ? libEntry.days : []),
+          ...planMatches.map(match => match.dayKey),
+        ].filter(Boolean))]
+
+        if (!records.has(key)) {
+          records.set(key, {
+            exercise_id: String(exercise?.exercise_id || libEntry?.id || key),
+            exercise_name: String(exercise?.exercise_name || exercise?.name || exercise?.n || libEntry?.name || key).trim(),
+            movement_pattern,
+            oc_regions: [...new Set((libEntry?.loads || []).map(load => load.region).filter(Boolean))],
+            sessions: [],
+            planned_days: dayKeys,
+            prescribed_reps_by_role: getPrescribedRepRanges(libEntry, exercise),
+          })
+        }
+
+        const record = records.get(key)
+        record.exercise_name = record.exercise_name || String(exercise?.exercise_name || exercise?.name || exercise?.n || libEntry?.name || key).trim()
+        record.movement_pattern = record.movement_pattern || movement_pattern
+        record.oc_regions = record.oc_regions?.length ? record.oc_regions : [...new Set((libEntry?.loads || []).map(load => load.region).filter(Boolean))]
+        record.planned_days = [...new Set([...(record.planned_days || []), ...dayKeys])]
+
+        const exercisesBeforeSameGroup = exerciseContexts
+          .slice(0, index)
+          .filter(ctx => ctx.movement_pattern === movement_pattern)
+        const upstreamVolume = exercisesBeforeSameGroup.reduce((sum, ctx) => sum + Number(ctx.summary?.volume_load || 0), 0)
+
+        record.sessions.push({
+          date,
+          day: normalizeScheduleDayKey(sessionEntry?.day || sessionEntry?.dayLabel) || null,
+          day_label: sessionEntry?.dayLabel || sessionEntry?.day || null,
+          role,
+          session_position: index,
+          exercises_before_same_group: exercisesBeforeSameGroup.length,
+          load_lb: summary.load_lb,
+          reps: summary.reps,
+          sets: summary.sets,
+          volume_load: summary.volume_load,
+          e1rm_epley: summary.e1rm_epley,
+          was_end_of_session: index >= Math.max(0, exercises.length - 2),
+          upstream_same_group_volume: upstreamVolume > 0 ? Number(upstreamVolume.toFixed(1)) : null,
+        })
+      })
+    })
+
+    return [...records.values()].map(record => {
+      const sessions = [...record.sessions].sort((a, b) => a.date.localeCompare(b.date))
+      const byRole = { heavy: [], volume: [], accessory: [], unknown: [] }
+      sessions.forEach(session => {
+        const roleKey = session.role || "unknown"
+        if (!byRole[roleKey]) byRole[roleKey] = []
+        byRole[roleKey].push(session)
+      })
+
+      const stalenessThreshold = STALENESS_THRESHOLDS[record.movement_pattern] ?? STALENESS_THRESHOLDS.other
+      const staleness_by_role = {}
+      Object.entries(byRole).forEach(([role, roleSessions]) => {
+        if (roleSessions.length < 2) {
+          staleness_by_role[role] = { stale: false, sessions_since_load_increase: 0, sessions_since_reps_increase: 0 }
+          return
+        }
+        const primaryMetric = role === "heavy" ? "load_lb" : "reps"
+        let streak = 0
+        for (let i = roleSessions.length - 1; i > 0; i -= 1) {
+          const current = roleSessions[i]?.[primaryMetric]
+          const previous = roleSessions[i - 1]?.[primaryMetric]
+          if (current == null || previous == null) break
+          if (current <= previous) streak += 1
+          else break
+        }
+        staleness_by_role[role] = {
+          stale: streak >= stalenessThreshold,
+          sessions_since_load_increase: role === "heavy" ? streak : 0,
+          sessions_since_reps_increase: role !== "heavy" ? streak : 0,
+        }
+      })
+
+      const stale_roles = Object.entries(staleness_by_role)
+        .filter(([, value]) => value?.stale)
+        .map(([role]) => role)
+      const stale = stale_roles.length > 0
+
+      const e1rm_sessions = sessions
+        .filter(session => session.e1rm_epley != null)
+        .map(session => ({ date: session.date, e1rm: session.e1rm_epley }))
+      const e1rm_current = e1rm_sessions.length ? e1rm_sessions[e1rm_sessions.length - 1].e1rm : null
+      const e1rm_peak = e1rm_sessions.length ? Math.max(...e1rm_sessions.map(session => session.e1rm)) : null
+      const latestSession = sessions[sessions.length - 1] || null
+      const load_headroom_pct = (e1rm_current != null && latestSession?.load_lb != null && e1rm_current > 0)
+        ? Number((((e1rm_current - latestSession.load_lb) / e1rm_current) * 100).toFixed(1))
+        : null
+
+      const roleFromPlannedDay = (() => {
+        if ((record.planned_days || []).includes(todayDayKey)) return inferSessionRole({ day: todayDayKey }, PLAN)
+        const fallbackDay = (record.planned_days || [])[0]
+        return fallbackDay ? inferSessionRole({ day: fallbackDay }, PLAN) : null
+      })()
+      const current_session_role = latestSession?.date === todayStr
+        ? (latestSession?.role || roleFromPlannedDay || "unknown")
+        : (roleFromPlannedDay || latestSession?.role || "unknown")
+
+      const primaryRole = staleness_by_role?.[current_session_role]?.stale
+        ? current_session_role
+        : (stale_roles[0] || current_session_role)
+      const primaryRoleData = staleness_by_role?.[primaryRole] || { sessions_since_load_increase: 0, sessions_since_reps_increase: 0 }
+      const position_concern = Boolean(stale && latestSession?.exercises_before_same_group >= 3)
+      const dayLabel = latestSession?.day_label || (record.planned_days?.[0] ? (SMETA[record.planned_days[0]]?.label || record.planned_days[0]) : "that session")
+      const reorder_suggestion = position_concern
+        ? `Move to position 1 or 2 on ${dayLabel} to progress load. ${latestSession.exercises_before_same_group} same-group exercises currently come first.`
+        : null
+
+      const ocGate = computeOcGate(record.exercise_id, ocItems, exerciseLibrary, { exercise_id: record.exercise_id, exercise_name: record.exercise_name })
+      const finalized = {
+        ...record,
+        sessions,
+        staleness_threshold: stalenessThreshold,
+        staleness_by_role,
+        stale_roles,
+        stale,
+        sessions_since_load_increase: primaryRoleData.sessions_since_load_increase ?? 0,
+        sessions_since_reps_increase: primaryRoleData.sessions_since_reps_increase ?? 0,
+        e1rm_sessions,
+        e1rm_trend: computeE1rmTrend(e1rm_sessions),
+        e1rm_current,
+        e1rm_peak,
+        load_headroom_pct,
+        oc_gate: ocGate.gate,
+        oc_gate_reason: ocGate.reason,
+        current_session_position: latestSession?.session_position ?? null,
+        current_upstream_load: latestSession?.upstream_same_group_volume ?? null,
+        position_concern,
+        reorder_suggestion,
+        current_session_role,
+        primary_stale_role: primaryRole,
+      }
+      finalized.suggestion = computeSuggestion(finalized, current_session_role)
+      return finalized
+    }).sort((a, b) => {
+      if (a.stale !== b.stale) return a.stale ? -1 : 1
+      const aDate = a.sessions[a.sessions.length - 1]?.date || ""
+      const bDate = b.sessions[b.sessions.length - 1]?.date || ""
+      return bDate.localeCompare(aDate)
+    })
+  } catch (error) {
+    console.warn("[POE] computeProgressionState failed", error)
+    return []
+  }
 }
 
 const getScheduleEntryDayDateMismatch = entry => {
@@ -5491,34 +6127,22 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const saveScheduleKey = async (key, value) => {
     writeLocalScheduleKey(key, value)
     if (!supabase || !session?.user?.id) return { value, synced: false, reason: "no-auth" }
-
-    const SAVE_TIMEOUT_MS = 5000
-    try {
-      const upsertPromise = supabase.from("user_kv").upsert(
-        { user_id: session.user.id, key, value, updated_at: new Date().toISOString() },
-        { onConflict: "user_id,key" }
-      ).select("value").maybeSingle()
-
-      const result = await Promise.race([
-        upsertPromise,
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("supabase-timeout")), SAVE_TIMEOUT_MS)
-        )
-      ])
-
-      const { data, error } = result
-      if (error) {
-        console.warn(`[LIFT] Supabase sync failed for ${key}:`, error.message)
-        return { value, synced: false, reason: error.message }
-      }
-
-      const savedValue = data?.value ?? value
-      writeLocalScheduleKey(key, savedValue)
-      return { value: savedValue, synced: true }
-    } catch (networkErr) {
-      console.warn(`[LIFT] Network error syncing ${key}:`, networkErr.message)
-      return { value, synced: false, reason: networkErr.message }
-    }
+    supabase.from("user_kv").upsert(
+      { user_id: session.user.id, key, value, updated_at: new Date().toISOString() },
+      { onConflict: "user_id,key" }
+    ).select("value").maybeSingle()
+      .then(({ data, error }) => {
+        if (error) {
+          console.warn(`[LIFT] Supabase sync failed for ${key}:`, error.message)
+          return
+        }
+        const savedValue = data?.value ?? value
+        writeLocalScheduleKey(key, savedValue)
+      })
+      .catch(networkErr => {
+        console.warn(`[LIFT] Network error syncing ${key}:`, networkErr.message)
+      })
+    return { value, synced: false, pending: true }
   }
 
   const loadScheduleLogForMutation = async fallbackLog => {
@@ -8437,6 +9061,226 @@ function projectWeightTrend(weights, nutritionSeries, weeks = 12) {
   }
 
   return out
+}
+
+function SectionHeader({ children }) {
+  return (
+    <div style={{ fontFamily: "IBM Plex Mono", fontSize: 11, letterSpacing: "0.12em", textTransform: "uppercase", color: "#8fa8d8" }}>
+      {children}
+    </div>
+  )
+}
+
+function SortButtons({ sortBy, setSortBy }) {
+  const options = [
+    { id: "stale", label: "Stale" },
+    { id: "group", label: "Group" },
+    { id: "date", label: "Last Date" },
+  ]
+  return (
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+      {options.map(option => (
+        <button
+          key={option.id}
+          onClick={() => setSortBy(option.id)}
+          style={{
+            padding: "4px 8px",
+            borderRadius: 6,
+            border: sortBy === option.id ? "1px solid #4a9ee8" : "1px solid #2a2f3e",
+            background: sortBy === option.id ? "rgba(74,158,232,0.12)" : "#0d0e1c",
+            color: sortBy === option.id ? "#d4d8e8" : "#6b7290",
+            fontFamily: "IBM Plex Mono",
+            fontSize: 10,
+            cursor: "pointer"
+          }}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function NudgeCard({ record }) {
+  const suggestion = record.suggestion || {}
+  const gateColor = record.oc_gate === "clear" ? "#4caf50"
+    : record.oc_gate === "modulate_reps" ? "#e8b84a"
+    : "#e88c2a"
+  const lastLoad = record.sessions[record.sessions.length - 1]?.load_lb
+
+  return (
+    <div style={{
+      background: "#141720",
+      border: `1px solid ${record.stale ? "#e8b84a33" : "#2a2f3e"}`,
+      borderRadius: 4,
+      padding: 14
+    }}>
+      <div style={{ fontFamily: "IBM Plex Mono", fontSize: 11, fontWeight: 600, color: "#d4d8e8", marginBottom: 6 }}>
+        {record.exercise_name}
+      </div>
+      <div style={{ fontFamily: "IBM Plex Mono", fontSize: 9, color: "#6b7290", marginBottom: 8 }}>
+        {record.movement_pattern.replace(/_/g, " ")} · pos {(record.current_session_position ?? 0) + 1} in session
+      </div>
+      {suggestion.type !== "rep_increase" && suggestion.next_load_lb != null && (
+        <div style={{ fontFamily: "IBM Plex Mono", fontSize: 20, fontWeight: 600, color: "#e88c2a" }}>
+          {suggestion.next_load_lb} lb
+          {suggestion.next_load_range && (
+            <span style={{ fontSize: 11, color: "#6b7290", marginLeft: 6 }}>
+              ({suggestion.next_load_range[0]}–{suggestion.next_load_range[1]})
+            </span>
+          )}
+        </div>
+      )}
+      {suggestion.next_reps != null && (
+        <div style={{ fontFamily: "IBM Plex Mono", fontSize: 20, fontWeight: 600, color: "#e8b84a" }}>
+          {suggestion.next_reps} reps @ {lastLoad ?? "?"} lb
+        </div>
+      )}
+      <div style={{ fontSize: 11, color: "#6b7290", marginTop: 6, lineHeight: 1.5 }}>
+        {suggestion.rationale}
+      </div>
+      {record.oc_gate_reason && (
+        <div style={{ marginTop: 6, fontSize: 9, color: gateColor, fontFamily: "IBM Plex Mono" }}>
+          {record.oc_gate_reason}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ReorderRow({ record }) {
+  const latest = record.sessions[record.sessions.length - 1]
+  return (
+    <div style={{ padding: "10px 12px", border: "1px solid #2a2f3e", borderLeft: "3px solid #e8b84a", borderRadius: 6, background: "rgba(232,184,74,0.05)", marginBottom: 8 }}>
+      <div style={{ fontFamily: "IBM Plex Mono", fontSize: 11, color: "#d4d8e8", marginBottom: 4 }}>
+        {record.exercise_name}
+      </div>
+      <div style={{ fontSize: 10, color: "#8fa8d8", marginBottom: 4 }}>
+        {latest?.day_label || latest?.day || "Session"} · current position {(record.current_session_position ?? 0) + 1}
+      </div>
+      <div style={{ fontSize: 11, color: "#6b7290", lineHeight: 1.5 }}>
+        {record.reorder_suggestion}
+      </div>
+    </div>
+  )
+}
+
+function ProgressTable({ records }) {
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "IBM Plex Mono", fontSize: 11 }}>
+        <thead>
+          <tr>
+            {["Exercise", "Group", "N", "Last Load", "e1RM", "Headroom", "Stale", "OC", "Suggestion"].map(header => (
+              <th key={header} style={{ textAlign: "left", fontSize: 9, letterSpacing: "1.5px", textTransform: "uppercase", color: "#6b7290", padding: "6px 8px", borderBottom: "1px solid #2a2f3e" }}>
+                {header}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {records.map(record => {
+            const last = record.sessions[record.sessions.length - 1]
+            const staleColor = record.stale ? "#e8b84a" : "#6b7290"
+            const gateColor = record.oc_gate === "clear" ? "#4caf50" : record.oc_gate === "block" ? "#d95f5f" : "#e8b84a"
+            const staleMetric = record.primary_stale_role === "heavy"
+              ? record.sessions_since_load_increase
+              : record.sessions_since_reps_increase
+            return (
+              <tr key={record.exercise_id} style={{ background: record.stale ? "rgba(232,184,74,0.04)" : "transparent" }}>
+                <td style={{ padding: "7px 8px", color: "#d4d8e8" }}>{record.exercise_name}</td>
+                <td style={{ padding: "7px 8px", color: "#6b7290" }}>{record.movement_pattern.replace(/_/g, " ")}</td>
+                <td style={{ padding: "7px 8px", color: "#6b7290", textAlign: "right" }}>{record.sessions.length}</td>
+                <td style={{ padding: "7px 8px", textAlign: "right" }}>{last?.load_lb ?? "—"}</td>
+                <td style={{ padding: "7px 8px", textAlign: "right", color: "#4caf7d" }}>{record.e1rm_current != null ? record.e1rm_current.toFixed(0) : "—"}</td>
+                <td style={{ padding: "7px 8px", textAlign: "right" }}>{record.load_headroom_pct != null ? `${record.load_headroom_pct.toFixed(0)}%` : "—"}</td>
+                <td style={{ padding: "7px 8px", color: staleColor, textAlign: "center" }}>
+                  {record.stale ? `${record.primary_stale_role}:${staleMetric}s` : "—"}
+                </td>
+                <td style={{ padding: "7px 8px", color: gateColor }}>
+                  {record.oc_gate === "clear" ? "✓" : record.oc_gate.replace(/_/g, " ")}
+                </td>
+                <td style={{ padding: "7px 8px", color: record.suggestion?.type !== "none" ? "#e88c2a" : "#6b7290" }}>
+                  {record.suggestion?.type === "none"
+                    ? "—"
+                    : `${record.suggestion?.rationale?.slice(0, 60) || ""}${(record.suggestion?.rationale || "").length > 60 ? "…" : ""}`}
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function ProgressTab({ progressionState, schedLog }) {
+  const [sortBy, setSortBy] = useState("stale")
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const todaySession = getLatestScheduleSessionForDate(schedLog, todayStr)
+  const todayIds = new Set((todaySession?.exercises || []).map(exercise => exercise.exercise_id).filter(Boolean))
+  const visibleRecords = (Array.isArray(progressionState) ? progressionState : []).filter(record => record.sessions.length >= 2)
+  const todayNudges = visibleRecords.filter(record => todayIds.has(record.exercise_id) && record.suggestion?.type !== "none")
+  const reorderItems = visibleRecords.filter(record => record.suggestion?.type === "reorder_then_load")
+
+  const sorted = [...visibleRecords].sort((a, b) => {
+    if (sortBy === "stale") {
+      if (a.stale !== b.stale) return a.stale ? -1 : 1
+      return (b.sessions.length || 0) - (a.sessions.length || 0)
+    }
+    if (sortBy === "group") return a.movement_pattern.localeCompare(b.movement_pattern)
+    if (sortBy === "date") {
+      const aDate = a.sessions[a.sessions.length - 1]?.date || ""
+      const bDate = b.sessions[b.sessions.length - 1]?.date || ""
+      return bDate.localeCompare(aDate)
+    }
+    return 0
+  })
+
+  return (
+    <div style={{ padding: "16px", maxWidth: 1100 }}>
+      <div style={{ marginBottom: 16 }}>
+        <h3 style={{ margin: 0 }}>Progress</h3>
+        <div style={{ fontSize: 11, color: "#667", marginTop: 4 }}>
+          Progressive overload state by exercise, role, and OC constraint.
+        </div>
+      </div>
+
+      {todayNudges.length > 0 && (
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ marginBottom: 10 }}><SectionHeader>Today&apos;s Progression Opportunities</SectionHeader></div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 10 }}>
+            {todayNudges.map(record => (
+              <NudgeCard key={record.exercise_id} record={record} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {reorderItems.length > 0 && (
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ marginBottom: 10 }}><SectionHeader>Session Order Adjustments</SectionHeader></div>
+          {reorderItems.map(record => (
+            <ReorderRow key={record.exercise_id} record={record} />
+          ))}
+        </div>
+      )}
+
+      <div style={{ ...cardStyle(), minWidth: 0 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+          <SectionHeader>All Exercises</SectionHeader>
+          <SortButtons sortBy={sortBy} setSortBy={setSortBy} />
+        </div>
+        {sorted.length > 0 ? (
+          <ProgressTable records={sorted} />
+        ) : (
+          <div style={{ fontSize: 12, color: "#6b7290" }}>
+            No progression history yet. Log at least two sessions with overlapping exercises to populate this table.
+          </div>
+        )}
+      </div>
+    </div>
+  )
 }
 
 function TrainingDashboard({ workouts, recentNutrition, healthFitDaily = [], schedLog = [], ocItems = [], biometricRecords = [], tsbV2Panel = null, prevMetricValues = {} }) {
@@ -14940,7 +15784,51 @@ SUBSTITUTION PROTOCOL — when the user reports MTP score 2+ or describes a phys
 
 For all other data writes, tell the user you cannot do that yet.`
 
-function assembleTrainerContext({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, mealRecords, sleepRecords, biometricRecords, schedLog, readinessScore }) {
+function buildPoeContextSection(progressionState, schedLog) {
+  if (!Array.isArray(progressionState) || progressionState.length === 0) return ""
+
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const todaySession = getLatestScheduleSessionForDate(schedLog, todayStr)
+  const todayExerciseIds = todaySession
+    ? (todaySession.exercises || []).map(exercise => exercise.exercise_id).filter(Boolean)
+    : []
+
+  const todayFlagged = progressionState
+    .filter(record => todayExerciseIds.includes(record.exercise_id) && record.suggestion?.type !== "none")
+
+  const otherFlagged = progressionState
+    .filter(record => !todayExerciseIds.includes(record.exercise_id) && record.suggestion?.type !== "none")
+    .slice(0, 5)
+
+  const lines = ["=== PROGRESSIVE OVERLOAD ENGINE ==="]
+
+  if (todayFlagged.length > 0) {
+    lines.push(`TODAY'S SESSION — ${todayFlagged.length} exercise(s) ready for progression:`)
+    todayFlagged.forEach(record => {
+      const suggestion = record.suggestion || {}
+      const loadStr = suggestion.type === "rep_increase" && suggestion.next_reps != null
+        ? `Target: ${suggestion.next_reps} reps at ${record.sessions[record.sessions.length - 1]?.load_lb ?? "?"} lb`
+        : suggestion.next_load_lb != null
+          ? `Target: ${suggestion.next_load_lb} lb${suggestion.next_load_range ? ` (range ${suggestion.next_load_range[0]}–${suggestion.next_load_range[1]} lb)` : ""}`
+          : suggestion.next_reps != null
+            ? `Target: ${suggestion.next_reps} reps at ${record.sessions[record.sessions.length - 1]?.load_lb ?? "?"} lb`
+            : ""
+      const ocNote = record.oc_gate !== "clear" ? ` [OC: ${record.oc_gate_reason}]` : ""
+      lines.push(`  ${record.exercise_name} (pos ${(record.current_session_position ?? 0) + 1}): ${suggestion.rationale} ${loadStr}${ocNote} [${suggestion.confidence} confidence]`)
+    })
+  } else if (todayExerciseIds.length > 0) {
+    lines.push("TODAY'S SESSION — no stalled exercises flagged.")
+  }
+
+  if (otherFlagged.length > 0) {
+    lines.push(`OTHER FLAGGED (not today): ${otherFlagged.map(record => `${record.exercise_name} — ${record.suggestion.rationale}`).join(" | ")}`)
+  }
+
+  lines.push("=== END POE ===")
+  return lines.join("\n")
+}
+
+function assembleTrainerContext({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, mealRecords, sleepRecords, biometricRecords, schedLog, readinessScore, progressionState }) {
   const today = new Date().toISOString().slice(0, 10)
   const dayName = new Date().toLocaleDateString('en-US', { weekday: 'long' })
 
@@ -15091,6 +15979,8 @@ function assembleTrainerContext({ sessions60, ocItems, tsbData, raceCalendar, li
     "  Cut: Phase 1 target 21% body fat while preserving lean mass and protein compliance"
   ].join("\n")
 
+  const poeSection = buildPoeContextSection(progressionState, schedLog)
+
   return `=== LIVE STATE SNAPSHOT — ${dayName} ${today} ===
 
 READINESS
@@ -15116,6 +16006,8 @@ ${weightLine}
 
 ACTIVE OC ISSUES
 ${ocLines}
+
+${poeSection ? `${poeSection}\n` : ""}
 
 UPCOMING RACES
 ${upcomingRaces}
@@ -15165,7 +16057,7 @@ const FingerprintIcon = ({ size = 38 }) => {
   )
 }
 
-function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, onLogMtp, onLogWeight, onLogExercise, onLogRun, onLogMeal, biometricRecords, sleepRecords, setSleepRecords, mealRecords, readinessScore, schedLog, setSchedLog }) {
+function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, onLogMtp, onLogWeight, onLogExercise, onLogRun, onLogMeal, biometricRecords, sleepRecords, setSleepRecords, mealRecords, readinessScore, schedLog, setSchedLog, progressionState = [] }) {
   const [isOpen, setIsOpen] = React.useState(false)
   const [messages, setMessages] = React.useState(() => {
     try { return JSON.parse(localStorage.getItem(TRAINER_STORAGE_KEY) || "[]") } catch { return [] }
@@ -15565,7 +16457,7 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
       setInputValue("")
       return
     }
-    const context = assembleTrainerContext({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, mealRecords, sleepRecords, biometricRecords, schedLog, readinessScore })
+    const context = assembleTrainerContext({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, mealRecords, sleepRecords, biometricRecords, schedLog, readinessScore, progressionState })
     const userMsg = { role: "user", content: text, ts: Date.now() }
     const updatedMsgs = [...messages, userMsg]
     saveMessages(updatedMsgs)
@@ -20589,6 +21481,11 @@ const tissueLoadIndex = useMemo(() => {
 
   return result
 }, [schedLog, unifiedCanonicalSessions, ocItems, ocLoadOverrides])
+
+const progressionState = useMemo(
+  () => computeProgressionState(schedLog, ocItems, EXERCISE_LIBRARY),
+  [schedLog, ocItems]
+)
 
 const formDecayReadinessPenalty = useMemo(() => {
   const now = new Date()
@@ -25632,6 +26529,13 @@ return (
 
 
       
+{tab === "Progress" && (
+  <ProgressTab
+    progressionState={progressionState}
+    schedLog={schedLog}
+  />
+)}
+
 {tab === "Schedule" && (
   <TabSchedule
     storedWorkouts={storedWorkouts}
@@ -26343,7 +27247,7 @@ return (
 )}
 
       
-{tab !== "Overview" && tab !== "Composition" && tab !== "Calories" && tab !== "Capacity" && tab !== "Forecast" && tab !== "Schedule" && tab !== "Training" && tab !== "Import" && tab !== "Coach" && tab !== "Log" && (
+{tab !== "Overview" && tab !== "Progress" && tab !== "Composition" && tab !== "Calories" && tab !== "Capacity" && tab !== "Forecast" && tab !== "Schedule" && tab !== "Training" && tab !== "Import" && tab !== "Coach" && tab !== "Log" && (
   <div>
     <h3>{tab}</h3>
     <div>This tab is next.</div>
@@ -26446,6 +27350,7 @@ return (
     readinessScore={readinessScore}
     schedLog={schedLog}
     setSchedLog={setSchedLog}
+    progressionState={progressionState}
   />
   </>
   )
