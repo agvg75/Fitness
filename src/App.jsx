@@ -6497,7 +6497,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     const node = programPromptRefs.current?.[latestId]
     if (!node) return
     requestAnimationFrame(() => {
-      node.scrollIntoView({ behavior: "smooth", block: "center" })
+      node.scrollIntoView({ behavior: "smooth", block: "nearest" })
     })
   }, [programPromptState])
 
@@ -10020,6 +10020,8 @@ function ProgressTab({ progressionState, schedLog }) {
             style={{
               width: 22,
               height: 22,
+              minWidth: 36,
+              minHeight: 36,
               borderRadius: 999,
               border: "1px solid #2a2d45",
               background: showMethodology ? "#252640" : "#0d0e1c",
@@ -10027,7 +10029,10 @@ function ProgressTab({ progressionState, schedLog }) {
               fontSize: 12,
               fontWeight: 700,
               cursor: "pointer",
-              flex: "0 0 auto"
+              flex: "0 0 auto",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center"
             }}
           >
             {showMethodology ? "×" : "i"}
@@ -27482,65 +27487,68 @@ return (
       </div>
       <div
         style={{
-          display: "flex",
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
           gap: 16,
-          flexWrap: "wrap"
+          alignItems: "stretch"
         }}
       >
-        <div style={{ flex: 1, minWidth: 280 }}>
+        <div style={{ minWidth: 280, display: "flex", flexDirection: "column" }}>
           <div style={{ fontSize: "12px", fontWeight: "700", letterSpacing: "0.04em", opacity: 0.7, marginBottom: "8px" }}>Recent Trend</div>
-          <ResponsiveContainer width="100%" height={280}>
-            <LineChart data={bodyWeightRecentTrendChart} margin={{ top: 10, right: 20, left: 55, bottom: 20 }}>
-              <CartesianGrid stroke="#1a1b2e" />
-              <XAxis
-                type="number"
-                dataKey="dateMs"
-                scale="time"
-                domain={["dataMin", "dataMax"]}
-                tick={{ fontSize: 11 }}
-                tickFormatter={value => fmtMonthYear(new Date(value).toISOString().slice(0, 10))}
-                label={{
-                  value: "Date",
-                  position: "insideBottom",
-                  offset: -10,
-                  fill: "#ced2f0",
-                  style: { textAnchor: "middle" }
-                }}
-              />
-              <YAxis
-                type="number"
-                scale="linear"
-                domain={forecastYDomain}
-                allowDataOverflow={true}
-                label={{ value: "Weight (lb)", angle: -90, position: "insideLeft", offset: 15, fill: "#ced2f0", style: { textAnchor: "middle" } }}
-              />
-              <Tooltip
-                labelFormatter={value => fmtMonthYear(new Date(value).toISOString().slice(0, 10))}
-                formatter={(v) => [v != null ? `${v} lb` : "—", "Actual (7d avg)"]}
-              />
-              <Legend verticalAlign="top" height={28} />
-              <Line type="monotone" dataKey="actual" name="Actual (7d avg)" stroke="#4a9ee8" strokeWidth={2} dot={false} connectNulls={false} />
-              {bodyForecast && <ReferenceLine y={bodyForecast.phase1TargetWeight} stroke="#ffd166" strokeDasharray="3 3" label={{ value: "Phase 1", fill: "#ffd166", fontSize: 11 }} />}
-              {bodyForecast && <ReferenceLine y={bodyForecast.finalTargetWeight} stroke="#4ade80" strokeDasharray="3 3" label={{ value: "Target", fill: "#4ade80", fontSize: 11 }} />}
-              {/* Titration end ~Feb 2025 */}
-              <ReferenceLine x={new Date("2025-02-15T12:00:00").getTime()} stroke="#64748b" strokeDasharray="3 3"
-                label={{ value: "Dose stable", position: "insideTopRight", fill: "#64748b", fontSize: 9 }} />
-              {/* Strength program start Sep 2025 */}
-              <ReferenceLine x={new Date("2025-09-01T12:00:00").getTime()} stroke="#a78bfa" strokeDasharray="3 3"
-                label={{ value: "Strength", position: "insideTopRight", fill: "#a78bfa", fontSize: 9 }} />
-              {/* Aerobic program start Nov 2025 */}
-              <ReferenceLine x={new Date("2025-11-01T12:00:00").getTime()} stroke="#34d399" strokeDasharray="3 3"
-                label={{ value: "Aerobic", position: "insideTopRight", fill: "#34d399", fontSize: 9 }} />
-              {/* 10mg dose escalation Apr 19 2026 */}
-              <ReferenceLine x={new Date("2026-04-19T12:00:00").getTime()} stroke="#fb923c" strokeDasharray="3 3"
-                label={{ value: "10mg", position: "insideTopRight", fill: "#fb923c", fontSize: 9 }} />
-              {/* KNR suspension ~Apr 2026 */}
-              <ReferenceLine x={new Date("2026-04-26T12:00:00").getTime()} stroke="#f87171" strokeDasharray="2 4"
-                label={{ value: "KNR pause", position: "insideTopLeft", fill: "#f87171", fontSize: 9 }} />
-            </LineChart>
-          </ResponsiveContainer>
+          <div style={{ flex: 1, minHeight: 280 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={bodyWeightRecentTrendChart} margin={{ top: 10, right: 20, left: 55, bottom: 20 }}>
+                <CartesianGrid stroke="#1a1b2e" />
+                <XAxis
+                  type="number"
+                  dataKey="dateMs"
+                  scale="time"
+                  domain={["dataMin", "dataMax"]}
+                  tick={{ fontSize: 11 }}
+                  tickFormatter={value => fmtMonthYear(new Date(value).toISOString().slice(0, 10))}
+                  label={{
+                    value: "Date",
+                    position: "insideBottom",
+                    offset: -10,
+                    fill: "#ced2f0",
+                    style: { textAnchor: "middle" }
+                  }}
+                />
+                <YAxis
+                  type="number"
+                  scale="linear"
+                  domain={forecastYDomain}
+                  allowDataOverflow={true}
+                  label={{ value: "Weight (lb)", angle: -90, position: "insideLeft", offset: 15, fill: "#ced2f0", style: { textAnchor: "middle" } }}
+                />
+                <Tooltip
+                  labelFormatter={value => fmtMonthYear(new Date(value).toISOString().slice(0, 10))}
+                  formatter={(v) => [v != null ? `${v} lb` : "—", "Actual (7d avg)"]}
+                />
+                <Legend verticalAlign="top" height={28} />
+                <Line type="monotone" dataKey="actual" name="Actual (7d avg)" stroke="#4a9ee8" strokeWidth={2} dot={false} connectNulls={false} />
+                {bodyForecast && <ReferenceLine y={bodyForecast.phase1TargetWeight} stroke="#ffd166" strokeDasharray="3 3" label={{ value: "Phase 1", fill: "#ffd166", fontSize: 11 }} />}
+                {bodyForecast && <ReferenceLine y={bodyForecast.finalTargetWeight} stroke="#4ade80" strokeDasharray="3 3" label={{ value: "Target", fill: "#4ade80", fontSize: 11 }} />}
+                {/* Titration end ~Feb 2025 */}
+                <ReferenceLine x={new Date("2025-02-15T12:00:00").getTime()} stroke="#64748b" strokeDasharray="3 3"
+                  label={{ value: "Dose stable", position: "insideTopRight", fill: "#64748b", fontSize: 9 }} />
+                {/* Strength program start Sep 2025 */}
+                <ReferenceLine x={new Date("2025-09-01T12:00:00").getTime()} stroke="#a78bfa" strokeDasharray="3 3"
+                  label={{ value: "Strength", position: "insideTopRight", fill: "#a78bfa", fontSize: 9 }} />
+                {/* Aerobic program start Nov 2025 */}
+                <ReferenceLine x={new Date("2025-11-01T12:00:00").getTime()} stroke="#34d399" strokeDasharray="3 3"
+                  label={{ value: "Aerobic", position: "insideTopRight", fill: "#34d399", fontSize: 9 }} />
+                {/* 10mg dose escalation Apr 19 2026 */}
+                <ReferenceLine x={new Date("2026-04-19T12:00:00").getTime()} stroke="#fb923c" strokeDasharray="3 3"
+                  label={{ value: "10mg", position: "insideTopRight", fill: "#fb923c", fontSize: 9 }} />
+                {/* KNR suspension ~Apr 2026 */}
+                <ReferenceLine x={new Date("2026-04-26T12:00:00").getTime()} stroke="#f87171" strokeDasharray="2 4"
+                  label={{ value: "KNR pause", position: "insideTopLeft", fill: "#f87171", fontSize: 9 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         </div>
-        <div style={{ flex: 1, minWidth: 280 }}>
+        <div style={{ minWidth: 280, display: "flex", flexDirection: "column" }}>
           <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 6, opacity: 0.8 }}>Trajectory Analysis</div>
           {trajectoryData ? (() => {
             const { chartPoints, events, winners, aics, exponential, segmented, linear, t0, fitPointCount } = trajectoryData
@@ -27550,8 +27558,8 @@ return (
               strokeDasharray: model === "linear" ? "4 3" : model === "segmented" ? "2 2" : undefined,
             })
             return (
-              <>
-                <ResponsiveContainer width="100%" height={220}>
+              <div style={{ position: "relative", flex: 1, minHeight: 280 }}>
+                <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={chartPoints} margin={{ top: 8, right: 16, left: 8, bottom: 16 }}>
                     <CartesianGrid stroke="#1a1b2e" />
                     <XAxis dataKey="label" tick={{ fontSize: 9 }} interval={Math.max(1, Math.floor(chartPoints.length / 8) - 1)} />
@@ -27570,31 +27578,31 @@ return (
                     <ReferenceLine y={145} stroke="#4ade80" strokeDasharray="3 3" label={{ value: "Target", fill: "#4ade80", fontSize: 8 }} />
                   </ComposedChart>
                 </ResponsiveContainer>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginTop: 8, fontSize: 9, opacity: 0.8 }}>
-                  <div style={{ background: "#0d1117", padding: "6px 8px", borderRadius: 4, borderLeft: `2px solid ${winners.includes("exponential") ? "#ffd166" : "#333"}` }}>
-                    <div style={{ fontWeight: 700, color: "#ffd166" }}>Exp decay{winners.includes("exponential") ? " ★" : ""}</div>
+                <div style={{ position: "absolute", top: 12, right: 12, display: "flex", flexDirection: "column", gap: 6, zIndex: 10, pointerEvents: "none", fontSize: 9, opacity: 0.8 }}>
+                  <div style={{ background: "rgba(13,17,23,0.82)", padding: "5px 10px", borderRadius: 3, border: `1px solid ${winners.includes("exponential") ? "#ffd166" : "rgba(42,47,62,0.7)"}`, fontFamily: "IBM Plex Mono, monospace", color: winners.includes("exponential") ? "#ffd166" : "#6b7290", minWidth: 160 }}>
+                    <div style={{ fontWeight: 700, marginBottom: 2 }}>Exp decay{winners.includes("exponential") ? " ★" : ""}</div>
                     <div>W0 {exponential.W0.toFixed(1)} lb</div>
                     <div>Wf {exponential.Wf.toFixed(1)} lb</div>
                     <div>k {exponential.k.toFixed(4)}/day</div>
-                    <div style={{ opacity: 0.6 }}>AIC {exponential.aic.toFixed(1)}</div>
+                    <div>AIC {exponential.aic.toFixed(1)}</div>
                   </div>
-                  <div style={{ background: "#0d1117", padding: "6px 8px", borderRadius: 4, borderLeft: `2px solid ${winners.includes("linear") ? "#94a3b8" : "#333"}` }}>
-                    <div style={{ fontWeight: 700, color: "#94a3b8" }}>Linear{winners.includes("linear") ? " ★" : ""}</div>
+                  <div style={{ background: "rgba(13,17,23,0.82)", padding: "5px 10px", borderRadius: 3, border: `1px solid ${winners.includes("linear") ? "#94a3b8" : "rgba(42,47,62,0.7)"}`, fontFamily: "IBM Plex Mono, monospace", color: winners.includes("linear") ? "#94a3b8" : "#6b7290", minWidth: 160 }}>
+                    <div style={{ fontWeight: 700, marginBottom: 2 }}>Linear{winners.includes("linear") ? " ★" : ""}</div>
                     <div>slope {(linear.slope * 30).toFixed(2)} lb/mo</div>
-                    <div style={{ opacity: 0.6 }}>AIC {linear.aic.toFixed(1)}</div>
+                    <div>AIC {linear.aic.toFixed(1)}</div>
                   </div>
-                  <div style={{ background: "#0d1117", padding: "6px 8px", borderRadius: 4, borderLeft: `2px solid ${winners.includes("segmented") ? "#f472b6" : "#333"}` }}>
-                    <div style={{ fontWeight: 700, color: "#f472b6" }}>Segmented{winners.includes("segmented") ? " ★" : ""}</div>
+                  <div style={{ background: "rgba(13,17,23,0.82)", padding: "5px 10px", borderRadius: 3, border: `1px solid ${winners.includes("segmented") ? "#f472b6" : "rgba(42,47,62,0.7)"}`, fontFamily: "IBM Plex Mono, monospace", color: winners.includes("segmented") ? "#f472b6" : "#6b7290", minWidth: 160 }}>
+                    <div style={{ fontWeight: 700, marginBottom: 2 }}>Segmented{winners.includes("segmented") ? " ★" : ""}</div>
                     <div>break {segmented.bpDate.slice(0, 7)}</div>
                     <div>s1 {(segmented.b * 30).toFixed(2)} lb/mo</div>
                     <div>s2 {((segmented.b + segmented.c) * 30).toFixed(2)} lb/mo</div>
-                    <div style={{ opacity: 0.6 }}>AIC {segmented.aic.toFixed(1)}</div>
-                  </div>
-                  <div style={{ fontSize: 9, opacity: 0.5, marginTop: 6, gridColumn: "1 / -1" }}>
-                    Models fit on dose-stable regime only (Feb 2025 onward, n={fitPointCount} points). Full history shown in chart for context.
+                    <div>AIC {segmented.aic.toFixed(1)}</div>
                   </div>
                 </div>
-              </>
+                <div style={{ fontSize: 9, opacity: 0.5, marginTop: 6 }}>
+                  Models fit on dose-stable regime only (Feb 2025 onward, n={fitPointCount} points). Full history shown in chart for context.
+                </div>
+              </div>
             )
           })() : <div style={{ fontSize: 11, opacity: 0.5, padding: 20 }}>Insufficient data for trajectory fit.</div>}
         </div>
