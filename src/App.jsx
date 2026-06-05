@@ -6248,6 +6248,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const [customExerciseRegistry, setCustomExerciseRegistry] = useState(() => readCustomExerciseRegistry())
   const [scheduleOverrides, setScheduleOverrides] = useState(() => readScheduleOverrides())
   const [programPromptState, setProgramPromptState] = useState({})
+  const programPromptRefs = useRef({})
   const [tendonEntries, setTendonEntries] = useState({}) // { day: [{id,name,sets,reps,load,notes}] }
   const [savedEntries, setSavedEntries] = useState({})   // { day: { ymca: entry|null, knr: entry|null } }
   const [justUndone, setJustUndone] = useState(null)    // "ymca" | "knr" | null
@@ -6488,6 +6489,17 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       return next
     })
   }
+
+  useEffect(() => {
+    const promptIds = Object.keys(programPromptState || {})
+    if (!promptIds.length) return
+    const latestId = promptIds[promptIds.length - 1]
+    const node = programPromptRefs.current?.[latestId]
+    if (!node) return
+    requestAnimationFrame(() => {
+      node.scrollIntoView({ behavior: "smooth", block: "center" })
+    })
+  }, [programPromptState])
 
   const loadScheduleLogForMutation = async fallbackLog => {
     try {
@@ -8415,7 +8427,13 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       ? prompt.selectedPosition
       : (defaultOption?.value || "section-end:Program")
     return (
-      <div style={{ margin: "-2px 0 10px", padding: "10px 12px", background: "rgba(15,110,86,0.12)", border: "1px solid rgba(16,185,129,0.28)", borderRadius: 8 }}>
+      <div
+        ref={node => {
+          if (node) programPromptRefs.current[exercise.id] = node
+          else delete programPromptRefs.current[exercise.id]
+        }}
+        style={{ margin: "-2px 0 18px", padding: "10px 12px 14px", background: "rgba(15,110,86,0.12)", border: "1px solid rgba(16,185,129,0.28)", borderRadius: 8 }}
+      >
         <div style={{ fontSize: 12, color: "#a7f3d0", fontWeight: 700 }}>{exercise.n} added to today&apos;s session.</div>
         <div style={{ fontSize: 11, color: "#cbd5e1", marginTop: 4 }}>Make this a permanent part of your program?</div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8, alignItems: "center" }}>
@@ -9773,8 +9791,74 @@ function ProgressTable({ records }) {
   )
 }
 
+function VolumeIndexChart({ data }) {
+  if (!data) return null
+  const rows = data.labels.map((label, index) => ({
+    label,
+    Composite: data.rolling.Composite[index],
+    UpperPush: data.rolling["Upper Push"][index],
+    UpperPull: data.rolling["Upper Pull"][index],
+    Lower: data.rolling.Lower[index],
+    Core: data.rolling.Core[index],
+    Baseline: 100,
+  }))
+
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <LineChart data={rows} margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>
+        <CartesianGrid stroke="rgba(42,47,62,0.8)" />
+        <XAxis dataKey="label" tick={{ fill: "#6b7290", fontSize: 10 }} minTickGap={24} />
+        <YAxis tick={{ fill: "#6b7290", fontSize: 10 }} tickFormatter={value => `${value}%`} width={42} />
+        <Tooltip
+          contentStyle={{ background: "#1c2030", border: "1px solid #2a2f3e", borderRadius: 6, color: "#cbd5e1" }}
+          formatter={(value, name) => [value != null ? `${value}%` : "—", name]}
+        />
+        <Legend wrapperStyle={{ color: "#6b7290", fontSize: 10 }} />
+        <ReferenceLine y={100} stroke="rgba(107,114,144,0.35)" strokeDasharray="5 5" />
+        <Area type="monotone" dataKey="Composite" name="Composite" stroke="#e88c2a" fill="rgba(232,140,42,0.07)" strokeWidth={2.5} connectNulls />
+        <Line type="monotone" dataKey="UpperPush" name="Upper Push" stroke="#3a7bd5" strokeWidth={1.5} dot={{ r: 3 }} strokeDasharray="3 3" connectNulls />
+        <Line type="monotone" dataKey="UpperPull" name="Upper Pull" stroke="#4caf7d" strokeWidth={1.5} dot={{ r: 3 }} strokeDasharray="3 3" connectNulls />
+        <Line type="monotone" dataKey="Lower" name="Lower" stroke="#e8b84a" strokeWidth={1.5} dot={{ r: 3 }} strokeDasharray="3 3" connectNulls />
+        <Line type="monotone" dataKey="Core" name="Core" stroke="#c47ed5" strokeWidth={1.5} dot={{ r: 3 }} strokeDasharray="3 3" connectNulls />
+      </LineChart>
+    </ResponsiveContainer>
+  )
+}
+
+function VolumeRawBarChart({ data }) {
+  if (!data) return null
+  const rows = data.labels.map((label, index) => ({
+    label,
+    UpperPush: data.raw["Upper Push"][index],
+    UpperPull: data.raw["Upper Pull"][index],
+    Lower: data.raw.Lower[index],
+    Core: data.raw.Core[index],
+  }))
+
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart data={rows} margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>
+        <CartesianGrid stroke="rgba(42,47,62,0.8)" />
+        <XAxis dataKey="label" tick={{ fill: "#6b7290", fontSize: 10 }} />
+        <YAxis tick={{ fill: "#6b7290", fontSize: 10 }} tickFormatter={value => `${(Number(value) / 1000).toFixed(0)}k`} width={42} />
+        <Tooltip
+          contentStyle={{ background: "#1c2030", border: "1px solid #2a2f3e", borderRadius: 6, color: "#cbd5e1" }}
+          formatter={(value, name) => [value ? `${Number(value).toLocaleString()} lb` : "—", name]}
+        />
+        <Legend wrapperStyle={{ color: "#6b7290", fontSize: 10 }} />
+        <Bar dataKey="UpperPush" name="Upper Push" stackId="volume" fill="rgba(58,123,213,0.65)" />
+        <Bar dataKey="UpperPull" name="Upper Pull" stackId="volume" fill="rgba(76,175,125,0.65)" />
+        <Bar dataKey="Lower" name="Lower" stackId="volume" fill="rgba(232,184,74,0.65)" />
+        <Bar dataKey="Core" name="Core" stackId="volume" fill="rgba(196,126,213,0.65)" />
+      </BarChart>
+    </ResponsiveContainer>
+  )
+}
+
 function ProgressTab({ progressionState, schedLog }) {
   const [sortBy, setSortBy] = useState("stale")
+  const [showMethodology, setShowMethodology] = useState(false)
+  const methodologyRef = useRef(null)
   const todayStr = new Date().toISOString().slice(0, 10)
   const todaySession = getLatestScheduleSessionForDate(schedLog, todayStr)
   const customRegistry = readCustomExerciseRegistry()
@@ -9784,6 +9868,128 @@ function ProgressTab({ progressionState, schedLog }) {
   const visibleRecords = (Array.isArray(progressionState) ? progressionState : []).filter(record => record.sessions.length >= 2)
   const todayNudges = visibleRecords.filter(record => todayIds.has(record.exercise_id) && record.suggestion?.type !== "none")
   const reorderItems = visibleRecords.filter(record => record.suggestion?.type === "reorder_then_load")
+  const movementPatternById = useMemo(() => {
+    const map = {}
+    ;(Array.isArray(progressionState) ? progressionState : []).forEach(record => {
+      if (!record?.exercise_id) return
+      map[String(record.exercise_id)] = record.movement_pattern || ""
+    })
+    return map
+  }, [progressionState])
+
+  useEffect(() => {
+    if (!showMethodology) return undefined
+    const onPointerDown = event => {
+      if (methodologyRef.current?.contains(event.target)) return
+      setShowMethodology(false)
+    }
+    document.addEventListener("mousedown", onPointerDown)
+    document.addEventListener("touchstart", onPointerDown)
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown)
+      document.removeEventListener("touchstart", onPointerDown)
+    }
+  }, [showMethodology])
+
+  const volumeChartData = useMemo(() => {
+    if (!Array.isArray(schedLog) || schedLog.length === 0) return null
+
+    const byDate = {}
+    schedLog.forEach(entry => {
+      const date = String(entry?.date || "").slice(0, 10)
+      if (!date) return
+      const count = Array.isArray(entry?.exercises) ? entry.exercises.length : 0
+      if (!byDate[date] || count > ((byDate[date]?.exercises || []).length)) byDate[date] = entry
+    })
+
+    const getGroup = movementPattern => {
+      if (["upper_pull", "arm_flexion"].includes(movementPattern)) return "Upper Pull"
+      if (movementPattern === "upper_push") return "Upper Push"
+      if (["lower_push_quad", "posterior_chain", "hip_accessory"].includes(movementPattern)) return "Lower"
+      if (movementPattern === "core") return "Core"
+      return null
+    }
+
+    const weekly = {}
+    Object.values(byDate).forEach(entry => {
+      const date = String(entry?.date || "").slice(0, 10)
+      if (!date) return
+      const dt = new Date(`${date}T12:00:00`)
+      if (Number.isNaN(dt.getTime())) return
+      const monday = new Date(dt)
+      monday.setDate(dt.getDate() - dt.getDay() + (dt.getDay() === 0 ? -6 : 1))
+      const weekKey = monday.toISOString().slice(0, 10)
+
+      ;(entry.exercises || []).forEach(exercise => {
+        const actual = exercise?.actual || {}
+        const load = parseFloat(actual.load || 0)
+        const reps = parseFloat(actual.reps || 0)
+        const sets = parseFloat(actual.sets || 1)
+        if (!load || load <= 0 || !reps || reps <= 0) return
+        const resolvedId = resolveStableCustomExerciseId(exercise.exercise_id, exercise.exercise_name, customRegistry)
+        const movementPattern = movementPatternById[String(resolvedId)] || ""
+        const group = getGroup(movementPattern)
+        if (!group) return
+        if (!weekly[weekKey]) weekly[weekKey] = {}
+        weekly[weekKey][group] = (weekly[weekKey][group] || 0) + (sets * reps * load)
+      })
+    })
+
+    const weeks = Object.keys(weekly).sort()
+    if (!weeks.length) return null
+    const groups = ["Upper Push", "Upper Pull", "Lower", "Core"]
+    const baselines = {}
+    groups.forEach(group => {
+      const values = weeks
+        .filter(week => (weekly[week]?.[group] || 0) > 0)
+        .slice(0, 4)
+        .map(week => weekly[week][group])
+      baselines[group] = values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null
+    })
+
+    const indexed = weeks.map(week => {
+      const row = { week }
+      groups.forEach(group => {
+        const raw = weekly[week]?.[group] || 0
+        row[`${group}_raw`] = Math.round(raw)
+        row[group] = baselines[group] && raw > 0 ? +((raw / baselines[group]) * 100).toFixed(1) : null
+      })
+      const compositeValues = groups.map(group => row[group]).filter(value => value != null)
+      row.Composite = compositeValues.length ? +(compositeValues.reduce((sum, value) => sum + value, 0) / compositeValues.length).toFixed(1) : null
+      return row
+    })
+
+    const roll3 = (arr, key) => arr.map((row, index) => {
+      const start = index === arr.length - 1 ? Math.max(0, index - 2) : Math.max(0, index - 1)
+      const end = index === arr.length - 1 ? index : Math.min(arr.length - 1, index + 1)
+      const pool = []
+      for (let i = start; i <= end; i += 1) {
+        if (arr[i][key] != null) pool.push(arr[i][key])
+      }
+      return pool.length ? +(pool.reduce((sum, value) => sum + value, 0) / pool.length).toFixed(1) : null
+    })
+
+    return {
+      labels: weeks.map(week => week.slice(5)),
+      weeks,
+      indexed,
+      baselines,
+      groups,
+      rolling: {
+        "Upper Push": roll3(indexed, "Upper Push"),
+        "Upper Pull": roll3(indexed, "Upper Pull"),
+        Lower: roll3(indexed, "Lower"),
+        Core: roll3(indexed, "Core"),
+        Composite: roll3(indexed, "Composite"),
+      },
+      raw: {
+        "Upper Push": indexed.map(row => row["Upper Push_raw"] || null),
+        "Upper Pull": indexed.map(row => row["Upper Pull_raw"] || null),
+        Lower: indexed.map(row => row["Lower_raw"] || null),
+        Core: indexed.map(row => row["Core_raw"] || null),
+      },
+    }
+  }, [schedLog, progressionState, movementPatternById, customRegistry])
 
   const sorted = [...visibleRecords].sort((a, b) => {
     if (sortBy === "stale") {
@@ -9802,10 +10008,49 @@ function ProgressTab({ progressionState, schedLog }) {
   return (
     <div style={{ padding: "16px", maxWidth: 1100 }}>
       <div style={{ marginBottom: 16 }}>
-        <h3 style={{ margin: 0 }}>Progress</h3>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+          <h3 style={{ margin: 0 }}>Progress</h3>
+          <button
+            type="button"
+            onClick={event => {
+              event.stopPropagation()
+              setShowMethodology(open => !open)
+            }}
+            aria-label={showMethodology ? "Show chart" : "Show explanation"}
+            style={{
+              width: 22,
+              height: 22,
+              borderRadius: 999,
+              border: "1px solid #2a2d45",
+              background: showMethodology ? "#252640" : "#0d0e1c",
+              color: "#cbd5e1",
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: "pointer",
+              flex: "0 0 auto"
+            }}
+          >
+            {showMethodology ? "×" : "i"}
+          </button>
+        </div>
         <div style={{ fontSize: 11, color: "#667", marginTop: 4 }}>
           Progressive overload state by exercise, role, and OC constraint.
         </div>
+        {showMethodology && (
+          <div ref={methodologyRef} style={{ marginTop: 10, padding: "12px 14px", background: "#141720", border: "1px solid #2a2f3e", borderRadius: 6, color: "#cbd5e1", fontSize: 11, lineHeight: 1.6 }}>
+            <div style={{ fontFamily: "IBM Plex Mono", fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "#8fa8d8", marginBottom: 8 }}>
+              Progressive Overload Engine - Methodology
+            </div>
+            <div><span style={{ color: "#d4d8e8", fontWeight: 700 }}>Volume Load</span> Each session&apos;s volume is computed as Sets x Reps x Load (lb) per exercise. Bodyweight-only exercises are excluded (no numeric load to track).</div>
+            <div><span style={{ color: "#d4d8e8", fontWeight: 700 }}>Indexed Volume (% of Baseline)</span> Each muscle group&apos;s weekly volume is expressed as a percentage of its own month-1 baseline (average of the first 4 weeks with data for that group). This puts all groups on the same scale regardless of absolute load differences. A value of 150% means you are doing 50% more volume than your starting baseline.</div>
+            <div><span style={{ color: "#d4d8e8", fontWeight: 700 }}>3-Week Rolling Average</span> Weekly totals are smoothed with a centered 3-week rolling average to reduce session-to-session noise. The most recent week uses a trailing average.</div>
+            <div><span style={{ color: "#d4d8e8", fontWeight: 700 }}>Staleness Threshold</span> Compound movements (upper pull, upper push, lower push, posterior chain): flagged after 3 consecutive sessions at the same load. Isolation and accessory movements: flagged after 4 consecutive sessions.</div>
+            <div><span style={{ color: "#d4d8e8", fontWeight: 700 }}>e1RM (Estimated 1-Rep Max)</span> Computed using the Epley formula: Load x (1 + Reps / 30). Only computed when reps &lt; 30. Used to estimate how much headroom remains before the current working load approaches your ceiling.</div>
+            <div><span style={{ color: "#d4d8e8", fontWeight: 700 }}>Headroom</span> (e1RM - Last Load) / e1RM x 100. Indicates how conservative the current load is relative to estimated maximum capacity.</div>
+            <div><span style={{ color: "#d4d8e8", fontWeight: 700 }}>OC Gate</span> Exercises that load an active Operational Capacity region are modulated: score 1 = clear (monitor only), score 2 = rep progression only, score 3 = technique/ROM focus, score 4+ = blocked.</div>
+            <div><span style={{ color: "#d4d8e8", fontWeight: 700 }}>Session Role (Heavy / Volume / Accessory)</span> Staleness is tracked separately per session role. A load plateau on a volume day does not trigger a load nudge - rep progression is suggested instead. Heavy-day staleness triggers load increase suggestions.</div>
+          </div>
+        )}
       </div>
 
       {todayNudges.length > 0 && (
@@ -9841,6 +10086,46 @@ function ProgressTab({ progressionState, schedLog }) {
           </div>
         )}
       </div>
+
+      {volumeChartData && (
+        <div style={{ marginTop: 24 }}>
+          <div style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 11, color: "#6b7290", letterSpacing: 2, textTransform: "uppercase", marginBottom: 12, paddingBottom: 6, borderBottom: "1px solid #2a2f3e" }}>
+            Volume Progression by Muscle Group
+            <span style={{ float: "right", fontSize: 9 }}>
+              100 = month-1 baseline · 3-week rolling average
+            </span>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px,1fr))", gap: 8, marginBottom: 14 }}>
+            {["Upper Push", "Upper Pull", "Lower", "Core", "Composite"].map((group, index) => {
+              const colors = ["#3a7bd5", "#4caf7d", "#e8b84a", "#c47ed5", "#e88c2a"]
+              const arr = volumeChartData.rolling[group]
+              const last = Array.isArray(arr) ? [...arr].reverse().find(value => value != null) : null
+              return (
+                <div key={group} style={{ background: "#1c2030", border: "1px solid #2a2f3e", borderRadius: 4, padding: "10px 12px", textAlign: "center" }}>
+                  <div style={{ fontFamily: "IBM Plex Mono", fontSize: 8, letterSpacing: 2, textTransform: "uppercase", color: "#6b7290", marginBottom: 4 }}>
+                    {group}
+                  </div>
+                  <div style={{ fontFamily: "IBM Plex Mono", fontSize: 18, fontWeight: 600, color: colors[index] }}>
+                    {last != null ? `${last}%` : "—"}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          <div style={{ height: 300, marginBottom: 20 }}>
+            <VolumeIndexChart data={volumeChartData} />
+          </div>
+
+          <div style={{ fontFamily: "IBM Plex Mono", fontSize: 9, color: "#6b7290", letterSpacing: 2, textTransform: "uppercase", marginBottom: 8 }}>
+            Raw Weekly Volume (lb)
+          </div>
+          <div style={{ height: 220 }}>
+            <VolumeRawBarChart data={volumeChartData} />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
