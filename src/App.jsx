@@ -21928,7 +21928,12 @@ const trajectoryData = useMemo(() => {
       return { t, lb: r.lb, date: r.date, rawLb: r.rawLb, excluded: grossOutlier || manualFlag, flagged: grossOutlier || manualFlag }
     })
 
-    const fitPoints = points.filter(p => !p.excluded)
+    // All non-excluded points for display
+    const displayPoints = points.filter(p => !p.excluded)
+
+    // Fit only on dose-stable regime (Feb 15 2025 onward) for unbiased model comparison
+    const FIT_START_DATE = "2025-02-15"
+    const fitPoints = points.filter(p => !p.excluded && p.date >= FIT_START_DATE)
     const n = fitPoints.length
     if (n < 8) return null
 
@@ -22064,7 +22069,7 @@ const trajectoryData = useMemo(() => {
     // Events (t in days from t0)
     const tEvent = dateStr => (new Date(dateStr).getTime() - t0) / 86400000
     const events = [
-      { t: tEvent("2025-02-15"), label: "Dose stable", color: "#64748b", weight: "heavy" },
+      { t: tEvent("2025-02-15"), label: "Fit start", color: "#64748b", weight: "heavy" },
       { t: tEvent("2025-09-01"), label: "Strength", color: "#a78bfa", weight: "heavy" },
       { t: tEvent("2025-11-01"), label: "Aerobic", color: "#34d399", weight: "heavy" },
       { t: tEvent("2026-04-19"), label: "10mg", color: "#fb923c", weight: "heavy" },
@@ -22077,6 +22082,8 @@ const trajectoryData = useMemo(() => {
       exponential: { W0, Wf, k, aic: expAIC },
       segmented: { a: segA, b: segB, c: segC, bp: bestBp, bpDate: new Date(t0 + bestBp * 86400000).toISOString().slice(0, 10), aic: bestSegAIC },
       outliers: points.filter(p => p.flagged),
+      displayPointCount: displayPoints.length,
+      fitPointCount: fitPoints.length,
       t0,
     }
   } catch (e) {
@@ -25664,7 +25671,7 @@ return (
         <div style={{ flex: 1, minWidth: 280 }}>
           <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 6, opacity: 0.8 }}>Trajectory Analysis</div>
           {trajectoryData ? (() => {
-            const { chartPoints, events, winners, aics, exponential, segmented, linear, t0 } = trajectoryData
+            const { chartPoints, events, winners, aics, exponential, segmented, linear, t0, fitPointCount } = trajectoryData
             const lineProps = (model) => ({
               strokeWidth: winners.includes(model) ? 2.5 : 1,
               strokeOpacity: winners.includes(model) ? 1 : 0.35,
@@ -25710,6 +25717,9 @@ return (
                     <div>s1 {(segmented.b * 30).toFixed(2)} lb/mo</div>
                     <div>s2 {((segmented.b + segmented.c) * 30).toFixed(2)} lb/mo</div>
                     <div style={{ opacity: 0.6 }}>AIC {segmented.aic.toFixed(1)}</div>
+                  </div>
+                  <div style={{ fontSize: 9, opacity: 0.5, marginTop: 6, gridColumn: "1 / -1" }}>
+                    Models fit on dose-stable regime only (Feb 2025 onward, n={fitPointCount} points). Full history shown in chart for context.
                   </div>
                 </div>
               </>
