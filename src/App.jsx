@@ -9884,14 +9884,42 @@ function ProgressTable({ records, collapsedGroups, onToggleGroup }) {
   const groupNames = [...new Set(records.map(getProgressTableGroupLabel).filter(Boolean))]
   return (
     <div style={{ overflowX: "auto" }}>
+      <style>{`
+        .progress-col-e1rm,
+        .progress-col-group,
+        .progress-col-lastload,
+        .progress-col-stale,
+        .progress-col-n,
+        .progress-col-oc {
+          display: none;
+        }
+        @media (min-width: 480px) {
+          .progress-col-e1rm { display: table-cell; }
+        }
+        @media (min-width: 640px) {
+          .progress-col-group { display: table-cell; }
+        }
+        @media (min-width: 760px) {
+          .progress-col-lastload,
+          .progress-col-stale { display: table-cell; }
+        }
+        @media (min-width: 900px) {
+          .progress-col-n,
+          .progress-col-oc { display: table-cell; }
+        }
+      `}</style>
       <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "IBM Plex Mono", fontSize: 11 }}>
         <thead>
           <tr>
-            {["Exercise", "Group", "N", "Last Load", "e1RM", "Headroom", "Stale", "OC", "Suggestion"].map(header => (
-              <th key={header} style={{ textAlign: "left", fontSize: 9, letterSpacing: "1.5px", textTransform: "uppercase", color: "#6b7290", padding: "6px 8px", borderBottom: "1px solid #2a2f3e" }}>
-                {header}
-              </th>
-            ))}
+            <th style={{ textAlign: "left", fontSize: 9, letterSpacing: "1.5px", textTransform: "uppercase", color: "#6b7290", padding: "6px 8px", borderBottom: "1px solid #2a2f3e" }}>Exercise</th>
+            <th className="progress-col-group" style={{ textAlign: "left", fontSize: 9, letterSpacing: "1.5px", textTransform: "uppercase", color: "#6b7290", padding: "6px 8px", borderBottom: "1px solid #2a2f3e" }}>Group</th>
+            <th className="progress-col-n" style={{ textAlign: "left", fontSize: 9, letterSpacing: "1.5px", textTransform: "uppercase", color: "#6b7290", padding: "6px 8px", borderBottom: "1px solid #2a2f3e" }}>N</th>
+            <th className="progress-col-lastload" style={{ textAlign: "left", fontSize: 9, letterSpacing: "1.5px", textTransform: "uppercase", color: "#6b7290", padding: "6px 8px", borderBottom: "1px solid #2a2f3e" }}>Last Load</th>
+            <th className="progress-col-e1rm" style={{ textAlign: "left", fontSize: 9, letterSpacing: "1.5px", textTransform: "uppercase", color: "#6b7290", padding: "6px 8px", borderBottom: "1px solid #2a2f3e" }}>e1RM</th>
+            <th style={{ textAlign: "left", fontSize: 9, letterSpacing: "1.5px", textTransform: "uppercase", color: "#6b7290", padding: "6px 8px", borderBottom: "1px solid #2a2f3e" }}>Headroom</th>
+            <th className="progress-col-stale" style={{ textAlign: "left", fontSize: 9, letterSpacing: "1.5px", textTransform: "uppercase", color: "#6b7290", padding: "6px 8px", borderBottom: "1px solid #2a2f3e" }}>Stale</th>
+            <th className="progress-col-oc" style={{ textAlign: "left", fontSize: 9, letterSpacing: "1.5px", textTransform: "uppercase", color: "#6b7290", padding: "6px 8px", borderBottom: "1px solid #2a2f3e" }}>OC</th>
+            <th style={{ textAlign: "left", fontSize: 9, letterSpacing: "1.5px", textTransform: "uppercase", color: "#6b7290", padding: "6px 8px", borderBottom: "1px solid #2a2f3e" }}>Suggestion</th>
           </tr>
         </thead>
         <tbody>
@@ -9904,7 +9932,7 @@ function ProgressTable({ records, collapsedGroups, onToggleGroup }) {
                   onClick={() => onToggleGroup(groupName)}
                   style={{ background: "rgba(28,32,48,0.95)", cursor: "pointer", userSelect: "none" }}
                 >
-                  <td colSpan={9} style={{ padding: "8px 10px", borderTop: "1px solid #24293b", borderBottom: isCollapsed ? "1px solid #2a2f3e" : "1px solid rgba(42,47,62,0.45)", fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: "#888" }}>
+                  <td colSpan={99} style={{ padding: "8px 10px", borderTop: "1px solid #24293b", borderBottom: isCollapsed ? "1px solid #2a2f3e" : "1px solid rgba(42,47,62,0.45)", fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: "#888" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <span>{groupName} ({groupRecords.length})</span>
                       <span style={{ marginLeft: "auto", color: "#666" }}>{isCollapsed ? "▸" : "▾"}</span>
@@ -9921,15 +9949,15 @@ function ProgressTable({ records, collapsedGroups, onToggleGroup }) {
                   return (
                     <tr key={record.exercise_id} style={{ background: record.stale ? "rgba(232,184,74,0.04)" : "transparent" }}>
                       <td style={{ padding: "7px 8px", color: "#d4d8e8" }}>{record.exercise_name}</td>
-                      <td style={{ padding: "7px 8px", color: "#6b7290" }}>{getProgressTableGroupLabel(record)}</td>
-                      <td style={{ padding: "7px 8px", color: "#6b7290", textAlign: "right" }}>{record.sessions.length}</td>
-                      <td style={{ padding: "7px 8px", textAlign: "right" }}>{last?.load_lb ?? "—"}</td>
-                      <td style={{ padding: "7px 8px", textAlign: "right", color: "#4caf7d" }}>{record.e1rm_current != null ? record.e1rm_current.toFixed(0) : "—"}</td>
+                      <td className="progress-col-group" style={{ padding: "7px 8px", color: "#6b7290" }}>{getProgressTableGroupLabel(record)}</td>
+                      <td className="progress-col-n" style={{ padding: "7px 8px", color: "#6b7290", textAlign: "right" }}>{record.sessions.length}</td>
+                      <td className="progress-col-lastload" style={{ padding: "7px 8px", textAlign: "right" }}>{last?.load_lb ?? "—"}</td>
+                      <td className="progress-col-e1rm" style={{ padding: "7px 8px", textAlign: "right", color: "#4caf7d" }}>{record.e1rm_current != null ? record.e1rm_current.toFixed(0) : "—"}</td>
                       <td style={{ padding: "7px 8px", textAlign: "right" }}>{record.load_headroom_pct != null ? `${record.load_headroom_pct.toFixed(0)}%` : "—"}</td>
-                      <td style={{ padding: "7px 8px", color: staleColor, textAlign: "center" }}>
+                      <td className="progress-col-stale" style={{ padding: "7px 8px", color: staleColor, textAlign: "center" }}>
                         {record.stale ? `${record.primary_stale_role}:${staleMetric}s` : "—"}
                       </td>
-                      <td style={{ padding: "7px 8px", color: gateColor }}>
+                      <td className="progress-col-oc" style={{ padding: "7px 8px", color: gateColor }}>
                         {record.oc_gate === "clear" ? "✓" : record.oc_gate.replace(/_/g, " ")}
                       </td>
                       <td style={{ padding: "7px 8px", color: record.suggestion?.type !== "none" ? "#e88c2a" : "#6b7290" }}>
@@ -10030,6 +10058,7 @@ function ProgressTab({ progressionState, schedLog }) {
   const [showMethodology, setShowMethodology] = useState(false)
   const [collapsedExGroups, setCollapsedExGroups] = useState({})
   const [progressMapOpen, setProgressMapOpen] = useState(true)
+  const [progressMapSide, setProgressMapSide] = useState("front")
   const methodologyRef = useRef(null)
   const todayStr = new Date().toISOString().slice(0, 10)
   const todaySession = getLatestScheduleSessionForDate(schedLog, todayStr)
@@ -10620,74 +10649,89 @@ function ProgressTab({ progressionState, schedLog }) {
         </div>
       )}
 
-      <div style={{ ...cardStyle(), minWidth: 0, marginBottom: 24 }}>
-        <div
-          onClick={() => setProgressMapOpen(open => !open)}
-          style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", userSelect: "none" }}
-        >
-          <SectionHeader>Strength Progress Map</SectionHeader>
-          <span style={{ marginLeft: "auto", fontSize: 11, color: "#6b7290" }}>{progressMapOpen ? "▾" : "▸"}</span>
-        </div>
-        {progressMapOpen && (
-          <>
-            <div style={{ fontSize: 12, color: "#6b7290", marginTop: 8, marginBottom: 12 }}>
-              Last 28 days versus prior 28 days by mapped exercise strength signal.
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
-              {renderProgressMap("front")}
-              {renderProgressMap("back")}
-            </div>
-            <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 14 }}>
-              {[
-                ["progress", "Progress"],
-                ["stalling", "Stalling"],
-                ["regression", "Regression"],
-                ["neutral", "Neutral"],
-              ].map(([key, label]) => (
-                <div key={key} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#94a3b8" }}>
-                  <span style={{ width: 12, height: 12, borderRadius: "50%", background: PROGRESS_COLOR[key], display: "inline-block" }} />
-                  {label}
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-      </div>
-
-      <div style={{ ...cardStyle(), minWidth: 0 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
-          <SectionHeader>All Exercises</SectionHeader>
-          <SortButtons sortBy={sortBy} setSortBy={setSortBy} />
-        </div>
-        {sorted.length > 0 ? (
-          <>
-            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
-              <button
-                onClick={toggleAllEx}
-                style={{
-                  background: "none",
-                  border: "1px solid #333",
-                  color: "#888",
-                  fontSize: 11,
-                  padding: "3px 10px",
-                  borderRadius: 4,
-                  cursor: "pointer"
-                }}
-              >
-                {allExCollapsed ? "Expand all" : "Collapse all"}
-              </button>
-            </div>
-            <ProgressTable
-              records={sorted}
-              collapsedGroups={collapsedExGroups}
-              onToggleGroup={toggleExGroup}
-            />
-          </>
-        ) : (
-          <div style={{ fontSize: 12, color: "#6b7290" }}>
-            No progression history yet. Log at least two sessions with overlapping exercises to populate this table.
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 16, alignItems: "flex-start", marginBottom: 24 }}>
+        <div style={{ ...cardStyle(), flex: "0 0 260px", minWidth: 0 }}>
+          <div
+            onClick={() => setProgressMapOpen(open => !open)}
+            style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", userSelect: "none" }}
+          >
+            <SectionHeader>Strength Progress Map</SectionHeader>
+            <span style={{ marginLeft: "auto", fontSize: 11, color: "#6b7290" }}>{progressMapOpen ? "▾" : "▸"}</span>
           </div>
-        )}
+          {progressMapOpen && (
+            <>
+              <div style={{ fontSize: 12, color: "#6b7290", marginTop: 8, marginBottom: 12 }}>
+                Last 28 days versus prior 28 days by mapped exercise strength signal.
+              </div>
+              {renderProgressMap(progressMapSide)}
+              <div style={{ display: "flex", justifyContent: "center", marginTop: 10 }}>
+                <button
+                  onClick={() => setProgressMapSide(side => side === "front" ? "back" : "front")}
+                  style={{
+                    background: "none",
+                    border: "1px solid #333",
+                    color: "#888",
+                    fontSize: 11,
+                    padding: "3px 10px",
+                    borderRadius: 4,
+                    cursor: "pointer"
+                  }}
+                >
+                  {progressMapSide === "front" ? "Show back" : "Show front"}
+                </button>
+              </div>
+              <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 14 }}>
+                {[
+                  ["progress", "Progress"],
+                  ["stalling", "Stalling"],
+                  ["regression", "Regression"],
+                  ["neutral", "Neutral"],
+                ].map(([key, label]) => (
+                  <div key={key} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#94a3b8" }}>
+                    <span style={{ width: 12, height: 12, borderRadius: "50%", background: PROGRESS_COLOR[key], display: "inline-block" }} />
+                    {label}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+        <div style={{ ...cardStyle(), flex: "1 1 480px", minWidth: 0 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+            <SectionHeader>All Exercises</SectionHeader>
+            <SortButtons sortBy={sortBy} setSortBy={setSortBy} />
+          </div>
+          {sorted.length > 0 ? (
+            <>
+              <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+                <button
+                  onClick={toggleAllEx}
+                  style={{
+                    background: "none",
+                    border: "1px solid #333",
+                    color: "#888",
+                    fontSize: 11,
+                    padding: "3px 10px",
+                    borderRadius: 4,
+                    cursor: "pointer"
+                  }}
+                >
+                  {allExCollapsed ? "Expand all" : "Collapse all"}
+                </button>
+              </div>
+              <ProgressTable
+                records={sorted}
+                collapsedGroups={collapsedExGroups}
+                onToggleGroup={toggleExGroup}
+              />
+            </>
+          ) : (
+            <div style={{ fontSize: 12, color: "#6b7290" }}>
+              No progression history yet. Log at least two sessions with overlapping exercises to populate this table.
+            </div>
+          )}
+        </div>
       </div>
 
       {volumeChartData && (
