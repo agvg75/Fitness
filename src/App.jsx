@@ -3452,6 +3452,90 @@ const PROGRESS_COLOR = {
   regression: "rgba(239, 68, 68, 0.75)",
 }
 
+const PROGRESS_EXERCISE_GROUPS = [
+  {
+    group: "Upper Body — Chest & Shoulders",
+    color: "#f97316",
+    exercises: [
+      { name: "Chest Press", match: "chest press", baseline: 110 },
+      { name: "Incline Press", match: "incline", baseline: 90 },
+      { name: "Machine Flys", match: "fly", baseline: 30 },
+      { name: "Triceps", match: ["tricep", "push down", "pull down"], baseline: null },
+      { name: "Lateral Raise", match: "lateral raise", baseline: null },
+      { name: "Face Pull", match: "face pull", baseline: null },
+      { name: "Rear Delt Fly", match: "rear delt", baseline: null },
+      { name: "Cable Crossover", match: "crossover", baseline: null },
+      { name: "Pushup Plank", match: "pushup plank", baseline: null },
+    ]
+  },
+  {
+    group: "Back & Arms",
+    color: "#4a9ee8",
+    exercises: [
+      { name: "Lat Pulldown", match: ["lat pulldown", "lat pull", "pull down"], baseline: 133 },
+      { name: "Cable Row", match: "cable row", baseline: 133 },
+      { name: "Bicep Curl", match: ["bicep"], baseline: 75 },
+      { name: "Hammer Curl", match: "hammer curl", baseline: null },
+      { name: "Inverted Row", match: ["inverted row"], baseline: null },
+      { name: "Straight Arm Pulldown", match: "straight arm", baseline: null },
+      { name: "Chin-Up / Pull-Up", match: ["chin", "pull up", "pull-up", "pull ups"], baseline: null },
+      { name: "Reverse Biceps", match: "reverse bicep", baseline: null },
+    ]
+  },
+  {
+    group: "Lower Body",
+    color: "#ffd166",
+    exercises: [
+      { name: "Hip Thrust", match: ["hip thrust"], baseline: null },
+      { name: "Leg Press", match: "leg press", baseline: 320 },
+      { name: "Leg Extension", match: "leg extension", baseline: null },
+      { name: "Leg Curl", match: "leg curl", exclude: ["bicep", "hamstring eccentric"], baseline: 125 },
+      { name: "KB RDL", match: "rdl", baseline: null },
+      { name: "Hip Abduction", match: "abduction", baseline: null },
+      { name: "Hip Adduction", match: "adduction", baseline: null },
+    ]
+  },
+  {
+    group: "Tendons & Connective",
+    color: "#f59e0b",
+    exercises: [
+      { name: "Eccentric Calf", match: "eccentric calf", baseline: null },
+      { name: "Eccentric Lateral", match: "eccentric lateral", baseline: null },
+      { name: "Eccentric Biceps", match: "eccentric biceps", baseline: null },
+      { name: "Suitcase Carry", match: "suitcase", baseline: null },
+      { name: "KB Swing", match: "kb swing", baseline: null },
+      { name: "Shoulder Clock", match: "shoulder clock", baseline: null },
+      { name: "Tibialis Raise", match: ["tibialis", "shin raise"], baseline: null },
+      { name: "Calf Raise", match: "calf raise", baseline: null },
+    ]
+  },
+  {
+    group: "Core",
+    color: "#a78bfa",
+    exercises: [
+      { name: "Russian Twist", match: "russian twist", baseline: null },
+      { name: "Pallof Press", match: "pallof", baseline: null },
+      { name: "Plank", match: "plank", baseline: null },
+      { name: "Dead Bug", match: "dead bug", baseline: null },
+    ]
+  },
+  {
+    group: "Single-Limb Progressions",
+    color: "#a78bfa",
+    exercises: [
+      { name: "Leg Press — SL", match: "leg press — sl", baseline: null },
+      { name: "Hip Thrust — SL", match: "hip thrust — sl", baseline: null },
+      { name: "Leg Curl — SL", match: "leg curl — sl", baseline: null },
+      { name: "Calf Raise — SL", match: "calf raise — sl", baseline: null },
+      { name: "Cable Row — SA", match: "cable row — sa", baseline: null },
+      { name: "Lat Pulldown — SA", match: "lat pulldown — sa", baseline: null },
+      { name: "Chest Press — SA", match: "chest press — sa", baseline: null },
+      { name: "Leg Press SL", match: "leg press sl", baseline: null },
+      { name: "Cable Row SA", match: "cable row sa", baseline: null },
+    ]
+  },
+]
+
 // Body silhouette images — coordinates in OC_REGION_COORDS are CSS percentages
 // (0–100) of the container's width/height, matching the 364×952 PNG dimensions.
 function BodySilhouetteImg({ side, onClick = null }) {
@@ -9941,89 +10025,7 @@ function VolumeRawBarChart({ data }) {
 
 function ProgressTab({ progressionState, schedLog }) {
   const BW_LB = 160
-  const EXERCISE_GROUPS = [
-    {
-      group: "Upper Body — Chest & Shoulders",
-      color: "#f97316",
-      exercises: [
-        { name: "Chest Press", match: "chest press", baseline: 110 },
-        { name: "Incline Press", match: "incline", baseline: 90 },
-        { name: "Machine Flys", match: "fly", baseline: 30 },
-        { name: "Triceps", match: ["tricep", "push down", "pull down"], baseline: null },
-        { name: "Lateral Raise", match: "lateral raise", baseline: null },
-        { name: "Face Pull", match: "face pull", baseline: null },
-        { name: "Rear Delt Fly", match: "rear delt", baseline: null },
-        { name: "Cable Crossover", match: "crossover", baseline: null },
-        { name: "Pushup Plank", match: "pushup plank", baseline: null },
-      ]
-    },
-    {
-      group: "Back & Arms",
-      color: "#4a9ee8",
-      exercises: [
-        { name: "Lat Pulldown", match: ["lat pulldown", "lat pull", "pull down"], baseline: 133 },
-        { name: "Cable Row", match: "cable row", baseline: 133 },
-        { name: "Bicep Curl", match: ["bicep"], baseline: 75 },
-        { name: "Hammer Curl", match: "hammer curl", baseline: null },
-        { name: "Inverted Row", match: ["inverted row"], baseline: null },
-        { name: "Straight Arm Pulldown", match: "straight arm", baseline: null },
-        { name: "Chin-Up / Pull-Up", match: ["chin", "pull up", "pull-up", "pull ups"], baseline: null },
-        { name: "Reverse Biceps", match: "reverse bicep", baseline: null },
-      ]
-    },
-    {
-      group: "Lower Body",
-      color: "#ffd166",
-      exercises: [
-        { name: "Hip Thrust", match: ["hip thrust"], baseline: null },
-        { name: "Leg Press", match: "leg press", baseline: 320 },
-        { name: "Leg Extension", match: "leg extension", baseline: null },
-        { name: "Leg Curl", match: "leg curl", exclude: ["bicep", "hamstring eccentric"], baseline: 125 },
-        { name: "KB RDL", match: "rdl", baseline: null },
-        { name: "Hip Abduction", match: "abduction", baseline: null },
-        { name: "Hip Adduction", match: "adduction", baseline: null },
-      ]
-    },
-    {
-      group: "Tendons & Connective",
-      color: "#f59e0b",
-      exercises: [
-        { name: "Eccentric Calf", match: "eccentric calf", baseline: null },
-        { name: "Eccentric Lateral", match: "eccentric lateral", baseline: null },
-        { name: "Eccentric Biceps", match: "eccentric biceps", baseline: null },
-        { name: "Suitcase Carry", match: "suitcase", baseline: null },
-        { name: "KB Swing", match: "kb swing", baseline: null },
-        { name: "Shoulder Clock", match: "shoulder clock", baseline: null },
-        { name: "Tibialis Raise", match: ["tibialis", "shin raise"], baseline: null },
-        { name: "Calf Raise", match: "calf raise", baseline: null },
-      ]
-    },
-    {
-      group: "Core",
-      color: "#a78bfa",
-      exercises: [
-        { name: "Russian Twist", match: "russian twist", baseline: null },
-        { name: "Pallof Press", match: "pallof", baseline: null },
-        { name: "Plank", match: "plank", baseline: null },
-        { name: "Dead Bug", match: "dead bug", baseline: null },
-      ]
-    },
-    {
-      group: "Single-Limb Progressions",
-      color: "#a78bfa",
-      exercises: [
-        { name: "Leg Press — SL", match: "leg press — sl", baseline: null },
-        { name: "Hip Thrust — SL", match: "hip thrust — sl", baseline: null },
-        { name: "Leg Curl — SL", match: "leg curl — sl", baseline: null },
-        { name: "Calf Raise — SL", match: "calf raise — sl", baseline: null },
-        { name: "Cable Row — SA", match: "cable row — sa", baseline: null },
-        { name: "Lat Pulldown — SA", match: "lat pulldown — sa", baseline: null },
-        { name: "Chest Press — SA", match: "chest press — sa", baseline: null },
-        { name: "Leg Press SL", match: "leg press sl", baseline: null },
-        { name: "Cable Row SA", match: "cable row sa", baseline: null },
-      ]
-    },
-  ]
+  const EXERCISE_GROUPS = PROGRESS_EXERCISE_GROUPS
   const [sortBy, setSortBy] = useState("stale")
   const [showMethodology, setShowMethodology] = useState(false)
   const [collapsedExGroups, setCollapsedExGroups] = useState({})
@@ -11096,6 +11098,168 @@ if (w.category === "Strength") {
     })
   }, [showLiveStateDebug, chartData, workouts])
 
+  const BW_LB = 160
+  const trainingSessions = useMemo(() => {
+    const log = Array.isArray(schedLog) ? schedLog : []
+    const wtLog = (() => {
+      try {
+        return JSON.parse(localStorage.getItem("wt-log") || "[]")
+      } catch {
+        return []
+      }
+    })()
+    const wtLogIds = new Set(wtLog.map(session => String(session.id || session.session_id)))
+    const schedOnly = log.filter(session => !wtLogIds.has(String(session.id || session.session_id)))
+    return [...wtLog, ...schedOnly]
+  }, [schedLog])
+
+  const strengthGroups = useMemo(() => PROGRESS_EXERCISE_GROUPS.map(({ group, color, exercises }) => {
+    const charts = exercises.map(({ name, match, exclude = [], baseline }) => {
+      const points = []
+      for (const sess of trainingSessions) {
+        const date = String(sess?.date || sess?.start_date || "").slice(0, 10)
+        if (!date) continue
+        const normalized = (sess.exercises || [])
+          .map(normalizeLoggedExercise)
+          .filter(Boolean)
+        const matches = normalized.filter(exercise => {
+          const nm = String(exercise.name || "").toLowerCase()
+          const matchList = Array.isArray(match) ? match : [match]
+          if (!matchList.some(term => nm.includes(term.toLowerCase()))) return false
+          return !exclude.some(term => nm.includes(term.toLowerCase()))
+        })
+        if (!matches.length) continue
+
+        let maxE1rm = null
+        let totalVolume = 0
+        let totalTimeSec = 0
+
+        for (const ex of matches) {
+          const dataEntry = sess.data?.[ex.exercise_id ?? ex.id]
+          const setsArr = Array.isArray(dataEntry) && dataEntry.length > 0
+            ? dataEntry.map(set => ({ weight: set.w ?? set.weight, reps: set.r ?? set.reps }))
+            : Array.isArray(ex.sets) && ex.sets.length > 0
+              ? ex.sets
+              : [{ weight: ex.actual?.load ?? ex.load, reps: ex.actual?.reps ?? ex.reps }]
+
+          for (const set of setsArr) {
+            const rawLoad = set.weight ?? set.load ?? set.w
+            const rawReps = set.reps ?? set.r
+            const loadStr = String(rawLoad ?? "").trim().toUpperCase()
+            const weight = loadStr === "BW" || loadStr === "BODYWEIGHT" || loadStr === "—"
+              ? BW_LB
+              : parseFloat(rawLoad)
+            if (!Number.isFinite(weight) || weight <= 0) continue
+            const repsStr = String(rawReps ?? "").trim()
+            const isTimeBased = /^\d+s$/i.test(repsStr)
+            const reps = isTimeBased ? null : parseFloat(rawReps)
+            if (isTimeBased) totalTimeSec += parseInt(repsStr, 10) || 0
+            const effectiveReps = Number.isFinite(reps) && reps > 0 ? reps : 1
+            totalVolume += weight * effectiveReps
+            if (!isTimeBased && Number.isFinite(reps) && reps > 0 && reps <= 15) {
+              const e1rm = Math.round(weight * (1 + reps / 30))
+              if (maxE1rm === null || e1rm > maxE1rm) maxE1rm = e1rm
+            }
+          }
+        }
+
+        if (totalVolume > 0 || totalTimeSec > 0) {
+          points.push({
+            date,
+            e1rm: maxE1rm,
+            volume: totalVolume > 0 ? Math.round(totalVolume) : null,
+            durationSec: totalTimeSec > 0 ? totalTimeSec : null
+          })
+        }
+      }
+
+      const sortedPoints = points.sort((a, b) => a.date.localeCompare(b.date))
+      return { name, baseline, data: sortedPoints }
+    }).filter(chart => {
+      if (!chart.data.length) return false
+      const cutoff = new Date()
+      cutoff.setDate(cutoff.getDate() - 90)
+      const cutoffStr = cutoff.toISOString().slice(0, 10)
+      return chart.data.some(point => point.date >= cutoffStr)
+    })
+
+    return { group, color, charts }
+  }), [trainingSessions])
+
+  const anyStrengthData = strengthGroups.some(group => group.charts.length > 0)
+
+  const renderTrainingStrengthGroup = ({ group, color, charts }) => {
+    if (!charts.length) return null
+    return (
+      <div key={group} style={{ background: "#0d0e1c", border: `1px solid ${color}22`, borderRadius: 10, padding: "14px" }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color, marginBottom: 10, borderBottom: `1px solid ${color}33`, paddingBottom: 6 }}>
+          {group}
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12 }}>
+          {charts.map(({ name, baseline, data }) => (
+            <div key={name}>
+              <div style={{ fontSize: 10, fontWeight: 600, color: "#8fa8d8", marginBottom: 3 }}>{name}</div>
+              <ResponsiveContainer width="100%" height={110}>
+                <ComposedChart data={data} margin={{ top: 4, right: 28, left: 0, bottom: 4 }}>
+                  <CartesianGrid stroke="#1a1b2e" />
+                  <XAxis dataKey="date" tick={{ fontSize: 8 }} interval="preserveStartEnd" />
+                  <YAxis
+                    yAxisId="left"
+                    tick={{ fontSize: 8 }}
+                    width={32}
+                    label={{ value: "lb", angle: -90, position: "insideLeft", fontSize: 7, fill: "#666" }}
+                  />
+                  <YAxis
+                    yAxisId="right"
+                    orientation="right"
+                    tick={{ fontSize: 8 }}
+                    width={28}
+                    tickFormatter={value => value >= 1000 ? `${(value / 1000).toFixed(1)}k` : value}
+                    label={{ value: "vol", angle: 90, position: "insideRight", fontSize: 7, fill: "#444" }}
+                  />
+                  <Tooltip
+                    formatter={(value, key) => key === "volume"
+                      ? [`${value.toLocaleString()} lb·reps`, "Volume"]
+                      : [`${value} lb`, "e1RM"]}
+                    labelFormatter={label => label}
+                  />
+                  <Area
+                    yAxisId="right"
+                    type="monotone"
+                    dataKey="volume"
+                    fill="rgba(255,255,255,0.07)"
+                    stroke="rgba(255,255,255,0.15)"
+                    strokeWidth={1}
+                    dot={false}
+                    connectNulls
+                  />
+                  <Line
+                    yAxisId="left"
+                    type="monotone"
+                    dataKey="e1rm"
+                    stroke={color}
+                    strokeWidth={2}
+                    dot={{ r: 2 }}
+                    connectNulls
+                  />
+                  {baseline != null && (
+                    <ReferenceLine
+                      yAxisId="left"
+                      y={baseline}
+                      stroke="#4a9ee8"
+                      strokeDasharray="4 2"
+                      label={{ value: `B ${baseline}`, position: "insideTopRight", fontSize: 8, fill: "#4a9ee8" }}
+                    />
+                  )}
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div style={{ padding: "16px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", flexWrap: "wrap", marginBottom: "14px" }}>
@@ -11320,7 +11484,7 @@ if (w.category === "Strength") {
                 <span style={{ fontSize: 10, fontWeight: 400, color: "#555", marginLeft: 8 }}>e1RM line (left axis) · volume area (right axis) · max set per session</span>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 16 }}>
-                {strengthGroups.map(group => renderGroup(group))}
+                {strengthGroups.map(group => renderTrainingStrengthGroup(group))}
               </div>
             </div>
           </>
