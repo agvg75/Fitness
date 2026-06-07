@@ -10051,7 +10051,7 @@ function VolumeRawBarChart({ data }) {
   )
 }
 
-function ProgressTab({ progressionState, schedLog }) {
+function ProgressTab({ progressionState, schedLog, workouts = [] }) {
   const BW_LB = 160
   const EXERCISE_GROUPS = PROGRESS_EXERCISE_GROUPS
   const [sortBy, setSortBy] = useState("stale")
@@ -10263,17 +10263,25 @@ function ProgressTab({ progressionState, schedLog }) {
   }, [progressionState])
 
   const aerobicVolumeData = useMemo(() => {
-    const isRun = session => /run|jog|5k|10k|half|marathon/i.test(`${session?.activity_type || ""} ${session?.title || session?.name || ""}`)
-    const isCycle = session => /cycl|bike|ride|spin/i.test(`${session?.activity_type || ""} ${session?.title || session?.name || ""}`)
-    const isSwim = session => /swim|pool/i.test(`${session?.activity_type || ""} ${session?.title || session?.name || ""}`)
-    const byDate = {}
-    ;(Array.isArray(schedLog) ? schedLog : []).forEach(entry => {
-      const date = String(entry?.date || "").slice(0, 10)
-      if (!date) return
-      const count = Array.isArray(entry?.exercises) ? entry.exercises.length : 0
-      if (!byDate[date] || count > ((byDate[date]?.exercises || []).length)) byDate[date] = entry
-    })
-    const baseSessions = Object.values(byDate)
+    const baseSessions = Array.isArray(workouts) ? workouts : []
+    const getWorkoutType = session => String(
+      session?.category ||
+      normalizeWorkoutType(
+        session?.type ||
+        session?.canonical_type ||
+        session?.activity_type ||
+        session?.raw_type,
+        session
+      ) ||
+      session?.type ||
+      session?.canonical_type ||
+      session?.activity_type ||
+      session?.raw_type ||
+      ""
+    ).toLowerCase()
+    const isRun = session => /run/.test(getWorkoutType(session))
+    const isCycle = session => /cycl|bike|ride/.test(getWorkoutType(session))
+    const isSwim = session => /swim/.test(getWorkoutType(session))
     const getWeekKey = value => {
       const dateKey = String(value || "").slice(0, 10)
       if (!dateKey) return null
@@ -10290,18 +10298,27 @@ function ProgressTab({ progressionState, schedLog }) {
       return getWeekKey(date.toISOString().slice(0, 10))
     }
     const getDurationMinutes = session => {
-      const candidates = [session?.duration_min, session?.duration_minutes, session?.dur]
+      const candidates = [session?.duration_minutes, session?.duration_min, session?.dur, session?.duration]
       for (const candidate of candidates) {
         const minutes = Number(candidate)
         if (Number.isFinite(minutes) && minutes > 0) return minutes
       }
-      return null
+      const extracted = Number(extractDurationMin(session))
+      return Number.isFinite(extracted) && extracted > 0 ? extracted : null
     }
     const getDistanceMiles = session => {
-      const miles = Number(session?.distance_miles)
-      if (Number.isFinite(miles) && miles > 0) return miles
-      const km = Number(session?.distance_km)
-      if (Number.isFinite(km) && km > 0) return km / 1.609
+      const directCandidates = [
+        session?.distanceMiles,
+        session?.distance_miles,
+        session?.distance,
+        session?.preferred_metrics?.distance_mi,
+      ]
+      for (const candidate of directCandidates) {
+        const miles = Number(candidate)
+        if (Number.isFinite(miles) && miles > 0) return miles
+      }
+      const normalized = Number(normalizeDistanceToMiles(session))
+      if (Number.isFinite(normalized) && normalized > 0) return normalized
       return null
     }
     const seriesDefs = [
@@ -10315,7 +10332,7 @@ function ProgressTab({ progressionState, schedLog }) {
     let swimCount = 0
 
     baseSessions.forEach(session => {
-      const weekKey = getWeekKey(session?.date)
+      const weekKey = getWeekKey(session?.date || session?.dateTime || session?.start_date || session?.startDate)
       if (!weekKey) return
       seriesDefs.forEach(series => {
         if (!series.match(session)) return
@@ -10359,7 +10376,7 @@ function ProgressTab({ progressionState, schedLog }) {
         }
       })
     }
-  }, [schedLog])
+  }, [workouts])
 
   const sorted = [...visibleRecords].sort((a, b) => {
     if (sortBy === "stale") {
@@ -28199,6 +28216,7 @@ return (
   <ProgressTab
     progressionState={progressionState}
     schedLog={schedLog}
+    workouts={operationalWorkouts}
   />
 )}
 
