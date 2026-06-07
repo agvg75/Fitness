@@ -10660,9 +10660,6 @@ function ProgressTab({ progressionState, schedLog }) {
           </div>
           {progressMapOpen && (
             <>
-              <div style={{ background: "#ff0000", color: "#fff", fontWeight: 700, padding: "4px 8px", fontSize: 14 }}>
-                SENTINEL-PROGRESS-MAP-BLOCK
-              </div>
               <div style={{ fontSize: 12, color: "#6b7290", marginTop: 8, marginBottom: 12 }}>
                 Last 28 days versus prior 28 days by mapped exercise strength signal.
               </div>
