@@ -10307,18 +10307,19 @@ function ProgressTab({ progressionState, schedLog, workouts = [] }) {
       return Number.isFinite(extracted) && extracted > 0 ? extracted : null
     }
     const getDistanceMiles = session => {
+      const normalized = Number(normalizeDistanceToMiles(session))
+      if (Number.isFinite(normalized) && normalized > 0) {
+        return normalized > 100 ? normalized / 1609.34 : normalized
+      }
       const directCandidates = [
         session?.distanceMiles,
         session?.distance_miles,
-        session?.distance,
-        session?.preferred_metrics?.distance_mi,
+        session?.miles,
       ]
       for (const candidate of directCandidates) {
         const miles = Number(candidate)
         if (Number.isFinite(miles) && miles > 0) return miles
       }
-      const normalized = Number(normalizeDistanceToMiles(session))
-      if (Number.isFinite(normalized) && normalized > 0) return normalized
       return null
     }
     const seriesDefs = [
@@ -18750,6 +18751,7 @@ function extractDistanceInfo(workout) {
     { value: pmDist?.amount, unit: pmDist?.unit },
     { value: pmDist?.qty, unit: pmDist?.unit },
     { value: pmDist?.distance, unit: pmDist?.unit },
+    { value: workout?.preferred_metrics?.distance_mi, unit: "m" },
     { value: workout?.distance, unit: workout?.distance_unit || workout?.unit },
     { value: workout?.distanceMiles, unit: "mi" },
     { value: workout?.distance_miles, unit: "mi" },
