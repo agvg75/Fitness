@@ -18620,6 +18620,220 @@ const EXPLAIN_FNS = {
   tissue: explainTissue
 }
 
+function getTechnogymSource(workout) {
+  return workout?.sources?.technogym ||
+    (String(workout?.source || "").toLowerCase() === "technogym" ? workout : null)
+}
+
+function getMetricValue(workout, key) {
+  return workout?.preferred_metrics?.[key]?.value ??
+    workout?.sources?.technogym?.[key] ??
+    workout?.[key] ??
+    null
+}
+
+function isTechnogymCyclingSession(workout) {
+  const technogym = getTechnogymSource(workout)
+  if (!technogym) return false
+
+  const tgType = String(
+    technogym?.type ||
+    technogym?.raw_type ||
+    technogym?.activity_type ||
+    ""
+  ).toLowerCase()
+
+  if (tgType.includes("cycl") || tgType.includes("bike") || tgType.includes("spin")) return true
+
+  const rpmAvg = getMetricValue(workout, "rpm_avg")
+  return rpmAvg !== null && Number.isFinite(Number(rpmAvg))
+}
+
+function normalizeWorkoutType(type, workout) {
+  const t = String(type || "").toLowerCase()
+  const schedule = workout?.sources?.schedule || workout?.schedule || null
+  const scheduleExercises = Array.isArray(schedule?.exercises) ? schedule.exercises : []
+  const hasStrengthExercises = scheduleExercises.some(ex => String(ex?.variant || "").toLowerCase() !== "cardio")
+  const cardioModalities = Array.isArray(schedule?.cardio)
+    ? schedule.cardio.map(cardio => String(cardio?.modality || "").toLowerCase())
+    : []
+
+  if (t.includes("traditional strength")) return "Strength"
+  if (t.includes("functional strength")) return "Strength"
+  if (t.includes("core")) return "Strength"
+  if (hasStrengthExercises) return "Strength"
+
+  if (t.includes("outdoor run") || t.includes("indoor run") || t.includes("treadmill")) return "Running"
+  if (t.includes("trail run")) return "Running"
+  if (t.includes("outdoor cycle") || t.includes("indoor cycle") || t === "cycling") return "Cycling"
+  if (t.includes("outdoor swim") || t.includes("pool swim") || t === "swimming") return "Swimming"
+  if (t.includes("open water")) return "Swimming"
+
+  if (isTechnogymCyclingSession(workout)) return "Cycling"
+
+  if (t.includes("running")) return "Running"
+  if (t.includes("walking")) return "Walking"
+  if (t.includes("cycling")) return "Cycling"
+  if (t.includes("bike")) return "Cycling"
+  if (t.includes("swimming")) return "Swimming"
+  if (t.includes("elliptical")) return "Elliptical"
+  if (t.includes("rowing")) return "Rowing"
+  if (t.includes("stair")) return "Stairs"
+  if (cardioModalities.includes("run")) return "Running"
+  if (cardioModalities.includes("walk")) return "Walking"
+  if (cardioModalities.includes("bike")) return "Cycling"
+  if (cardioModalities.includes("swim")) return "Swimming"
+  if (cardioModalities.includes("row")) return "Rowing"
+  if (t === "strength") return "Strength"
+  if (t === "run") return "Running"
+  if (t === "bike") return "Cycling"
+  if (t === "swim") return "Swimming"
+
+  if (t.includes("machine cardio") || t === "other") {
+    const rpmAvg =
+      workout?.preferred_metrics?.rpm_avg?.value ??
+      workout?.sources?.technogym?.rpm_avg ??
+      workout?.rpm_avg ??
+      null
+
+    if (rpmAvg !== null && Number.isFinite(Number(rpmAvg))) return "Cycling"
+
+    const powerAvg =
+      workout?.preferred_metrics?.power_avg?.value ??
+      workout?.sources?.technogym?.power_avg ??
+      null
+
+    const tgRaw = String(workout?.sources?.technogym?.raw_type || "").toLowerCase()
+    if (powerAvg !== null && Number.isFinite(Number(powerAvg)) && tgRaw.includes("machine")) return "Cycling"
+
+    const tgType = String(
+      workout?.sources?.technogym?.type ||
+      workout?.sources?.technogym?.raw_type ||
+      workout?.sources?.technogym?.activity_type ||
+      ""
+    ).toLowerCase()
+
+    if (tgType.includes("cycl") || tgType.includes("bike") || tgType.includes("spin")) return "Cycling"
+    if (tgType.includes("run") || tgType.includes("tread")) return "Running"
+    if (tgType.includes("row")) return "Rowing"
+    if (tgType.includes("swim")) return "Swimming"
+    if (tgType.includes("ellip")) return "Elliptical"
+    if (tgType.includes("stair") || tgType.includes("climb")) return "Stairs"
+    if (tgType.includes("strength") || tgType.includes("weight") || tgType.includes("train")) return "Strength"
+    if (t.includes("machine cardio")) return "Machine Cardio"
+    if (t === "strength") return "Strength"
+    if (t === "running") return "Running"
+    if (t === "cycling") return "Cycling"
+    if (t === "run") return "Running"
+    if (t === "bike") return "Cycling"
+    if (t === "swim") return "Swimming"
+    if (t === "swimming") return "Swimming"
+    if (t === "yoga" || t === "flexibility" || t === "hiit") return "Strength"
+    return "Other"
+  }
+  return "Other"
+}
+
+function extractDistanceInfo(workout) {
+  const pmDist = workout?.preferred_metrics?.distance
+  const pmSource = String(pmDist?.source || "").toLowerCase()
+  const pmUnit = pmDist?.unit ||
+    (pmSource.includes("technogym")
+      ? (workout?.sources?.technogym?.distance_unit || "m")
+      : pmSource.includes("apple")
+      ? workout?.sources?.apple?.distance_unit
+      : (workout?.sources?.technogym?.distance_unit || workout?.sources?.apple?.distance_unit || ""))
+
+  const candidates = [
+    { value: pmDist?.value, unit: pmUnit },
+    { value: pmDist?.raw, unit: pmDist?.unit },
+    { value: pmDist?.amount, unit: pmDist?.unit },
+    { value: pmDist?.qty, unit: pmDist?.unit },
+    { value: pmDist?.distance, unit: pmDist?.unit },
+    { value: workout?.distance, unit: workout?.distance_unit || workout?.unit },
+    { value: workout?.distanceMiles, unit: "mi" },
+    { value: workout?.distance_miles, unit: "mi" },
+    { value: workout?.miles, unit: "mi" },
+    { value: workout?.distanceKm, unit: "km" },
+    { value: workout?.distance_km, unit: "km" },
+    { value: workout?.km, unit: "km" },
+    { value: workout?.distanceMeters, unit: "m" },
+    { value: workout?.distance_m, unit: "m" },
+    { value: workout?.meters, unit: "m" },
+    { value: workout?.total_distance, unit: workout?.total_distance_unit },
+    { value: workout?.sources?.technogym?.distance, unit: workout?.sources?.technogym?.distance_unit || "m" },
+    { value: workout?.sources?.apple?.distance, unit: workout?.sources?.apple?.distance_unit }
+  ]
+
+  for (const c of candidates) {
+    const v = Number(c?.value)
+    if (Number.isFinite(v) && v > 0) {
+      return {
+        value: v,
+        unit: String(c?.unit || "").toLowerCase()
+      }
+    }
+  }
+
+  return { value: 0, unit: "" }
+}
+
+function extractDurationMin(workout) {
+  const candidates = [
+    workout?.dur,
+    workout?.duration_min,
+    workout?.durationMin,
+    workout?.minutes,
+    workout?.duration,
+    workout?.preferred_metrics?.duration?.value,
+    workout?.total_duration_min,
+    workout?.sources?.apple?.duration_min,
+    workout?.sources?.apple?.duration,
+    workout?.sources?.technogym?.duration_min,
+    workout?.sources?.technogym?.duration,
+    workout?.overlap_summary?.duration_min
+  ]
+
+  for (const c of candidates) {
+    const v = Number(c)
+    if (Number.isFinite(v) && v > 0) {
+      let result = v
+      if (result > 600) result = result / 60
+      const hasHR = !!(workout?.hr || workout?.preferred_metrics?.hr?.value)
+      if (result > 180 && !hasHR) {
+        result = result / 60
+      }
+      const isStrength = ["Strength", "Functional Strength Training", "Traditional Strength Training", "Core Training", "CrossFit"]
+        .includes(workout?.category || workout?.canonical_type || workout?.type || "")
+      if (!hasHR && isStrength && result > 90) {
+        result = 90
+      }
+      if (!hasHR && !isStrength && result > 180) {
+        result = 180
+      }
+      return result
+    }
+  }
+
+  return 0
+}
+
+function normalizeDistanceToMiles(workout) {
+  const { value, unit } = extractDistanceInfo(workout)
+  if (!Number.isFinite(value) || value <= 0) return 0
+
+  if (unit === "mi" || unit === "mile" || unit === "miles") return value
+  if (unit === "km" || unit === "kilometer" || unit === "kilometers") return value / 1.60934
+  if (unit === "m" || unit === "meter" || unit === "meters") return value / 1609.34
+  if (unit === "yd" || unit === "yard" || unit === "yards") return value / 1760
+  if (workout?.source === "ManualSchedule") return value
+  if (workout?.source === "Technogym") return value / 1609.34
+  if (workout?.sources?.technogym && !workout?.sources?.apple) return value / 1609.34
+  if (workout?.sources?.technogym && workout?.sources?.apple) return value / 1609.34
+
+  return value
+}
+
 export default function App() {
   if (typeof window !== "undefined") window.__liftConfig = LIFT_CONFIG
   const isMobileLayout = useIsMobile()
@@ -19100,126 +19314,6 @@ useEffect(() => {
 const fmt0 = n => Number.isFinite(Number(n)) ? Math.round(Number(n)).toLocaleString() : "0"
 const fmt1 = n => Number.isFinite(Number(n)) ? Number(n).toFixed(1) : "0.0"
 
-function getTechnogymSource(workout) {
-  return workout?.sources?.technogym ||
-    (String(workout?.source || "").toLowerCase() === "technogym" ? workout : null)
-}
-
-function getMetricValue(workout, key) {
-  return workout?.preferred_metrics?.[key]?.value ??
-    workout?.sources?.technogym?.[key] ??
-    workout?.[key] ??
-    null
-}
-
-function isTechnogymCyclingSession(workout) {
-  const technogym = getTechnogymSource(workout)
-  if (!technogym) return false
-
-  const tgType = String(
-    technogym?.type ||
-    technogym?.raw_type ||
-    technogym?.activity_type ||
-    ""
-  ).toLowerCase()
-
-  if (tgType.includes("cycl") || tgType.includes("bike") || tgType.includes("spin")) return true
-
-  const rpmAvg = getMetricValue(workout, "rpm_avg")
-  return rpmAvg !== null && Number.isFinite(Number(rpmAvg))
-}
-
-function normalizeWorkoutType(type, workout) {
-  const t = String(type || "").toLowerCase()
-  const schedule = workout?.sources?.schedule || workout?.schedule || null
-  const scheduleExercises = Array.isArray(schedule?.exercises) ? schedule.exercises : []
-  const hasStrengthExercises = scheduleExercises.some(ex => String(ex?.variant || "").toLowerCase() !== "cardio")
-  const cardioModalities = Array.isArray(schedule?.cardio)
-    ? schedule.cardio.map(cardio => String(cardio?.modality || "").toLowerCase())
-    : []
-
-  if (t.includes("traditional strength")) return "Strength"
-  if (t.includes("functional strength")) return "Strength"
-  if (t.includes("core")) return "Strength"
-  if (hasStrengthExercises) return "Strength"
-
-  if (t.includes("outdoor run") || t.includes("indoor run") || t.includes("treadmill")) return "Running"
-  if (t.includes("trail run")) return "Running"
-  if (t.includes("outdoor cycle") || t.includes("indoor cycle") || t === "cycling") return "Cycling"
-  if (t.includes("outdoor swim") || t.includes("pool swim") || t === "swimming") return "Swimming"
-  if (t.includes("open water")) return "Swimming"
-
-  if (isTechnogymCyclingSession(workout)) return "Cycling"
-
-  if (t.includes("running")) return "Running"
-  if (t.includes("walking")) return "Walking"
-  if (t.includes("cycling")) return "Cycling"
-  if (t.includes("bike")) return "Cycling"
-  if (t.includes("swimming")) return "Swimming"
-  if (t.includes("elliptical")) return "Elliptical"
-  if (t.includes("rowing")) return "Rowing"
-  if (t.includes("stair")) return "Stairs"
-  if (cardioModalities.includes("run")) return "Running"
-  if (cardioModalities.includes("walk")) return "Walking"
-  if (cardioModalities.includes("bike")) return "Cycling"
-  if (cardioModalities.includes("swim")) return "Swimming"
-  if (cardioModalities.includes("row")) return "Rowing"
-  if (t === "strength") return "Strength"
-  if (t === "run") return "Running"
-  if (t === "bike") return "Cycling"
-  if (t === "swim") return "Swimming"
-
-  // For Machine Cardio, check rpm_avg as the definitive bike signal,
-  // then fall back to sub-type string matching
-  if (t.includes("machine cardio") || t === "other") {
-    const rpmAvg =
-      workout?.preferred_metrics?.rpm_avg?.value ??
-      workout?.sources?.technogym?.rpm_avg ??
-      workout?.rpm_avg ??
-      null
-
-    // rpm_avg being non-null (even zero) means it was a bike session
-    if (rpmAvg !== null && Number.isFinite(Number(rpmAvg))) return "Cycling"
-
-    const powerAvg =
-      workout?.preferred_metrics?.power_avg?.value ??
-      workout?.sources?.technogym?.power_avg ??
-      null
-
-    // power_avg without rpm could be a bike too (some sessions only log power)
-    // only use this if the raw_type gives no further info
-    const tgRaw = String(workout?.sources?.technogym?.raw_type || "").toLowerCase()
-    if (powerAvg !== null && Number.isFinite(Number(powerAvg)) && tgRaw.includes("machine")) return "Cycling"
-
-    const tgType = String(
-      workout?.sources?.technogym?.type ||
-      workout?.sources?.technogym?.raw_type ||
-      workout?.sources?.technogym?.activity_type ||
-      ""
-    ).toLowerCase()
-
-    if (tgType.includes("cycl") || tgType.includes("bike") || tgType.includes("spin")) return "Cycling"
-    if (tgType.includes("run") || tgType.includes("tread")) return "Running"
-    if (tgType.includes("row")) return "Rowing"
-    if (tgType.includes("swim")) return "Swimming"
-    if (tgType.includes("ellip")) return "Elliptical"
-    if (tgType.includes("stair") || tgType.includes("climb")) return "Stairs"
-    if (tgType.includes("strength") || tgType.includes("weight") || tgType.includes("train")) return "Strength"
-    // Default Machine Cardio stays as-is so it still gets cardioMinutes credit
-    if (t.includes("machine cardio")) return "Machine Cardio"
-    if (t === "strength") return "Strength"
-      if (t === "running") return "Running"
-        if (t === "cycling") return "Cycling"
-          if (t === "run") return "Running"
-            if (t === "bike") return "Cycling"
-              if (t === "swim") return "Swimming"
-          if (t === "swimming") return "Swimming"
-            if (t === "yoga" || t === "flexibility" || t === "hiit") return "Strength"
-              return "Other"
-  }
-  return "Other"
-}
-
 function formatBucketLabel(dateStr, mode) {
   const d = new Date(dateStr)
   if (!Number.isFinite(d.getTime())) return String(dateStr || "")
@@ -19233,209 +19327,6 @@ function formatBucketLabel(dateStr, mode) {
   if (mode === "yearly") return `${mm}/${yy}`
   return `${mm}/${yy}`
 }
-function extractDistanceInfo(workout) {
-  const pmDist = workout?.preferred_metrics?.distance
-  const pmSource = String(pmDist?.source || "").toLowerCase()
-  const pmUnit = pmDist?.unit ||
-    (pmSource.includes("technogym")
-      ? (workout?.sources?.technogym?.distance_unit || "m")
-      : pmSource.includes("apple")
-      ? workout?.sources?.apple?.distance_unit
-      : (workout?.sources?.technogym?.distance_unit || workout?.sources?.apple?.distance_unit || ""))
-
-  const candidates = [
-    {
-      value: pmDist?.value,
-      unit: pmUnit
-
-    },
-    {
-      value: pmDist?.raw,
-      unit: pmDist?.unit
-    },
-    {
-      value: pmDist?.amount,
-      unit: pmDist?.unit
-    },
-    {
-      value: pmDist?.qty,
-      unit: pmDist?.unit
-    },
-    {
-      value: pmDist?.distance,
-      unit: pmDist?.unit
-    },
-
-    {
-      value: workout?.distance,
-      unit: workout?.distance_unit || workout?.unit
-    },
-    {
-      value: workout?.distanceMiles,
-      unit: "mi"
-    },
-    {
-      value: workout?.distance_miles,
-      unit: "mi"
-    },
-    {
-      value: workout?.miles,
-      unit: "mi"
-    },
-    {
-      value: workout?.distanceKm,
-      unit: "km"
-    },
-    {
-      value: workout?.distance_km,
-      unit: "km"
-    },
-    {
-      value: workout?.km,
-      unit: "km"
-    },
-    {
-      value: workout?.distanceMeters,
-      unit: "m"
-    },
-    {
-      value: workout?.distance_m,
-      unit: "m"
-    },
-    {
-      value: workout?.meters,
-      unit: "m"
-    },
-    {
-      value: workout?.total_distance,
-      unit: workout?.total_distance_unit
-    },
-    {
-      value: workout?.sources?.technogym?.distance,
-      unit: workout?.sources?.technogym?.distance_unit || "m"
-    },
-    {
-      value: workout?.sources?.apple?.distance,
-      unit: workout?.sources?.apple?.distance_unit
-    }
-  ]
-
-  for (const c of candidates) {
-    const v = Number(c?.value)
-    if (Number.isFinite(v) && v > 0) {
-      return {
-        value: v,
-        unit: String(c?.unit || "").toLowerCase()
-      }
-    }
-  }
-
-  return { value: 0, unit: "" }
-}
-
-
-function extractDurationMin(workout) {
-  const candidates = [
-    workout?.dur,
-    workout?.duration_min,
-    workout?.durationMin,
-    workout?.minutes,
-    workout?.duration,
-    workout?.preferred_metrics?.duration?.value,
-    workout?.total_duration_min,
-    // Canonical session nested sources
-    workout?.sources?.apple?.duration_min,
-    workout?.sources?.apple?.duration,
-    workout?.sources?.technogym?.duration_min,
-    workout?.sources?.technogym?.duration,
-    workout?.overlap_summary?.duration_min
-  ]
-
-  for (const c of candidates) {
-    const v = Number(c)
-    if (Number.isFinite(v) && v > 0) {
-      // Guard against seconds being returned as minutes (>600 min = implausible)
-      let result = v
-      if (result > 600) result = result / 60
-      // Technogym stores duration in seconds rather than minutes for machine sessions.
-      // Two-pass correction:
-      // Pass 1: if raw value > 180 and no HR, it was seconds — divide by 60.
-      // Pass 2: strength sessions with no HR are capped at 90 min (YMCA 5-7 AM window).
-      //         Cardio sessions are capped at 180 min (generous for long rides/swims).
-      const hasHR = !!(workout?.hr || workout?.preferred_metrics?.hr?.value)
-      if (result > 180 && !hasHR) {
-        result = result / 60
-      }
-      const isStrength = ['Strength', 'Functional Strength Training', 'Traditional Strength Training',
-        'Core Training', 'CrossFit'].includes(workout?.category || workout?.canonical_type || workout?.type || '')
-      if (!hasHR && isStrength && result > 90) {
-        result = 90
-      }
-      if (!hasHR && !isStrength && result > 180) {
-        result = 180
-      }
-      return result
-    }
-  }
-
-  return 0
-}
-
-function normalizeDistanceToMiles(workout) {
-  const { value, unit } = extractDistanceInfo(workout)
-  if (!Number.isFinite(value) || value <= 0) return 0
-
-  if (
-    unit === "mi" ||
-    unit === "mile" ||
-    unit === "miles"
-  ) {
-    return value
-  }
-
-  if (
-    unit === "km" ||
-    unit === "kilometer" ||
-    unit === "kilometers"
-  ) {
-    return value / 1.60934
-  }
-
-  if (
-    unit === "m" ||
-    unit === "meter" ||
-    unit === "meters"
-  ) {
-    return value / 1609.34
-  }
-
-  if (
-    unit === "yd" ||
-    unit === "yard" ||
-    unit === "yards"
-  ) {
-    return value / 1760
-  }
-
-  if (workout?.source === "ManualSchedule") {
-    return value
-  }
-
-  if (workout?.source === "Technogym") {
-    return value / 1609.34
-  }
-
-  if (workout?.sources?.technogym && !workout?.sources?.apple) {
-    return value / 1609.34
-  }
-
-  if (workout?.sources?.technogym && workout?.sources?.apple) {
-    return value / 1609.34
-  }
-
-  return value
-}
-
 function getDayTypeBucket(isoDate) {
   // Use UTC to avoid timezone rollover at midnight local
   const d = new Date(isoDate + "T12:00:00")
