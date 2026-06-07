@@ -581,7 +581,6 @@ const tabs = [
   "Calories",
   "Composition",
   "Import",
-  "Coach",
 ]
 
 const rangeOptions = [
@@ -28655,32 +28654,39 @@ return (
   </div>
 )}
 {tab === "Import" && (
-  <ImportTab
-    canonicalSessions={canonicalSessions}
-    setCanonicalSessions={setCanonicalSessions}
-    setHealthFitDaily={setHealthFitDaily}
-    setSleepRecords={setSleepRecords}
-    setBiometricRecords={setBiometricRecords}
-    setSchedLog={setSchedLog}
-    healthFitDaily={healthFitDaily}
-    biometricRecords={biometricRecords}
-    ocItems={ocItems}
-    dexa={dexa}
-    sleepRecords={sleepRecords}
-    schedLog={schedLog}
-    tsbV2Panel={tsbV2Panel}
-    unifiedCanonicalSessions={unifiedCanonicalSessions}
-    mealRecords={typeof mealRecords !== "undefined" ? mealRecords : []}
-    liftConfig={LIFT_CONFIG}
-  />
-)}
+  <div style={{ display: "flex", gap: 24, alignItems: "flex-start", flexWrap: "wrap" }}>
+    <div style={{ flex: "0 0 58%", minWidth: 0 }}>
+      <ImportTab
+        canonicalSessions={canonicalSessions}
+        setCanonicalSessions={setCanonicalSessions}
+        setHealthFitDaily={setHealthFitDaily}
+        setSleepRecords={setSleepRecords}
+        setBiometricRecords={setBiometricRecords}
+        setSchedLog={setSchedLog}
+        healthFitDaily={healthFitDaily}
+        biometricRecords={biometricRecords}
+        ocItems={ocItems}
+        dexa={dexa}
+        sleepRecords={sleepRecords}
+        schedLog={schedLog}
+        tsbV2Panel={tsbV2Panel}
+        unifiedCanonicalSessions={unifiedCanonicalSessions}
+        mealRecords={typeof mealRecords !== "undefined" ? mealRecords : []}
+        liftConfig={LIFT_CONFIG}
+      />
+    </div>
 
-{tab === "Coach" && (
-  <CoachEntry supabase={supabase} onMealLogged={bridgeQuickLogMealToUfd} />
+    <div style={{ flex: "0 0 40%", minWidth: 0, borderLeft: "1px solid #1a1b2e", paddingLeft: 20 }}>
+      <div style={{ fontSize: 11, letterSpacing: "0.12em", textTransform: "uppercase", color: "#555", marginBottom: 12 }}>
+        Coach
+      </div>
+      <CoachEntry supabase={supabase} onMealLogged={bridgeQuickLogMealToUfd} />
+    </div>
+  </div>
 )}
 
       
-{tab !== "Overview" && tab !== "Progress" && tab !== "Composition" && tab !== "Calories" && tab !== "Capacity" && tab !== "Forecast" && tab !== "Schedule" && tab !== "Training" && tab !== "Import" && tab !== "Coach" && tab !== "Log" && (
+{tab !== "Overview" && tab !== "Progress" && tab !== "Composition" && tab !== "Calories" && tab !== "Capacity" && tab !== "Forecast" && tab !== "Schedule" && tab !== "Training" && tab !== "Import" && tab !== "Log" && (
   <div>
     <h3>{tab}</h3>
     <div>This tab is next.</div>
