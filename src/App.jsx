@@ -3398,6 +3398,39 @@ const OC_REGION_COORDS = {
   "Toe R": { f: [38.2, 84.2], b: [66.2, 82.7] },
 }
 
+const PROGRESS_REGION_EXERCISE_MAP = {
+  "Chest": ["incline press", "chest press", "fly", "cable crossover"],
+  "Upper Back": ["cable row", "inverted row", "face pull", "straight arm"],
+  "Shoulder L": ["shoulder press", "rear delt", "face pull"],
+  "Shoulder R": ["shoulder press", "rear delt", "face pull"],
+  "Upper Arm L": ["bicep", "hammer curl", "reverse bicep"],
+  "Upper Arm R": ["bicep", "hammer curl", "reverse bicep"],
+  "Elbow L": ["eccentric lateral", "eccentric biceps"],
+  "Elbow R": ["eccentric lateral", "eccentric biceps"],
+  "Core/Abs": ["pallof", "suitcase", "plank"],
+  "Quad L": ["leg press", "leg extension", "split squat"],
+  "Quad R": ["leg press", "leg extension", "split squat"],
+  "Hamstring L": ["rdl", "leg curl", "hamstring"],
+  "Hamstring R": ["rdl", "leg curl", "hamstring"],
+  "Glute L": ["hip thrust", "hip bridge", "split squat"],
+  "Glute R": ["hip thrust", "hip bridge", "split squat"],
+  "Calf L": ["eccentric calf", "seated calf"],
+  "Calf R": ["eccentric calf", "seated calf"],
+  "Ankle L": ["eccentric calf"],
+  "Ankle R": ["eccentric calf"],
+  "Hip L": ["hip abduction", "adduction"],
+  "Hip R": ["hip abduction", "adduction"],
+  "Shin L": ["eccentric lateral"],
+  "Shin R": ["eccentric lateral"],
+}
+
+const PROGRESS_COLOR = {
+  progress: "rgba(34, 197, 94, 0.75)",
+  neutral: "rgba(100, 116, 139, 0.45)",
+  stalling: "rgba(234, 179, 8, 0.75)",
+  regression: "rgba(239, 68, 68, 0.75)",
+}
+
 // Body silhouette images — coordinates in OC_REGION_COORDS are CSS percentages
 // (0–100) of the container's width/height, matching the 364×952 PNG dimensions.
 function BodySilhouetteImg({ side, onClick = null }) {
@@ -9866,9 +9899,107 @@ function VolumeRawBarChart({ data }) {
 }
 
 function ProgressTab({ progressionState, schedLog }) {
+  const BW_LB = 160
+  const EXERCISE_GROUPS = [
+    {
+      group: "Upper Body — Chest & Shoulders",
+      color: "#f97316",
+      exercises: [
+        { name: "Chest Press", match: "chest press", baseline: 110 },
+        { name: "Incline Press", match: "incline", baseline: 90 },
+        { name: "Machine Flys", match: "fly", baseline: 30 },
+        { name: "Triceps", match: ["tricep", "push down", "pull down"], baseline: null },
+        { name: "Lateral Raise", match: "lateral raise", baseline: null },
+        { name: "Face Pull", match: "face pull", baseline: null },
+        { name: "Rear Delt Fly", match: "rear delt", baseline: null },
+        { name: "Cable Crossover", match: "crossover", baseline: null },
+        { name: "Pushup Plank", match: "pushup plank", baseline: null },
+      ]
+    },
+    {
+      group: "Back & Arms",
+      color: "#4a9ee8",
+      exercises: [
+        { name: "Lat Pulldown", match: ["lat pulldown", "lat pull", "pull down"], baseline: 133 },
+        { name: "Cable Row", match: "cable row", baseline: 133 },
+        { name: "Bicep Curl", match: ["bicep"], baseline: 75 },
+        { name: "Hammer Curl", match: "hammer curl", baseline: null },
+        { name: "Inverted Row", match: ["inverted row"], baseline: null },
+        { name: "Straight Arm Pulldown", match: "straight arm", baseline: null },
+        { name: "Chin-Up / Pull-Up", match: ["chin", "pull up", "pull-up", "pull ups"], baseline: null },
+        { name: "Reverse Biceps", match: "reverse bicep", baseline: null },
+      ]
+    },
+    {
+      group: "Lower Body",
+      color: "#ffd166",
+      exercises: [
+        { name: "Hip Thrust", match: ["hip thrust"], baseline: null },
+        { name: "Leg Press", match: "leg press", baseline: 320 },
+        { name: "Leg Extension", match: "leg extension", baseline: null },
+        { name: "Leg Curl", match: "leg curl", exclude: ["bicep", "hamstring eccentric"], baseline: 125 },
+        { name: "KB RDL", match: "rdl", baseline: null },
+        { name: "Hip Abduction", match: "abduction", baseline: null },
+        { name: "Hip Adduction", match: "adduction", baseline: null },
+      ]
+    },
+    {
+      group: "Tendons & Connective",
+      color: "#f59e0b",
+      exercises: [
+        { name: "Eccentric Calf", match: "eccentric calf", baseline: null },
+        { name: "Eccentric Lateral", match: "eccentric lateral", baseline: null },
+        { name: "Eccentric Biceps", match: "eccentric biceps", baseline: null },
+        { name: "Suitcase Carry", match: "suitcase", baseline: null },
+        { name: "KB Swing", match: "kb swing", baseline: null },
+        { name: "Shoulder Clock", match: "shoulder clock", baseline: null },
+        { name: "Tibialis Raise", match: ["tibialis", "shin raise"], baseline: null },
+        { name: "Calf Raise", match: "calf raise", baseline: null },
+      ]
+    },
+    {
+      group: "Core",
+      color: "#a78bfa",
+      exercises: [
+        { name: "Russian Twist", match: "russian twist", baseline: null },
+        { name: "Pallof Press", match: "pallof", baseline: null },
+        { name: "Plank", match: "plank", baseline: null },
+        { name: "Dead Bug", match: "dead bug", baseline: null },
+      ]
+    },
+    {
+      group: "Single-Limb Progressions",
+      color: "#a78bfa",
+      exercises: [
+        { name: "Leg Press — SL", match: "leg press — sl", baseline: null },
+        { name: "Hip Thrust — SL", match: "hip thrust — sl", baseline: null },
+        { name: "Leg Curl — SL", match: "leg curl — sl", baseline: null },
+        { name: "Calf Raise — SL", match: "calf raise — sl", baseline: null },
+        { name: "Cable Row — SA", match: "cable row — sa", baseline: null },
+        { name: "Lat Pulldown — SA", match: "lat pulldown — sa", baseline: null },
+        { name: "Chest Press — SA", match: "chest press — sa", baseline: null },
+        { name: "Leg Press SL", match: "leg press sl", baseline: null },
+        { name: "Cable Row SA", match: "cable row sa", baseline: null },
+      ]
+    },
+  ]
+  const AEROBIC_SERIES = [
+    { label: "Running", color: "#06b6d4", filter: sess => /run|jog|5k|10k|half|marathon/i.test(`${sess?.activity_type || ""} ${sess?.title || ""}`), unit: "mi", field: "distance_miles" },
+    { label: "Cycling", color: "#a78bfa", filter: sess => /cycl|bike|ride|spin/i.test(`${sess?.activity_type || ""} ${sess?.title || ""}`), unit: "mi", field: "distance_miles" },
+    { label: "Swimming", color: "#34d399", filter: sess => /swim|pool/i.test(`${sess?.activity_type || ""} ${sess?.title || ""}`), unit: "min", field: "duration_minutes" },
+  ]
   const [sortBy, setSortBy] = useState("stale")
   const [showMethodology, setShowMethodology] = useState(false)
+  const [collapsedGroups, setCollapsedGroups] = useState({})
+  const [progressMapOpen, setProgressMapOpen] = useState(true)
   const methodologyRef = useRef(null)
+  const allGroupNames = EXERCISE_GROUPS.map(g => g.group)
+  const allCollapsed = allGroupNames.every(name => collapsedGroups[name])
+  const toggleGroup = name => setCollapsedGroups(prev => ({ ...prev, [name]: !prev[name] }))
+  const toggleAll = () => {
+    const next = allCollapsed ? {} : Object.fromEntries(allGroupNames.map(name => [name, true]))
+    setCollapsedGroups(next)
+  }
   const todayStr = new Date().toISOString().slice(0, 10)
   const todaySession = getLatestScheduleSessionForDate(schedLog, todayStr)
   const customRegistry = readCustomExerciseRegistry()
@@ -9900,6 +10031,282 @@ function ProgressTab({ progressionState, schedLog }) {
       document.removeEventListener("touchstart", onPointerDown)
     }
   }, [showMethodology])
+
+  const allSessions = useMemo(() => {
+    const log = Array.isArray(schedLog) ? schedLog : []
+    const wtLog = (() => {
+      try {
+        return JSON.parse(localStorage.getItem("wt-log") || "[]")
+      } catch {
+        return []
+      }
+    })()
+    const wtLogIds = new Set(wtLog.map(session => String(session.id || session.session_id)))
+    const schedOnly = log.filter(session => !wtLogIds.has(String(session.id || session.session_id)))
+    return [...wtLog, ...schedOnly]
+  }, [schedLog])
+
+  const strengthGroups = useMemo(() => EXERCISE_GROUPS.map(({ group, color, exercises }) => {
+    const charts = exercises.map(({ name, match, exclude = [], baseline }) => {
+      const points = []
+      for (const sess of allSessions) {
+        const date = String(sess?.date || sess?.start_date || "").slice(0, 10)
+        if (!date) continue
+        const normalized = (sess.exercises || [])
+          .map(normalizeLoggedExercise)
+          .filter(Boolean)
+        const matches = normalized.filter(exercise => {
+          const nm = String(exercise.name || "").toLowerCase()
+          const matchList = Array.isArray(match) ? match : [match]
+          if (!matchList.some(term => nm.includes(term.toLowerCase()))) return false
+          return !exclude.some(term => nm.includes(term.toLowerCase()))
+        })
+        if (!matches.length) continue
+
+        let maxE1rm = null
+        let totalVolume = 0
+        let totalTimeSec = 0
+
+        for (const ex of matches) {
+          const dataEntry = sess.data?.[ex.exercise_id ?? ex.id]
+          const setsArr = Array.isArray(dataEntry) && dataEntry.length > 0
+            ? dataEntry.map(set => ({ weight: set.w ?? set.weight, reps: set.r ?? set.reps }))
+            : Array.isArray(ex.sets) && ex.sets.length > 0
+              ? ex.sets
+              : [{ weight: ex.actual?.load ?? ex.load, reps: ex.actual?.reps ?? ex.reps }]
+
+          for (const set of setsArr) {
+            const rawLoad = set.weight ?? set.load ?? set.w
+            const rawReps = set.reps ?? set.r
+            const loadStr = String(rawLoad ?? "").trim().toUpperCase()
+            const weight = loadStr === "BW" || loadStr === "BODYWEIGHT" || loadStr === "—"
+              ? BW_LB
+              : parseFloat(rawLoad)
+            if (!Number.isFinite(weight) || weight <= 0) continue
+            const repsStr = String(rawReps ?? "").trim()
+            const isTimeBased = /^\d+s$/i.test(repsStr)
+            const reps = isTimeBased ? null : parseFloat(rawReps)
+            if (isTimeBased) totalTimeSec += parseInt(repsStr, 10) || 0
+            const effectiveReps = Number.isFinite(reps) && reps > 0 ? reps : 1
+            totalVolume += weight * effectiveReps
+            if (!isTimeBased && Number.isFinite(reps) && reps > 0 && reps <= 15) {
+              const e1rm = Math.round(weight * (1 + reps / 30))
+              if (maxE1rm === null || e1rm > maxE1rm) maxE1rm = e1rm
+            }
+          }
+        }
+
+        if (totalVolume > 0 || totalTimeSec > 0) {
+          points.push({
+            date,
+            e1rm: maxE1rm,
+            volume: totalVolume > 0 ? Math.round(totalVolume) : null,
+            durationSec: totalTimeSec > 0 ? totalTimeSec : null
+          })
+        }
+      }
+
+      const sortedPoints = points
+        .sort((a, b) => a.date.localeCompare(b.date))
+
+      return { name, baseline, data: sortedPoints }
+    }).filter(chart => {
+      if (!chart.data.length) return false
+      const cutoff = new Date()
+      cutoff.setDate(cutoff.getDate() - 90)
+      const cutoffStr = cutoff.toISOString().slice(0, 10)
+      return chart.data.some(point => point.date >= cutoffStr)
+    })
+
+    return { group, color, charts }
+  }), [allSessions])
+
+  const anyStrengthData = strengthGroups.some(group => group.charts.length > 0)
+
+  const aerobicCharts = useMemo(() => {
+    const parseSessionDate = value => {
+      const dateKey = String(value || "").slice(0, 10)
+      if (!dateKey) return null
+      const date = new Date(`${dateKey}T12:00:00`)
+      return Number.isNaN(date.getTime()) ? null : date
+    }
+    const getWeekKey = value => {
+      const date = parseSessionDate(value)
+      if (!date) return null
+      const monday = new Date(date)
+      monday.setDate(date.getDate() - date.getDay() + (date.getDay() === 0 ? -6 : 1))
+      monday.setHours(0, 0, 0, 0)
+      return monday.toISOString().slice(0, 10)
+    }
+    const addWeeks = (weekKey, offset) => {
+      const date = new Date(`${weekKey}T12:00:00`)
+      date.setDate(date.getDate() + offset * 7)
+      return getWeekKey(date.toISOString().slice(0, 10))
+    }
+    const getDistanceMiles = session => {
+      const direct = Number(session?.distance_miles)
+      if (Number.isFinite(direct) && direct > 0) return direct
+      const km = Number(session?.distance_km)
+      if (Number.isFinite(km) && km > 0) return km / 1.609
+      return null
+    }
+    const getDurationMinutes = session => {
+      const minuteCandidates = [
+        session?.duration_minutes,
+        session?.duration_min,
+        session?.dur,
+      ]
+      for (const candidate of minuteCandidates) {
+        const minutes = Number(candidate)
+        if (Number.isFinite(minutes) && minutes > 0) return minutes
+      }
+      const sec = Number(session?.durationSec ?? session?.duration_sec)
+      if (Number.isFinite(sec) && sec > 0) return sec / 60
+      return null
+    }
+
+    const weekTotalsByLabel = Object.fromEntries(AEROBIC_SERIES.map(series => [series.label, {}]))
+    allSessions.forEach(session => {
+      const weekKey = getWeekKey(session?.date || session?.start_date)
+      if (!weekKey) return
+      AEROBIC_SERIES.forEach(series => {
+        if (!series.filter(session)) return
+        const distanceMiles = getDistanceMiles(session)
+        const durationMinutes = getDurationMinutes(session)
+        const value = series.field === "duration_minutes"
+          ? durationMinutes
+          : (distanceMiles ?? durationMinutes)
+        if (!Number.isFinite(value) || value <= 0) return
+        weekTotalsByLabel[series.label][weekKey] = (weekTotalsByLabel[series.label][weekKey] || 0) + value
+      })
+    })
+
+    const latestWeekWithData = Object.values(weekTotalsByLabel)
+      .flatMap(seriesMap => Object.keys(seriesMap))
+      .sort()
+      .pop() || getWeekKey(new Date().toISOString().slice(0, 10))
+    const weekKeys = latestWeekWithData
+      ? Array.from({ length: 12 }, (_, index) => addWeeks(latestWeekWithData, index - 11))
+      : []
+
+    return AEROBIC_SERIES.map(series => {
+      const totals = weekTotalsByLabel[series.label]
+      const data = weekKeys.map(weekKey => ({
+        week: weekKey.slice(5),
+        value: Number(((totals[weekKey] || 0)).toFixed(1))
+      }))
+      const hasData = data.some(point => point.value > 0)
+      return { ...series, data, hasData }
+    })
+  }, [allSessions, AEROBIC_SERIES])
+
+  const progressRegionSignals = useMemo(() => {
+    const now = new Date()
+    now.setHours(0, 0, 0, 0)
+    const recentStart = new Date(now)
+    recentStart.setDate(recentStart.getDate() - 28)
+    const priorStart = new Date(now)
+    priorStart.setDate(priorStart.getDate() - 56)
+    const matchName = (name, terms) => terms.some(term => name.includes(term))
+    const parseSessionDate = value => {
+      const dateKey = String(value || "").slice(0, 10)
+      if (!dateKey) return null
+      const date = new Date(`${dateKey}T12:00:00`)
+      return Number.isNaN(date.getTime()) ? null : date
+    }
+    const summariesByRegion = {}
+
+    Object.entries(PROGRESS_REGION_EXERCISE_MAP).forEach(([region, terms]) => {
+      const normalizedTerms = terms.map(term => term.toLowerCase())
+      const sessions = []
+
+      allSessions.forEach(session => {
+        const sessionDate = parseSessionDate(session?.date || session?.start_date)
+        if (!sessionDate || sessionDate < priorStart || sessionDate > now) return
+
+        const normalizedExercises = (session.exercises || [])
+          .map(normalizeLoggedExercise)
+          .filter(Boolean)
+        const matches = normalizedExercises.filter(exercise => matchName(String(exercise.name || "").toLowerCase(), normalizedTerms))
+        if (!matches.length) return
+
+        let maxE1rm = null
+        let totalVolume = 0
+
+        matches.forEach(exercise => {
+          const dataEntry = session.data?.[exercise.exercise_id ?? exercise.id]
+          const setsArr = Array.isArray(dataEntry) && dataEntry.length > 0
+            ? dataEntry.map(set => ({ weight: set.w ?? set.weight, reps: set.r ?? set.reps }))
+            : Array.isArray(exercise.sets) && exercise.sets.length > 0
+              ? exercise.sets
+              : [{ weight: exercise.actual?.load ?? exercise.load, reps: exercise.actual?.reps ?? exercise.reps }]
+
+          setsArr.forEach(set => {
+            const rawLoad = set.weight ?? set.load ?? set.w
+            const rawReps = set.reps ?? set.r
+            const loadStr = String(rawLoad ?? "").trim().toUpperCase()
+            const weight = loadStr === "BW" || loadStr === "BODYWEIGHT" || loadStr === "—"
+              ? BW_LB
+              : parseFloat(rawLoad)
+            if (!Number.isFinite(weight) || weight <= 0) return
+            const repsStr = String(rawReps ?? "").trim()
+            const isTimeBased = /^\d+s$/i.test(repsStr)
+            const reps = isTimeBased ? null : parseFloat(rawReps)
+            const effectiveReps = Number.isFinite(reps) && reps > 0 ? reps : 1
+            totalVolume += weight * effectiveReps
+            if (!isTimeBased && Number.isFinite(reps) && reps > 0 && reps <= 15) {
+              const e1rm = weight * (1 + reps / 30)
+              if (maxE1rm == null || e1rm > maxE1rm) maxE1rm = e1rm
+            }
+          })
+        })
+
+        sessions.push({
+          date: sessionDate,
+          e1rm: maxE1rm,
+          volume: totalVolume > 0 ? totalVolume : null,
+        })
+      })
+
+      const recentSessions = sessions.filter(item => item.date >= recentStart)
+      const priorSessions = sessions.filter(item => item.date >= priorStart && item.date < recentStart)
+      const recentE1rm = recentSessions.filter(item => item.e1rm != null)
+      const priorE1rm = priorSessions.filter(item => item.e1rm != null)
+      const recentVolume = recentSessions.filter(item => item.volume != null)
+      const priorVolume = priorSessions.filter(item => item.volume != null)
+
+      let signal = "neutral"
+      if (recentE1rm.length >= 2 && priorE1rm.length >= 2) {
+        const recentMean = recentE1rm.reduce((sum, item) => sum + item.e1rm, 0) / recentE1rm.length
+        const priorMean = priorE1rm.reduce((sum, item) => sum + item.e1rm, 0) / priorE1rm.length
+        if (priorMean > 0) {
+          const pct = ((recentMean - priorMean) / priorMean) * 100
+          const historicalMax = sessions
+            .filter(item => item.date < recentStart && item.e1rm != null)
+            .reduce((max, item) => Math.max(max, item.e1rm), -Infinity)
+          const recentMax = recentE1rm.reduce((max, item) => Math.max(max, item.e1rm), -Infinity)
+          const hasNewMax = recentMax > historicalMax
+          signal = pct > 5 ? "progress" : pct < -5 ? "regression" : hasNewMax ? "progress" : "stalling"
+        }
+      } else if (recentVolume.length >= 2 && priorVolume.length >= 2) {
+        const recentMean = recentVolume.reduce((sum, item) => sum + item.volume, 0) / recentVolume.length
+        const priorMean = priorVolume.reduce((sum, item) => sum + item.volume, 0) / priorVolume.length
+        if (priorMean > 0) {
+          const pct = ((recentMean - priorMean) / priorMean) * 100
+          const historicalMax = sessions
+            .filter(item => item.date < recentStart && item.volume != null)
+            .reduce((max, item) => Math.max(max, item.volume), -Infinity)
+          const recentMax = recentVolume.reduce((max, item) => Math.max(max, item.volume), -Infinity)
+          const hasNewMax = recentMax > historicalMax
+          signal = pct > 5 ? "progress" : pct < -5 ? "regression" : hasNewMax ? "progress" : "stalling"
+        }
+      }
+
+      summariesByRegion[region] = signal
+    })
+
+    return summariesByRegion
+  }, [allSessions])
 
   const volumeChartData = useMemo(() => {
     if (!Array.isArray(schedLog) || schedLog.length === 0) return null
@@ -10015,6 +10422,121 @@ function ProgressTab({ progressionState, schedLog }) {
     return 0
   })
 
+  const renderProgressMap = side => {
+    const coordKey = side === "back" ? "b" : "f"
+    return (
+      <div style={{ position: "relative", background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: 12, padding: 10 }}>
+        <BodySilhouetteImg side={side} />
+        <svg style={{ position: "absolute", inset: 10, width: "calc(100% - 20px)", height: "calc(100% - 20px)", pointerEvents: "none", overflow: "visible" }}>
+          {Object.entries(progressRegionSignals).map(([region, signal]) => {
+            const coords = OC_REGION_COORDS[region]?.[coordKey]
+            if (!coords) return null
+            return (
+              <circle
+                key={`${side}-${region}`}
+                cx={`${coords[0]}%`}
+                cy={`${coords[1]}%`}
+                r={14}
+                fill={PROGRESS_COLOR[signal] || PROGRESS_COLOR.neutral}
+              />
+            )
+          })}
+        </svg>
+      </div>
+    )
+  }
+
+  const renderGroup = ({ group, color, charts }) => {
+    if (!charts.length) return null
+    const isCollapsed = !!collapsedGroups[group]
+    return (
+      <div key={group} style={{ background: "#0d0e1c", border: `1px solid ${color}22`, borderRadius: 10, padding: "14px" }}>
+        <div
+          onClick={() => toggleGroup(group)}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            cursor: "pointer",
+            userSelect: "none",
+            marginBottom: isCollapsed ? 0 : 12
+          }}
+        >
+          <div style={{ width: 10, height: 10, borderRadius: "50%", background: color, flexShrink: 0 }} />
+          <span style={{ fontSize: 13, fontWeight: 600, color: "#ccc", letterSpacing: "0.05em" }}>
+            {group}
+          </span>
+          <span style={{ marginLeft: "auto", fontSize: 11, color: "#555" }}>
+            {isCollapsed ? "▸" : "▾"}
+          </span>
+        </div>
+        {!isCollapsed && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12 }}>
+            {charts.map(({ name, baseline, data }) => (
+              <div key={name}>
+                <div style={{ fontSize: 10, fontWeight: 600, color: "#8fa8d8", marginBottom: 3 }}>{name}</div>
+                <ResponsiveContainer width="100%" height={110}>
+                  <ComposedChart data={data} margin={{ top: 4, right: 28, left: 0, bottom: 4 }}>
+                    <CartesianGrid stroke="#1a1b2e" />
+                    <XAxis dataKey="date" tick={{ fontSize: 8 }} interval="preserveStartEnd" />
+                    <YAxis
+                      yAxisId="left"
+                      tick={{ fontSize: 8 }}
+                      width={32}
+                      label={{ value: "lb", angle: -90, position: "insideLeft", fontSize: 7, fill: "#666" }}
+                    />
+                    <YAxis
+                      yAxisId="right"
+                      orientation="right"
+                      tick={{ fontSize: 8 }}
+                      width={28}
+                      tickFormatter={value => value >= 1000 ? `${(value / 1000).toFixed(1)}k` : value}
+                      label={{ value: "vol", angle: 90, position: "insideRight", fontSize: 7, fill: "#444" }}
+                    />
+                    <Tooltip
+                      formatter={(value, key) => key === "volume"
+                        ? [`${value.toLocaleString()} lb·reps`, "Volume"]
+                        : [`${value} lb`, "e1RM"]}
+                      labelFormatter={label => label}
+                    />
+                    <Area
+                      yAxisId="right"
+                      type="monotone"
+                      dataKey="volume"
+                      fill="rgba(255,255,255,0.07)"
+                      stroke="rgba(255,255,255,0.15)"
+                      strokeWidth={1}
+                      dot={false}
+                      connectNulls
+                    />
+                    <Line
+                      yAxisId="left"
+                      type="monotone"
+                      dataKey="e1rm"
+                      stroke={color}
+                      strokeWidth={2}
+                      dot={{ r: 2 }}
+                      connectNulls
+                    />
+                    {baseline != null && (
+                      <ReferenceLine
+                        yAxisId="left"
+                        y={baseline}
+                        stroke="#4a9ee8"
+                        strokeDasharray="4 2"
+                        label={{ value: `B ${baseline}`, position: "insideTopRight", fontSize: 8, fill: "#4a9ee8" }}
+                      />
+                    )}
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div style={{ padding: "16px", maxWidth: 1100 }}>
       <div style={{ marginBottom: 16 }}>
@@ -10087,6 +10609,40 @@ function ProgressTab({ progressionState, schedLog }) {
           ))}
         </div>
       )}
+
+      <div style={{ ...cardStyle(), minWidth: 0, marginBottom: 24 }}>
+        <div
+          onClick={() => setProgressMapOpen(open => !open)}
+          style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", userSelect: "none" }}
+        >
+          <SectionHeader>Strength Progress Map</SectionHeader>
+          <span style={{ marginLeft: "auto", fontSize: 11, color: "#6b7290" }}>{progressMapOpen ? "▾" : "▸"}</span>
+        </div>
+        {progressMapOpen && (
+          <>
+            <div style={{ fontSize: 12, color: "#6b7290", marginTop: 8, marginBottom: 12 }}>
+              Last 28 days versus prior 28 days by mapped exercise strength signal.
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
+              {renderProgressMap("front")}
+              {renderProgressMap("back")}
+            </div>
+            <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 14 }}>
+              {[
+                ["progress", "Progress"],
+                ["stalling", "Stalling"],
+                ["regression", "Regression"],
+                ["neutral", "Neutral"],
+              ].map(([key, label]) => (
+                <div key={key} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#94a3b8" }}>
+                  <span style={{ width: 12, height: 12, borderRadius: "50%", background: PROGRESS_COLOR[key], display: "inline-block" }} />
+                  {label}
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
 
       <div style={{ ...cardStyle(), minWidth: 0 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
@@ -10676,283 +11232,70 @@ if (w.category === "Strength") {
           </ResponsiveContainer>
         </div>
 
-        {(() => {
-          const BW_LB = 160 // bodyweight substitution for BW-loaded exercises
-          const EXERCISE_GROUPS = [
-            {
-              group: "Upper Body — Chest & Shoulders",
-              color: "#f97316",
-              exercises: [
-                { name: "Chest Press",       match: "chest press",      baseline: 110 },
-                { name: "Incline Press",      match: "incline",          baseline: 90  },
-                { name: "Machine Flys",       match: "fly",              baseline: 30  },
-                { name: "Triceps",            match: ["tricep", "push down", "pull down"], baseline: null },
-                { name: "Lateral Raise",      match: "lateral raise",    baseline: null },
-                { name: "Face Pull",          match: "face pull",        baseline: null },
-                { name: "Rear Delt Fly",      match: "rear delt",        baseline: null },
-                { name: "Cable Crossover",    match: "crossover",        baseline: null },
-                { name: "Pushup Plank",       match: "pushup plank",     baseline: null },
-              ]
-            },
-            {
-              group: "Back & Arms",
-              color: "#4a9ee8",
-              exercises: [
-                { name: "Lat Pulldown",       match: ["lat pulldown", "lat pull", "pull down"], baseline: 133 },
-                { name: "Cable Row",          match: "cable row",        baseline: 133 },
-                { name: "Bicep Curl",         match: ["bicep"],          baseline: 75  },
-                { name: "Hammer Curl",        match: "hammer curl",      baseline: null },
-                { name: "Inverted Row",       match: ["inverted row"],   baseline: null },
-                { name: "Straight Arm Pulldown", match: "straight arm",  baseline: null },
-                { name: "Chin-Up / Pull-Up",  match: ["chin", "pull up", "pull-up", "pull ups"], baseline: null },
-                { name: "Reverse Biceps",     match: "reverse bicep",    baseline: null },
-              ]
-            },
-            {
-              group: "Lower Body",
-              color: "#ffd166",
-              exercises: [
-                { name: "Hip Thrust",         match: ["hip thrust"],     baseline: null },
-                { name: "Leg Press",          match: "leg press",        baseline: 320  },
-                { name: "Leg Extension",      match: "leg extension",    baseline: null },
-                { name: "Leg Curl",           match: "leg curl",         exclude: ["bicep", "hamstring eccentric"], baseline: 125  },
-                { name: "KB RDL",             match: "rdl",              baseline: null },
-                { name: "Hip Abduction",      match: "abduction",        baseline: null },
-                { name: "Hip Adduction",      match: "adduction",        baseline: null },
-              ]
-            },
-            {
-              group: "Tendons & Connective",
-              color: "#f59e0b",
-              exercises: [
-                { name: "Eccentric Calf",     match: "eccentric calf",   baseline: null },
-                { name: "Eccentric Lateral",  match: "eccentric lateral",baseline: null },
-                { name: "Eccentric Biceps",   match: "eccentric biceps", baseline: null },
-                { name: "Suitcase Carry",     match: "suitcase",         baseline: null },
-                { name: "KB Swing",           match: "kb swing",         baseline: null },
-                { name: "Shoulder Clock",     match: "shoulder clock",   baseline: null },
-                { name: "Tibialis Raise",     match: ["tibialis", "shin raise"], baseline: null },
-                { name: "Calf Raise",         match: "calf raise",       baseline: null },
-              ]
-            },
-            {
-              group: "Core",
-              color: "#a78bfa",
-              exercises: [
-                { name: "Russian Twist",      match: "russian twist",    baseline: null },
-                { name: "Pallof Press",       match: "pallof",           baseline: null },
-                { name: "Plank",              match: "plank",            baseline: null },
-                { name: "Dead Bug",           match: "dead bug",         baseline: null },
-              ]
-            },
-            {
-              group: "Single-Limb Progressions",
-              color: "#a78bfa",
-              exercises: [
-                { name: "Leg Press — SL",    match: "leg press — sl",    baseline: null },
-                { name: "Hip Thrust — SL",   match: "hip thrust — sl",   baseline: null },
-                { name: "Leg Curl — SL",     match: "leg curl — sl",     baseline: null },
-                { name: "Calf Raise — SL",   match: "calf raise — sl",   baseline: null },
-                { name: "Cable Row — SA",    match: "cable row — sa",    baseline: null },
-                { name: "Lat Pulldown — SA", match: "lat pulldown — sa", baseline: null },
-                { name: "Chest Press — SA",  match: "chest press — sa",  baseline: null },
-                { name: "Leg Press SL",      match: "leg press sl",      baseline: null },
-                { name: "Cable Row SA",      match: "cable row sa",      baseline: null },
-              ]
-            },
-          ]
-
-          const log = Array.isArray(schedLog) ? schedLog : []
-          // Pull wt-log from localStorage as the primary logged session source
-          const wtLog = (() => {
-            try { return JSON.parse(localStorage.getItem('wt-log') || '[]') } catch { return [] }
-          })()
-          // Merge: prefer wt-log entries, supplement with any schedLog entries not already present
-          const wtLogIds = new Set(wtLog.map(s => String(s.id || s.session_id)))
-          const schedOnly = log.filter(s => !wtLogIds.has(String(s.id || s.session_id)))
-          const allSessions = [...wtLog, ...schedOnly]
-          const sessionHasExerciseMatch = (sess, match, exclude = []) =>
-            (sess.exercises || [])
-              .map(normalizeLoggedExercise)
-              .filter(Boolean)
-              .some(e => {
-                const nm = (e.name || "").toLowerCase()
-                const matchList = Array.isArray(match) ? match : [match]
-                if (!matchList.some(m => nm.includes(m.toLowerCase()))) return false
-                return !exclude.some(x => nm.includes(x.toLowerCase()))
-              })
-
-          const renderGroup = ({ group, color, exercises }) => {
-            const charts = exercises.map(({ name, match, exclude = [], baseline }) => {
-              const points = []
-              for (const sess of allSessions) {
-                const date = (sess.date || sess.start_date || "").slice(0, 10)
-                if (!date) continue
-                // Collect all exercises matching this name (there may be more than one entry per session).
-                const normalized = (sess.exercises || [])
-                  .map(normalizeLoggedExercise)
-                  .filter(Boolean)
-                const matches = normalized.filter(e => {
-                  const nm = (e.name || "").toLowerCase()
-                  const matchList = Array.isArray(match) ? match : [match]
-                  if (!matchList.some(m => nm.includes(m.toLowerCase()))) return false
-                  return !exclude.some(x => nm.includes(x.toLowerCase()))
-                })
-                if (!matches.length) continue
-
-                let maxE1rm = null
-                let totalVolume = 0
-                let totalTimeSec = 0
-
-                for (const ex of matches) {
-                  // Prefer the per-set data array from sess.data[exercise_id] (shape: [{r, w}])
-                  // Fall back to ex.sets array, then to the single actual scalar
-                  const dataEntry = sess.data?.[ex.exercise_id ?? ex.id]
-                  const setsArr = Array.isArray(dataEntry) && dataEntry.length > 0
-                    ? dataEntry.map(s => ({ weight: s.w ?? s.weight, reps: s.r ?? s.reps }))
-                    : Array.isArray(ex.sets) && ex.sets.length > 0
-                      ? ex.sets
-                      : [{ weight: ex.actual?.load ?? ex.load, reps: ex.actual?.reps ?? ex.reps }]
-
-                  for (const set of setsArr) {
-                    const rawLoad = set.weight ?? set.load ?? set.w
-                    const rawReps = set.reps ?? set.r
-                    // Resolve load: substitute BW constant for bodyweight exercises.
-                    const loadStr = String(rawLoad ?? "").trim().toUpperCase()
-                    const w = loadStr === "BW" || loadStr === "BODYWEIGHT" || loadStr === "—"
-                      ? BW_LB
-                      : parseFloat(rawLoad)
-                    if (!Number.isFinite(w) || w <= 0) continue
-                    // Resolve reps: handle time descriptors (e.g. "30s") as seconds, not reps.
-                    const repsStr = String(rawReps ?? "").trim()
-                    const isTimeBased = /^\d+s$/i.test(repsStr)
-                    const r = isTimeBased ? null : parseFloat(repsStr)
-                    if (isTimeBased) {
-                      totalTimeSec += parseInt(repsStr, 10) || 0
-                    }
-                    // Volume: always accumulate (reps default to 1 for time-based sets).
-                    const effectiveReps = Number.isFinite(r) && r > 0 ? r : 1
-                    totalVolume += w * effectiveReps
-                    // e1RM: only for sets at or below 15 reps.
-                    if (!isTimeBased && Number.isFinite(r) && r > 0 && r <= 15) {
-                      const e1rm = Math.round(w * (1 + r / 30))
-                      if (maxE1rm === null || e1rm > maxE1rm) maxE1rm = e1rm
-                    }
-                  }
-                }
-
-                // Only push a point if we have at least volume or duration data.
-                if (totalVolume > 0 || totalTimeSec > 0) {
-                  points.push({
-                    date,
-                    e1rm: maxE1rm,
-                    volume: totalVolume > 0 ? Math.round(totalVolume) : null,
-                    durationSec: totalTimeSec > 0 ? totalTimeSec : null
-                  })
-                }
-              }
-              const sorted = points
-                .sort((a, b) => a.date.localeCompare(b.date))
-              return { name, baseline, data: sorted }
-            }).filter(c => {
-                if (!c.data.length) return false
-                const cutoff = new Date()
-                cutoff.setDate(cutoff.getDate() - 90)
-                const cutoffStr = cutoff.toISOString().slice(0, 10)
-                return c.data.some(p => p.date >= cutoffStr)
-              })
-
-            if (!charts.length) return null
-
-            return (
-              <div key={group} style={{ background: "#0d0e1c", border: `1px solid ${color}22`, borderRadius: 10, padding: "14px" }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color, marginBottom: 10, borderBottom: `1px solid ${color}33`, paddingBottom: 6 }}>
-                  {group}
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12 }}>
-                  {charts.map(({ name, baseline, data }) => (
-                    <div key={name}>
-                      <div style={{ fontSize: 10, fontWeight: 600, color: "#8fa8d8", marginBottom: 3 }}>{name}</div>
-                      <ResponsiveContainer width="100%" height={110}>
-                        <ComposedChart data={data} margin={{ top: 4, right: 28, left: 0, bottom: 4 }}>
-                          <CartesianGrid stroke="#1a1b2e" />
-                          <XAxis dataKey="date" tick={{ fontSize: 8 }} interval="preserveStartEnd" />
-                          <YAxis
-                            yAxisId="left"
-                            tick={{ fontSize: 8 }}
-                            width={32}
-                            label={{ value: "lb", angle: -90, position: "insideLeft", fontSize: 7, fill: "#666" }}
-                          />
-                          <YAxis
-                            yAxisId="right"
-                            orientation="right"
-                            tick={{ fontSize: 8 }}
-                            width={28}
-                            tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(1)}k` : v}
-                            label={{ value: "vol", angle: 90, position: "insideRight", fontSize: 7, fill: "#444" }}
-                          />
-                          <Tooltip
-                            formatter={(v, n) => n === "volume"
-                              ? [`${v.toLocaleString()} lb·reps`, "Volume"]
-                              : [`${v} lb`, "e1RM"]}
-                            labelFormatter={l => l}
-                          />
-                          <Area
-                            yAxisId="right"
-                            type="monotone"
-                            dataKey="volume"
-                            fill="rgba(255,255,255,0.07)"
-                            stroke="rgba(255,255,255,0.15)"
-                            strokeWidth={1}
-                            dot={false}
-                            connectNulls
-                          />
-                          <Line
-                            yAxisId="left"
-                            type="monotone"
-                            dataKey="e1rm"
-                            stroke={color}
-                            strokeWidth={2}
-                            dot={{ r: 2 }}
-                            connectNulls
-                          />
-                          {baseline != null && (
-                            <ReferenceLine yAxisId="left" y={baseline} stroke="#4a9ee8" strokeDasharray="4 2"
-                              label={{ value: `B ${baseline}`, position: "insideTopRight", fontSize: 8, fill: "#4a9ee8" }} />
-                          )}
-                        </ComposedChart>
-                      </ResponsiveContainer>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )
-          }
-
-          const anyData = EXERCISE_GROUPS.some(g =>
-            g.exercises.some(({ match, exclude = [] }) =>
-              allSessions.some(sess => sessionHasExerciseMatch(sess, match, exclude))
-            )
-          )
-
-          if (!anyData) return (
-            <div style={{ background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: 12, padding: 16, color: "#555", fontSize: 12 }}>
-              Strength Progression — no logged sessions yet. Log sessions in the Schedule tab to populate these charts.
-            </div>
-          )
-
-          return (
+        {!anyStrengthData ? (
+          <div style={{ background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: 12, padding: 16, color: "#555", fontSize: 12 }}>
+            Strength Progression — no logged sessions yet. Log sessions in the Schedule tab to populate these charts.
+          </div>
+        ) : (
+          <>
             <div style={{ background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: 12, padding: 16 }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: "#ced2f0", marginBottom: 14 }}>
                 Strength Progression
                 <span style={{ fontSize: 10, fontWeight: 400, color: "#555", marginLeft: 8 }}>e1RM line (left axis) · volume area (right axis) · max set per session</span>
               </div>
+              <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+                <button
+                  onClick={toggleAll}
+                  style={{
+                    background: "none",
+                    border: "1px solid #333",
+                    color: "#888",
+                    fontSize: 11,
+                    padding: "3px 10px",
+                    borderRadius: 4,
+                    cursor: "pointer"
+                  }}
+                >
+                  {allCollapsed ? "Expand all" : "Collapse all"}
+                </button>
+              </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 16 }}>
-                {EXERCISE_GROUPS.map(g => renderGroup(g))}
+                {strengthGroups.map(group => renderGroup(group))}
               </div>
             </div>
-          )
-        })()}
+
+            <div style={{ background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: 12, padding: 16, marginTop: 16 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#ced2f0", marginBottom: 14 }}>
+                Aerobic Volume
+                <span style={{ fontSize: 10, fontWeight: 400, color: "#555", marginLeft: 8 }}>last 12 weeks · Monday-anchored</span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
+                {aerobicCharts.map(series => (
+                  <div key={series.label} style={{ background: "#10131f", border: `1px solid ${series.color}22`, borderRadius: 10, padding: 12 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: series.color, marginBottom: 10 }}>
+                      {series.label}
+                    </div>
+                    {series.hasData ? (
+                      <ResponsiveContainer width="100%" height={180}>
+                        <BarChart data={series.data} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
+                          <CartesianGrid stroke="#1a1b2e" />
+                          <XAxis dataKey="week" tick={{ fontSize: 8 }} interval={1} />
+                          <YAxis tick={{ fontSize: 8 }} label={{ value: series.unit, angle: -90, position: "insideLeft", fontSize: 7, fill: "#666" }} />
+                          <Tooltip formatter={value => [`${value} ${series.unit}`, series.label]} />
+                          <Bar dataKey="value" fill={series.color} radius={[3, 3, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div style={{ minHeight: 180, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "#555" }}>
+                        no sessions logged
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
 
         {pmfChartData.length > 0 && (
           <div style={{ background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: "12px", padding: "16px" }}>
