@@ -44,6 +44,110 @@ function getTechnogymDistanceMetric(session) {
   }
 }
 
+function getAppleDistanceMetric(session) {
+  const metric = session?.preferred_metrics?.distance || null
+  const source = String(metric?.source || "").toLowerCase()
+  if (source.includes("apple") && isPositiveNumber(metric?.value)) {
+    return metric
+  }
+
+  const distance = Number(session?.sources?.apple?.distance)
+  if (!Number.isFinite(distance) || distance <= 0) return null
+
+  return {
+    value: distance,
+    unit: session?.sources?.apple?.distance_unit || metric?.unit || "mi",
+    source: "AppleHealth",
+    rationale: "Carried forward from Apple distance"
+  }
+}
+
+function distanceMetricToMiles(metric) {
+  const value = Number(metric?.value)
+  if (!Number.isFinite(value) || value <= 0) return 0
+
+  const unit = String(metric?.unit || "").toLowerCase()
+  if (unit === "mi" || unit === "mile" || unit === "miles") return value
+  if (unit === "km" || unit === "kilometer" || unit === "kilometers") return value / 1.60934
+  if (unit === "m" || unit === "meter" || unit === "meters") return value / 1609.34
+  if (unit === "yd" || unit === "yard" || unit === "yards") return value / 1760
+  return value
+}
+
+function getSessionDistanceMiles(session) {
+  const preferred = session?.preferred_metrics?.distance || null
+  const preferredMiles = distanceMetricToMiles(preferred)
+  if (preferredMiles > 0) return preferredMiles
+
+  const apple = getAppleDistanceMetric(session)
+  const appleMiles = distanceMetricToMiles(apple)
+  if (appleMiles > 0) return appleMiles
+
+  const technogym = getTechnogymDistanceMetric(session)
+  const technogymMiles = distanceMetricToMiles(technogym)
+  if (technogymMiles > 0) return technogymMiles
+
+  return 0
+}
+
+function getSessionStartMs(session) {
+  const candidates = [
+    session?.start_date,
+    session?.dateTime,
+    session?.date
+  ]
+
+  for (const candidate of candidates) {
+    const ms = toMsForScheduleSeeds(candidate)
+    if (Number.isFinite(ms)) return ms
+  }
+
+  return null
+}
+
+function getSessionEndMs(session) {
+  const candidates = [
+    session?.end_date,
+    session?.endDate,
+    session?.end_time
+  ]
+
+  for (const candidate of candidates) {
+    const ms = toMsForScheduleSeeds(candidate)
+    if (Number.isFinite(ms)) return ms
+  }
+
+  return null
+}
+
+function getSessionDateKey(session) {
+  const raw = String(session?.start_date || session?.dateTime || session?.date || "").trim()
+  return raw ? raw.slice(0, 10) : ""
+}
+
+function getSessionTypeFamily(session) {
+  return normalizeWorkoutTypeForScheduleSeeds(
+    session?.canonical_type ||
+    session?.type ||
+    session?.activity_type ||
+    session?.raw_type ||
+    session?.category,
+    session
+  )
+}
+
+function isPlaceholderSession(session) {
+  const sources = session?.sources || {}
+  const hasAnyRealSource = Boolean(sources.apple || sources.technogym)
+  if (hasAnyRealSource) return false
+
+  const start = String(session?.start_date || session?.dateTime || session?.date || "")
+  const time = start.includes("T") ? start.slice(11, 19) : ""
+  if (!/^06:00:00/.test(time)) return false
+
+  return isPositiveNumber(session?.duration_min) || isPositiveNumber(session?.preferred_metrics?.duration?.value)
+}
+
 function shouldCarryForwardTechnogymDistance(winner, loser) {
   const winnerDistance = getCanonicalDistanceMetric(winner)
   const winnerValue = Number(winnerDistance?.value)
@@ -63,6 +167,7 @@ function canonicalSessionQualityScore(session) {
   if (isPositiveNumber(session?.preferred_metrics?.power_avg?.value)) score += 1
   if (isPositiveNumber(session?.preferred_metrics?.rpm_avg?.value)) score += 1
   if (isPositiveNumber(session?.duration_min)) score += 1
+  if (isPlaceholderSession(session)) score -= 2
   return score
 }
 
@@ -110,13 +215,29 @@ function mergePreferredMetrics(winner, loser) {
 
   const winnerDistance = winner?.preferred_metrics?.distance || null
   const loserDistance = loser?.preferred_metrics?.distance || null
-  const technogymDistance = getTechnogymDistanceMetric(winner) || getTechnogymDistanceMetric(loser)
+  if (isCyclingLikeSession(mergedSession)) {
+    const appleDistance = getAppleDistanceMetric(winner) || getAppleDistanceMetric(loser)
+    const technogymDistance = getTechnogymDistanceMetric(winner) || getTechnogymDistanceMetric(loser)
 
-  if (isCyclingLikeSession(mergedSession) && technogymDistance) {
-    merged.distance = {
-      ...(loserDistance || {}),
-      ...(winnerDistance || {}),
-      ...technogymDistance
+    if (appleDistance && distanceMetricToMiles(appleDistance) > 0) {
+      merged.distance = {
+        ...(loserDistance || {}),
+        ...(winnerDistance || {}),
+        ...appleDistance
+      }
+    } else if (technogymDistance && distanceMetricToMiles(technogymDistance) > 0) {
+      merged.distance = {
+        ...(loserDistance || {}),
+        ...(winnerDistance || {}),
+        ...technogymDistance
+      }
+    } else if (shouldCarryForwardTechnogymDistance(winner, loser)) {
+      merged.distance = {
+        ...(winnerDistance || {}),
+        ...getTechnogymDistanceMetric(loser)
+      }
+    } else {
+      merged.distance = mergeMetricEntry(winnerDistance, loserDistance)
     }
   } else if (shouldCarryForwardTechnogymDistance(winner, loser)) {
     merged.distance = {
@@ -170,16 +291,18 @@ function mergeCanonicalSessionPair(a, b) {
 }
 
 function getDuplicateSessionKey(session) {
-  const startMs = toMsForScheduleSeeds(session?.start_date || session?.dateTime || session?.date)
-  const endMs = toMsForScheduleSeeds(session?.end_date)
-  const type = normalizeCanonicalType(session?.canonical_type || session?.type)
-  if (!Number.isFinite(startMs) || !type) {
+  const dateKey = getSessionDateKey(session)
+  const type = getSessionTypeFamily(session)
+  const startMs = getSessionStartMs(session)
+  const endMs = getSessionEndMs(session)
+  if (!dateKey || !type || !Number.isFinite(startMs)) {
     return session?.session_id || makeSessionId("session", session)
   }
 
-  const roundedStart = Math.round(startMs / (5 * 60 * 1000))
-  const roundedEnd = Number.isFinite(endMs) ? Math.round(endMs / (5 * 60 * 1000)) : "na"
-  return `${type}|${roundedStart}|${roundedEnd}`
+  const roundedStart = Math.round(startMs / (90 * 60 * 1000))
+  const roundedEnd = Number.isFinite(endMs) ? Math.round(endMs / (90 * 60 * 1000)) : "na"
+  const roundedDistance = Math.round(getSessionDistanceMiles(session) * 10) / 10
+  return `${dateKey}|${type}|${roundedStart}|${roundedEnd}|${roundedDistance || "na"}`
 }
 
 export function getCanonicalSessionDuplicateKey(session) {
@@ -187,19 +310,64 @@ export function getCanonicalSessionDuplicateKey(session) {
 }
 
 export function dedupeCanonicalSessions(sessions) {
-  const deduped = new Map()
+  const sorted = (Array.isArray(sessions) ? sessions : [])
+    .slice()
+    .sort((a, b) => String(a?.start_date || "").localeCompare(String(b?.start_date || "")))
 
-  ;(Array.isArray(sessions) ? sessions : []).forEach(session => {
-    const key = getDuplicateSessionKey(session)
-    const existing = deduped.get(key)
-    if (!existing) {
-      deduped.set(key, session)
-      return
+  const clusters = []
+
+  const isSamePhysicalSession = (a, b) => {
+    if (!a || !b) return false
+    const dateA = getSessionDateKey(a)
+    const dateB = getSessionDateKey(b)
+    const typeA = getSessionTypeFamily(a)
+    const typeB = getSessionTypeFamily(b)
+    if (!dateA || dateA !== dateB || !typeA || typeA !== typeB) return false
+
+    const startA = getSessionStartMs(a)
+    const startB = getSessionStartMs(b)
+    const endA = getSessionEndMs(a)
+    const endB = getSessionEndMs(b)
+    const durA = getSessionDurationValue(a)
+    const durB = getSessionDurationValue(b)
+    const distA = getSessionDistanceMiles(a)
+    const distB = getSessionDistanceMiles(b)
+
+    const startClose = Number.isFinite(startA) && Number.isFinite(startB) && Math.abs(startA - startB) <= 90 * 60 * 1000
+    const endClose = Number.isFinite(endA) && Number.isFinite(endB) && Math.abs(endA - endB) <= 90 * 60 * 1000
+    const sameDistance = distA > 0 && distB > 0 && Math.abs(distA - distB) / Math.max(distA, distB) <= 0.01
+    const durationSimilar = durA > 0 && durB > 0 && Math.abs(durA - durB) / Math.max(durA, durB) <= 0.2
+    const hasAppleA = Boolean(a?.sources?.apple)
+    const hasAppleB = Boolean(b?.sources?.apple)
+    const hasTechA = Boolean(a?.sources?.technogym)
+    const hasTechB = Boolean(b?.sources?.technogym)
+    const sourceMix = (hasAppleA && hasTechB) || (hasTechA && hasAppleB)
+    const placeholderA = isPlaceholderSession(a)
+    const placeholderB = isPlaceholderSession(b)
+
+    if (placeholderA && placeholderB && (startClose || endClose || durationSimilar)) return true
+    if ((placeholderA || placeholderB) && durationSimilar) return true
+    if (sourceMix && (startClose || endClose || sameDistance)) return true
+    if (sameDistance && (startClose || sourceMix || placeholderA || placeholderB)) return true
+    if (startClose && (sourceMix || sameDistance)) return true
+    return false
+  }
+
+  sorted.forEach(session => {
+    let cluster = null
+    for (const candidate of clusters) {
+      if (candidate.some(existing => isSamePhysicalSession(existing, session))) {
+        cluster = candidate
+        break
+      }
     }
-    deduped.set(key, mergeCanonicalSessionPair(existing, session))
+
+    if (cluster) cluster.push(session)
+    else clusters.push([session])
   })
 
-  return [...deduped.values()]
+  return clusters
+    .map(cluster => cluster.reduce((acc, session) => (acc ? mergeCanonicalSessionPair(acc, session) : session), null))
     .map(applyCanonicalSessionMergePolicy)
     .sort((a, b) => String(a?.start_date || "").localeCompare(String(b?.start_date || "")))
 }

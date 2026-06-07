@@ -11592,38 +11592,7 @@ function distanceValueToMiles(value, unit, workout) {
   return n
 }
 
-function shouldIgnoreTechnogymCyclingDistance(workout) {
-  const type = normalizeWorkoutType(
-    workout?.type ||
-    workout?.canonical_type ||
-    workout?.activity_type ||
-    workout?.raw_type ||
-    workout?.category,
-    workout
-  )
-  if (type !== "Cycling") return false
-
-  const hasTechnogym = !!getTechnogymSource(workout)
-  if (!hasTechnogym) return false
-
-  if (workout?.source === "ManualSchedule") return false
-
-  const appleMiles = distanceValueToMiles(
-    workout?.sources?.apple?.distance,
-    workout?.sources?.apple?.distance_unit,
-    workout
-  )
-  if (appleMiles > 0) return false
-
-  const preferredSource = String(workout?.preferred_metrics?.distance?.source || "").toLowerCase()
-  if (preferredSource.includes("apple")) return false
-
-  return true
-}
-
 function getWorkoutDistanceMiles(workout) {
-  if (shouldIgnoreTechnogymCyclingDistance(workout)) return 0
-
   const explicit = Number(workout?.distanceMiles ?? workout?.distance_miles)
   if (Number.isFinite(explicit) && explicit > 0) return explicit
 
@@ -11663,7 +11632,6 @@ const appleMiles = distanceValueToMiles(
 // Only explicit recorded distance counts; duration-only cycling sessions do not
 // get a mileage estimate because many are indoor bike workouts.
 function getCyclingDistanceMiles(workout) {
-  if (shouldIgnoreTechnogymCyclingDistance(workout)) return 0
   const explicit = getWorkoutDistanceMiles(workout)
   if (explicit > 0) return explicit
   return 0
@@ -16095,12 +16063,12 @@ Return ONLY a JSON object with this exact structure, no explanation:
                 ])
                 const policyMerged = mergedSessions.map(applyCanonicalSessionMergePolicy)
                 localStorage.setItem("lift_canonical_sessions", JSON.stringify(policyMerged))
-                setCanonicalSessions(policyMerged)
+                setCanonicalSessions(dedupeCanonicalSessions(policyMerged))
                 if (supabase && STORE_USER_ID) {
                   await upsertCanonicalSessions(supabase, STORE_USER_ID, policyMerged)
                   const remote = await loadCanonicalSessions(supabase, STORE_USER_ID)
                   localStorage.setItem("lift_canonical_sessions", JSON.stringify(remote))
-                  setCanonicalSessions(remote)
+                  setCanonicalSessions(dedupeCanonicalSessions(remote))
                 }
                 setStatus(`FitnessView: ${accepted.length} sessions committed (${linkedCount} linked to Schedule, ${accepted.length - linkedCount} standalone)`)
               } catch (autoCommitErr) {
@@ -16340,13 +16308,13 @@ Return ONLY a JSON object with this exact structure, no explanation:
         const mergedSessions = dedupeCanonicalSessions([...(Array.isArray(existingCanonical) ? existingCanonical : []), ...sessions])
         const policyMergedSessions = mergedSessions.map(applyCanonicalSessionMergePolicy)
         localStorage.setItem("lift_canonical_sessions", JSON.stringify(policyMergedSessions))
-        setCanonicalSessions(policyMergedSessions)
+        setCanonicalSessions(dedupeCanonicalSessions(policyMergedSessions))
         committed += sessions.length
         if (supabase && STORE_USER_ID) {
           await upsertCanonicalSessions(supabase, STORE_USER_ID, policyMergedSessions)
           const remoteSessions = await loadCanonicalSessions(supabase, STORE_USER_ID)
           localStorage.setItem("lift_canonical_sessions", JSON.stringify(remoteSessions))
-          setCanonicalSessions(remoteSessions)
+          setCanonicalSessions(dedupeCanonicalSessions(remoteSessions))
         }
       }
       // Commit nutrition to user_kv (feeds Calories tab)
@@ -18853,8 +18821,6 @@ function extractDurationMin(workout) {
 }
 
 function normalizeDistanceToMiles(workout) {
-  if (shouldIgnoreTechnogymCyclingDistance(workout)) return 0
-
   const { value, unit } = extractDistanceInfo(workout)
   if (!Number.isFinite(value) || value <= 0) return 0
 
@@ -20218,7 +20184,7 @@ useEffect(() => {
           count: bundledCanonicalSessions.length
         }
         console.log("Readiness workout source update", operationalWorkoutUpdateRef.current)
-        setCanonicalSessions(bundledCanonicalSessions)
+        setCanonicalSessions(dedupeCanonicalSessions(bundledCanonicalSessions))
       } catch (err) {
         if (process.env.NODE_ENV === "development") console.log(err)
         setError(String(err))
@@ -20368,10 +20334,10 @@ useEffect(() => {
             return currentCanonicalSessions
           }
 
-          const merged = mergeCanonicalSessionsPreferPrimary(
+          const merged = dedupeCanonicalSessions(mergeCanonicalSessionsPreferPrimary(
             Array.isArray(currentCanonicalSessions) ? currentCanonicalSessions : [],
             remoteCanonicalSessions
-          ).map(applyCanonicalSessionMergePolicy)
+          ).map(applyCanonicalSessionMergePolicy))
 
           operationalWorkoutUpdateRef.current = {
             source: "remote:canonicalSessions",
