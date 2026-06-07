@@ -11592,7 +11592,38 @@ function distanceValueToMiles(value, unit, workout) {
   return n
 }
 
+function shouldIgnoreTechnogymCyclingDistance(workout) {
+  const type = normalizeWorkoutType(
+    workout?.type ||
+    workout?.canonical_type ||
+    workout?.activity_type ||
+    workout?.raw_type ||
+    workout?.category,
+    workout
+  )
+  if (type !== "Cycling") return false
+
+  const hasTechnogym = !!getTechnogymSource(workout)
+  if (!hasTechnogym) return false
+
+  if (workout?.source === "ManualSchedule") return false
+
+  const appleMiles = distanceValueToMiles(
+    workout?.sources?.apple?.distance,
+    workout?.sources?.apple?.distance_unit,
+    workout
+  )
+  if (appleMiles > 0) return false
+
+  const preferredSource = String(workout?.preferred_metrics?.distance?.source || "").toLowerCase()
+  if (preferredSource.includes("apple")) return false
+
+  return true
+}
+
 function getWorkoutDistanceMiles(workout) {
+  if (shouldIgnoreTechnogymCyclingDistance(workout)) return 0
+
   const explicit = Number(workout?.distanceMiles ?? workout?.distance_miles)
   if (Number.isFinite(explicit) && explicit > 0) return explicit
 
@@ -11632,6 +11663,7 @@ const appleMiles = distanceValueToMiles(
 // Only explicit recorded distance counts; duration-only cycling sessions do not
 // get a mileage estimate because many are indoor bike workouts.
 function getCyclingDistanceMiles(workout) {
+  if (shouldIgnoreTechnogymCyclingDistance(workout)) return 0
   const explicit = getWorkoutDistanceMiles(workout)
   if (explicit > 0) return explicit
   return 0
@@ -18821,6 +18853,8 @@ function extractDurationMin(workout) {
 }
 
 function normalizeDistanceToMiles(workout) {
+  if (shouldIgnoreTechnogymCyclingDistance(workout)) return 0
+
   const { value, unit } = extractDistanceInfo(workout)
   if (!Number.isFinite(value) || value <= 0) return 0
 
