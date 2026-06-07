@@ -1248,6 +1248,28 @@ function normalizeExerciseToken(value) {
   return String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "")
 }
 
+function normalizeExerciseWords(value) {
+  return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
+}
+
+function matchesExerciseTerm(name, term) {
+  const normalizedName = normalizeExerciseWords(name)
+  const normalizedTerm = normalizeExerciseWords(term)
+  if (!normalizedName || !normalizedTerm) return false
+
+  const nameTokens = normalizedName.split(" ").filter(Boolean)
+  const termTokens = normalizedTerm.split(" ").filter(Boolean)
+  if (!termTokens.length) return false
+  if (termTokens.length === 1) {
+    return nameTokens.some(token => token === termTokens[0] || token.startsWith(termTokens[0]))
+  }
+  return normalizedName.includes(normalizedTerm)
+}
+
+function getProgressTableGroupLabel(record) {
+  return String(record?.movement_pattern || "").replace(/_/g, " ")
+}
+
 function normalizeScheduleDayKey(value) {
   const raw = String(value || "").trim()
   return SCHEDULE_DAY_KEY_MAP[raw] || null
@@ -9774,7 +9796,8 @@ function ReorderRow({ record }) {
   )
 }
 
-function ProgressTable({ records }) {
+function ProgressTable({ records, collapsedGroups, onToggleGroup }) {
+  const groupNames = [...new Set(records.map(getProgressTableGroupLabel).filter(Boolean))]
   return (
     <div style={{ overflowX: "auto" }}>
       <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "IBM Plex Mono", fontSize: 11 }}>
@@ -9788,33 +9811,52 @@ function ProgressTable({ records }) {
           </tr>
         </thead>
         <tbody>
-          {records.map(record => {
-            const last = record.sessions[record.sessions.length - 1]
-            const staleColor = record.stale ? "#e8b84a" : "#6b7290"
-            const gateColor = record.oc_gate === "clear" ? "#4caf50" : record.oc_gate === "block" ? "#d95f5f" : "#e8b84a"
-            const staleMetric = record.primary_stale_role === "heavy"
-              ? record.sessions_since_load_increase
-              : record.sessions_since_reps_increase
+          {groupNames.map(groupName => {
+            const groupRecords = records.filter(record => getProgressTableGroupLabel(record) === groupName)
+            const isCollapsed = !!collapsedGroups[groupName]
             return (
-              <tr key={record.exercise_id} style={{ background: record.stale ? "rgba(232,184,74,0.04)" : "transparent" }}>
-                <td style={{ padding: "7px 8px", color: "#d4d8e8" }}>{record.exercise_name}</td>
-                <td style={{ padding: "7px 8px", color: "#6b7290" }}>{record.movement_pattern.replace(/_/g, " ")}</td>
-                <td style={{ padding: "7px 8px", color: "#6b7290", textAlign: "right" }}>{record.sessions.length}</td>
-                <td style={{ padding: "7px 8px", textAlign: "right" }}>{last?.load_lb ?? "—"}</td>
-                <td style={{ padding: "7px 8px", textAlign: "right", color: "#4caf7d" }}>{record.e1rm_current != null ? record.e1rm_current.toFixed(0) : "—"}</td>
-                <td style={{ padding: "7px 8px", textAlign: "right" }}>{record.load_headroom_pct != null ? `${record.load_headroom_pct.toFixed(0)}%` : "—"}</td>
-                <td style={{ padding: "7px 8px", color: staleColor, textAlign: "center" }}>
-                  {record.stale ? `${record.primary_stale_role}:${staleMetric}s` : "—"}
-                </td>
-                <td style={{ padding: "7px 8px", color: gateColor }}>
-                  {record.oc_gate === "clear" ? "✓" : record.oc_gate.replace(/_/g, " ")}
-                </td>
-                <td style={{ padding: "7px 8px", color: record.suggestion?.type !== "none" ? "#e88c2a" : "#6b7290" }}>
-                  {record.suggestion?.type === "none"
-                    ? "—"
-                    : `${record.suggestion?.rationale?.slice(0, 60) || ""}${(record.suggestion?.rationale || "").length > 60 ? "…" : ""}`}
-                </td>
-              </tr>
+              <React.Fragment key={groupName}>
+                <tr
+                  onClick={() => onToggleGroup(groupName)}
+                  style={{ background: "rgba(28,32,48,0.95)", cursor: "pointer", userSelect: "none" }}
+                >
+                  <td colSpan={9} style={{ padding: "8px 10px", borderTop: "1px solid #24293b", borderBottom: isCollapsed ? "1px solid #2a2f3e" : "1px solid rgba(42,47,62,0.45)", fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: "#888" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span>{groupName} ({groupRecords.length})</span>
+                      <span style={{ marginLeft: "auto", color: "#666" }}>{isCollapsed ? "▸" : "▾"}</span>
+                    </div>
+                  </td>
+                </tr>
+                {!isCollapsed && groupRecords.map(record => {
+                  const last = record.sessions[record.sessions.length - 1]
+                  const staleColor = record.stale ? "#e8b84a" : "#6b7290"
+                  const gateColor = record.oc_gate === "clear" ? "#4caf50" : record.oc_gate === "block" ? "#d95f5f" : "#e8b84a"
+                  const staleMetric = record.primary_stale_role === "heavy"
+                    ? record.sessions_since_load_increase
+                    : record.sessions_since_reps_increase
+                  return (
+                    <tr key={record.exercise_id} style={{ background: record.stale ? "rgba(232,184,74,0.04)" : "transparent" }}>
+                      <td style={{ padding: "7px 8px", color: "#d4d8e8" }}>{record.exercise_name}</td>
+                      <td style={{ padding: "7px 8px", color: "#6b7290" }}>{getProgressTableGroupLabel(record)}</td>
+                      <td style={{ padding: "7px 8px", color: "#6b7290", textAlign: "right" }}>{record.sessions.length}</td>
+                      <td style={{ padding: "7px 8px", textAlign: "right" }}>{last?.load_lb ?? "—"}</td>
+                      <td style={{ padding: "7px 8px", textAlign: "right", color: "#4caf7d" }}>{record.e1rm_current != null ? record.e1rm_current.toFixed(0) : "—"}</td>
+                      <td style={{ padding: "7px 8px", textAlign: "right" }}>{record.load_headroom_pct != null ? `${record.load_headroom_pct.toFixed(0)}%` : "—"}</td>
+                      <td style={{ padding: "7px 8px", color: staleColor, textAlign: "center" }}>
+                        {record.stale ? `${record.primary_stale_role}:${staleMetric}s` : "—"}
+                      </td>
+                      <td style={{ padding: "7px 8px", color: gateColor }}>
+                        {record.oc_gate === "clear" ? "✓" : record.oc_gate.replace(/_/g, " ")}
+                      </td>
+                      <td style={{ padding: "7px 8px", color: record.suggestion?.type !== "none" ? "#e88c2a" : "#6b7290" }}>
+                        {record.suggestion?.type === "none"
+                          ? "—"
+                          : `${record.suggestion?.rationale?.slice(0, 60) || ""}${(record.suggestion?.rationale || "").length > 60 ? "…" : ""}`}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </React.Fragment>
             )
           })}
         </tbody>
@@ -9982,23 +10024,11 @@ function ProgressTab({ progressionState, schedLog }) {
       ]
     },
   ]
-  const AEROBIC_SERIES = [
-    { label: "Running", color: "#06b6d4", filter: sess => /run|jog|5k|10k|half|marathon/i.test(`${sess?.activity_type || ""} ${sess?.title || ""}`), unit: "mi", field: "distance_miles" },
-    { label: "Cycling", color: "#a78bfa", filter: sess => /cycl|bike|ride|spin/i.test(`${sess?.activity_type || ""} ${sess?.title || ""}`), unit: "mi", field: "distance_miles" },
-    { label: "Swimming", color: "#34d399", filter: sess => /swim|pool/i.test(`${sess?.activity_type || ""} ${sess?.title || ""}`), unit: "min", field: "duration_minutes" },
-  ]
   const [sortBy, setSortBy] = useState("stale")
   const [showMethodology, setShowMethodology] = useState(false)
-  const [collapsedGroups, setCollapsedGroups] = useState({})
+  const [collapsedExGroups, setCollapsedExGroups] = useState({})
   const [progressMapOpen, setProgressMapOpen] = useState(true)
   const methodologyRef = useRef(null)
-  const allGroupNames = EXERCISE_GROUPS.map(g => g.group)
-  const allCollapsed = allGroupNames.every(name => collapsedGroups[name])
-  const toggleGroup = name => setCollapsedGroups(prev => ({ ...prev, [name]: !prev[name] }))
-  const toggleAll = () => {
-    const next = allCollapsed ? {} : Object.fromEntries(allGroupNames.map(name => [name, true]))
-    setCollapsedGroups(next)
-  }
   const todayStr = new Date().toISOString().slice(0, 10)
   const todaySession = getLatestScheduleSessionForDate(schedLog, todayStr)
   const customRegistry = readCustomExerciseRegistry()
@@ -10122,16 +10152,102 @@ function ProgressTab({ progressionState, schedLog }) {
 
   const anyStrengthData = strengthGroups.some(group => group.charts.length > 0)
 
-  const aerobicCharts = useMemo(() => {
-    const parseSessionDate = value => {
+  const progressRegionSignals = useMemo(() => {
+    const now = new Date()
+    now.setHours(0, 0, 0, 0)
+    const recentStart = new Date(now)
+    recentStart.setDate(recentStart.getDate() - 28)
+    const priorStart = new Date(now)
+    priorStart.setDate(priorStart.getDate() - 56)
+    const summariesByRegion = {}
+    const records = Array.isArray(progressionState) ? progressionState : []
+
+    Object.entries(PROGRESS_REGION_EXERCISE_MAP).forEach(([region, terms]) => {
+      const matchedRecords = records.filter(record =>
+        terms.some(term => matchesExerciseTerm(record?.exercise_name, term))
+      )
+      const metricRows = matchedRecords.flatMap(record => {
+        const e1rmRows = (record.e1rm_sessions || [])
+          .map(item => ({
+            date: item.date,
+            dateMs: new Date(`${String(item.date).slice(0, 10)}T12:00:00`).getTime(),
+            metric: item.e1rm,
+          }))
+          .filter(item => Number.isFinite(item.metric) && Number.isFinite(item.dateMs))
+        if (e1rmRows.length) return e1rmRows
+        return (record.sessions || [])
+          .map(session => ({
+            date: session.date,
+            dateMs: new Date(`${String(session.date).slice(0, 10)}T12:00:00`).getTime(),
+            metric: session.volume_load,
+          }))
+          .filter(item => Number.isFinite(item.metric) && Number.isFinite(item.dateMs))
+      })
+      const recentSessions = metricRows.filter(item => item.dateMs >= recentStart.getTime() && item.dateMs <= now.getTime())
+      const priorSessions = metricRows.filter(item => item.dateMs >= priorStart.getTime() && item.dateMs < recentStart.getTime())
+      let signal = "neutral"
+      const recentCount = recentSessions.length
+      const priorCount = priorSessions.length
+      const recentMean = recentCount ? recentSessions.reduce((sum, item) => sum + item.metric, 0) / recentCount : null
+      const priorMean = priorCount ? priorSessions.reduce((sum, item) => sum + item.metric, 0) / priorCount : null
+      const pct = recentCount >= 2 && priorCount >= 2 && Number.isFinite(priorMean) && priorMean > 0
+        ? ((recentMean - priorMean) / priorMean) * 100
+        : null
+      const priorMax = priorSessions.length ? Math.max(...priorSessions.map(item => item.metric)) : null
+      const recentMax = recentSessions.length ? Math.max(...recentSessions.map(item => item.metric)) : null
+      const hasNewMax = Number.isFinite(recentMax) && Number.isFinite(priorMax) ? recentMax > priorMax : false
+      const dominantRecord = matchedRecords
+        .filter(record => record?.e1rm_current != null)
+        .sort((a, b) => (b.e1rm_current || 0) - (a.e1rm_current || 0))[0] || matchedRecords[0] || null
+      const dominantRecent = dominantRecord?.e1rm_sessions?.filter(item => {
+        const dateMs = new Date(`${String(item.date).slice(0, 10)}T12:00:00`).getTime()
+        return Number.isFinite(dateMs) && dateMs >= recentStart.getTime() && dateMs <= now.getTime()
+      }) || []
+      const dominantPrior = dominantRecord?.e1rm_sessions?.filter(item => {
+        const dateMs = new Date(`${String(item.date).slice(0, 10)}T12:00:00`).getTime()
+        return Number.isFinite(dateMs) && dateMs >= priorStart.getTime() && dateMs < recentStart.getTime()
+      }) || []
+      const dominantRecentMean = dominantRecent.length ? dominantRecent.reduce((sum, item) => sum + item.e1rm, 0) / dominantRecent.length : null
+      const dominantPriorMean = dominantPrior.length ? dominantPrior.reduce((sum, item) => sum + item.e1rm, 0) / dominantPrior.length : null
+      const dominantPositive = dominantRecent.length >= 2 && dominantPrior.length >= 2 &&
+        Number.isFinite(dominantRecentMean) && Number.isFinite(dominantPriorMean) &&
+        dominantRecentMean > dominantPriorMean
+
+      if (pct != null) {
+        signal = pct > 5 ? "progress" : pct < -5 ? "regression" : hasNewMax ? "progress" : "stalling"
+        if (signal === "regression" && dominantPositive) signal = "progress"
+      }
+
+      summariesByRegion[region] = {
+        signal,
+        recentMean,
+        priorMean,
+        pct,
+        recentSessionCount: recentCount,
+        priorSessionCount: priorCount,
+      }
+    })
+
+    return summariesByRegion
+  }, [progressionState])
+
+  const aerobicVolumeData = useMemo(() => {
+    const isRun = session => /run|jog|5k|10k|half|marathon/i.test(`${session?.activity_type || ""} ${session?.title || session?.name || ""}`)
+    const isCycle = session => /cycl|bike|ride|spin/i.test(`${session?.activity_type || ""} ${session?.title || session?.name || ""}`)
+    const isSwim = session => /swim|pool/i.test(`${session?.activity_type || ""} ${session?.title || session?.name || ""}`)
+    const byDate = {}
+    ;(Array.isArray(schedLog) ? schedLog : []).forEach(entry => {
+      const date = String(entry?.date || "").slice(0, 10)
+      if (!date) return
+      const count = Array.isArray(entry?.exercises) ? entry.exercises.length : 0
+      if (!byDate[date] || count > ((byDate[date]?.exercises || []).length)) byDate[date] = entry
+    })
+    const baseSessions = Object.values(byDate)
+    const getWeekKey = value => {
       const dateKey = String(value || "").slice(0, 10)
       if (!dateKey) return null
       const date = new Date(`${dateKey}T12:00:00`)
-      return Number.isNaN(date.getTime()) ? null : date
-    }
-    const getWeekKey = value => {
-      const date = parseSessionDate(value)
-      if (!date) return null
+      if (Number.isNaN(date.getTime())) return null
       const monday = new Date(date)
       monday.setDate(date.getDate() - date.getDay() + (date.getDay() === 0 ? -6 : 1))
       monday.setHours(0, 0, 0, 0)
@@ -10142,171 +10258,97 @@ function ProgressTab({ progressionState, schedLog }) {
       date.setDate(date.getDate() + offset * 7)
       return getWeekKey(date.toISOString().slice(0, 10))
     }
+    const getDurationMinutes = session => {
+      const candidates = [session?.duration_min, session?.duration_minutes, session?.dur]
+      for (const candidate of candidates) {
+        const minutes = Number(candidate)
+        if (Number.isFinite(minutes) && minutes > 0) return minutes
+      }
+      return null
+    }
     const getDistanceMiles = session => {
-      const direct = Number(session?.distance_miles)
-      if (Number.isFinite(direct) && direct > 0) return direct
+      const miles = Number(session?.distance_miles)
+      if (Number.isFinite(miles) && miles > 0) return miles
       const km = Number(session?.distance_km)
       if (Number.isFinite(km) && km > 0) return km / 1.609
       return null
     }
-    const getDurationMinutes = session => {
-      const minuteCandidates = [
-        session?.duration_minutes,
-        session?.duration_min,
-        session?.dur,
-      ]
-      for (const candidate of minuteCandidates) {
-        const minutes = Number(candidate)
-        if (Number.isFinite(minutes) && minutes > 0) return minutes
-      }
-      const sec = Number(session?.durationSec ?? session?.duration_sec)
-      if (Number.isFinite(sec) && sec > 0) return sec / 60
-      return null
-    }
+    const seriesDefs = [
+      { label: "Running", color: "#06b6d4", match: isRun, mode: "distance" },
+      { label: "Cycling", color: "#a78bfa", match: isCycle, mode: "distance" },
+      { label: "Swimming", color: "#34d399", match: isSwim, mode: "duration" },
+    ]
+    const weekTotals = Object.fromEntries(seriesDefs.map(series => [series.label, {}]))
+    let runCount = 0
+    let cycleCount = 0
+    let swimCount = 0
 
-    const weekTotalsByLabel = Object.fromEntries(AEROBIC_SERIES.map(series => [series.label, {}]))
-    allSessions.forEach(session => {
-      const weekKey = getWeekKey(session?.date || session?.start_date)
+    baseSessions.forEach(session => {
+      const weekKey = getWeekKey(session?.date)
       if (!weekKey) return
-      AEROBIC_SERIES.forEach(series => {
-        if (!series.filter(session)) return
+      seriesDefs.forEach(series => {
+        if (!series.match(session)) return
+        if (series.label === "Running") runCount += 1
+        if (series.label === "Cycling") cycleCount += 1
+        if (series.label === "Swimming") swimCount += 1
         const distanceMiles = getDistanceMiles(session)
         const durationMinutes = getDurationMinutes(session)
-        const value = series.field === "duration_minutes"
+        const value = series.mode === "duration"
           ? durationMinutes
           : (distanceMiles ?? durationMinutes)
         if (!Number.isFinite(value) || value <= 0) return
-        weekTotalsByLabel[series.label][weekKey] = (weekTotalsByLabel[series.label][weekKey] || 0) + value
+        weekTotals[series.label][weekKey] = (weekTotals[series.label][weekKey] || 0) + value
       })
     })
 
-    const latestWeekWithData = Object.values(weekTotalsByLabel)
-      .flatMap(seriesMap => Object.keys(seriesMap))
-      .sort()
-      .pop() || getWeekKey(new Date().toISOString().slice(0, 10))
-    const weekKeys = latestWeekWithData
-      ? Array.from({ length: 12 }, (_, index) => addWeeks(latestWeekWithData, index - 11))
-      : []
+    const latestWeek = [
+      ...Object.keys(weekTotals.Running),
+      ...Object.keys(weekTotals.Cycling),
+      ...Object.keys(weekTotals.Swimming),
+    ].sort().pop() || getWeekKey(new Date().toISOString().slice(0, 10))
+    const aerobicWeeks = latestWeek ? Array.from({ length: 12 }, (_, index) => addWeeks(latestWeek, index - 11)) : []
 
-    return AEROBIC_SERIES.map(series => {
-      const totals = weekTotalsByLabel[series.label]
-      const data = weekKeys.map(weekKey => ({
-        week: weekKey.slice(5),
-        value: Number(((totals[weekKey] || 0)).toFixed(1))
-      }))
-      const hasData = data.some(point => point.value > 0)
-      return { ...series, data, hasData }
-    })
-  }, [allSessions, AEROBIC_SERIES])
-
-  const progressRegionSignals = useMemo(() => {
-    const now = new Date()
-    now.setHours(0, 0, 0, 0)
-    const recentStart = new Date(now)
-    recentStart.setDate(recentStart.getDate() - 28)
-    const priorStart = new Date(now)
-    priorStart.setDate(priorStart.getDate() - 56)
-    const matchName = (name, terms) => terms.some(term => name.includes(term))
-    const parseSessionDate = value => {
-      const dateKey = String(value || "").slice(0, 10)
-      if (!dateKey) return null
-      const date = new Date(`${dateKey}T12:00:00`)
-      return Number.isNaN(date.getTime()) ? null : date
+    return {
+      aerobicWeeks,
+      runCount,
+      cycleCount,
+      swimCount,
+      charts: seriesDefs.map(series => {
+        const data = aerobicWeeks.map(weekKey => ({
+          week: weekKey ? weekKey.slice(5) : "",
+          value: Number((weekTotals[series.label][weekKey] || 0).toFixed(1)),
+        }))
+        const hasDurationFallback = series.mode === "distance" && !Object.keys(weekTotals[series.label]).some(weekKey => Number.isFinite(weekTotals[series.label][weekKey]) && weekTotals[series.label][weekKey] > 0)
+        return {
+          ...series,
+          data,
+          unit: series.mode === "duration" ? "min" : "mi",
+          hasData: data.some(point => point.value > 0),
+          usesDurationFallback: hasDurationFallback && (series.label === "Running" || series.label === "Cycling"),
+        }
+      })
     }
-    const summariesByRegion = {}
+  }, [schedLog])
 
-    Object.entries(PROGRESS_REGION_EXERCISE_MAP).forEach(([region, terms]) => {
-      const normalizedTerms = terms.map(term => term.toLowerCase())
-      const sessions = []
-
-      allSessions.forEach(session => {
-        const sessionDate = parseSessionDate(session?.date || session?.start_date)
-        if (!sessionDate || sessionDate < priorStart || sessionDate > now) return
-
-        const normalizedExercises = (session.exercises || [])
-          .map(normalizeLoggedExercise)
-          .filter(Boolean)
-        const matches = normalizedExercises.filter(exercise => matchName(String(exercise.name || "").toLowerCase(), normalizedTerms))
-        if (!matches.length) return
-
-        let maxE1rm = null
-        let totalVolume = 0
-
-        matches.forEach(exercise => {
-          const dataEntry = session.data?.[exercise.exercise_id ?? exercise.id]
-          const setsArr = Array.isArray(dataEntry) && dataEntry.length > 0
-            ? dataEntry.map(set => ({ weight: set.w ?? set.weight, reps: set.r ?? set.reps }))
-            : Array.isArray(exercise.sets) && exercise.sets.length > 0
-              ? exercise.sets
-              : [{ weight: exercise.actual?.load ?? exercise.load, reps: exercise.actual?.reps ?? exercise.reps }]
-
-          setsArr.forEach(set => {
-            const rawLoad = set.weight ?? set.load ?? set.w
-            const rawReps = set.reps ?? set.r
-            const loadStr = String(rawLoad ?? "").trim().toUpperCase()
-            const weight = loadStr === "BW" || loadStr === "BODYWEIGHT" || loadStr === "—"
-              ? BW_LB
-              : parseFloat(rawLoad)
-            if (!Number.isFinite(weight) || weight <= 0) return
-            const repsStr = String(rawReps ?? "").trim()
-            const isTimeBased = /^\d+s$/i.test(repsStr)
-            const reps = isTimeBased ? null : parseFloat(rawReps)
-            const effectiveReps = Number.isFinite(reps) && reps > 0 ? reps : 1
-            totalVolume += weight * effectiveReps
-            if (!isTimeBased && Number.isFinite(reps) && reps > 0 && reps <= 15) {
-              const e1rm = weight * (1 + reps / 30)
-              if (maxE1rm == null || e1rm > maxE1rm) maxE1rm = e1rm
-            }
-          })
-        })
-
-        sessions.push({
-          date: sessionDate,
-          e1rm: maxE1rm,
-          volume: totalVolume > 0 ? totalVolume : null,
-        })
-      })
-
-      const recentSessions = sessions.filter(item => item.date >= recentStart)
-      const priorSessions = sessions.filter(item => item.date >= priorStart && item.date < recentStart)
-      const recentE1rm = recentSessions.filter(item => item.e1rm != null)
-      const priorE1rm = priorSessions.filter(item => item.e1rm != null)
-      const recentVolume = recentSessions.filter(item => item.volume != null)
-      const priorVolume = priorSessions.filter(item => item.volume != null)
-
-      let signal = "neutral"
-      if (recentE1rm.length >= 2 && priorE1rm.length >= 2) {
-        const recentMean = recentE1rm.reduce((sum, item) => sum + item.e1rm, 0) / recentE1rm.length
-        const priorMean = priorE1rm.reduce((sum, item) => sum + item.e1rm, 0) / priorE1rm.length
-        if (priorMean > 0) {
-          const pct = ((recentMean - priorMean) / priorMean) * 100
-          const historicalMax = sessions
-            .filter(item => item.date < recentStart && item.e1rm != null)
-            .reduce((max, item) => Math.max(max, item.e1rm), -Infinity)
-          const recentMax = recentE1rm.reduce((max, item) => Math.max(max, item.e1rm), -Infinity)
-          const hasNewMax = recentMax > historicalMax
-          signal = pct > 5 ? "progress" : pct < -5 ? "regression" : hasNewMax ? "progress" : "stalling"
-        }
-      } else if (recentVolume.length >= 2 && priorVolume.length >= 2) {
-        const recentMean = recentVolume.reduce((sum, item) => sum + item.volume, 0) / recentVolume.length
-        const priorMean = priorVolume.reduce((sum, item) => sum + item.volume, 0) / priorVolume.length
-        if (priorMean > 0) {
-          const pct = ((recentMean - priorMean) / priorMean) * 100
-          const historicalMax = sessions
-            .filter(item => item.date < recentStart && item.volume != null)
-            .reduce((max, item) => Math.max(max, item.volume), -Infinity)
-          const recentMax = recentVolume.reduce((max, item) => Math.max(max, item.volume), -Infinity)
-          const hasNewMax = recentMax > historicalMax
-          signal = pct > 5 ? "progress" : pct < -5 ? "regression" : hasNewMax ? "progress" : "stalling"
-        }
-      }
-
-      summariesByRegion[region] = signal
-    })
-
-    return summariesByRegion
-  }, [allSessions])
-
+  const sorted = [...visibleRecords].sort((a, b) => {
+    if (sortBy === "stale") {
+      if (a.stale !== b.stale) return a.stale ? -1 : 1
+      return (b.sessions.length || 0) - (a.sessions.length || 0)
+    }
+    if (sortBy === "group") return a.movement_pattern.localeCompare(b.movement_pattern)
+    if (sortBy === "date") {
+      const aDate = a.sessions[a.sessions.length - 1]?.date || ""
+      const bDate = b.sessions[b.sessions.length - 1]?.date || ""
+      return bDate.localeCompare(aDate)
+    }
+    return 0
+  })
+  const exGroupNames = [...new Set(sorted.map(getProgressTableGroupLabel).filter(Boolean))]
+  const allExCollapsed = exGroupNames.length > 0 && exGroupNames.every(groupName => collapsedExGroups[groupName])
+  const toggleExGroup = groupName => setCollapsedExGroups(prev => ({ ...prev, [groupName]: !prev[groupName] }))
+  const toggleAllEx = () => setCollapsedExGroups(
+    allExCollapsed ? {} : Object.fromEntries(exGroupNames.map(groupName => [groupName, true]))
+  )
   const volumeChartData = useMemo(() => {
     if (!Array.isArray(schedLog) || schedLog.length === 0) return null
 
@@ -10407,27 +10449,13 @@ function ProgressTab({ progressionState, schedLog }) {
     }
   }, [schedLog, progressionState, movementPatternById, customRegistry])
 
-  const sorted = [...visibleRecords].sort((a, b) => {
-    if (sortBy === "stale") {
-      if (a.stale !== b.stale) return a.stale ? -1 : 1
-      return (b.sessions.length || 0) - (a.sessions.length || 0)
-    }
-    if (sortBy === "group") return a.movement_pattern.localeCompare(b.movement_pattern)
-    if (sortBy === "date") {
-      const aDate = a.sessions[a.sessions.length - 1]?.date || ""
-      const bDate = b.sessions[b.sessions.length - 1]?.date || ""
-      return bDate.localeCompare(aDate)
-    }
-    return 0
-  })
-
   const renderProgressMap = side => {
     const coordKey = side === "back" ? "b" : "f"
     return (
       <div style={{ position: "relative", background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: 12, padding: 10 }}>
         <BodySilhouetteImg side={side} />
         <svg style={{ position: "absolute", inset: 10, width: "calc(100% - 20px)", height: "calc(100% - 20px)", pointerEvents: "none", overflow: "visible" }}>
-          {Object.entries(progressRegionSignals).map(([region, signal]) => {
+          {Object.entries(progressRegionSignals).map(([region, info]) => {
             const coords = OC_REGION_COORDS[region]?.[coordKey]
             if (!coords) return null
             return (
@@ -10436,7 +10464,7 @@ function ProgressTab({ progressionState, schedLog }) {
                 cx={`${coords[0]}%`}
                 cy={`${coords[1]}%`}
                 r={14}
-                fill={PROGRESS_COLOR[signal] || PROGRESS_COLOR.neutral}
+                fill={PROGRESS_COLOR[info?.signal] || PROGRESS_COLOR.neutral}
               />
             )
           })}
@@ -10447,91 +10475,72 @@ function ProgressTab({ progressionState, schedLog }) {
 
   const renderGroup = ({ group, color, charts }) => {
     if (!charts.length) return null
-    const isCollapsed = !!collapsedGroups[group]
     return (
       <div key={group} style={{ background: "#0d0e1c", border: `1px solid ${color}22`, borderRadius: 10, padding: "14px" }}>
-        <div
-          onClick={() => toggleGroup(group)}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            cursor: "pointer",
-            userSelect: "none",
-            marginBottom: isCollapsed ? 0 : 12
-          }}
-        >
-          <div style={{ width: 10, height: 10, borderRadius: "50%", background: color, flexShrink: 0 }} />
-          <span style={{ fontSize: 13, fontWeight: 600, color: "#ccc", letterSpacing: "0.05em" }}>
-            {group}
-          </span>
-          <span style={{ marginLeft: "auto", fontSize: 11, color: "#555" }}>
-            {isCollapsed ? "▸" : "▾"}
-          </span>
+        <div style={{ fontSize: 12, fontWeight: 700, color, marginBottom: 10, borderBottom: `1px solid ${color}33`, paddingBottom: 6 }}>
+          {group}
         </div>
-        {!isCollapsed && (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12 }}>
-            {charts.map(({ name, baseline, data }) => (
-              <div key={name}>
-                <div style={{ fontSize: 10, fontWeight: 600, color: "#8fa8d8", marginBottom: 3 }}>{name}</div>
-                <ResponsiveContainer width="100%" height={110}>
-                  <ComposedChart data={data} margin={{ top: 4, right: 28, left: 0, bottom: 4 }}>
-                    <CartesianGrid stroke="#1a1b2e" />
-                    <XAxis dataKey="date" tick={{ fontSize: 8 }} interval="preserveStartEnd" />
-                    <YAxis
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12 }}>
+          {charts.map(({ name, baseline, data }) => (
+            <div key={name}>
+              <div style={{ fontSize: 10, fontWeight: 600, color: "#8fa8d8", marginBottom: 3 }}>{name}</div>
+              <ResponsiveContainer width="100%" height={110}>
+                <ComposedChart data={data} margin={{ top: 4, right: 28, left: 0, bottom: 4 }}>
+                  <CartesianGrid stroke="#1a1b2e" />
+                  <XAxis dataKey="date" tick={{ fontSize: 8 }} interval="preserveStartEnd" />
+                  <YAxis
+                    yAxisId="left"
+                    tick={{ fontSize: 8 }}
+                    width={32}
+                    label={{ value: "lb", angle: -90, position: "insideLeft", fontSize: 7, fill: "#666" }}
+                  />
+                  <YAxis
+                    yAxisId="right"
+                    orientation="right"
+                    tick={{ fontSize: 8 }}
+                    width={28}
+                    tickFormatter={value => value >= 1000 ? `${(value / 1000).toFixed(1)}k` : value}
+                    label={{ value: "vol", angle: 90, position: "insideRight", fontSize: 7, fill: "#444" }}
+                  />
+                  <Tooltip
+                    formatter={(value, key) => key === "volume"
+                      ? [`${value.toLocaleString()} lb·reps`, "Volume"]
+                      : [`${value} lb`, "e1RM"]}
+                    labelFormatter={label => label}
+                  />
+                  <Area
+                    yAxisId="right"
+                    type="monotone"
+                    dataKey="volume"
+                    fill="rgba(255,255,255,0.07)"
+                    stroke="rgba(255,255,255,0.15)"
+                    strokeWidth={1}
+                    dot={false}
+                    connectNulls
+                  />
+                  <Line
+                    yAxisId="left"
+                    type="monotone"
+                    dataKey="e1rm"
+                    stroke={color}
+                    strokeWidth={2}
+                    dot={{ r: 2 }}
+                    connectNulls
+                  />
+                  {baseline != null && (
+                    <ReferenceLine
                       yAxisId="left"
-                      tick={{ fontSize: 8 }}
-                      width={32}
-                      label={{ value: "lb", angle: -90, position: "insideLeft", fontSize: 7, fill: "#666" }}
+                      y={baseline}
+                      stroke="#4a9ee8"
+                      strokeDasharray="4 2"
+                      label={{ value: `B ${baseline}`, position: "insideTopRight", fontSize: 8, fill: "#4a9ee8" }}
                     />
-                    <YAxis
-                      yAxisId="right"
-                      orientation="right"
-                      tick={{ fontSize: 8 }}
-                      width={28}
-                      tickFormatter={value => value >= 1000 ? `${(value / 1000).toFixed(1)}k` : value}
-                      label={{ value: "vol", angle: 90, position: "insideRight", fontSize: 7, fill: "#444" }}
-                    />
-                    <Tooltip
-                      formatter={(value, key) => key === "volume"
-                        ? [`${value.toLocaleString()} lb·reps`, "Volume"]
-                        : [`${value} lb`, "e1RM"]}
-                      labelFormatter={label => label}
-                    />
-                    <Area
-                      yAxisId="right"
-                      type="monotone"
-                      dataKey="volume"
-                      fill="rgba(255,255,255,0.07)"
-                      stroke="rgba(255,255,255,0.15)"
-                      strokeWidth={1}
-                      dot={false}
-                      connectNulls
-                    />
-                    <Line
-                      yAxisId="left"
-                      type="monotone"
-                      dataKey="e1rm"
-                      stroke={color}
-                      strokeWidth={2}
-                      dot={{ r: 2 }}
-                      connectNulls
-                    />
-                    {baseline != null && (
-                      <ReferenceLine
-                        yAxisId="left"
-                        y={baseline}
-                        stroke="#4a9ee8"
-                        strokeDasharray="4 2"
-                        label={{ value: `B ${baseline}`, position: "insideTopRight", fontSize: 8, fill: "#4a9ee8" }}
-                      />
-                    )}
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </div>
-            ))}
-          </div>
-        )}
+                  )}
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          ))}
+        </div>
       </div>
     )
   }
@@ -10649,7 +10658,29 @@ function ProgressTab({ progressionState, schedLog }) {
           <SortButtons sortBy={sortBy} setSortBy={setSortBy} />
         </div>
         {sorted.length > 0 ? (
-          <ProgressTable records={sorted} />
+          <>
+            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+              <button
+                onClick={toggleAllEx}
+                style={{
+                  background: "none",
+                  border: "1px solid #333",
+                  color: "#888",
+                  fontSize: 11,
+                  padding: "3px 10px",
+                  borderRadius: 4,
+                  cursor: "pointer"
+                }}
+              >
+                {allExCollapsed ? "Expand all" : "Collapse all"}
+              </button>
+            </div>
+            <ProgressTable
+              records={sorted}
+              collapsedGroups={collapsedExGroups}
+              onToggleGroup={toggleExGroup}
+            />
+          </>
         ) : (
           <div style={{ fontSize: 12, color: "#6b7290" }}>
             No progression history yet. Log at least two sessions with overlapping exercises to populate this table.
@@ -10696,6 +10727,52 @@ function ProgressTab({ progressionState, schedLog }) {
           </div>
         </div>
       )}
+
+      <div style={{ marginTop: 24 }}>
+        <div style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 11, color: "#6b7290", letterSpacing: 2, textTransform: "uppercase", marginBottom: 12, paddingBottom: 6, borderBottom: "1px solid #2a2f3e" }}>
+          Aerobic Volume by Modality
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
+          {aerobicVolumeData.charts.map(series => (
+            <div key={series.label} style={{ background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: 12, padding: 14 }}>
+              <div style={{ fontFamily: "IBM Plex Mono", fontSize: 10, letterSpacing: 1.5, textTransform: "uppercase", color: series.color, marginBottom: 10 }}>
+                {series.label}
+              </div>
+              {series.hasData ? (
+                <>
+                  <div style={{ height: 190 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={series.data} margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>
+                        <CartesianGrid stroke="rgba(42,47,62,0.8)" />
+                        <XAxis dataKey="week" tick={{ fill: "#6b7290", fontSize: 10 }} />
+                        <YAxis
+                          tick={{ fill: "#6b7290", fontSize: 10 }}
+                          width={42}
+                          label={{ value: series.usesDurationFallback ? "min" : series.unit, angle: -90, position: "insideLeft", offset: 2, fill: "#6b7290", style: { textAnchor: "middle" }, fontSize: 10 }}
+                        />
+                        <Tooltip
+                          contentStyle={{ background: "#1c2030", border: "1px solid #2a2f3e", borderRadius: 6, color: "#cbd5e1" }}
+                          formatter={value => [`${value} ${series.usesDurationFallback ? "min" : series.unit}`, series.label]}
+                        />
+                        <Bar dataKey="value" name={series.label} fill={series.color} radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  {series.usesDurationFallback && (
+                    <div style={{ fontSize: 10, color: "#667", marginTop: 6 }}>
+                      Distance missing for some sessions; using duration fallback.
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div style={{ height: 190, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "#555" }}>
+                  no sessions logged
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }
@@ -11242,55 +11319,8 @@ if (w.category === "Strength") {
                 Strength Progression
                 <span style={{ fontSize: 10, fontWeight: 400, color: "#555", marginLeft: 8 }}>e1RM line (left axis) · volume area (right axis) · max set per session</span>
               </div>
-              <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
-                <button
-                  onClick={toggleAll}
-                  style={{
-                    background: "none",
-                    border: "1px solid #333",
-                    color: "#888",
-                    fontSize: 11,
-                    padding: "3px 10px",
-                    borderRadius: 4,
-                    cursor: "pointer"
-                  }}
-                >
-                  {allCollapsed ? "Expand all" : "Collapse all"}
-                </button>
-              </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 16 }}>
                 {strengthGroups.map(group => renderGroup(group))}
-              </div>
-            </div>
-
-            <div style={{ background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: 12, padding: 16, marginTop: 16 }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: "#ced2f0", marginBottom: 14 }}>
-                Aerobic Volume
-                <span style={{ fontSize: 10, fontWeight: 400, color: "#555", marginLeft: 8 }}>last 12 weeks · Monday-anchored</span>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
-                {aerobicCharts.map(series => (
-                  <div key={series.label} style={{ background: "#10131f", border: `1px solid ${series.color}22`, borderRadius: 10, padding: 12 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: series.color, marginBottom: 10 }}>
-                      {series.label}
-                    </div>
-                    {series.hasData ? (
-                      <ResponsiveContainer width="100%" height={180}>
-                        <BarChart data={series.data} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
-                          <CartesianGrid stroke="#1a1b2e" />
-                          <XAxis dataKey="week" tick={{ fontSize: 8 }} interval={1} />
-                          <YAxis tick={{ fontSize: 8 }} label={{ value: series.unit, angle: -90, position: "insideLeft", fontSize: 7, fill: "#666" }} />
-                          <Tooltip formatter={value => [`${value} ${series.unit}`, series.label]} />
-                          <Bar dataKey="value" fill={series.color} radius={[3, 3, 0, 0]} />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    ) : (
-                      <div style={{ minHeight: 180, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "#555" }}>
-                        no sessions logged
-                      </div>
-                    )}
-                  </div>
-                ))}
               </div>
             </div>
           </>
