@@ -6472,6 +6472,14 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   }, [])
 
   const [pendingKvWriteCount, setPendingKvWriteCount] = useState(() => readPendingKvWrites().length)
+  const scheduleSyncSignedOut = pendingKvWriteCount > 0 && !session?.user?.id
+  const isCanonicalHost = typeof window === "undefined"
+    ? true
+    : (
+        window.location.hostname === "fitness-theta-ruby.vercel.app" ||
+        window.location.hostname === "localhost" ||
+        window.location.hostname === "127.0.0.1"
+      )
 
   const writePendingKvWrites = useCallback(nextQueue => {
     const safeQueue = Array.isArray(nextQueue) ? nextQueue.filter(entry => entry && typeof entry.kvKey === "string") : []
@@ -6596,10 +6604,11 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       let queue = readPendingKvWrites()
       if (!queue.length) {
         setPendingKvWriteCount(0)
-        return { ok: true, trigger, flushed: 0, remaining: 0 }
+        return { ok: true, trigger, flushed: 0, remaining: 0, authBlocked: false }
       }
 
       const startingCount = queue.length
+      let authBlocked = false
       for (const entry of [...queue]) {
         try {
           const result = await attemptScheduleKvWrite(entry.kvKey, entry.value)
@@ -6614,12 +6623,16 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
             }
             continue
           }
+          if (result?.reason === "no-auth" || result?.reason === "missing-session") {
+            authBlocked = true
+          }
           queue = queue.map(candidate => candidate.kvKey === entry.kvKey
             ? { ...candidate, attempts: Number(candidate.attempts || 0) + 1 }
             : candidate
           )
           writePendingKvWrites(queue)
-        } catch (_) {
+        } catch (error) {
+          if ((error?.message || "").toLowerCase().includes("session")) authBlocked = true
           queue = queue.map(candidate => candidate.kvKey === entry.kvKey
             ? { ...candidate, attempts: Number(candidate.attempts || 0) + 1 }
             : candidate
@@ -6628,7 +6641,9 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
         }
       }
 
-      if (toastOnSuccess && startingCount > 0 && queue.length === 0) {
+      if (authBlocked && queue.length > 0) {
+        showToast("Saved on this device — you are signed out. Sign in to sync this session.", 5000)
+      } else if (toastOnSuccess && startingCount > 0 && queue.length === 0) {
         showToast("Queued schedule sync complete.")
       }
       return {
@@ -6636,6 +6651,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
         trigger,
         flushed: startingCount - queue.length,
         remaining: queue.length,
+        authBlocked,
       }
     })().finally(() => {
       pendingKvFlushRef.current = null
@@ -6669,6 +6685,9 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     try {
       const flushResult = await flushPendingKvWrites({ trigger: `save:${key}` })
       const stillQueued = readPendingKvWrites().some(entry => entry.kvKey === key)
+      if (flushResult?.authBlocked) {
+        return { value, synced: false, pending: true, reason: "queued-no-auth" }
+      }
       if (stillQueued || flushResult?.remaining > 0) {
         return { value, synced: false, pending: true, reason: "queued" }
       }
@@ -6895,11 +6914,35 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     }
   }, [flushPendingKvWrites])
 
+  useEffect(() => {
+    if (!supabase) return
+    const { data } = supabase.auth.onAuthStateChange((evt, sess) => {
+      if (evt === "SIGNED_IN" && sess?.user?.id) {
+        flushPendingKvWrites({ trigger: "auth:signed-in", toastOnSuccess: true }).catch(err => {
+          if (process.env.NODE_ENV === "development") console.warn("[LIFT] auth-triggered schedule sync failed:", err?.message || err)
+        })
+      }
+    })
+    return () => {
+      data?.subscription?.unsubscribe?.()
+    }
+  }, [flushPendingKvWrites, supabase])
+
   const syncPendingScheduleWritesNow = useCallback(() => {
     flushPendingKvWrites({ trigger: "manual", toastOnSuccess: true }).catch(err => {
       if (process.env.NODE_ENV === "development") console.warn("[LIFT] manual schedule sync failed:", err?.message || err)
     })
   }, [flushPendingKvWrites])
+
+  const openScheduleSignIn = useCallback(() => {
+    if (typeof document === "undefined") return
+    const node = document.getElementById("auth-panel")
+    if (node) {
+      node.scrollIntoView({ behavior: "smooth", block: "center" })
+      return
+    }
+    if (typeof window !== "undefined") window.location.hash = "auth-panel"
+  }, [])
 
   const setLogEntryRef = useCallback((id, node) => {
     if (node) logEntryRefs.current[id] = node
@@ -7897,6 +7940,8 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     const sessionsResult = await saveScheduleKey("wt-sessions", buildSessionsStore())
     if (logResult?.synced && sessionsResult?.synced) {
       showToast("Session saved and synced.")
+    } else if (logResult?.reason === "queued-no-auth" || sessionsResult?.reason === "queued-no-auth") {
+      showToast("Saved on this device — you are signed out. Sign in to sync this session.", 5000)
     } else if (logResult?.pending || sessionsResult?.pending) {
       showToast("Session saved locally — will sync when online.")
     } else {
@@ -9128,17 +9173,35 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
           ))}
         </div>
       )}
+      {!isCanonicalHost && (
+        <div style={{ marginBottom: 12, padding: "10px 12px", background: "rgba(96,165,250,0.08)", border: "1px solid rgba(96,165,250,0.24)", borderRadius: 8, fontSize: 12, color: "#bfdbfe", lineHeight: 1.5 }}>
+          You are on a preview deployment, not the main app. Open <a href="https://fitness-theta-ruby.vercel.app" style={{ color: "#93c5fd" }}>fitness-theta-ruby.vercel.app</a> to log and sync normally.
+        </div>
+      )}
       {pendingKvWriteCount > 0 && (
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 12, padding: "10px 12px", background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.24)", borderRadius: 8 }}>
           <div style={{ fontSize: 12, color: "#fbbf24", lineHeight: 1.5 }}>
-            {pendingKvWriteCount} scheduled-session sync {pendingKvWriteCount === 1 ? "item is" : "items are"} queued locally and will retry automatically when online.
+            {scheduleSyncSignedOut
+              ? `${pendingKvWriteCount} scheduled-session sync ${pendingKvWriteCount === 1 ? "item is" : "items are"} saved on this device. You are signed out, so these will not sync until you sign in.`
+              : `${pendingKvWriteCount} scheduled-session sync ${pendingKvWriteCount === 1 ? "item is" : "items are"} queued locally and will retry automatically when online.`}
           </div>
-          <button
-            onClick={syncPendingScheduleWritesNow}
-            style={{ padding: "8px 10px", background: "#1f2937", color: "#fbbf24", border: "1px solid rgba(245,158,11,0.35)", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}
-          >
-            Sync now
-          </button>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {scheduleSyncSignedOut ? (
+              <button
+                onClick={openScheduleSignIn}
+                style={{ padding: "8px 10px", background: "#1f2937", color: "#fbbf24", border: "1px solid rgba(245,158,11,0.35)", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}
+              >
+                Sign in to sync
+              </button>
+            ) : (
+              <button
+                onClick={syncPendingScheduleWritesNow}
+                style={{ padding: "8px 10px", background: "#1f2937", color: "#fbbf24", border: "1px solid rgba(245,158,11,0.35)", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}
+              >
+                Sync now
+              </button>
+            )}
+          </div>
         </div>
       )}
       <DailyReadinessPanel readinessScore={readinessScore} latestHealthFit={latestHealthFit} ocItems={ocItems} computedTSB={computedTSB} tsbV2Panel={tsbV2Panel} sleepRecords={sleepRecords} formDecayPenalty={formDecayPenalty} tissueLoadIndex={tissueLoadIndex} />
@@ -25402,7 +25465,7 @@ return (
   {!hydrated && <div style={{ fontSize: "12px", opacity: 0.8 }}>Loading synced data...</div>}
 </div>
 
-        <div style={{ ...cardStyle(), minWidth: "0", flex: "1 1 280px", maxWidth: "420px" }}>
+        <div id="auth-panel" style={{ ...cardStyle(), minWidth: "0", flex: "1 1 280px", maxWidth: "420px" }}>
           <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "8px" }}>Sync</div>
           {recoveryStatus === "ready" ? (
             <>
