@@ -4031,7 +4031,7 @@ function SignalDialSheet({ open, onClose, structureKey, location, onSubmit }) {
 }
 
 // ─── TabOperationalCapacity ────────────────────────────────────────────────────
-function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapacityData, healthFitDaily, sleepRecords, tsbFallback = null, runSessions = [], canonicalSessions = [], schedLog = [], biometricRecords = [], formDecayAccumulation = {}, tissueLoadIndex = {}, ocLoadOverrides = {}, saveOcLoadOverrides = async () => {}, tsbV2Panel = null }) {
+function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapacityData, healthFitDaily, sleepRecords, tsbFallback = null, runSessions = [], canonicalSessions = [], schedLog = [], biometricRecords = [], formDecayAccumulation = {}, tissueLoadIndex = {}, ocLoadOverrides = {}, saveOcLoadOverrides = async () => {}, saveOcItemsDurably = async () => ({ synced: false }), tsbV2Panel = null }) {
   const [selectedId, setSelectedId] = useState(null)
   const [loadSourcesOpen, setLoadSourcesOpen] = useState(false)
   const [addForm, setAddForm] = useState({
@@ -4187,13 +4187,7 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
   }
 
   const saveOcItems = async items => {
-    await store.set("oc-items", items)
-    if (supabase && session?.user?.id) {
-      await supabase.from("user_kv").upsert(
-        { user_id: session.user.id, key: "oc-items", value: items, updated_at: new Date().toISOString() },
-        { onConflict: "user_id,key" }
-      )
-    }
+    await saveOcItemsDurably(items)
   }
 
   const tendonControlItem = [...ocItems]
@@ -19420,6 +19414,156 @@ const [mealRecords, setMealRecords] = useState(() => { try { return JSON.parse(l
 const [sleepRecords, setSleepRecords] = useState(() => { try { return JSON.parse(localStorage.getItem("lift_sleep_records") || "[]") } catch { return [] } })
 const [schedLog, setSchedLog] = useState(() => { try { return JSON.parse(localStorage.getItem('wt-log') || '[]') } catch { return [] } })
 const [ocItems, setOcItems] = useState(() => { try { return JSON.parse(localStorage.getItem('oc-items') || '[]') } catch { return [] } })
+const PENDING_KV_WRITES_KEY = "lift_pending_kv_writes"
+const ocPendingKvFlushRef = useRef(null)
+const readPendingKvWrites = useCallback(() => {
+  try {
+    const raw = localStorage.getItem(PENDING_KV_WRITES_KEY)
+    const parsed = raw ? JSON.parse(raw) : []
+    return Array.isArray(parsed)
+      ? parsed.filter(entry => entry && typeof entry.kvKey === "string")
+      : []
+  } catch {
+    return []
+  }
+}, [])
+const writePendingKvWrites = useCallback(nextQueue => {
+  const safeQueue = Array.isArray(nextQueue)
+    ? nextQueue.filter(entry => entry && typeof entry.kvKey === "string")
+    : []
+  try {
+    if (safeQueue.length > 0) localStorage.setItem(PENDING_KV_WRITES_KEY, JSON.stringify(safeQueue))
+    else localStorage.removeItem(PENDING_KV_WRITES_KEY)
+  } catch {}
+  return safeQueue
+}, [])
+const getPendingKvWrite = useCallback(kvKey => {
+  return readPendingKvWrites().find(entry => entry.kvKey === kvKey) || null
+}, [readPendingKvWrites])
+const queuePendingKvWrite = useCallback((kvKey, value) => {
+  const nextEntry = {
+    kvKey,
+    value,
+    queuedAt: new Date().toISOString(),
+    attempts: 0,
+  }
+  const nextQueue = [
+    ...readPendingKvWrites().filter(entry => entry.kvKey !== kvKey),
+    nextEntry,
+  ]
+  writePendingKvWrites(nextQueue)
+  return nextEntry
+}, [readPendingKvWrites, writePendingKvWrites])
+const ensureFreshKvSession = useCallback(async () => {
+  if (!supabase) return { ok: false, reason: "missing-supabase" }
+  const { data, error } = await supabase.auth.getSession()
+  if (error) throw error
+  const activeSession = data?.session
+  if (!activeSession?.user?.id) return { ok: false, reason: "missing-session" }
+  const now = Math.floor(Date.now() / 1000)
+  const expiresAt = Number(activeSession.expires_at || 0)
+  if (!expiresAt || expiresAt - now > 120) {
+    return { ok: true, session: activeSession }
+  }
+  const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession()
+  if (refreshError) throw refreshError
+  if (!refreshed?.session?.user?.id) return { ok: false, reason: "missing-session" }
+  return { ok: true, session: refreshed.session }
+}, [supabase])
+const attemptDurableKvWrite = useCallback(async (kvKey, value) => {
+  if (!supabase || !session?.user?.id) {
+    return { ok: false, reason: "no-auth" }
+  }
+  const authResult = await ensureFreshKvSession()
+  if (!authResult?.ok || !authResult?.session?.user?.id) {
+    return { ok: false, reason: authResult?.reason || "no-auth" }
+  }
+  const userId = authResult.session.user.id
+  const { data, error, status, count } = await supabase
+    .from("user_kv")
+    .upsert(
+      { user_id: userId, key: kvKey, value, updated_at: new Date().toISOString() },
+      { onConflict: "user_id,key" }
+    )
+    .select("value")
+    .maybeSingle()
+  if (error) {
+    return { ok: false, reason: error.message || "supabase-upsert-failed", error, status, count }
+  }
+  return { ok: true, value: data?.value ?? value, status, count }
+}, [ensureFreshKvSession, session?.user?.id, supabase])
+const flushPendingOcItemsWrite = useCallback(async ({ trigger = "manual", toastOnSuccess = false } = {}) => {
+  if (ocPendingKvFlushRef.current) return ocPendingKvFlushRef.current
+  const flushPromise = (async () => {
+    let queue = readPendingKvWrites()
+    const pendingOc = queue.filter(entry => entry.kvKey === "oc-items")
+    if (!pendingOc.length) return { ok: true, trigger, flushed: 0, remaining: 0, authBlocked: false }
+
+    let authBlocked = false
+    for (const entry of pendingOc) {
+      try {
+        const result = await attemptDurableKvWrite(entry.kvKey, entry.value)
+        if (result?.ok) {
+          queue = queue.filter(candidate => candidate.kvKey !== entry.kvKey)
+          writePendingKvWrites(queue)
+          if (entry.kvKey === "oc-items" && Array.isArray(result.value)) {
+            try { localStorage.setItem("oc-items", JSON.stringify(result.value)) } catch {}
+            await store.set("oc-items", result.value)
+            setOcItems(result.value)
+          }
+          continue
+        }
+        if (result?.reason === "no-auth" || result?.reason === "missing-session") authBlocked = true
+        queue = queue.map(candidate => candidate.kvKey === entry.kvKey
+          ? { ...candidate, attempts: Number(candidate.attempts || 0) + 1 }
+          : candidate
+        )
+        writePendingKvWrites(queue)
+      } catch (error) {
+        if ((error?.message || "").toLowerCase().includes("session")) authBlocked = true
+        queue = queue.map(candidate => candidate.kvKey === entry.kvKey
+          ? { ...candidate, attempts: Number(candidate.attempts || 0) + 1 }
+          : candidate
+        )
+        writePendingKvWrites(queue)
+      }
+    }
+
+    const remaining = readPendingKvWrites().filter(entry => entry.kvKey === "oc-items").length
+    if (authBlocked && remaining > 0) {
+      console.warn("[LIFT] oc-items sync queued until sign-in")
+    } else if (toastOnSuccess && remaining === 0) {
+      console.log("[LIFT] oc-items queued sync complete")
+    }
+    return { ok: remaining === 0, trigger, flushed: pendingOc.length - remaining, remaining, authBlocked }
+  })().finally(() => {
+    ocPendingKvFlushRef.current = null
+  })
+  ocPendingKvFlushRef.current = flushPromise
+  return flushPromise
+}, [attemptDurableKvWrite, readPendingKvWrites, writePendingKvWrites])
+const saveOcItemsDurably = useCallback(async items => {
+  try { localStorage.setItem("oc-items", JSON.stringify(items)) } catch {}
+  try {
+    await store.set("oc-items", items)
+  } catch (storeErr) {
+    console.warn("[LIFT] local oc-items store write failed:", storeErr?.message || storeErr)
+  }
+  queuePendingKvWrite("oc-items", items)
+  if (!supabase || !session?.user?.id) {
+    return { value: items, synced: false, pending: true, reason: "queued-no-auth" }
+  }
+  try {
+    const flushResult = await flushPendingOcItemsWrite({ trigger: "save:oc-items" })
+    const stillQueued = Boolean(getPendingKvWrite("oc-items"))
+    if (flushResult?.authBlocked) return { value: items, synced: false, pending: true, reason: "queued-no-auth" }
+    if (stillQueued || flushResult?.remaining > 0) return { value: items, synced: false, pending: true, reason: "queued" }
+    return { value: items, synced: true, pending: false }
+  } catch (error) {
+    console.warn("[LIFT] Durable oc-items sync failed:", error?.message || error)
+    return { value: items, synced: false, pending: true, reason: error?.message || "queued" }
+  }
+}, [flushPendingOcItemsWrite, getPendingKvWrite, queuePendingKvWrite, session?.user?.id, supabase])
 const [ocLoadOverrides, setOcLoadOverrides] = useState(() => { try { return JSON.parse(localStorage.getItem("oc-load-overrides") || "{}") } catch { return {} } })
 const [followupDismissedDate, setFollowupDismissedDate] = useState(null)
 useEffect(() => {
@@ -19509,6 +19653,32 @@ const [baseDataLoaded, setBaseDataLoaded] = useState(false)
 const [readinessInputsHydrated, setReadinessInputsHydrated] = useState(false)
 const [readinessRemoteInputsHydrated, setReadinessRemoteInputsHydrated] = useState(false)
 const operationalWorkoutUpdateRef = useRef({ source: "initial", newestDate: null, count: 0 })
+
+useEffect(() => {
+  const flushOcWrites = trigger => {
+    flushPendingOcItemsWrite({ trigger }).catch(err => {
+      if (process.env.NODE_ENV === "development") console.warn("[LIFT] oc-items queue flush failed:", err?.message || err)
+    })
+  }
+
+  flushOcWrites("load")
+
+  const handleOnline = () => flushOcWrites("online")
+  const handleVisibilityChange = () => {
+    if (document.visibilityState === "visible") flushOcWrites("visibility-visible")
+    if (document.visibilityState === "hidden") flushOcWrites("visibility-hidden")
+  }
+  const handlePageHide = () => flushOcWrites("pagehide")
+
+  window.addEventListener("online", handleOnline)
+  document.addEventListener("visibilitychange", handleVisibilityChange)
+  window.addEventListener("pagehide", handlePageHide)
+  return () => {
+    window.removeEventListener("online", handleOnline)
+    document.removeEventListener("visibilitychange", handleVisibilityChange)
+    window.removeEventListener("pagehide", handlePageHide)
+  }
+}, [flushPendingOcItemsWrite])
 
 const scheduleStrengthCanonicalSeeds = useMemo(() => {
   return (Array.isArray(schedLog) ? schedLog : [])
@@ -20837,6 +21007,10 @@ useEffect(() => {
         }
       }
 
+      flushPendingOcItemsWrite({ trigger: "auth:signed-in" }).catch(err => {
+        if (process.env.NODE_ENV === "development") console.warn("[LIFT] oc-items auth-triggered flush failed:", err?.message || err)
+      })
+
       if (!redirectContext.isRecovery) {
         setRecoveryStatus("inactive")
         cleanAuthRedirectUrl()
@@ -20995,12 +21169,10 @@ useEffect(() => {
     }
     if (ocLocalChanged) {
       await store.set("oc-items", cleanedOcLocal)
+      try { localStorage.setItem("oc-items", JSON.stringify(cleanedOcLocal)) } catch {}
       setOcItems(cleanedOcLocal)
       if ((ocLocalChronicityMigrated || ocLocalScaleMigrated) && supabase && session?.user?.id) {
-        await supabase.from("user_kv").upsert(
-          { user_id: session.user.id, key: "oc-items", value: cleanedOcLocal, updated_at: new Date().toISOString() },
-          { onConflict: "user_id,key" }
-        )
+        await saveOcItemsDurably(cleanedOcLocal)
       }
       console.log(`[migration] Updated OC items: ${ocLocalItems.length} → ${cleanedOcLocal.length}`)
     }
@@ -21070,18 +21242,31 @@ useEffect(() => {
           }
           // Merge oc-items
           const sbOc = data.find(r => r.key === "oc-items")?.value
-          if (Array.isArray(sbOc)) {
-            const local = cleanedOcLocal
-            const merged = Object.values(
-              [...local, ...sbOc].reduce((acc, e) => { acc[e.id] = e; return acc }, {})
-            )
+          const pendingOc = getPendingKvWrite("oc-items")?.value
+          if (Array.isArray(pendingOc)) {
+            const seededOcItems = seedHistoricalMtpEpisodes(pendingOc.filter(function(item) {
+              if (
+                item.key === 'jointStatus' &&
+                (item.location || '').includes('Toe') &&
+                (item.initialScore || 0) === 0 &&
+                (item.currentScore || 0) === 0
+              ) return false
+              return true
+            }))
+            const { items: chronicityOcItems } = backfillOcChronicity(seededOcItems)
+            const { items: cleanedOcItems } = migrateOcScaleNonDestructive(chronicityOcItems)
+            setOcItems(cleanedOcItems)
+            await store.set("oc-items", cleanedOcItems)
+            try { localStorage.setItem("oc-items", JSON.stringify(cleanedOcItems)) } catch {}
+          } else if (Array.isArray(sbOc)) {
+            const remoteFiltered = sbOc
               .filter(item => {
                 if ((item.initialScore || item.currentScore || 0) > 0) return true
                 const startMs = item.startDate ? new Date(item.startDate).getTime() : 0
                 return Number.isFinite(startMs) && startMs >= ninetyDaysAgo
               })
               .sort((a, b) => b.id - a.id)
-            const seededOcItems = seedHistoricalMtpEpisodes(merged.filter(function(item) {
+            const seededOcItems = seedHistoricalMtpEpisodes(remoteFiltered.filter(function(item) {
               // Remove ghost OC entries: zero-severity Toe L joint items created by body map mis-taps
               if (
                 item.key === 'jointStatus' &&
@@ -21095,11 +21280,9 @@ useEffect(() => {
             const { items: cleanedOcItems, migrated: ocRemoteScaleMigrated } = migrateOcScaleNonDestructive(chronicityOcItems)
             setOcItems(cleanedOcItems)
             await store.set("oc-items", cleanedOcItems)
+            try { localStorage.setItem("oc-items", JSON.stringify(cleanedOcItems)) } catch {}
             if ((ocRemoteChronicityMigrated || ocRemoteScaleMigrated) && session?.user?.id) {
-              await supabase.from("user_kv").upsert(
-                { user_id: session.user.id, key: "oc-items", value: cleanedOcItems, updated_at: new Date().toISOString() },
-                { onConflict: "user_id,key" }
-              )
+              await saveOcItemsDurably(cleanedOcItems)
             }
           } else if (Array.isArray(cleanedOcLocal)) {
             setOcItems(cleanedOcLocal)
@@ -25186,17 +25369,11 @@ const overviewExplainButton = (key) => (
     }
     setOcItems(updated)
     try {
-      await store.set("oc-items", updated)
-      if (supabase && session?.user?.id) {
-        await supabase.from("user_kv").upsert(
-          { user_id: session.user.id, key: "oc-items", value: updated, updated_at: nowIso },
-          { onConflict: "user_id,key" }
-        )
-      }
+      await saveOcItemsDurably(updated)
     } catch (e) {
       console.warn("[Trainer] MTP save error", e)
     }
-  }, [ocItems, setOcItems, session, supabase, LIFT_CONFIG])
+  }, [ocItems, saveOcItemsDurably, setOcItems, LIFT_CONFIG])
 
   const trainerLogWeight = React.useCallback(async (weight_lb) => {
     const nowIso = new Date().toISOString()
@@ -28453,6 +28630,7 @@ return (
     tissueLoadIndex={tissueLoadIndex}
     ocLoadOverrides={ocLoadOverrides}
     saveOcLoadOverrides={saveOcLoadOverrides}
+    saveOcItemsDurably={saveOcItemsDurably}
     tsbV2Panel={tsbV2Panel}
   />
 )}
@@ -29178,13 +29356,7 @@ return (
                 const updated = [...(ocItems || []), ...toAdd]
                 setOcItems(updated)
                 try {
-                  await store.set("oc-items", updated)
-                  if (supabase && session?.user?.id) {
-                    await supabase.from("user_kv").upsert(
-                      { user_id: session.user.id, key: "oc-items", value: updated, updated_at: nowIso },
-                      { onConflict: "user_id,key" }
-                    )
-                  }
+                  await saveOcItemsDurably(updated)
                 } catch (e) {
                   console.warn("[FormDecay] OC save error", e)
                 }
