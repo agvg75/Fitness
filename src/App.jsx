@@ -6395,6 +6395,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const [pendingChecked, setPendingChecked] = useState({}) // { [exercise_id]: bool }
   const [isCommitting, setIsCommitting] = useState(false)
   const [logCommitError, setLogCommitError] = useState("")
+  const pendingKvFlushRef = useRef(null)
   const [sessionRPE, setSessionRPE] = useState({})         // { day_venue: 1-10 }
   const [inlineItemForm, setInlineItemForm] = useState(null) // { day, section } | null
   const [inlineItemName, setInlineItemName] = useState("")
@@ -6446,10 +6447,77 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
 
   const VENUE_TIMES = { ymca: "05:30", knr: "09:35" }
   const VENUE_LABELS = { ymca: "YMCA (5:30–7:00)", knr: "KNR (9:35–10:45)" }
+  const PENDING_KV_WRITES_KEY = "lift_pending_kv_writes"
+  const DURABLE_SCHEDULE_SYNC_KEYS = new Set(["wt-log", "wt-sessions"])
 
   const writeLocalScheduleKey = (key, value) => {
     try { localStorage.setItem(key, JSON.stringify(value)) } catch {}
   }
+
+  const showToast = useCallback((msg, duration = 2500) => {
+    setToast(msg)
+    setTimeout(() => setToast(null), duration)
+  }, [])
+
+  const readPendingKvWrites = useCallback(() => {
+    try {
+      const raw = localStorage.getItem(PENDING_KV_WRITES_KEY)
+      const parsed = raw ? JSON.parse(raw) : []
+      return Array.isArray(parsed)
+        ? parsed.filter(entry => entry && typeof entry.kvKey === "string")
+        : []
+    } catch {
+      return []
+    }
+  }, [])
+
+  const [pendingKvWriteCount, setPendingKvWriteCount] = useState(() => readPendingKvWrites().length)
+
+  const writePendingKvWrites = useCallback(nextQueue => {
+    const safeQueue = Array.isArray(nextQueue) ? nextQueue.filter(entry => entry && typeof entry.kvKey === "string") : []
+    try {
+      if (safeQueue.length > 0) localStorage.setItem(PENDING_KV_WRITES_KEY, JSON.stringify(safeQueue))
+      else localStorage.removeItem(PENDING_KV_WRITES_KEY)
+    } catch {}
+    setPendingKvWriteCount(safeQueue.length)
+    return safeQueue
+  }, [])
+
+  const getPendingKvWrite = useCallback(kvKey => {
+    return readPendingKvWrites().find(entry => entry.kvKey === kvKey) || null
+  }, [readPendingKvWrites])
+
+  const queuePendingKvWrite = useCallback((kvKey, value) => {
+    const nextEntry = {
+      kvKey,
+      value,
+      queuedAt: new Date().toISOString(),
+      attempts: 0,
+    }
+    const nextQueue = [
+      ...readPendingKvWrites().filter(entry => entry.kvKey !== kvKey),
+      nextEntry,
+    ]
+    writePendingKvWrites(nextQueue)
+    return nextEntry
+  }, [readPendingKvWrites, writePendingKvWrites])
+
+  const ensureFreshScheduleSyncSession = useCallback(async () => {
+    if (!supabase) return { ok: false, reason: "missing-supabase" }
+    const { data, error } = await supabase.auth.getSession()
+    if (error) throw error
+    const activeSession = data?.session
+    if (!activeSession?.user?.id) return { ok: false, reason: "missing-session" }
+    const now = Math.floor(Date.now() / 1000)
+    const expiresAt = Number(activeSession.expires_at || 0)
+    if (!expiresAt || expiresAt - now > 120) {
+      return { ok: true, session: activeSession }
+    }
+    const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession()
+    if (refreshError) throw refreshError
+    if (!refreshed?.session?.user?.id) return { ok: false, reason: "missing-session" }
+    return { ok: true, session: refreshed.session }
+  }, [supabase])
 
   const hydrateSessionStore = useCallback((ss) => {
     if (!ss || typeof ss !== "object") return
@@ -6497,75 +6565,126 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     return data?.value ?? null
   }
 
+  const attemptScheduleKvWrite = useCallback(async (key, value) => {
+    if (!supabase || !session?.user?.id) {
+      return { ok: false, reason: "no-auth" }
+    }
+    const authResult = await ensureFreshScheduleSyncSession()
+    if (!authResult?.ok || !authResult?.session?.user?.id) {
+      return { ok: false, reason: authResult?.reason || "no-auth" }
+    }
+    const userId = authResult.session.user.id
+    const { data, error, status, count } = await supabase
+      .from("user_kv")
+      .upsert(
+        { user_id: userId, key, value, updated_at: new Date().toISOString() },
+        { onConflict: "user_id,key" }
+      )
+      .select("value")
+      .maybeSingle()
+    if (error) {
+      return { ok: false, reason: error.message || "supabase-upsert-failed", error, status, count }
+    }
+    const savedValue = data?.value ?? value
+    writeLocalScheduleKey(key, savedValue)
+    return { ok: true, value: savedValue, status, count }
+  }, [ensureFreshScheduleSyncSession, session?.user?.id])
+
+  const flushPendingKvWrites = useCallback(async ({ trigger = "manual", toastOnSuccess = false } = {}) => {
+    if (pendingKvFlushRef.current) return pendingKvFlushRef.current
+    const flushPromise = (async () => {
+      let queue = readPendingKvWrites()
+      if (!queue.length) {
+        setPendingKvWriteCount(0)
+        return { ok: true, trigger, flushed: 0, remaining: 0 }
+      }
+
+      const startingCount = queue.length
+      for (const entry of [...queue]) {
+        try {
+          const result = await attemptScheduleKvWrite(entry.kvKey, entry.value)
+          if (result?.ok) {
+            queue = queue.filter(candidate => candidate.kvKey !== entry.kvKey)
+            writePendingKvWrites(queue)
+            if (entry.kvKey === "wt-log" && Array.isArray(result.value)) {
+              setSchedLog(result.value)
+            }
+            if (entry.kvKey === "wt-sessions" && result.value && typeof result.value === "object") {
+              hydrateSessionStore(result.value)
+            }
+            continue
+          }
+          queue = queue.map(candidate => candidate.kvKey === entry.kvKey
+            ? { ...candidate, attempts: Number(candidate.attempts || 0) + 1 }
+            : candidate
+          )
+          writePendingKvWrites(queue)
+        } catch (_) {
+          queue = queue.map(candidate => candidate.kvKey === entry.kvKey
+            ? { ...candidate, attempts: Number(candidate.attempts || 0) + 1 }
+            : candidate
+          )
+          writePendingKvWrites(queue)
+        }
+      }
+
+      if (toastOnSuccess && startingCount > 0 && queue.length === 0) {
+        showToast("Queued schedule sync complete.")
+      }
+      return {
+        ok: queue.length === 0,
+        trigger,
+        flushed: startingCount - queue.length,
+        remaining: queue.length,
+      }
+    })().finally(() => {
+      pendingKvFlushRef.current = null
+    })
+
+    pendingKvFlushRef.current = flushPromise
+    return flushPromise
+  }, [attemptScheduleKvWrite, hydrateSessionStore, readPendingKvWrites, showToast, writePendingKvWrites])
+
   const saveScheduleKey = async (key, value) => {
     writeLocalScheduleKey(key, value)
-    const isSaveDiagKey = key === "wt-log"
-    const diagSessionId = isSaveDiagKey && Array.isArray(value) && value[0]?.session_id
-      ? value[0].session_id
-      : null
-    if (isSaveDiagKey) {
-      console.log("[SAVE-DIAG] confirm log fired. session id:", diagSessionId)
-    }
-    if (!supabase || !session?.user?.id) {
-      if (isSaveDiagKey) {
-        console.log("[SAVE-DIAG] skipping supabase write:", JSON.stringify({
-          hasSupabase: Boolean(supabase),
-          hasUserId: Boolean(session?.user?.id),
-          reason: "no-auth"
-        }))
-      }
-      return { value, synced: false, reason: "no-auth" }
-    }
-    ;(async () => {
-      if (isSaveDiagKey) {
-        try {
-          const { data: sess } = await supabase.auth.getSession()
-          console.log(
-            "[SAVE-DIAG] auth session present:",
-            !!sess?.session,
-            "expires_at:",
-            sess?.session?.expires_at,
-            "now:",
-            Math.floor(Date.now() / 1000),
-            "expired:",
-            sess?.session?.expires_at
-              ? (sess.session.expires_at < Math.floor(Date.now() / 1000))
-              : "no-session"
-          )
-        } catch (e) {
-          console.log("[SAVE-DIAG] auth check threw:", e?.message)
-        }
-        console.log("[SAVE-DIAG] about to call supabase write...")
-      }
+    if (!DURABLE_SCHEDULE_SYNC_KEYS.has(key)) {
+      if (!supabase || !session?.user?.id) return { value, synced: false, reason: "no-auth" }
       try {
-        const res = await supabase.from("user_kv").upsert(
-          { user_id: session.user.id, key, value, updated_at: new Date().toISOString() },
-          { onConflict: "user_id,key" }
-        ).select("value").maybeSingle()
-        if (isSaveDiagKey) {
-          console.log("[SAVE-DIAG] write response:", JSON.stringify({
-            error: res?.error
-              ? { message: res.error.message, code: res.error.code, details: res.error.details, hint: res.error.hint }
-              : null,
-            status: res?.status,
-            count: res?.count,
-            dataLen: Array.isArray(res?.data) ? res.data.length : (res?.data ? 1 : 0)
-          }))
+        const result = await attemptScheduleKvWrite(key, value)
+        if (!result?.ok) {
+          console.warn(`[LIFT] Supabase sync failed for ${key}:`, result?.reason || "unknown error")
+          return { value, synced: false, reason: result?.reason || "sync-failed" }
         }
-        if (res?.error) {
-          console.warn(`[LIFT] Supabase sync failed for ${key}:`, res.error.message)
-          return
-        }
-        const savedValue = res?.data?.value ?? value
-        writeLocalScheduleKey(key, savedValue)
+        return { value: result.value ?? value, synced: true }
       } catch (networkErr) {
-        if (isSaveDiagKey) {
-          console.log("[SAVE-DIAG] write THREW:", networkErr?.message, networkErr?.name)
-        }
         console.warn(`[LIFT] Network error syncing ${key}:`, networkErr.message)
+        return { value, synced: false, reason: networkErr?.message || "network-error" }
       }
-    })()
-    return { value, synced: false, pending: true }
+    }
+
+    queuePendingKvWrite(key, value)
+    if (!supabase || !session?.user?.id) {
+      return { value, synced: false, pending: true, reason: "queued-no-auth" }
+    }
+    try {
+      const flushResult = await flushPendingKvWrites({ trigger: `save:${key}` })
+      const stillQueued = readPendingKvWrites().some(entry => entry.kvKey === key)
+      if (stillQueued || flushResult?.remaining > 0) {
+        return { value, synced: false, pending: true, reason: "queued" }
+      }
+      const savedValue = (() => {
+        try {
+          const raw = localStorage.getItem(key)
+          return raw ? JSON.parse(raw) : value
+        } catch {
+          return value
+        }
+      })()
+      return { value: savedValue, synced: true, pending: false }
+    } catch (error) {
+      console.warn(`[LIFT] Durable schedule sync failed for ${key}:`, error?.message || error)
+      return { value, synced: false, pending: true, reason: error?.message || "queued" }
+    }
   }
 
   const persistCustomExerciseRegistry = nextRegistry => {
@@ -6690,6 +6809,8 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   }, [programPromptState])
 
   const loadScheduleLogForMutation = async fallbackLog => {
+    const pendingLog = getPendingKvWrite("wt-log")?.value
+    if (Array.isArray(pendingLog)) return pendingLog
     try {
       const remoteLog = await readScheduleKeyFromSupabase("wt-log")
       if (Array.isArray(remoteLog)) return mergeScheduleLogEntries(fallbackLog, remoteLog)
@@ -6710,8 +6831,13 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       const so = await store.get(SCHEDULE_OVERRIDES_KEY)
       const tw = await store.get("wt-tendon-work")
       const ck = await store.get("wt-checked-items")
+      const pendingLog = getPendingKvWrite("wt-log")?.value
+      const pendingSessions = getPendingKvWrite("wt-sessions")?.value
       // Fetch wt-log from Supabase and merge with localStorage
-      if (supabase && session?.user?.id) {
+      if (Array.isArray(pendingLog)) {
+        setSchedLog(pendingLog)
+        writeLocalScheduleKey("wt-log", pendingLog)
+      } else if (supabase && session?.user?.id) {
         try {
           const sbLg = await readScheduleKeyFromSupabase("wt-log")
           if (process.env.NODE_ENV === "development") console.log("wt-log from Supabase:", Array.isArray(sbLg) ? sbLg.length + " entries" : "not array")
@@ -6729,7 +6855,9 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       } else if (Array.isArray(lg)) {
         setSchedLog(lg)
       }
-      if (ss && typeof ss === "object") {
+      if (pendingSessions && typeof pendingSessions === "object") {
+        hydrateSessionStore(pendingSessions)
+      } else if (ss && typeof ss === "object") {
         hydrateSessionStore(ss)
       }
       if (ci && typeof ci === "object") setCustomItems(ci)
@@ -6739,12 +6867,39 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       if (tw && typeof tw === "object") setTendonEntries(tw)
       if (ck && typeof ck === "object") setCheckedItems(ck)
     })()
-  }, [session?.user?.id, hydrateSessionStore])
+  }, [getPendingKvWrite, hydrateSessionStore, session?.user?.id, supabase])
 
-  const showToast = useCallback((msg, duration = 2500) => {
-    setToast(msg)
-    setTimeout(() => setToast(null), duration)
-  }, [])
+  useEffect(() => {
+    const flushScheduleWrites = (trigger, toastOnSuccess = false) => {
+      flushPendingKvWrites({ trigger, toastOnSuccess }).catch(err => {
+        if (process.env.NODE_ENV === "development") console.warn("[LIFT] schedule queue flush failed:", err?.message || err)
+      })
+    }
+
+    flushScheduleWrites("load")
+
+    const handleOnline = () => flushScheduleWrites("online", true)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") flushScheduleWrites("visibility-visible", true)
+      if (document.visibilityState === "hidden") flushScheduleWrites("visibility-hidden")
+    }
+    const handlePageHide = () => flushScheduleWrites("pagehide")
+
+    window.addEventListener("online", handleOnline)
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+    window.addEventListener("pagehide", handlePageHide)
+    return () => {
+      window.removeEventListener("online", handleOnline)
+      document.removeEventListener("visibilitychange", handleVisibilityChange)
+      window.removeEventListener("pagehide", handlePageHide)
+    }
+  }, [flushPendingKvWrites])
+
+  const syncPendingScheduleWritesNow = useCallback(() => {
+    flushPendingKvWrites({ trigger: "manual", toastOnSuccess: true }).catch(err => {
+      if (process.env.NODE_ENV === "development") console.warn("[LIFT] manual schedule sync failed:", err?.message || err)
+    })
+  }, [flushPendingKvWrites])
 
   const setLogEntryRef = useCallback((id, node) => {
     if (node) logEntryRefs.current[id] = node
@@ -7738,13 +7893,15 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
 
     const logResult = await saveScheduleKey("wt-log", newLog)
     setSavedEntries(prev => ({ ...prev, [day]: { ...(prev[day] || {}), [venue]: entry } }))
-    if (logResult?.synced) {
-      showToast("Session saved and synced.")
-    } else {
-      showToast("Session saved locally. Cloud sync pending — check connection.")
-    }
     if (Array.isArray(logResult?.value)) setSchedLog(logResult.value)
-    await saveScheduleKey("wt-sessions", buildSessionsStore())
+    const sessionsResult = await saveScheduleKey("wt-sessions", buildSessionsStore())
+    if (logResult?.synced && sessionsResult?.synced) {
+      showToast("Session saved and synced.")
+    } else if (logResult?.pending || sessionsResult?.pending) {
+      showToast("Session saved locally — will sync when online.")
+    } else {
+      showToast("Session saved locally — syncing...")
+    }
 
     const allCardio = completedCardio
     if (allCardio.some(c => c.duration)) {
@@ -8969,6 +9126,19 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
               {message}
             </div>
           ))}
+        </div>
+      )}
+      {pendingKvWriteCount > 0 && (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 12, padding: "10px 12px", background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.24)", borderRadius: 8 }}>
+          <div style={{ fontSize: 12, color: "#fbbf24", lineHeight: 1.5 }}>
+            {pendingKvWriteCount} scheduled-session sync {pendingKvWriteCount === 1 ? "item is" : "items are"} queued locally and will retry automatically when online.
+          </div>
+          <button
+            onClick={syncPendingScheduleWritesNow}
+            style={{ padding: "8px 10px", background: "#1f2937", color: "#fbbf24", border: "1px solid rgba(245,158,11,0.35)", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}
+          >
+            Sync now
+          </button>
         </div>
       )}
       <DailyReadinessPanel readinessScore={readinessScore} latestHealthFit={latestHealthFit} ocItems={ocItems} computedTSB={computedTSB} tsbV2Panel={tsbV2Panel} sleepRecords={sleepRecords} formDecayPenalty={formDecayPenalty} tissueLoadIndex={tissueLoadIndex} />
