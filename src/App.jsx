@@ -6499,22 +6499,72 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
 
   const saveScheduleKey = async (key, value) => {
     writeLocalScheduleKey(key, value)
-    if (!supabase || !session?.user?.id) return { value, synced: false, reason: "no-auth" }
-    supabase.from("user_kv").upsert(
-      { user_id: session.user.id, key, value, updated_at: new Date().toISOString() },
-      { onConflict: "user_id,key" }
-    ).select("value").maybeSingle()
-      .then(({ data, error }) => {
-        if (error) {
-          console.warn(`[LIFT] Supabase sync failed for ${key}:`, error.message)
+    const isSaveDiagKey = key === "wt-log"
+    const diagSessionId = isSaveDiagKey && Array.isArray(value) && value[0]?.session_id
+      ? value[0].session_id
+      : null
+    if (isSaveDiagKey) {
+      console.log("[SAVE-DIAG] confirm log fired. session id:", diagSessionId)
+    }
+    if (!supabase || !session?.user?.id) {
+      if (isSaveDiagKey) {
+        console.log("[SAVE-DIAG] skipping supabase write:", JSON.stringify({
+          hasSupabase: Boolean(supabase),
+          hasUserId: Boolean(session?.user?.id),
+          reason: "no-auth"
+        }))
+      }
+      return { value, synced: false, reason: "no-auth" }
+    }
+    ;(async () => {
+      if (isSaveDiagKey) {
+        try {
+          const { data: sess } = await supabase.auth.getSession()
+          console.log(
+            "[SAVE-DIAG] auth session present:",
+            !!sess?.session,
+            "expires_at:",
+            sess?.session?.expires_at,
+            "now:",
+            Math.floor(Date.now() / 1000),
+            "expired:",
+            sess?.session?.expires_at
+              ? (sess.session.expires_at < Math.floor(Date.now() / 1000))
+              : "no-session"
+          )
+        } catch (e) {
+          console.log("[SAVE-DIAG] auth check threw:", e?.message)
+        }
+        console.log("[SAVE-DIAG] about to call supabase write...")
+      }
+      try {
+        const res = await supabase.from("user_kv").upsert(
+          { user_id: session.user.id, key, value, updated_at: new Date().toISOString() },
+          { onConflict: "user_id,key" }
+        ).select("value").maybeSingle()
+        if (isSaveDiagKey) {
+          console.log("[SAVE-DIAG] write response:", JSON.stringify({
+            error: res?.error
+              ? { message: res.error.message, code: res.error.code, details: res.error.details, hint: res.error.hint }
+              : null,
+            status: res?.status,
+            count: res?.count,
+            dataLen: Array.isArray(res?.data) ? res.data.length : (res?.data ? 1 : 0)
+          }))
+        }
+        if (res?.error) {
+          console.warn(`[LIFT] Supabase sync failed for ${key}:`, res.error.message)
           return
         }
-        const savedValue = data?.value ?? value
+        const savedValue = res?.data?.value ?? value
         writeLocalScheduleKey(key, savedValue)
-      })
-      .catch(networkErr => {
+      } catch (networkErr) {
+        if (isSaveDiagKey) {
+          console.log("[SAVE-DIAG] write THREW:", networkErr?.message, networkErr?.name)
+        }
         console.warn(`[LIFT] Network error syncing ${key}:`, networkErr.message)
-      })
+      }
+    })()
     return { value, synced: false, pending: true }
   }
 
