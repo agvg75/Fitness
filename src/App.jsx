@@ -19330,6 +19330,7 @@ export default function App() {
 const [error, setError] = useState("")
 const [storedWorkouts, setStoredWorkouts] = useState([])
 const [canonicalSessions, setCanonicalSessions] = useState([])
+const [session, setSession] = useState(null)
 const [healthFitDaily, setHealthFitDaily] = useState(() => {
   try {
     return JSON.parse(localStorage.getItem('lift_healthfit_daily') || '[]');
@@ -20423,7 +20424,6 @@ useEffect(() => {
 }, [operationalWorkouts, canonicalSessions, storedWorkouts, schedLog])
 
 
-const [session, setSession] = useState(null)
 useEffect(() => {
   let cancelled = false
   ;(async () => {
