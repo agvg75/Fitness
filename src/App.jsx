@@ -82,7 +82,7 @@ const LIFT_CONFIG = {
   lean_bmc_lb: 121.0,        // lean + BMC, April 2026 DEXA
   fat_lb: 41.3,              // fat mass, April 2026 DEXA
   pct_fat: 25.4,             // body fat %, April 2026 DEXA
-  scale_bias_pp: 0.6,        // DEXA BF% (25.4) minus scale-derived estimate at ~159 lb; update Sep 2026
+  scale_bias_pp: 0.6,        // DEXA BF% (25.4) minus scale-derived estimate at ~159 lb; PENDING: confirm vs ~0.4 from fasted morning readings before recalibrating; update Sep 2026 DEXA
   protein_target_g: 140,     // g/day — ~2.7 g/kg lean mass
   dexa_anchor_date: "2026-04-27",  // date of last DEXA scan (April 2026)
   next_dexa_date:   "2026-09-19",  // next planned scan — St. Jude 10K context
@@ -96,7 +96,7 @@ const LIFT_CONFIG = {
   mtp_next_milestone_miles: 7.26,  // next milestone: 6.6 * 1.10
 
   // Half marathon build
-  hm_race_date:    "2026-09-19",
+  hm_race_date:    "2026-10-18",  // Naperville Half Marathon (St. Jude 10K is a tune-up, not the goal race)
   hm_taper_start:  "2026-08-31",
   hm_peak_mi_week: 9,
   hm_taper_factor: 0.90,
@@ -960,7 +960,7 @@ const PLAN = {
 
   // ─── SUNDAY: Long Run ─────────────────────────────────────────────────────
   Sun: {
-    cardio: "Long run · Zone 2 · Current ceiling 4.0 miles · Next milestone 4.4 · MTP protocol applies · Race weeks: full rest — do not run day after a Saturday race",
+    cardio: `Long run · Zone 2 · Current ceiling ${LIFT_CONFIG.mtp_ceiling_miles} miles · Next milestone ${LIFT_CONFIG.mtp_next_milestone_miles} · MTP protocol applies · Race weeks: full rest — do not run day after a Saturday race`,
     warmup: [
       "PRE-RUN ACTIVE ROUTINE · 5 min · mandatory before every Sunday long run",
       "Ankle rotations · 10 each direction each foot · joint mobility",
@@ -2035,6 +2035,11 @@ const DEFAULT_TENDON_WORK_BY_DAY = {
     { id: "hip_flexor_isometric", name: "Hip Flexor Isometric Hold", sets: "2", reps: "20s each side", load: "BW", notes: "L1 start. Stand upright, lift one knee to 90°, hold completely still. Feel deep sustained effort at front of hip — not a cramp. If cramping reduce to 12 sec. L3 target: 3×30s + light ankle weight. Search: hip flexor isometric hold running prehab" },
   ],
 }
+
+// Derived: target weight at 21% BF given current lean+BMC = LIFT_CONFIG.lean_bmc_lb
+const TARGET_WEIGHT_LB = Math.round(LIFT_CONFIG.lean_bmc_lb / 0.79)
+const getMtpCeiling = () => LIFT_CONFIG.mtp_ceiling_miles ?? 6.6
+const getMtpNextMilestone = () => LIFT_CONFIG.mtp_next_milestone_miles ?? 7.26
 
 const TENDON_EXERCISE_PATTERNS = [
   { id: "standing_calf_raise", match: /standing calf raise|standing calf|single-leg calf raise/i, group: "achilles_calf", capacity: 1.2, load: 0.5 },
@@ -3306,13 +3311,6 @@ function migrateOcScaleNonDestructive(items) {
   })
   return { items: out, migrated }
 }
-const MTP_CURRENT_CEILING = 4.0
-const MTP_NEXT_MILESTONE = 4.4
-const DEFAULT_TSB_THRESHOLDS = {
-  moderate: -7,
-  high: -9,
-}
-
 const TISSUE_DECAY_CONSTANTS = {
   muscleStatus: { tau: 7 },
   tendonStatus: { tau: 21 },
@@ -3581,15 +3579,24 @@ function computeReadinessDetail(ocItems, sleepRecords, healthFitDaily, tsbFallba
   const latestHFEntry = sortedHF[0] ?? null
   const hfIsStale = !latestHFEntry ||
     (Date.now() - new Date(latestHFEntry.date).getTime()) > 7 * 24 * 3600000
+  const fallbackTsb = Number.isFinite(Number(tsbFallback))
+    ? Number(tsbFallback)
+    : Number.isFinite(Number(tsbFallback?.tsb))
+      ? Number(tsbFallback.tsb)
+      : null
   const latestTsb = (!hfIsStale && latestHFEntry) ? latestHFEntry.tsb
-    : tsbFallback ?? (latestHFEntry?.tsb ?? null)
+    : fallbackTsb ?? (latestHFEntry?.tsb ?? null)
   const tsbPenalty = latestTsb == null ? 0
-    : latestTsb < DEFAULT_TSB_THRESHOLDS.high ? 20
-    : latestTsb < DEFAULT_TSB_THRESHOLDS.moderate ? 10
+    : latestTsb < LIFT_CONFIG.tsbHighRiskThreshold ? 20
+    : latestTsb < LIFT_CONFIG.tsbModerateRiskThreshold ? 10
     : 0
 
+  const rollingLoad14 = Number.isFinite(Number(tsbFallback?.rollingLoad14)) ? Number(tsbFallback.rollingLoad14) : null
+  const compoundRisk = (latestTsb != null && latestTsb < LIFT_CONFIG.tsbModerateRiskThreshold)
+    && (rollingLoad14 != null && rollingLoad14 > 700)
+
   const score = Math.max(0, 100 - injuryPenalty - sleepPenalty - tsbPenalty)
-  return { score, injuryPenalty, sleepPenalty, tsbPenalty, avgSleepHours, latestTsb, active }
+  return { score, injuryPenalty, sleepPenalty, tsbPenalty, avgSleepHours, latestTsb, active, rollingLoad14, compoundRisk }
 }
 
 function computeReadiness(items) {
@@ -3940,6 +3947,7 @@ function computeOcRecoveryDate(item) {
   if (!score) return null
   const hoursToResolve = resolveOcHalfLifeHours(item) * Math.log2(score / 0.25)
   if (!Number.isFinite(hoursToResolve) || hoursToResolve <= 0) return null
+  if (!item.startDate) return null
   const recoveryMs = new Date(item.startDate).getTime() + hoursToResolve * 3600000
   const d = new Date(recoveryMs)
   return d < new Date() ? "Soon" : d.toISOString().slice(0, 10)
@@ -4085,7 +4093,12 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
   const toggleEpisode = id => setExpandedEpisodes(s => ({ ...s, [id]: !s[id] }))
 
   const selectedItem = ocItems.find(i => i.id === selectedId) || null
-  const rd = computeReadinessDetail(ocItems, sleepRecords, healthFitDaily, tsbFallback)
+  const rd = computeReadinessDetail(
+    ocItems,
+    sleepRecords,
+    healthFitDaily,
+    tsbV2Panel ? { tsb: tsbFallback, rollingLoad14: tsbV2Panel.currentLoad14 } : tsbFallback
+  )
   const readiness = rd.score
   const readinessColor = readiness >= 80 ? "#4ade80" : readiness >= 60 ? "#fbbf24" : readiness >= 40 ? "#f97316" : "#ef4444"
   const active = rd.active
@@ -4902,6 +4915,11 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
             <span style={{ color: "#f97316" }}>● 40–59 Limited</span>
             <span style={{ color: "#ef4444" }}>● &lt;40 Restricted</span>
           </div>
+          {rd.compoundRisk ? (
+            <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", marginBottom: "8px", padding: "4px 8px", borderRadius: "999px", background: "rgba(239,68,68,0.12)", color: "#ef4444", fontSize: "10px", fontWeight: "700", letterSpacing: "0.04em", textTransform: "uppercase" }}>
+              Compound risk: TSB + load
+            </div>
+          ) : null}
           {/* ── Penalty breakdown ── */}
           <div style={{ fontSize: "11px", color: "#667", marginTop: "4px", display: "grid", gap: "3px" }}>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
@@ -5015,8 +5033,8 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
 
         const PROGRESSION_THRESHOLD = 3
         const progressPct = Math.min(100, Math.round((streak / PROGRESSION_THRESHOLD) * 100))
-        const currentCeilingMiles = MTP_CURRENT_CEILING
-        const nextDistanceMilestone = MTP_NEXT_MILESTONE.toFixed(1)
+        const currentCeilingMiles = getMtpCeiling()
+        const nextDistanceMilestone = getMtpNextMilestone().toFixed(1)
         const nextDistanceText = `${nextDistanceMilestone} mi`
         const remainingScoreZeroSessions = Math.max(0, PROGRESSION_THRESHOLD - streak)
         const latestZeroCheckDate = zeroChecks[0]?.date || null
@@ -5881,10 +5899,10 @@ function DailyReadinessPanel({ readinessScore, latestHealthFit, ocItems, compute
     rationale = hasActiveIssue
       ? `OC ${adjustedScore} · Active issue score ≥3 · Substitute exercises affecting flagged regions`
       : `OC ${adjustedScore} · TSB ${tsb != null ? tsb.toFixed(1) : "—"} · Substitute exercises affecting flagged regions`
-  } else if (adjustedScore < 60 || (tsb != null && tsb < DEFAULT_TSB_THRESHOLDS.high)) {
+  } else if (adjustedScore < 60 || (tsb != null && tsb < LIFT_CONFIG.tsbHighRiskThreshold)) {
     status = "ORANGE"; color = "#ff8c42"; bg = "rgba(255,140,66,0.15)"
     rationale = `OC ${adjustedScore} · TSB ${tsb != null ? tsb.toFixed(1) : "—"} · Reduce working weight 10–15%, cap at 2 sets on compounds`
-  } else if (adjustedScore < 80 || (tsb != null && tsb < DEFAULT_TSB_THRESHOLDS.moderate)) {
+  } else if (adjustedScore < 80 || (tsb != null && tsb < LIFT_CONFIG.tsbModerateRiskThreshold)) {
     status = "YELLOW"; color = "#ffeb3b"; bg = "rgba(255,235,59,0.15)"
     rationale = `OC ${adjustedScore} · TSB ${tsb != null ? tsb.toFixed(1) : "—"} · Execute as written, no additions today`
   } else {
@@ -8591,7 +8609,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
                     Reason: {workoutSuggestion.reason}
                   </div>
                   {mtpUnsafe && (() => {
-                    const mtpCeilingMiles = LIFT_CONFIG?.mtp_ceiling_miles ?? 4.0
+                    const mtpCeilingMiles = getMtpCeiling()
                     const targetMiles = ps.dist
                       ? parseFloat(String(ps.dist).replace(/[^\d.]/g, "")) || 4.0
                       : 4.0
@@ -10014,7 +10032,7 @@ function projectWeightTrend(weights, nutritionSeries, weeks = 12) {
   if (weeklySlope > 1.5) weeklySlope = 1.5
 
   const recentNutrition = nutritionSeries.slice(-14)
-  const proteinTarget = 140
+  const proteinTarget = LIFT_CONFIG.protein_target_g ?? 140
   const proteinHitRate = recentNutrition.length
     ? recentNutrition.filter(r => toNum(r.protein_g) >= proteinTarget).length / recentNutrition.length
     : 0
@@ -12362,7 +12380,7 @@ function buildBodyForecast({
   bmr = null,
   configFatLossMonthly = null
 }) {
-  const phase1TargetWeight = 150
+  const phase1TargetWeight = TARGET_WEIGHT_LB
   const finalTargetWeight = 145
 
   if (!daily || !daily.length) return null
@@ -12443,7 +12461,7 @@ function buildBodyForecast({
   const configuredWeight = 1 - observedWeight
   blendedSlope = blendedSlope * observedWeight + configuredDailyLoss * configuredWeight
 
-  const distanceTo150 = currentWeight - phase1TargetWeight
+  const distanceToTarget = currentWeight - phase1TargetWeight
   const distanceTo145 = currentWeight - finalTargetWeight
 
   let taperMultiplier = 1
@@ -12452,9 +12470,9 @@ function buildBodyForecast({
     taperMultiplier = 0
   } else if (currentWeight <= phase1TargetWeight) {
     taperMultiplier = 0.35
-  } else if (distanceTo150 <= 5) {
+  } else if (distanceToTarget <= 5) {
     taperMultiplier = 0.55
-  } else if (distanceTo150 <= 10) {
+  } else if (distanceToTarget <= 10) {
     taperMultiplier = 0.75
   }
 
@@ -12489,7 +12507,7 @@ function buildBodyForecast({
     weight3m: Math.max(finalTargetWeight, projectValue(currentWeight, boundedSlope, 90)),
     weight6m: Math.max(finalTargetWeight, projectValue(currentWeight, boundedSlope, 180)),
     weight12m: Math.max(finalTargetWeight, projectValue(currentWeight, boundedSlope, 365)),
-    eta150: estimateMilestoneDate(currentWeight, boundedSlope, 150),
+    eta150: estimateMilestoneDate(currentWeight, boundedSlope, phase1TargetWeight),
     eta145: estimateMilestoneDate(currentWeight, boundedSlope, 145)
   }
 }
@@ -12821,7 +12839,9 @@ function buildOcConstraintState({ ocItems, sleepRecords, healthFitDaily, compute
     ocItems,
     sleepRecords,
     healthFitDaily,
-    tsbV2Panel?.currentOverallTsb ?? computedTSB?.global?.tsb ?? computedTSB?.running?.tsb ?? null
+    tsbV2Panel
+      ? { tsb: tsbV2Panel.currentOverallTsb, rollingLoad14: tsbV2Panel.currentLoad14 }
+      : (computedTSB?.global?.tsb ?? computedTSB?.running?.tsb ?? null)
   )
   const activeItems = Array.isArray(ocItems)
     ? ocItems.filter(item => Number(item?.currentScore || 0) > 0)
@@ -13657,7 +13677,7 @@ function buildAdaptiveTrainingState({
       const tendonSensitive = domain === "running" || domain === "tendon"
       const modifier = clampNumber(
         1
-          - (Number.isFinite(tsb) && tsb < DEFAULT_TSB_THRESHOLDS.high ? 0.18 : Number.isFinite(tsb) && tsb < DEFAULT_TSB_THRESHOLDS.moderate ? 0.1 : 0)
+          - (Number.isFinite(tsb) && tsb < LIFT_CONFIG.tsbHighRiskThreshold ? 0.18 : Number.isFinite(tsb) && tsb < LIFT_CONFIG.tsbModerateRiskThreshold ? 0.1 : 0)
           - (Number.isFinite(acwr) && acwr > 1.5 ? 0.2 : Number.isFinite(acwr) && acwr > 1.3 ? 0.12 : 0)
           - clampNumber((domain === "strength" ? estimateOcBurdenForDate(ocItems, weekStart, ["Shoulder", "Back", "Knee", "Hip"]) : ocRun) / 22, 0, 0.16)
           - (tendonSensitive ? clampNumber(ocTendon / 18, 0, 0.12) : 0),
@@ -13685,7 +13705,7 @@ function buildAdaptiveTrainingState({
     const patellarLoad = runMiles * 0.55 + quadStrengthDose
 
     const acwrPenalty = Number.isFinite(acwr) && acwr > 1.5 ? 1.2 : Number.isFinite(acwr) && acwr > 1.3 ? 0.65 : 0
-    const tsbPenalty = Number.isFinite(tsb) && tsb < DEFAULT_TSB_THRESHOLDS.high ? 0.9 : Number.isFinite(tsb) && tsb < DEFAULT_TSB_THRESHOLDS.moderate ? 0.45 : 0
+    const tsbPenalty = Number.isFinite(tsb) && tsb < LIFT_CONFIG.tsbHighRiskThreshold ? 0.9 : Number.isFinite(tsb) && tsb < LIFT_CONFIG.tsbModerateRiskThreshold ? 0.45 : 0
 
     tendonCapacities.achilles_calf = clampNumber(
       tendonCapacities.achilles_calf * 0.97 + (0.03 * achillesLoad) - acwrPenalty - tsbPenalty - clampNumber(estimateOcBurdenForDate(ocItems, weekStart, getTendonGroupKeywords("achilles_calf")) / 8, 0, 0.8),
@@ -13813,7 +13833,7 @@ function buildAdaptiveTrainingState({
   // Gap 4: aerobic substitution routing when MTP constrains running.
   // Uses the weekly run target derived from the HM build plan vs the current MTP ceiling.
   // LIFT_CONFIG is in scope via the outer useMemo closure.
-  const mtpCeilingMiles = typeof LIFT_CONFIG !== "undefined" ? (LIFT_CONFIG.mtp_ceiling_miles ?? 4.0) : 4.0
+  const mtpCeilingMiles = getMtpCeiling()
   const hmWeeklyTargetMiles = typeof LIFT_CONFIG !== "undefined" ? (LIFT_CONFIG.hm_peak_mi_week ?? 9) : 9
   // The long run target is 30% of weekly target miles, capped at 10 miles (HM build heuristic).
   const longRunTarget = Math.min(10, hmWeeklyTargetMiles * 0.30)
@@ -17548,7 +17568,7 @@ TSB thresholds: moderate risk below -7, high risk below -9.
 Taper requirement: 3 weeks before any goal half marathon (not 2 weeks).
 
 ACTIVE INJURY PROTOCOL — LEFT MTP JOINT (Morton's Toe)
-Current run ceiling: 4.0 miles. Advance by 10% only after 3 consecutive score-0 sessions.
+Current run ceiling: ${LIFT_CONFIG.mtp_ceiling_miles} miles. Advance by 10% only after 3 consecutive score-0 sessions.
 MTP scoring: 0=fine (continue), 1=note and continue, 2=modify session, 3=terminate session immediately.
 Pre-run ibuprofen is part of an explicitly recommended twice-daily anti-inflammatory protocol — not a red flag.
 The rowing machine causes passive MTP dorsiflexion at the catch regardless of technique and is incompatible with the current protocol until 3 consecutive score-0 sessions are achieved.
@@ -17762,7 +17782,7 @@ function assembleTrainerContext({ sessions60, ocItems, tsbData, raceCalendar, li
     .slice(0, 7)
   const latestWeight = recentWeight[0]
   const weightLine = latestWeight
-    ? `  Latest: ${latestWeight.weight_lb || latestWeight.value} lb (${latestWeight.date || latestWeight.recorded_at?.slice(0,10) || "?"}) | Target: 150 lb | Phase 1 cut to 21% BF`
+    ? `  Latest: ${latestWeight.weight_lb || latestWeight.value} lb (${latestWeight.date || latestWeight.recorded_at?.slice(0,10) || "?"}) | Target: ${TARGET_WEIGHT_LB} lb | Phase 1 cut to 21% BF`
     : "  No recent weight logged"
 
   // ── Today's schedule ───────────────────────────────────────────────────────
@@ -17775,7 +17795,7 @@ function assembleTrainerContext({ sessions60, ocItems, tsbData, raceCalendar, li
     Thu: "Back & Arms + Run — Chin-ups BW (first, 3×7 PR), Hanging leg raises, Cable row SA 200lb, Lat pulldown 180lb, Shoulder press 90lb (NEW), Inverted row, Straight arm pulldown, Biceps curl 80lb, Hammer curl 60lb, Suitcase carry 70lb",
     Fri: "Legs Volume + Hip + Friday Run — Staple run 2.5 mi Zone 2, ≈45% of long-run ceiling, advance on 3 clean (score-0) sessions. Strength: Hip thrust 120lb, RDL 70lb, Back extension BW, Hamstring eccentric curl 45lb + extra left, Hip abduction 120lb, Hip adduction 90lb, KB swing, Pallof press, Russian twists, Cable crossover 40lb (last)",
     Sat: "Long Run / Race day option — weekend long run may land Saturday when a race dictates. Swim is low-priority, ~2×/week, ~600 yards, flexible.",
-    Sun: "Long Run — Zone 2, current ceiling 6 miles (MTP protocol), no strength · spring/summer some long runs move to Saturday for races"
+    Sun: `Long Run — Zone 2, current ceiling ${LIFT_CONFIG.mtp_ceiling_miles} miles (MTP protocol), no strength · spring/summer some long runs move to Saturday for races`
   }
   const todayPlan = PLAN_THEMES[todayKey] || "Rest"
 
@@ -17868,7 +17888,7 @@ ${sessionLines}
 LIFT CONFIG
   tau1: ${liftConfig?.tau1 ?? 27}d | tau2: ${liftConfig?.tau2 ?? 18}d
   BF: ${liftConfig?.pct_fat ?? 25.4}% (DEXA 2026-04-27) | Phase 1 target: 21%
-  Run ceiling: 4.4 mi (MTP protocol) | Next race: St. Jude 10K 2026-09-19`
+  Run ceiling: ${LIFT_CONFIG.mtp_ceiling_miles} mi (MTP protocol) | Next race: St. Jude 10K 2026-09-19`
 }
 
 const FingerprintIcon = ({ size = 38 }) => {
@@ -20088,7 +20108,7 @@ function roundToNearest(value, step = 25) {
 function estimateDynamicCalorieTarget({
   currentWeight,
   estimatedMaintenance,
-  primaryGoal = 150,
+  primaryGoal = TARGET_WEIGHT_LB,
   lowerGoal = 145,
   minimumCalories = 1200
 }) {
@@ -20105,7 +20125,7 @@ function estimateDynamicCalorieTarget({
       targetCalories: CALIBRATED_FAT_LOSS_TARGET,
       deficit: CALIBRATED_MAINTENANCE - CALIBRATED_FAT_LOSS_TARGET,
       phase: w > 0 && w <= 145 ? "at_target" : "fat_loss",
-      distanceTo150: w > 0 ? Math.round(w - 150) : null,
+      distanceTo150: w > 0 ? Math.round(w - primaryGoal) : null,
       distanceTo145: w > 0 ? Math.round(w - 145) : null,
       bmr: CALIBRATED_BMR
     }
@@ -21716,7 +21736,7 @@ cutoff.setDate(cutoff.getDate() - selectedRangePoints)
     if (!filteredNutrition.length) return null
 
     const n = filteredNutrition.length
-    const proteinTarget = 140
+    const proteinTarget = LIFT_CONFIG.protein_target_g ?? 140
     const avgCalories = filteredNutrition.reduce((sum, row) => sum + toNum(row.calories), 0) / n
     const avgProtein = filteredNutrition.reduce((sum, row) => sum + toNum(row.protein_g), 0) / n
     const avgCarbs = filteredNutrition.reduce((sum, row) => sum + toNum(row.carbs_g), 0) / n
@@ -21724,8 +21744,10 @@ cutoff.setDate(cutoff.getDate() - selectedRangePoints)
     const proteinHitDays = filteredNutrition.filter(row => toNum(row.protein_g) >= proteinTarget).length
     const cloudDays = filteredNutrition.filter(row => row.source === "cloud_meals").length
 
+    const dataQuality = avgCalories === 0 && avgProtein === 0 ? 'empty' : 'ok'
     return {
       avgCalories,
+      dataQuality,
       avgProtein,
       avgCarbs,
       avgFat,
@@ -23051,7 +23073,7 @@ const bodyForecast = useMemo(() => {
 
   const lossRateMonthly = LIFT_CONFIG.fat_loss_rate_monthly ?? 1.7
   const slopePerDay = -(lossRateMonthly / 30.44)
-  const phase1Target = 150
+  const phase1Target = TARGET_WEIGHT_LB
   const finalTarget = 145
 
   const projectW = days => Math.max(finalTarget, anchorWeight + slopePerDay * days)
@@ -23217,8 +23239,15 @@ const operationalScore = useMemo(() => {
 }, [injuryPenalties])
 
 const readinessScore = useMemo(
-  () => computeReadinessDetail(ocItems, sleepRecords, healthFitDaily, computedTSBFromSessions?.tsb ?? null).score,
-  [ocItems, sleepRecords, healthFitDaily, computedTSBFromSessions]
+  () => computeReadinessDetail(
+    ocItems,
+    sleepRecords,
+    healthFitDaily,
+    tsbV2Panel
+      ? { tsb: tsbV2Panel.currentOverallTsb, rollingLoad14: tsbV2Panel.currentLoad14 }
+      : (computedTSBFromSessions?.tsb ?? null)
+  ).score,
+  [ocItems, sleepRecords, healthFitDaily, computedTSBFromSessions, tsbV2Panel]
 )
 
 const formDecayAccumulation = useMemo(() => {
@@ -24104,7 +24133,7 @@ const runningReadiness = useMemo(() => {
   return buildRunningReadinessController({
     workouts: operationalWorkouts,
     ocConstraintState,
-    mtpCeilingMiles: LIFT_CONFIG.mtp_ceiling_miles ?? 4.0
+    mtpCeilingMiles: getMtpCeiling()
   })
 }, [operationalWorkouts, ocConstraintState])
 const displayedTendonStatus = ocConstraintState?.tendon ?? tendonStatus
@@ -24157,9 +24186,30 @@ const readinessProjectionData = useMemo(() => {
 
   const latestWeek = adaptiveTrainingState.latestWeek
   const clamp = (v, lo = 0, hi = 100) => Math.min(hi, Math.max(lo, v))
-  const mtpCeiling = 4.0
-  const mtpNextMilestone = mtpCeiling * 1.1
+  const mtpCeiling = getMtpCeiling()
+  const mtpNextMilestone = getMtpNextMilestone()
   const mtpConstrained = mtpCeiling >= 3.5 && mtpCeiling < 6.2
+  const activeOcPenaltyForMonth = month => {
+    const activeOcItems = (ocItems || []).filter(item => Number(item?.currentScore) > 0 && item?.startDate)
+    if (!activeOcItems.length) return 0
+    const now = Date.now()
+    const targetMs = now + month * 30.44 * 86400000
+    return activeOcItems.reduce((sum, item) => {
+      const startMs = new Date(item.startDate).getTime()
+      if (!Number.isFinite(startMs)) return sum
+      const resolvedDate = item.expectedResolutionDate
+        ? new Date(item.expectedResolutionDate).getTime()
+        : startMs + 90 * 86400000
+      const totalWindow = resolvedDate - startMs
+      if (!Number.isFinite(totalWindow) || totalWindow <= 0) return sum
+      const elapsed = Math.min(Math.max(0, targetMs - startMs), totalWindow)
+      const penaltyFraction = Math.max(0, 1 - elapsed / totalWindow)
+      const scopePenalty = OC_KEY_META[item.key]?.scope === "global" ? 10 : 12
+      const basePenalty = Number(item.currentScore || 0) * scopePenalty
+      const boundedPenalty = basePenalty * penaltyFraction
+      return sum + boundedPenalty
+    }, 0)
+  }
   const buildProjectedCompletionScore = ({ distanceMiles, volumeThresholds, projectedCompletedRunMiles, projectedLongestRunMiles }) => {
     const completedRunMiles = Number.isFinite(Number(projectedCompletedRunMiles))
       ? Number(projectedCompletedRunMiles)
@@ -24266,7 +24316,8 @@ const readinessProjectionData = useMemo(() => {
     const blendFactor = month <= 1 ? 1 : Math.max(0, 1 - (month - 1) / 2.5)
     const blendedMonthlyGain = monthlyGainNearTerm * blendFactor + monthlyGainLongTerm * (1 - blendFactor)
     const monthGain = blendedMonthlyGain * (1 - Math.exp(-month / 3.5)) * 4
-    const baseReadiness = clampNumber(runSpecificNow + monthGain, 0, 100)
+    const activeOcPenalty = activeOcPenaltyForMonth(month)
+    const baseReadiness = clampNumber(runSpecificNow + monthGain - activeOcPenalty, 0, 100)
     const lrBonus = plannedLR != null ? Math.min(18, plannedLR * 1.5) : 0
     const tendonCap = adaptiveTrainingState.capitals?.tendon || 0
     const eventBase = clampNumber(baseReadiness + (tendonCap * 0.08) + lrBonus * 0.25, 0, 100)
@@ -24298,12 +24349,13 @@ const readinessProjectionData = useMemo(() => {
       runReadiness: Number(runReadiness.toFixed(1)),
       confidence: Number((adaptiveTrainingState.forecastConfidence || 0.4).toFixed(2)),
       triConfidence: Number(triConfidence.toFixed(2)),
-      effectiveProgress: Number(effectiveProgress.toFixed(1))
+      effectiveProgress: Number(effectiveProgress.toFixed(1)),
+      activeOcPenalty: Number(activeOcPenalty.toFixed(1))
     })
   }
 
   return series
-}, [adaptiveTrainingState, runningReadiness, ocProgressionReadiness])
+}, [adaptiveTrainingState, runningReadiness, ocItems, ocProgressionReadiness])
 const forecastReadinessCards = useMemo(() => {
   const byMonth = new Map(readinessProjectionData.map(row => [row.month, row.baseReadiness]))
   return [
@@ -24803,7 +24855,7 @@ const trajectoryData = useMemo(() => {
     const FIT_START_DATE = "2025-02-15"
     const fitPoints = points.filter(p => !p.excluded && p.date >= FIT_START_DATE)
     const n = fitPoints.length
-    if (n < 8) return null
+    if (n < 20) return null  // require sufficient interior candidates for segmented breakpoint search
 
     const xs = fitPoints.map(p => p.t)
     const ys = fitPoints.map(p => p.lb)
@@ -24912,7 +24964,9 @@ const trajectoryData = useMemo(() => {
     }
 
     // ── AIC winner ──
-    const aics = { linear: linAIC, exponential: expAIC, segmented: bestSegAIC }
+    const bpCandidates = xs.slice(Math.floor(n * 0.4), Math.ceil(n * 0.6) + 1)
+    const includeSegmented = bpCandidates.length >= 3
+    const aics = { linear: linAIC, exponential: expAIC, ...(includeSegmented ? { segmented: bestSegAIC } : {}) }
     const minAIC = Math.min(...Object.values(aics))
     const winners = Object.entries(aics).filter(([, v]) => v - minAIC <= 2).map(([k]) => k)
 
@@ -25579,6 +25633,20 @@ const trainerSessions60 = React.useMemo(() => {
     .sort((a, b) => (b.start_date || b.date || "").localeCompare(a.start_date || a.date || ""))
 }, [canonicalSessions])
 
+const SHOE_START_DATE = "2026-02-05"
+const shoeMileage = React.useMemo(() => {
+  return (canonicalSessions || [])
+    .filter(s => {
+      const d = String(s.dateTime || s.start_date || s.date || "").slice(0, 10)
+      const mod = String(s.modality || s.type || s.canonical_type || s.activity_type || "").toLowerCase()
+      return d >= SHOE_START_DATE && (mod === "running" || mod === "run")
+    })
+    .reduce((sum, s) => {
+      const dist = s.distance?.value ?? s.distance_mi ?? 0
+      return sum + Number(dist || 0)
+    }, 0)
+}, [canonicalSessions])
+
 const readinessCarouselPanel = React.useMemo(() => {
   const basePanel = tsbV2Panel || { rows: [], readinessDetail: { score: "NA" } }
   const tendonRows = (Array.isArray(adaptiveTrainingState?.weeklyRows) ? adaptiveTrainingState.weeklyRows : []).map(row => ({
@@ -25900,7 +25968,14 @@ return (
 {tab === "Overview" && (
   <div>
     {(() => {
-      const rd = computeReadinessDetail(ocItems, sleepRecords, healthFitDaily, computedTSBFromSessions?.tsb ?? null)
+      const rd = computeReadinessDetail(
+        ocItems,
+        sleepRecords,
+        healthFitDaily,
+        tsbV2Panel
+          ? { tsb: tsbV2Panel.currentOverallTsb, rollingLoad14: tsbV2Panel.currentLoad14 }
+          : (computedTSBFromSessions?.tsb ?? null)
+      )
       const latestAcwr = acwrSeries.length ? acwrSeries[acwrSeries.length - 1]?.acwr ?? null : null
       const tsbNow = tsbV2Panel?.currentOverallTsb ?? computedTSBFromSessions?.tsb ?? computedTSB?.global?.tsb ?? null
       const mtpItem = ocItems.find(i => (i.location || "").toLowerCase().includes("toe"))
@@ -27944,7 +28019,7 @@ return (
     Deficit: {Math.round(calorieTarget.deficit)} kcal, phase: {calorieTarget.phase}
   </div>
   <div style={{ fontSize: "12px", opacity: 0.7, marginTop: "4px" }}>
-    To 150: {calorieTarget.distanceTo150 ?? "NA"} lb, to 145: {calorieTarget.distanceTo145 ?? "NA"} lb
+    To {TARGET_WEIGHT_LB}: {calorieTarget.distanceTo150 ?? "NA"} lb, to 145: {calorieTarget.distanceTo145 ?? "NA"} lb
   </div>
 </div>
           </div>
@@ -28779,7 +28854,7 @@ return (
           <span>3 months: {bodyForecast.weight3m.toFixed(1)} lb</span>
           <span>6 months: {bodyForecast.weight6m.toFixed(1)} lb</span>
           <span>12 months: {bodyForecast.weight12m.toFixed(1)} lb</span>
-          <span>ETA 150 lb: {bodyForecast.eta150 || "not on trend"}</span>
+          <span>ETA {TARGET_WEIGHT_LB} lb: {bodyForecast.eta150 || "not on trend"}</span>
           <span>ETA 145 lb: {bodyForecast.eta145 || "not on trend"}</span>
         </div>
       )}
@@ -28955,6 +29030,21 @@ return (
       <div style={{ fontSize: "12px", opacity: 0.75, marginTop: "8px" }}>
         Running: {enduranceForecast.weeklyRunMiles28} mi/week · longest {runningReadiness?.signals?.recentLongestRunMiles ?? "NA"} mi · frequency {runningReadiness?.signals?.recentRunFrequency ?? "NA"}/week · progression {runningReadiness?.progressionReadiness ?? "hold"} · pace {enduranceForecast.avgPace28 || "NA"} min/mi · cardio {Math.round(enduranceForecast.cardioMinutesWeekly)} min/week · run modifier {((enduranceForecast.runPenalty ?? 1) * 100).toFixed(0)}%
       </div>
+      <div style={{ marginTop: "10px", padding: "10px 12px", background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: "8px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", flexWrap: "wrap", fontSize: "12px" }}>
+          <span>Shoe mileage: <strong style={{ color: shoeMileage < 300 ? "#4ade80" : shoeMileage < 400 ? "#fbbf24" : "#ef4444" }}>{shoeMileage.toFixed(1)} mi</strong> / 400 recommended replacement</span>
+          <span style={{ opacity: 0.7 }}>inspect at 300, ceiling 500 · ASICS Cumulus 27 since Feb 5 2026</span>
+        </div>
+        <div style={{ height: "8px", background: "#111827", borderRadius: "999px", overflow: "hidden", marginTop: "8px" }}>
+          <div
+            style={{
+              width: `${Math.min(100, (shoeMileage / 500) * 100)}%`,
+              height: "100%",
+              background: shoeMileage < 300 ? "#4ade80" : shoeMileage < 400 ? "#fbbf24" : "#ef4444"
+            }}
+          />
+        </div>
+      </div>
     </div>
 
     {/* ── Cardio Minutes ──────────────────────────────────────── */}
@@ -29010,7 +29100,7 @@ return (
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8, marginBottom: "10px" }}>
                 <div style={{ fontWeight: "bold", fontSize: "13px" }}>Running Volume (mi/week)</div>
                 <div style={{ fontSize: "11px", color: "#667", textAlign: "right" }}>
-                  ChatGPT build plan · peak 9 mi long run · taper Aug 31 · St. Jude 9/19/26
+                  ChatGPT build plan · peak 9 mi long run · taper Aug 31 · Naperville HM 10/18/26
                 </div>
               </div>
               <ResponsiveContainer width="100%" height={260}>
@@ -29092,7 +29182,7 @@ return (
       const rawLongest = recentRuns.length
         ? Math.max(...recentRuns.map(w => w.distance || 0))
         : 0
-      const currentLongRun = Math.max(rawLongest, LIFT_CONFIG.mtp_ceiling_miles ?? 6.6)
+      const currentLongRun = Math.max(rawLongest, getMtpCeiling())
 
       // Projected long run at a future date using HM_PLAN_LONG_RUN
       const getProjectedLongRun = (raceDateStr) => {

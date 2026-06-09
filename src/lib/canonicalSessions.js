@@ -366,9 +366,78 @@ export function dedupeCanonicalSessions(sessions) {
     else clusters.push([session])
   })
 
-  return clusters
+  const deduped = clusters
     .map(cluster => cluster.reduce((acc, session) => (acc ? mergeCanonicalSessionPair(acc, session) : session), null))
     .map(applyCanonicalSessionMergePolicy)
+    .sort((a, b) => String(a?.start_date || "").localeCompare(String(b?.start_date || "")))
+
+  const TG_START = "2025-11-01"
+  const TG_END = "2026-02-28"
+  const scoreSessionMetadata = session => {
+    if (!session || typeof session !== "object") return 0
+    return Object.entries(session).reduce((score, [, value]) => {
+      if (value == null) return score
+      if (typeof value === "string") return value.trim() ? score + 1 : score
+      if (Array.isArray(value)) return value.length ? score + 1 : score
+      if (typeof value === "object") return Object.keys(value).length ? score + 1 : score
+      return score + 1
+    }, 0)
+  }
+
+  const groupedByDate = deduped.reduce((map, session) => {
+    const dateKey = getSessionDateKey(session)
+    if (!dateKey || dateKey < TG_START || dateKey > TG_END) return map
+    if (!map.has(dateKey)) map.set(dateKey, [])
+    map.get(dateKey).push(session)
+    return map
+  }, new Map())
+
+  const fuzzyLosers = new Set()
+
+  groupedByDate.forEach(group => {
+    const modalityGroups = group.reduce((map, session) => {
+      const modality = getSessionTypeFamily(session)
+      if (!modality) return map
+      if (!map.has(modality)) map.set(modality, [])
+      map.get(modality).push(session)
+      return map
+    }, new Map())
+
+    modalityGroups.forEach(modalitySessions => {
+      const visited = new Set()
+      modalitySessions.forEach((session, index) => {
+        if (visited.has(index)) return
+        const baseDistance = getSessionDistanceMiles(session)
+        const cluster = [{ session, index }]
+        visited.add(index)
+
+        for (let i = index + 1; i < modalitySessions.length; i += 1) {
+          if (visited.has(i)) continue
+          const candidate = modalitySessions[i]
+          const candidateDistance = getSessionDistanceMiles(candidate)
+          if (baseDistance > 0 && candidateDistance > 0 && Math.abs(baseDistance - candidateDistance) <= 0.1) {
+            cluster.push({ session: candidate, index: i })
+            visited.add(i)
+          }
+        }
+
+        if (cluster.length < 2) return
+
+        const winner = cluster
+          .slice()
+          .sort((a, b) => scoreSessionMetadata(b.session) - scoreSessionMetadata(a.session))[0]
+
+        cluster.forEach(({ session: candidate }) => {
+          if (candidate === winner.session) return
+          candidate.dedupedBy = winner.session.id || getDuplicateSessionKey(winner.session)
+          fuzzyLosers.add(candidate)
+        })
+      })
+    })
+  })
+
+  return deduped
+    .filter(session => !fuzzyLosers.has(session))
     .sort((a, b) => String(a?.start_date || "").localeCompare(String(b?.start_date || "")))
 }
 
