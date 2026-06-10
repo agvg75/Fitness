@@ -10794,10 +10794,10 @@ function ProgressTab({ progressionState, schedLog, workouts = [], vo2ProxyData =
       .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))
 
     return rows.map(row => {
-      const rowTime = new Date(`${row.date}T12:00:00`).getTime()
+      const rowTime = new Date(`${String(row.date).slice(0, 10)}T12:00:00`).getTime()
       const subset = rows
         .filter(item => {
-          const itemTime = new Date(`${item.date}T12:00:00`).getTime()
+          const itemTime = new Date(`${String(item.date).slice(0, 10)}T12:00:00`).getTime()
           return Number.isFinite(itemTime) && Number.isFinite(rowTime) && itemTime <= rowTime && itemTime >= rowTime - 27 * 86400000
         })
         .map(item => Number(item.ef))
@@ -10818,8 +10818,8 @@ function ProgressTab({ progressionState, schedLog, workouts = [], vo2ProxyData =
     const meanVals = efTrendData.map(row => Number(row.ef_28d)).filter(Number.isFinite)
     return {
       count: efTrendData.length,
-      latestRaw: Number.isFinite(Number(latest?.ef)) ? Number(latest.ef) : null,
-      latestMean: Number.isFinite(Number(latest?.ef_28d)) ? Number(latest.ef_28d) : null,
+      latestRaw: latest?.ef != null && Number.isFinite(Number(latest.ef)) ? Number(latest.ef) : null,
+      latestMean: latest?.ef_28d != null && Number.isFinite(Number(latest.ef_28d)) ? Number(latest.ef_28d) : null,
       bestRaw: rawVals.length ? Math.max(...rawVals) : null,
       bestMean: meanVals.length ? Math.max(...meanVals) : null,
     }
