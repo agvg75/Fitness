@@ -59,6 +59,10 @@ const LIFT_CONFIG = {
   // Banister model constants — fitted via grid search on 466 days, R²=0.887
   tau1: 27,          // fitness decay (days) — HealthFit default is 42
   tau2: 18,          // fatigue decay (days) — HealthFit default is 7
+  hr_max: 186,            // measured ceiling (165 race avg near max effort supports ~186 est.)
+  evo2_min_hr_frac: 0.55, // ignore runs below 55% HRmax: Swain relation unreliable there
+  tau_fit_min_points: 25, // minimum eVO2 observations before tau diagnostic renders
+  tau_fit_window_days: 180,
   tsbModerateRiskThreshold: -7,
   tsbHighRiskThreshold: -9,
   ocHalfLifeOverrides: {
@@ -93,7 +97,7 @@ const LIFT_CONFIG = {
   fat_loss_target: 1700,
   fat_loss_rate_monthly: 1.7,  // lb/month — no-KNR period Apr-Sep 2026; reassess when KNR resumes
   mtp_ceiling_miles: 6.6,  // advanced from 4.0 — three consecutive score-0 sessions confirmed May 31 2026
-  mtp_next_milestone_miles: 7.26,  // next milestone: 6.6 * 1.10
+  mtp_next_milestone_miles: 7.26,  // superseded by derived getMtpNextMilestone
 
   // Half marathon build
   hm_race_date:    "2026-10-18",  // Naperville Half Marathon (St. Jude 10K is a tune-up, not the goal race)
