@@ -2210,8 +2210,23 @@ const DEFAULT_TENDON_WORK_BY_DAY = {
 
 // Derived: target weight at 21% BF given current lean+BMC = LIFT_CONFIG.lean_bmc_lb
 const TARGET_WEIGHT_LB = Math.round(LIFT_CONFIG.lean_bmc_lb / 0.79)
-const getMtpCeiling = () => LIFT_CONFIG.mtp_ceiling_miles ?? 6.6
-const getMtpNextMilestone = () => LIFT_CONFIG.mtp_next_milestone_miles ?? 7.26
+const MTP_CEILING_OVERRIDE_KEY = "lift_mtp_ceiling_override"
+function readMtpCeilingOverride() {
+  try {
+    const raw = localStorage.getItem(MTP_CEILING_OVERRIDE_KEY)
+    if (!raw) return null
+    const o = JSON.parse(raw)
+    return Number.isFinite(Number(o?.ceiling)) ? o : null
+  } catch {
+    return null
+  }
+}
+const getMtpCeiling = () => {
+  const base = LIFT_CONFIG.mtp_ceiling_miles ?? 6.6
+  const o = readMtpCeilingOverride()
+  return o && Number(o.ceiling) > base ? Number(o.ceiling) : base
+}
+const getMtpNextMilestone = () => +(getMtpCeiling() * 1.1).toFixed(2)
 
 const TENDON_EXERCISE_PATTERNS = [
   { id: "standing_calf_raise", match: /standing calf raise|standing calf|single-leg calf raise/i, group: "achilles_calf", capacity: 1.2, load: 0.5 },
@@ -4217,7 +4232,7 @@ function SignalDialSheet({ open, onClose, structureKey, location, onSubmit }) {
 }
 
 // ─── TabOperationalCapacity ────────────────────────────────────────────────────
-function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapacityData, healthFitDaily, sleepRecords, tsbFallback = null, runSessions = [], canonicalSessions = [], schedLog = [], biometricRecords = [], formDecayAccumulation = {}, tissueLoadIndex = {}, ocLoadOverrides = {}, saveOcLoadOverrides = async () => {}, saveOcItemsDurably = async () => ({ synced: false }), tsbV2Panel = null }) {
+function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapacityData, healthFitDaily, sleepRecords, tsbFallback = null, runSessions = [], canonicalSessions = [], schedLog = [], biometricRecords = [], formDecayAccumulation = {}, tissueLoadIndex = {}, ocLoadOverrides = {}, saveOcLoadOverrides = async () => {}, saveOcItemsDurably = async () => ({ synced: false }), tsbV2Panel = null, setMtpCeilingVersion = () => {} }) {
   const [selectedId, setSelectedId] = useState(null)
   const [loadSourcesOpen, setLoadSourcesOpen] = useState(false)
   const [addForm, setAddForm] = useState({
@@ -5220,6 +5235,7 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
         const PROGRESSION_THRESHOLD = 3
         const progressPct = Math.min(100, Math.round((streak / PROGRESSION_THRESHOLD) * 100))
         const currentCeilingMiles = getMtpCeiling()
+        const activeMtpOverride = readMtpCeilingOverride()
         const nextDistanceMilestone = getMtpNextMilestone().toFixed(1)
         const nextDistanceText = `${nextDistanceMilestone} mi`
         const remainingScoreZeroSessions = Math.max(0, PROGRESSION_THRESHOLD - streak)
@@ -5307,8 +5323,39 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
               }
             </div>
             <div style={{ marginTop: "10px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              {!isActive && remainingScoreZeroSessions === 0 && (
+                <button
+                  onClick={() => {
+                    const next = getMtpNextMilestone()
+                    localStorage.setItem(MTP_CEILING_OVERRIDE_KEY, JSON.stringify({
+                      ceiling: next,
+                      advancedOn: new Date().toISOString().slice(0, 10),
+                      basis: "3 consecutive score-0 sessions",
+                    }))
+                    setMtpCeilingVersion(v => v + 1)
+                  }}
+                  style={buttonStyle(true)}
+                >
+                  Advance ceiling to {getMtpNextMilestone().toFixed(1)} mi
+                </button>
+              )}
               <button onClick={openMtpCheckForm} style={buttonStyle(true)}>Log zero-pain check</button>
             </div>
+            {activeMtpOverride && Number(activeMtpOverride.ceiling) > (LIFT_CONFIG.mtp_ceiling_miles ?? 6.6) && (
+              <div style={{ marginTop: "8px", fontSize: "11px", color: "#94a3b8", lineHeight: 1.5 }}>
+                Ceiling {Number(activeMtpOverride.ceiling).toFixed(2)} mi (advanced {activeMtpOverride.advancedOn || "unknown"});{" "}
+                <button
+                  type="button"
+                  onClick={() => {
+                    localStorage.removeItem(MTP_CEILING_OVERRIDE_KEY)
+                    setMtpCeilingVersion(v => v + 1)
+                  }}
+                  style={{ background: "none", border: "none", color: "#38bdf8", cursor: "pointer", padding: 0, fontSize: "11px" }}
+                >
+                  Reset to config
+                </button>
+              </div>
+            )}
             {mtpCheckFormOpen && (
               <div style={{ marginTop: "10px", padding: "10px", background: "#0a0b14", borderRadius: "6px", border: "1px solid #1a1b2e", display: "grid", gap: "8px" }}>
                 <div style={{ fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase", color: "#555" }}>MTP check-in</div>
@@ -17963,7 +18010,7 @@ const dexaRegionalPct = DEXA_REGIONAL.map(s => ({
 
 // ── LIFT Trainer Panel ─────────────────────────────────────────────────────
 const TRAINER_STORAGE_KEY = "lift-trainer-chat"
-const TRAINER_SYSTEM_PROMPT = `You are LIFT Trainer, an AI training assistant with full access to Andrés Vidal-Gadea's longitudinal fitness data. Respond with the directness and precision of a sports scientist, not a generic coach. No decorative praise. No hedging. Separate observed data from inference. Quantify uncertainty where relevant.
+const getTrainerSystemPrompt = () => `You are LIFT Trainer, an AI training assistant with full access to Andrés Vidal-Gadea's longitudinal fitness data. Respond with the directness and precision of a sports scientist, not a generic coach. No decorative praise. No hedging. Separate observed data from inference. Quantify uncertainty where relevant.
 
 ABOUT ANDRÉS
 Age 50, scientist at an R2 institution in Normal IL. On tirzepatide (GLP-1/GIP, currently 10 mg) since November 2024 for weight loss. Governing training principle: leave every session better than you entered it.
@@ -17982,7 +18029,7 @@ TSB thresholds: moderate risk below -7, high risk below -9.
 Taper requirement: 3 weeks before any goal half marathon (not 2 weeks).
 
 ACTIVE INJURY PROTOCOL — LEFT MTP JOINT (Morton's Toe)
-Current run ceiling: ${LIFT_CONFIG.mtp_ceiling_miles} miles. Advance by 10% only after 3 consecutive score-0 sessions.
+Current run ceiling: ${getMtpCeiling()} miles. Advance by 10% only after 3 consecutive score-0 sessions.
 MTP scoring: 0=fine (continue), 1=note and continue, 2=modify session, 3=terminate session immediately.
 Pre-run ibuprofen is part of an explicitly recommended twice-daily anti-inflammatory protocol — not a red flag.
 The rowing machine causes passive MTP dorsiflexion at the catch regardless of technique and is incompatible with the current protocol until 3 consecutive score-0 sessions are achieved.
@@ -18209,7 +18256,7 @@ function assembleTrainerContext({ sessions60, ocItems, tsbData, raceCalendar, li
     Thu: "Back & Arms + Run — Chin-ups BW (first, 3×7 PR), Hanging leg raises, Cable row SA 200lb, Lat pulldown 180lb, Shoulder press 90lb (NEW), Inverted row, Straight arm pulldown, Biceps curl 80lb, Hammer curl 60lb, Suitcase carry 70lb",
     Fri: "Legs Volume + Hip + Friday Run — Staple run 2.5 mi Zone 2, ≈45% of long-run ceiling, advance on 3 clean (score-0) sessions. Strength: Hip thrust 120lb, RDL 70lb, Back extension BW, Hamstring eccentric curl 45lb + extra left, Hip abduction 120lb, Hip adduction 90lb, KB swing, Pallof press, Russian twists, Cable crossover 40lb (last)",
     Sat: "Long Run / Race day option — weekend long run may land Saturday when a race dictates. Swim is low-priority, ~2×/week, ~600 yards, flexible.",
-    Sun: `Long Run — Zone 2, current ceiling ${LIFT_CONFIG.mtp_ceiling_miles} miles (MTP protocol), no strength · spring/summer some long runs move to Saturday for races`
+    Sun: `Long Run — Zone 2, current ceiling ${getMtpCeiling()} miles (MTP protocol), no strength · spring/summer some long runs move to Saturday for races`
   }
   const todayPlan = PLAN_THEMES[todayKey] || "Rest"
 
@@ -18302,7 +18349,7 @@ ${sessionLines}
 LIFT CONFIG
   tau1: ${liftConfig?.tau1 ?? 27}d | tau2: ${liftConfig?.tau2 ?? 18}d
   BF: ${liftConfig?.pct_fat ?? 25.4}% (DEXA 2026-04-27) | Phase 1 target: 21%
-  Run ceiling: ${LIFT_CONFIG.mtp_ceiling_miles} mi (MTP protocol) | Next race: St. Jude 10K 2026-09-19`
+  Run ceiling: ${getMtpCeiling()} mi (MTP protocol) | Next race: St. Jude 10K 2026-09-19`
 }
 
 const FingerprintIcon = ({ size = 38 }) => {
@@ -18758,7 +18805,7 @@ function TrainerPanel({ sessions60, ocItems, tsbData, raceCalendar, liftConfig, 
         body: JSON.stringify({
           model: "claude-sonnet-4-20250514",
           max_tokens: 1024,
-          system: `Today is ${new Date().toLocaleDateString('en-CA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}. The current time is ${new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}.\n\n${TRAINER_SYSTEM_PROMPT}`,
+          system: `Today is ${new Date().toLocaleDateString('en-CA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}. The current time is ${new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}.\n\n${getTrainerSystemPrompt()}`,
           messages: apiMessages,
           stream: true
         })
@@ -19752,6 +19799,7 @@ const [healthFitDaily, setHealthFitDaily] = useState(() => {
     return JSON.parse(localStorage.getItem('lift_healthfit_daily') || '[]');
   } catch { return []; }
 })
+const [mtpCeilingVersion, setMtpCeilingVersion] = useState(0)
 const [weeklyLossTarget, setWeeklyLossTarget] = useState(() => {
   try {
     const stored = JSON.parse(localStorage.getItem("weekly-loss-target") || "null")
@@ -20830,11 +20878,12 @@ const HM_PLAN_LONG_RUN = useMemo(() => {
 
   const pastMondays = Object.keys(frozen).sort()
   const lastActual = pastMondays.length ? frozen[pastMondays[pastMondays.length - 1]] : 0
-  const startLongRunMi = Math.max(3.1, Math.min(lastActual || 3.1, LIFT_CONFIG.mtp_ceiling_miles))
+  const mtpCeiling = getMtpCeiling()
+  const startLongRunMi = Math.max(3.1, Math.min(lastActual || 3.1, mtpCeiling))
   const generated = generateHmPlan({
     startMonday: isoMondayOf(todayIso),
     startLongRunMi,
-    ceilingMi: LIFT_CONFIG.mtp_ceiling_miles,
+    ceilingMi: mtpCeiling,
     raceDate: LIFT_CONFIG.hm_race_date,
     taperStart: LIFT_CONFIG.hm_taper_start,
     peakMi: LIFT_CONFIG.hm_peak_mi_week,
@@ -20845,7 +20894,7 @@ const HM_PLAN_LONG_RUN = useMemo(() => {
   })
 
   return { ...frozen, ...generated }
-}, [operationalWorkouts])
+}, [operationalWorkouts, mtpCeilingVersion])
 
 useEffect(() => {
   const recent = (Array.isArray(operationalWorkouts) ? operationalWorkouts : []).filter(w => {
@@ -24629,7 +24678,7 @@ const runningReadiness = useMemo(() => {
     ocConstraintState,
     mtpCeilingMiles: getMtpCeiling()
   })
-}, [operationalWorkouts, ocConstraintState])
+}, [operationalWorkouts, ocConstraintState, mtpCeilingVersion])
 const displayedTendonStatus = ocConstraintState?.tendon ?? tendonStatus
 const ocProgressionReadiness = ocConstraintState?.gate?.progressionReadiness ?? "progress"
 const ocProgressionReasons = ocConstraintState?.gate?.progressionReasons ?? []
@@ -24849,7 +24898,7 @@ const readinessProjectionData = useMemo(() => {
   }
 
   return series
-}, [adaptiveTrainingState, runningReadiness, ocItems, ocProgressionReadiness])
+}, [adaptiveTrainingState, runningReadiness, ocItems, ocProgressionReadiness, mtpCeilingVersion])
 const forecastReadinessCards = useMemo(() => {
   const byMonth = new Map(readinessProjectionData.map(row => [row.month, row.baseReadiness]))
   return [
@@ -29244,6 +29293,7 @@ return (
     saveOcLoadOverrides={saveOcLoadOverrides}
     saveOcItemsDurably={saveOcItemsDurably}
     tsbV2Panel={tsbV2Panel}
+    setMtpCeilingVersion={setMtpCeilingVersion}
   />
 )}
 {tab === "Forecast" && (
