@@ -23243,11 +23243,9 @@ const readinessScore = useMemo(
     ocItems,
     sleepRecords,
     healthFitDaily,
-    tsbV2Panel
-      ? { tsb: tsbV2Panel.currentOverallTsb, rollingLoad14: tsbV2Panel.currentLoad14 }
-      : (computedTSBFromSessions?.tsb ?? null)
+    computedTSBFromSessions?.tsb ?? null
   ).score,
-  [ocItems, sleepRecords, healthFitDaily, computedTSBFromSessions, tsbV2Panel]
+  [ocItems, sleepRecords, healthFitDaily, computedTSBFromSessions]
 )
 
 const formDecayAccumulation = useMemo(() => {
