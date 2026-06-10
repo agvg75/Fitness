@@ -97,10 +97,21 @@ const LIFT_CONFIG = {
 
   // Half marathon build
   hm_race_date:    "2026-10-18",  // Naperville Half Marathon (St. Jude 10K is a tune-up, not the goal race)
-  hm_taper_start:  "2026-08-31",
+  hm_taper_start:  "2026-09-27",  // 3-week taper before Naperville Oct 18
   hm_peak_mi_week: 9,
   hm_taper_factor: 0.90,
   hm_weekly_build: 1.10,
+
+  // Feature 1: endurance discount on race prediction
+  endurance_penalty_max_hm:  0.12,
+  endurance_penalty_max_10k: 0.06,
+  required_long_run_factor:  0.75,
+  required_weekly_factor:    2.0,
+
+  // Feature 3: aerobic efficiency
+  ef_zone2_hr_min: 112,
+  ef_zone2_hr_max: 145,
+  decoupling_flag_pct: 5,
 
   trajectory_events: [
     { id: "tirzepatide_2_5", date: "2024-11-01", label: "2.5", shortLabel: "2.5", kind: "marker" },
