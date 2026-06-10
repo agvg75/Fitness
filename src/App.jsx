@@ -10464,7 +10464,7 @@ function VolumeRawBarChart({ data }) {
   )
 }
 
-function ProgressTab({ progressionState, schedLog, workouts = [], vo2ProxyData = [] }) {
+function ProgressTab({ progressionState, schedLog, workouts = [], vo2ProxyData = [], eVo2Trend = [], appleVo2Latest = null }) {
   const BW_LB = 160
   const EXERCISE_GROUPS = PROGRESS_EXERCISE_GROUPS
   const [sortBy, setSortBy] = useState("stale")
@@ -10828,6 +10828,20 @@ function ProgressTab({ progressionState, schedLog, workouts = [], vo2ProxyData =
       bestMean: meanVals.length ? Math.max(...meanVals) : null,
     }
   }, [efTrendData])
+  const eVo2Summary = useMemo(() => {
+    if (!eVo2Trend.length) return { count: 0, latestMean: null, latestRaw: null }
+    const latest = eVo2Trend[eVo2Trend.length - 1]
+    return {
+      count: eVo2Trend.length,
+      latestMean: Number.isFinite(Number(latest?.eVo2_28d)) ? Number(latest.eVo2_28d) : null,
+      latestRaw: Number.isFinite(Number(latest?.eVo2)) ? Number(latest.eVo2) : null,
+    }
+  }, [eVo2Trend])
+  const appleVo2Value = Number(appleVo2Latest?.vo2_max)
+  const appleVo2Date = String(appleVo2Latest?.metric_date || "").slice(0, 10) || null
+  const eVo2DisagreementPct = eVo2Summary.latestMean != null && Number.isFinite(appleVo2Value) && appleVo2Value > 0
+    ? Math.abs(eVo2Summary.latestMean - appleVo2Value) / appleVo2Value
+    : null
 
   const latestLongRunDrift = useMemo(() => {
     const rows = (Array.isArray(vo2ProxyData) ? vo2ProxyData : [])
@@ -11303,6 +11317,53 @@ function ProgressTab({ progressionState, schedLog, workouts = [], vo2ProxyData =
             ) : (
               <div style={{ height: 190, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "#555" }}>
                 no zone 2 runs with HR logged
+              </div>
+            )}
+          </div>
+          <div style={{ background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: 12, padding: 14 }}>
+            <div style={{ fontFamily: "IBM Plex Mono", fontSize: 10, letterSpacing: 1.5, textTransform: "uppercase", color: "#38bdf8", marginBottom: 6 }}>
+              Effective VO2max
+            </div>
+            <div style={{ fontSize: 10, color: "#6b7290", marginBottom: 10 }}>
+              Pace cost normalized by heart-rate-derived %VO2max. Same pace at harder effort now reads as lower fitness, not equal fitness.
+            </div>
+            {eVo2Trend.length ? (
+              <>
+                <div style={{ height: 190 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={eVo2Trend} margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>
+                      <CartesianGrid stroke="rgba(42,47,62,0.8)" />
+                      <XAxis dataKey="label" tick={{ fill: "#6b7290", fontSize: 10 }} />
+                      <YAxis
+                        tick={{ fill: "#6b7290", fontSize: 10 }}
+                        width={44}
+                        label={{ value: "ml/kg/min", angle: -90, position: "insideLeft", offset: 2, fill: "#6b7290", style: { textAnchor: "middle" }, fontSize: 10 }}
+                      />
+                      <Tooltip
+                        contentStyle={{ background: "#1c2030", border: "1px solid #2a2f3e", borderRadius: 6, color: "#cbd5e1" }}
+                        formatter={(value, name) => [value != null ? Number(value).toFixed(1) : "—", name === "eVo2" ? "eVO2" : "28d mean"]}
+                      />
+                      <Line type="monotone" dataKey="eVo2" name="eVo2" stroke="#38bdf8" strokeWidth={1.6} dot={{ r: 2 }} connectNulls={false} />
+                      <Line type="monotone" dataKey="eVo2_28d" name="eVo2_28d" stroke="#facc15" strokeWidth={2} dot={false} connectNulls />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8, marginTop: 8, fontSize: 10, color: "#94a3b8" }}>
+                  <div>Runs with eVO2: {eVo2Summary.count}</div>
+                  <div>Latest 28d mean: {eVo2Summary.latestMean != null ? eVo2Summary.latestMean.toFixed(1) : "—"}</div>
+                </div>
+                <div style={{ marginTop: 8, fontSize: 10, color: "#94a3b8" }}>
+                  In-app {eVo2Summary.latestMean != null ? eVo2Summary.latestMean.toFixed(1) : "—"} vs Apple Watch {Number.isFinite(appleVo2Value) ? appleVo2Value.toFixed(1) : "—"} {appleVo2Date ? `(${fmtShortDate(appleVo2Date)})` : ""}
+                </div>
+                {eVo2DisagreementPct != null && eVo2DisagreementPct > 0.15 && (
+                  <div style={{ marginTop: 8, padding: "6px 8px", borderRadius: 8, border: "1px solid rgba(251,191,36,0.35)", background: "rgba(251,191,36,0.08)", fontSize: 10, color: "#fcd34d" }}>
+                    Calibration flag: in-app and Apple differ by more than 15%. Review `hr_max` and HR-based effort assumptions.
+                  </div>
+                )}
+              </>
+            ) : (
+              <div style={{ height: 190, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "#555" }}>
+                no runs with valid HR-derived eVO2 yet
               </div>
             )}
           </div>
@@ -23051,6 +23112,16 @@ const vo2ProxyData = useMemo(() => {
       const ef = (inZone2 && distanceMiles >= 2)
         ? Number(((1609.34 / paceMinPerMile) / avgHr).toFixed(3))
         : null
+      const hrMax = LIFT_CONFIG.hr_max ?? 186
+      const minFrac = LIFT_CONFIG.evo2_min_hr_frac ?? 0.55
+      let eVo2 = null
+      if (avgHr >= hrMax * minFrac && avgHr <= hrMax) {
+        const pctVo2 = ((avgHr / hrMax) * 100 - 37) / 64
+        if (pctVo2 > 0.3 && pctVo2 <= 1.05) {
+          const cand = vo2 / pctVo2
+          eVo2 = (cand >= 20 && cand <= 65) ? Number(cand.toFixed(1)) : null
+        }
+      }
       const decouplingPct = distanceMiles >= 4
         ? computeDecouplingPct(
           Number.isFinite(hr1) && hr1 > 0 ? hr1 : null,
@@ -23067,6 +23138,7 @@ const vo2ProxyData = useMemo(() => {
         durationMin: Number(durationMin.toFixed(1)),
         avgHr: avgHr || null,
         ef,
+        eVo2,
         hr1: hr1 || null,
         hr2: hr2 || null,
         decouplingPct
@@ -23098,6 +23170,26 @@ const vo2ProxySmoothed = useMemo(() => {
     }
   })
 }, [vo2ProxyData])
+const eVo2Trend = useMemo(() => {
+  const rows = (Array.isArray(vo2ProxyData) ? vo2ProxyData : [])
+    .filter(r => r?.eVo2 != null)
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)))
+  return rows.map(row => {
+    const rowTime = new Date(`${String(row.date).slice(0, 10)}T12:00:00`).getTime()
+    const subset = rows.filter(item => {
+      const t = new Date(`${String(item.date).slice(0, 10)}T12:00:00`).getTime()
+      return Number.isFinite(t) && Number.isFinite(rowTime) && t <= rowTime && t >= rowTime - 27 * 86400000
+    }).map(i => Number(i.eVo2)).filter(Number.isFinite)
+    const avg = subset.length ? subset.reduce((s, v) => s + v, 0) / subset.length : null
+    return { ...row, eVo2_28d: avg == null ? null : Number(avg.toFixed(1)) }
+  })
+}, [vo2ProxyData])
+const appleVo2Latest = useMemo(() => {
+  const rows = (Array.isArray(healthFitDaily) ? healthFitDaily : [])
+    .filter(r => Number.isFinite(Number(r?.vo2_max)))
+    .sort((a, b) => String(a?.metric_date || "").localeCompare(String(b?.metric_date || "")))
+  return rows.length ? rows[rows.length - 1] : null
+}, [healthFitDaily])
 const vo2ProxySummary = useMemo(() => {
   if (!vo2ProxySmoothed.length) {
     return {
@@ -28941,6 +29033,8 @@ return (
     schedLog={schedLog}
     workouts={operationalWorkouts}
     vo2ProxyData={vo2ProxyData}
+    eVo2Trend={eVo2Trend}
+    appleVo2Latest={appleVo2Latest}
   />
 )}
 
