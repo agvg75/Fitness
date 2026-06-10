@@ -164,6 +164,63 @@ const LIFT_CONFIG = {
   },
 }
 
+function isoMondayOf(isoDate) {
+  const d = new Date(`${isoDate}T12:00:00`)
+  const day = d.getDay()
+  d.setDate(d.getDate() + (day === 0 ? -6 : 1 - day))
+  return d.toISOString().slice(0, 10)
+}
+
+function generateHmPlan({
+  startMonday,
+  startLongRunMi,
+  ceilingMi,
+  raceDate,
+  taperStart,
+  peakMi,
+  buildFactor,
+  tuneUps = []
+}) {
+  const plan = {}
+  const race = new Date(`${raceDate}T12:00:00`)
+  const taper = new Date(`${taperStart}T12:00:00`)
+  let cursor = new Date(`${startMonday}T12:00:00`)
+  let lastBuild = startLongRunMi
+  let buildWeekCount = 0
+  let guard = 0
+
+  while (cursor <= race && guard++ < 80) {
+    const iso = cursor.toISOString().slice(0, 10)
+    const weekEnd = new Date(cursor.getTime() + 6 * 86400000)
+    const tuneUp = tuneUps.find(t => {
+      const d = new Date(`${t.date}T12:00:00`)
+      return d >= cursor && d <= weekEnd
+    })
+
+    if (weekEnd >= race) {
+      plan[iso] = 13.1
+    } else if (cursor >= taper) {
+      const weeksOut = Math.round((race - cursor) / (7 * 86400000))
+      plan[iso] = +(lastBuild * (weeksOut === 3 ? 0.75 : weeksOut === 2 ? 0.60 : 0.45)).toFixed(1)
+    } else if (tuneUp) {
+      plan[iso] = tuneUp.dist_mi
+    } else {
+      buildWeekCount += 1
+      if (buildWeekCount % 4 === 0) {
+        plan[iso] = Math.max(3.1, +(lastBuild * 0.55).toFixed(1))
+      } else {
+        const next = Math.min(lastBuild * buildFactor, peakMi, ceilingMi * buildFactor)
+        plan[iso] = +next.toFixed(1)
+        lastBuild = next
+      }
+    }
+
+    cursor = new Date(cursor.getTime() + 7 * 86400000)
+  }
+
+  return plan
+}
+
 const ANTHROPOMETRIC_HISTORY = [
   {
     date: "2026-05-16",
@@ -19335,24 +19392,6 @@ export default function App() {
     return new Set(Object.values(byDistance).map(v => v.id))
   })()
 
-  // ── ChatGPT Plan: weekly long run targets (week-start Monday → miles) ───
-  const HM_PLAN_LONG_RUN = {
-    "2026-03-23": 3.5,  "2026-03-30": 4.0,
-    "2026-04-06": 3.1,  "2026-04-13": 3.1,
-    "2026-04-20": 4.5,  "2026-04-27": 4.35,
-    "2026-05-04": 3.1,  "2026-05-11": 3.1,
-    "2026-05-18": 5.0,  "2026-05-25": 5.5,
-    "2026-06-01": 4.0,  "2026-06-08": 3.1,
-    "2026-06-15": 6.0,  "2026-06-22": 6.5,
-    "2026-06-29": 5.0,  "2026-07-06": 3.1,
-    "2026-07-13": 7.0,  "2026-07-20": 7.5,
-    "2026-07-27": 3.5,  "2026-08-03": 8.0,
-    "2026-08-10": 8.5,  "2026-08-17": 4.1,
-    "2026-08-24": 9.0,  "2026-08-31": 4.0,
-    "2026-09-07": 8.0,  "2026-09-14": 6.2,
-    "2026-09-19": 6.2,
-  }
-
   const [tab, setTab] = useState("Overview")
   // Pre-populate Schedule tab when navigating from a missed-workout alert
   const [scheduleTarget, setScheduleTarget] = useState(null) // { day, date } | null
@@ -20458,6 +20497,40 @@ const operationalWorkouts = useMemo(() => {
     String(a.dateTime || a.date || "").localeCompare(String(b.dateTime || b.date || ""))
   )
 }, [normalizedActiveWorkouts, normalizedStoredWorkouts])
+
+const HM_PLAN_LONG_RUN = useMemo(() => {
+  const todayIso = todayISO()
+  const frozen = {}
+
+  ;(operationalWorkouts || []).forEach(w => {
+    const type = String(w.type || w.canonical_type || w.activityType || "").toLowerCase()
+    if (!type.includes("run") && !type.includes("jog")) return
+    const d = String(w.date || w.dateTime || w.start_date || "").slice(0, 10)
+    if (!d || d >= todayIso) return
+    const monday = isoMondayOf(d)
+    const dist = Number(w.distance ?? w.distanceMiles ?? w.miles ?? w.distance_miles ?? 0)
+    if (dist > (frozen[monday] || 0)) frozen[monday] = +dist.toFixed(1)
+  })
+
+  const pastMondays = Object.keys(frozen).sort()
+  const lastActual = pastMondays.length ? frozen[pastMondays[pastMondays.length - 1]] : 0
+  const startLongRunMi = Math.max(3.1, Math.min(lastActual || 3.1, LIFT_CONFIG.mtp_ceiling_miles))
+  const generated = generateHmPlan({
+    startMonday: isoMondayOf(todayIso),
+    startLongRunMi,
+    ceilingMi: LIFT_CONFIG.mtp_ceiling_miles,
+    raceDate: LIFT_CONFIG.hm_race_date,
+    taperStart: LIFT_CONFIG.hm_taper_start,
+    peakMi: LIFT_CONFIG.hm_peak_mi_week,
+    buildFactor: LIFT_CONFIG.hm_weekly_build,
+    tuneUps: RACE_CALENDAR
+      .filter(r => r.recommended && r.date > todayIso && r.date < LIFT_CONFIG.hm_race_date)
+      .map(r => ({ date: r.date, dist_mi: r.dist_mi })),
+  })
+
+  return { ...frozen, ...generated }
+}, [operationalWorkouts])
+
 useEffect(() => {
   const recent = (Array.isArray(operationalWorkouts) ? operationalWorkouts : []).filter(w => {
     const raw = w?.dateTime || w?.date || w?.start_date || w?.startDate || null
@@ -29139,7 +29212,7 @@ return (
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8, marginBottom: "10px" }}>
                 <div style={{ fontWeight: "bold", fontSize: "13px" }}>Running Volume (mi/week)</div>
                 <div style={{ fontSize: "11px", color: "#667", textAlign: "right" }}>
-                  ChatGPT build plan · peak 9 mi long run · taper Aug 31 · Naperville HM 10/18/26
+                  Adaptive HM plan · peak 9 mi long run · taper Sep 27 · Naperville HM 10/18/26
                 </div>
               </div>
               <ResponsiveContainer width="100%" height={260}>
