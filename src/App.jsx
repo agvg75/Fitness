@@ -801,6 +801,101 @@ function computeDecouplingPct(hr1, hr2) {
   if (!Number.isFinite(hr1) || !Number.isFinite(hr2) || hr1 <= 0) return null
   return +(((hr2 - hr1) / hr1) * 100).toFixed(1)
 }
+
+function fitBanisterTaus({ dailyTrimp, perfRows, windowDays = 180, minPoints = 25 }) {
+  const perf = (perfRows || [])
+    .map(r => ({ date: String(r.date).slice(0, 10), value: Number(r.value) }))
+    .filter(r => /^\d{4}-\d{2}-\d{2}$/.test(r.date) && Number.isFinite(r.value))
+  const cutoff = new Date(Date.now() - windowDays * 86400000).toISOString().slice(0, 10)
+  const perfW = perf.filter(r => r.date >= cutoff)
+  if (perfW.length < minPoints) return { ok: false, reason: `need ${minPoints}+ points, have ${perfW.length}` }
+
+  const loadDays = Object.keys(dailyTrimp || {}).sort()
+  if (loadDays.length < 30) return { ok: false, reason: "insufficient load history" }
+
+  function seriesFor(t1, t2) {
+    const byDate = {}
+    let ctl = 0
+    let atl = 0
+    let prev = loadDays[0]
+    loadDays.forEach(d => {
+      const gap = Math.max(0, Math.round((new Date(`${d}T12:00:00`) - new Date(`${prev}T12:00:00`)) / 86400000))
+      for (let i = 0; i < gap - 1; i++) {
+        ctl = ctl + (0 - ctl) / t1
+        atl = atl + (0 - atl) / t2
+      }
+      const t = dailyTrimp[d] || 0
+      ctl = ctl + (t - ctl) / t1
+      atl = atl + (t - atl) / t2
+      byDate[d] = { ctl, atl }
+      prev = d
+    })
+    return byDate
+  }
+
+  function nearestOnOrBefore(byDate, date) {
+    if (byDate[date]) return byDate[date]
+    let best = null
+    for (const k of loadDays) {
+      if (k <= date) best = byDate[k]
+      else break
+    }
+    return best
+  }
+
+  function r2For(t1, t2) {
+    const byDate = seriesFor(t1, t2)
+    const X = []
+    const Y = []
+    perfW.forEach(r => {
+      const s = nearestOnOrBefore(byDate, r.date)
+      if (s) {
+        X.push([1, s.ctl, s.atl])
+        Y.push(r.value)
+      }
+    })
+    const n = Y.length
+    if (n < minPoints) return null
+    const XtX = [[0, 0, 0], [0, 0, 0], [0, 0, 0]]
+    const XtY = [0, 0, 0]
+    for (let i = 0; i < n; i++) {
+      for (let a = 0; a < 3; a++) {
+        XtY[a] += X[i][a] * Y[i]
+        for (let b = 0; b < 3; b++) XtX[a][b] += X[i][a] * X[i][b]
+      }
+    }
+    const det3 = m =>
+      m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) -
+      m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) +
+      m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0])
+    const D = det3(XtX)
+    if (!Number.isFinite(D) || Math.abs(D) < 1e-9) return null
+    const col = (m, j, v) => m.map((row, i) => row.map((x, k) => (k === j ? v[i] : x)))
+    const beta = [0, 1, 2].map(j => det3(col(XtX, j, XtY)) / D)
+    const mean = Y.reduce((s, v) => s + v, 0) / n
+    let ssTot = 0
+    let ssRes = 0
+    for (let i = 0; i < n; i++) {
+      const pred = beta[0] + beta[1] * X[i][1] + beta[2] * X[i][2]
+      ssRes += (Y[i] - pred) ** 2
+      ssTot += (Y[i] - mean) ** 2
+    }
+    if (ssTot <= 0) return null
+    return { r2: 1 - ssRes / ssTot, n, beta }
+  }
+
+  let best = null
+  for (let t1 = 21; t1 <= 45; t1 += 3) {
+    for (let t2 = 7; t2 <= 27; t2 += 2) {
+      if (t2 >= t1) continue
+      const fit = r2For(t1, t2)
+      if (fit && (!best || fit.r2 > best.r2)) best = { tau1: t1, tau2: t2, ...fit }
+    }
+  }
+  const configured = r2For(LIFT_CONFIG.tau1, LIFT_CONFIG.tau2)
+  if (!best || !configured) return { ok: false, reason: "fit failed (degenerate data)" }
+  return { ok: true, best, configured: { tau1: LIFT_CONFIG.tau1, tau2: LIFT_CONFIG.tau2, ...configured } }
+}
 const SDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 const SMETA = {
@@ -22876,7 +22971,7 @@ const computedTSBFromSessions = useMemo(() => {
   })
   // TSB(t) = CTL(t-1) - ATL(t-1) per Banister definition
   const tsb = +(prevCtl - prevAtl).toFixed(1)
-  const out = { ctl: +ctl.toFixed(1), atl: +atl.toFixed(1), tsb }
+  const out = { ctl: +ctl.toFixed(1), atl: +atl.toFixed(1), tsb, dailyTrimp }
   out.global = out
   return out
 }, [banisterSupplementalSessions, unifiedCanonicalSessions])
@@ -23190,6 +23285,18 @@ const appleVo2Latest = useMemo(() => {
     .sort((a, b) => String(a?.metric_date || "").localeCompare(String(b?.metric_date || "")))
   return rows.length ? rows[rows.length - 1] : null
 }, [healthFitDaily])
+const tauCalibration = useMemo(() => {
+  if (!computedTSBFromSessions?.dailyTrimp) return null
+  const perfRows = (Array.isArray(vo2ProxyData) ? vo2ProxyData : [])
+    .filter(r => r?.eVo2 != null)
+    .map(r => ({ date: r.date, value: r.eVo2 }))
+  return fitBanisterTaus({
+    dailyTrimp: computedTSBFromSessions.dailyTrimp,
+    perfRows,
+    windowDays: LIFT_CONFIG.tau_fit_window_days ?? 180,
+    minPoints: LIFT_CONFIG.tau_fit_min_points ?? 25,
+  })
+}, [computedTSBFromSessions, vo2ProxyData])
 const vo2ProxySummary = useMemo(() => {
   if (!vo2ProxySmoothed.length) {
     return {
@@ -27191,6 +27298,46 @@ return (
             Below 0.8 usually reflects deload or undertraining. Around 0.8 to 1.3 is the usable zone. Above 1.3 is caution, and above 1.5 is a load-spike warning.
           </div>
         </>
+      )}
+    </div>
+
+    <div style={{ ...cardStyle(), minWidth:"0", marginBottom:16 }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:10, flexWrap:"wrap", marginBottom:10 }}>
+        <div>
+          <div style={{ fontWeight:"bold", marginBottom:"4px", minHeight:"20px" }}>Tau Calibration Diagnostic</div>
+          <div style={{ fontSize:11, color:"#667" }}>Advisory fit only. This compares configured Banister taus with the best eVO2-linked fit and writes nothing downstream.</div>
+        </div>
+        <div style={{ fontSize:"11px", color:"#9ca3af" }}>
+          Configured tau {LIFT_CONFIG.tau1}/{LIFT_CONFIG.tau2}
+        </div>
+      </div>
+      {tauCalibration?.ok ? (
+        <>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(180px, 1fr))", gap:10 }}>
+            <div style={{ background:"#07080e", border:"1px solid #1a1b2e", borderRadius:8, padding:10 }}>
+              <div style={{ fontSize:10, color:"#667" }}>Configured fit</div>
+              <div style={{ fontSize:20, fontWeight:800, color:"#ced2f0" }}>{tauCalibration.configured.tau1}/{tauCalibration.configured.tau2}</div>
+              <div style={{ fontSize:11, color:"#94a3b8" }}>R-squared {tauCalibration.configured.r2.toFixed(3)}</div>
+            </div>
+            <div style={{ background:"#07080e", border:"1px solid #1a1b2e", borderRadius:8, padding:10 }}>
+              <div style={{ fontSize:10, color:"#667" }}>Best fit</div>
+              <div style={{ fontSize:20, fontWeight:800, color:"#38bdf8" }}>{tauCalibration.best.tau1}/{tauCalibration.best.tau2}</div>
+              <div style={{ fontSize:11, color:"#94a3b8" }}>R-squared {tauCalibration.best.r2.toFixed(3)} · n {tauCalibration.best.n}</div>
+            </div>
+          </div>
+          {tauCalibration.best.r2 - tauCalibration.configured.r2 > 0.05 && (
+            (Math.abs(tauCalibration.best.tau1 - LIFT_CONFIG.tau1) / LIFT_CONFIG.tau1 > 0.2) ||
+            (Math.abs(tauCalibration.best.tau2 - LIFT_CONFIG.tau2) / LIFT_CONFIG.tau2 > 0.2)
+          ) && (
+            <div style={{ marginTop:10, padding:"8px 10px", borderRadius:8, border:"1px solid rgba(251,191,36,0.35)", background:"rgba(251,191,36,0.08)", fontSize:11, color:"#fcd34d", lineHeight:1.5 }}>
+              Model drift detected. Update `LIFT_CONFIG` manually and recalibrate TSB thresholds (-7/-9 were derived under 27/18) at the next review.
+            </div>
+          )}
+        </>
+      ) : (
+        <div style={{ fontSize:12, color:"#667" }}>
+          {tauCalibration?.reason || "Tau calibration unavailable."}
+        </div>
       )}
     </div>
 
