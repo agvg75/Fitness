@@ -792,6 +792,11 @@ function fmtMonthYear(dateStr) {
 function todayISO() {
   return new Date().toISOString().slice(0, 10)
 }
+
+function computeDecouplingPct(hr1, hr2) {
+  if (!Number.isFinite(hr1) || !Number.isFinite(hr2) || hr1 <= 0) return null
+  return +(((hr2 - hr1) / hr1) * 100).toFixed(1)
+}
 const SDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 const SMETA = {
@@ -2462,6 +2467,12 @@ function ScheduleLogView({ log, expanded, setExpanded, onDelete, onEdit, highlig
         {c.distance && <> , {parseFloat(c.distance).toFixed(2)} mi</>}
         {c.calories && <> , {c.calories} kcal</>}
         {c.hr && <> , {c.hr} bpm avg</>}
+        {Number(c.distance) >= 4 && Number.isFinite(Number(c.hr1)) && Number.isFinite(Number(c.hr2)) && (() => {
+          const drift = computeDecouplingPct(Number(c.hr1), Number(c.hr2))
+          if (drift == null) return null
+          const color = drift > 8 ? "#ef4444" : drift > (LIFT_CONFIG.decoupling_flag_pct ?? 5) ? "#fbbf24" : "#4ade80"
+          return <span style={{ color }}> , HR drift {drift.toFixed(1)}%</span>
+        })()}
         {c.notes && <div style={{ marginTop: "4px", color: "#7f93b8" }}>{c.notes}</div>}
       </div>
     ))}
@@ -5098,6 +5109,14 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
         if (isActive && sortedRuns.length > 0) {
           recentMax = sortedRuns[0].distance || 0
         }
+        const recentLongRunDrift = sortedRuns.find(run =>
+          Number(run.distance || run.distanceMiles || 0) >= 4 &&
+          Number.isFinite(Number(run.decouplingPct))
+        )
+        const driftFlagPct = LIFT_CONFIG.decoupling_flag_pct ?? 5
+        const driftAdvisory = recentLongRunDrift && Number(recentLongRunDrift.decouplingPct) > driftFlagPct
+          ? ` Aerobic base may lag the ceiling (latest HR drift ${Number(recentLongRunDrift.decouplingPct).toFixed(1)}% on ${fmtShortDate(recentLongRunDrift.date)}); consider one repeat at current distance.`
+          : ""
 
         const PROGRESSION_THRESHOLD = 3
         const progressPct = Math.min(100, Math.round((streak / PROGRESSION_THRESHOLD) * 100))
@@ -5182,9 +5201,9 @@ function TabOperationalCapacity({ ocItems, setOcItems, session, operationalCapac
               {isActive
                 ? `Resolve MTP to score 0 before resuming progression. ${sortedRuns.length > 0 ? `Last run: ${fmtShortDate(sortedRuns[0]?.date)}.` : ""}`
                 : streak >= PROGRESSION_THRESHOLD
-                  ? `Threshold met. Advance from ${currentCeilingMiles.toFixed(1)} mi to ${nextDistanceText} on next run.`
+                  ? `Threshold met. Advance from ${currentCeilingMiles.toFixed(1)} mi to ${nextDistanceText} on next run.${driftAdvisory}`
                   : streak > 0
-                    ? `${remainingScoreZeroSessions} more explicit score-0 check${remainingScoreZeroSessions === 1 ? "" : "s"} required before advancing to ${nextDistanceText}. Expected by ${nextMilestoneDate}.`
+                    ? `${remainingScoreZeroSessions} more explicit score-0 check${remainingScoreZeroSessions === 1 ? "" : "s"} required before advancing to ${nextDistanceText}. Expected by ${nextMilestoneDate}.${driftAdvisory}`
                     : "No explicit score-0 checks logged yet. Missing data does not advance progression."
               }
             </div>
@@ -7705,9 +7724,10 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     if (cardioEntries[day]?.length) return cardioEntries[day]
     const cd = CARDIO[day]
     if (cd.noCardio) return []
+    const blankEntry = modality => ({ modality, duration: "", distance: "", calories: "", hr: "", hr1: "", hr2: "", notes: "" })
     const sessions = cd.sessions || []
-    if (sessions.length > 0) return sessions.map(s => ({ modality: s.mod, duration: `${s.dMin}-${s.dMax}`, distance: "", calories: "", hr: "", notes: "" }))
-    return [{ modality: cd.mod || "run", duration: "", distance: "", calories: "", hr: "", notes: "" }]
+    if (sessions.length > 0) return sessions.map(s => ({ ...blankEntry(s.mod), duration: `${s.dMin}-${s.dMax}` }))
+    return [blankEntry(cd.mod || "run")]
   }
 
   const setCardioEntryF = (day, idx, fKey, val) => {
@@ -7784,7 +7804,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       ...prev,
       [day]: [
         ...getCardioEntries(day),
-        { modality: prescribedMod, duration: "", distance: "", calories: "", hr: "", notes: "" }
+        { modality: prescribedMod, duration: "", distance: "", calories: "", hr: "", hr1: "", hr2: "", notes: "" }
       ]
     }))
   }
@@ -8030,16 +8050,26 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
 
     const allCardio = completedCardio
     if (allCardio.some(c => c.duration)) {
-      const summaryEntries = allCardio.filter(c => c.duration).map((c, i) => ({
-        id: entry.id + i, date: sessionDate, time: VENUE_TIMES[venue] || "", dateTime: ts,
-        type: c.modality === "run" ? "Running" : c.modality === "bike" ? "Cycling" : c.modality === "swim" ? "Swimming" : c.modality === "row" ? "Rowing" : "Other",
-        dur: parseInt(c.duration) || 0,
-        hr: parseFloat(c.hr) > 0 ? parseFloat(c.hr) : null,
-        distance: parseFloat(c.distance) > 0 ? parseFloat(c.distance) : null,
-        calories: parseInt(c.calories) > 0 ? parseInt(c.calories) : null,
-        notes: `from Schedule , ${SCH_META[day]?.theme || SMETA[day]?.theme || day}${c.notes ? " , " + c.notes : ""}`,
-        _scheduleId: entry.id,
-      }))
+      const summaryEntries = allCardio.filter(c => c.duration).map((c, i) => {
+        const distance = parseFloat(c.distance) > 0 ? parseFloat(c.distance) : null
+        const hr1 = parseFloat(c.hr1) > 0 ? parseFloat(c.hr1) : null
+        const hr2 = parseFloat(c.hr2) > 0 ? parseFloat(c.hr2) : null
+        return {
+          id: entry.id + i, date: sessionDate, time: VENUE_TIMES[venue] || "", dateTime: ts,
+          type: c.modality === "run" ? "Running" : c.modality === "bike" ? "Cycling" : c.modality === "swim" ? "Swimming" : c.modality === "row" ? "Rowing" : "Other",
+          dur: parseInt(c.duration) || 0,
+          hr: parseFloat(c.hr) > 0 ? parseFloat(c.hr) : null,
+          hr1,
+          hr2,
+          decouplingPct: (c.modality === "run" || c.modality === "running" || c.modality === "jog") && Number(distance) >= 4
+            ? computeDecouplingPct(hr1, hr2)
+            : null,
+          distance,
+          calories: parseInt(c.calories) > 0 ? parseInt(c.calories) : null,
+          notes: `from Schedule , ${SCH_META[day]?.theme || SMETA[day]?.theme || day}${c.notes ? " , " + c.notes : ""}`,
+          _scheduleId: entry.id,
+        }
+      })
       const existing = await store.get("ufd-workouts") || storedWorkouts
       const merged = dedupeUfdWorkouts([
         ...(Array.isArray(existing) ? existing : []),
@@ -8785,6 +8815,22 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
                     placeholder="from watch"
                     style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
                 </div>
+                {(entry.modality === "run" || entry.modality === "running" || entry.modality === "jog") && (
+                  <>
+                    <div>
+                      <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>HR1 (first half)</div>
+                      <input type="text" inputMode="numeric" value={entry.hr1 || ""} onChange={e => setCardioEntryF(day, idx, "hr1", e.target.value)}
+                        placeholder="optional"
+                        style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>HR2 (second half)</div>
+                      <input type="text" inputMode="numeric" value={entry.hr2 || ""} onChange={e => setCardioEntryF(day, idx, "hr2", e.target.value)}
+                        placeholder="optional"
+                        style={{ width: "100%", padding: "5px 7px", border: "0.5px solid #252525", borderRadius: 5, fontSize: 13, fontWeight: 600, color: "#e8e8e8", background: "#111", fontFamily: "inherit", outline: "none" }} />
+                    </div>
+                  </>
+                )}
                 <div style={{ gridColumn: "1 / -1" }}>
                   <div style={{ fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Notes</div>
                   <input type="text" value={entry.notes} onChange={e => setCardioEntryF(day, idx, "notes", e.target.value)}
@@ -10414,7 +10460,7 @@ function VolumeRawBarChart({ data }) {
   )
 }
 
-function ProgressTab({ progressionState, schedLog, workouts = [] }) {
+function ProgressTab({ progressionState, schedLog, workouts = [], vo2ProxyData = [] }) {
   const BW_LB = 160
   const EXERCISE_GROUPS = PROGRESS_EXERCISE_GROUPS
   const [sortBy, setSortBy] = useState("stale")
@@ -10741,6 +10787,50 @@ function ProgressTab({ progressionState, schedLog, workouts = [] }) {
       })
     }
   }, [workouts])
+
+  const efTrendData = useMemo(() => {
+    const rows = (Array.isArray(vo2ProxyData) ? vo2ProxyData : [])
+      .filter(row => row?.ef != null)
+      .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))
+
+    return rows.map(row => {
+      const rowTime = new Date(`${row.date}T12:00:00`).getTime()
+      const subset = rows
+        .filter(item => {
+          const itemTime = new Date(`${item.date}T12:00:00`).getTime()
+          return Number.isFinite(itemTime) && Number.isFinite(rowTime) && itemTime <= rowTime && itemTime >= rowTime - 27 * 86400000
+        })
+        .map(item => Number(item.ef))
+        .filter(Number.isFinite)
+      const avg = subset.length ? subset.reduce((sum, value) => sum + value, 0) / subset.length : null
+
+      return {
+        ...row,
+        ef_28d: avg == null ? null : Number(avg.toFixed(3))
+      }
+    })
+  }, [vo2ProxyData])
+
+  const efSummary = useMemo(() => {
+    if (!efTrendData.length) return { count: 0, latestRaw: null, latestMean: null, bestRaw: null, bestMean: null }
+    const latest = efTrendData[efTrendData.length - 1]
+    const rawVals = efTrendData.map(row => Number(row.ef)).filter(Number.isFinite)
+    const meanVals = efTrendData.map(row => Number(row.ef_28d)).filter(Number.isFinite)
+    return {
+      count: efTrendData.length,
+      latestRaw: Number.isFinite(Number(latest?.ef)) ? Number(latest.ef) : null,
+      latestMean: Number.isFinite(Number(latest?.ef_28d)) ? Number(latest.ef_28d) : null,
+      bestRaw: rawVals.length ? Math.max(...rawVals) : null,
+      bestMean: meanVals.length ? Math.max(...meanVals) : null,
+    }
+  }, [efTrendData])
+
+  const latestLongRunDrift = useMemo(() => {
+    const rows = (Array.isArray(vo2ProxyData) ? vo2ProxyData : [])
+      .filter(row => Number(row?.distanceMiles) >= 4 && row?.decouplingPct != null)
+      .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))
+    return rows[0] || null
+  }, [vo2ProxyData])
 
   const sorted = [...visibleRecords].sort((a, b) => {
     if (sortBy === "stale") {
@@ -11160,6 +11250,58 @@ function ProgressTab({ progressionState, schedLog, workouts = [] }) {
           Aerobic Volume by Modality
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
+          <div style={{ background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: 12, padding: 14 }}>
+            <div style={{ fontFamily: "IBM Plex Mono", fontSize: 10, letterSpacing: 1.5, textTransform: "uppercase", color: "#f97316", marginBottom: 6 }}>
+              Aerobic Efficiency
+            </div>
+            <div style={{ fontSize: 10, color: "#6b7290", marginBottom: 10 }}>
+              Zone 2 runs only (HR {LIFT_CONFIG.ef_zone2_hr_min} to {LIFT_CONFIG.ef_zone2_hr_max}). Rising EF at constant Zone 2 HR is aerobic improvement; flat or falling during the build is the early warning.
+            </div>
+            {latestLongRunDrift?.decouplingPct != null && (
+              <div style={{
+                marginBottom: 10,
+                padding: "6px 8px",
+                borderRadius: 8,
+                border: `1px solid ${latestLongRunDrift.decouplingPct > 8 ? "rgba(239,68,68,0.35)" : latestLongRunDrift.decouplingPct > (LIFT_CONFIG.decoupling_flag_pct ?? 5) ? "rgba(251,191,36,0.35)" : "rgba(74,222,128,0.35)"}`,
+                background: latestLongRunDrift.decouplingPct > 8 ? "rgba(239,68,68,0.08)" : latestLongRunDrift.decouplingPct > (LIFT_CONFIG.decoupling_flag_pct ?? 5) ? "rgba(251,191,36,0.08)" : "rgba(74,222,128,0.08)",
+                fontSize: 10,
+                color: latestLongRunDrift.decouplingPct > 8 ? "#fca5a5" : latestLongRunDrift.decouplingPct > (LIFT_CONFIG.decoupling_flag_pct ?? 5) ? "#fcd34d" : "#86efac"
+              }}>
+                Latest 4+ mi run drift: {latestLongRunDrift.decouplingPct.toFixed(1)}% on {fmtShortDate(latestLongRunDrift.date)}
+              </div>
+            )}
+            {efTrendData.length ? (
+              <>
+                <div style={{ height: 190 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={efTrendData} margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>
+                      <CartesianGrid stroke="rgba(42,47,62,0.8)" />
+                      <XAxis dataKey="label" tick={{ fill: "#6b7290", fontSize: 10 }} />
+                      <YAxis
+                        tick={{ fill: "#6b7290", fontSize: 10 }}
+                        width={52}
+                        label={{ value: "m/min per bpm", angle: -90, position: "insideLeft", offset: 2, fill: "#6b7290", style: { textAnchor: "middle" }, fontSize: 10 }}
+                      />
+                      <Tooltip
+                        contentStyle={{ background: "#1c2030", border: "1px solid #2a2f3e", borderRadius: 6, color: "#cbd5e1" }}
+                        formatter={(value, name) => [value != null ? Number(value).toFixed(3) : "—", name === "ef" ? "EF" : "28d mean"]}
+                      />
+                      <Line type="monotone" dataKey="ef" name="ef" stroke="#f97316" strokeWidth={1.6} dot={{ r: 2 }} connectNulls={false} />
+                      <Line type="monotone" dataKey="ef_28d" name="ef_28d" stroke="#facc15" strokeWidth={2} dot={false} connectNulls />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8, marginTop: 8, fontSize: 10, color: "#94a3b8" }}>
+                  <div>Zone 2 runs: {efSummary.count}</div>
+                  <div>Latest 28d mean: {efSummary.latestMean != null ? efSummary.latestMean.toFixed(3) : "—"}</div>
+                </div>
+              </>
+            ) : (
+              <div style={{ height: 190, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "#555" }}>
+                no zone 2 runs with HR logged
+              </div>
+            )}
+          </div>
           {aerobicVolumeData.charts.map(series => (
             <div key={series.label} style={{ background: "#0d0e1c", border: "1px solid #1a1b2e", borderRadius: 12, padding: 14 }}>
               <div style={{ fontFamily: "IBM Plex Mono", fontSize: 10, letterSpacing: 1.5, textTransform: "uppercase", color: series.color, marginBottom: 10 }}>
@@ -12041,6 +12183,8 @@ function scoreScheduleWorkoutEvidence(workout) {
   if (Number(workout?.distanceMiles || 0) > 0) score += 4
   if (Number(workout?.dur || 0) > 0) score += 3
   if (Number(workout?.hr || 0) > 0) score += 1
+  if (Number(workout?.hr1 || 0) > 0) score += 0.5
+  if (Number(workout?.hr2 || 0) > 0) score += 0.5
   if (Number(workout?.calories || 0) > 0) score += 1
   if (String(workout?.notes || "").trim()) score += 0.5
   return score
@@ -12058,11 +12202,15 @@ function buildScheduleCardioWorkoutsFromLog(logEntries) {
         parseScheduleDistanceMiles(cardio?.notes, modality)
       const durationMin = parseScheduleDurationMinutes(cardio?.duration)
       const hr = Number(cardio?.hr)
+      const hr1 = Number(cardio?.hr1)
+      const hr2 = Number(cardio?.hr2)
       const calories = Number(cardio?.calories)
       const hasActualEvidence =
         (Number.isFinite(durationMin) && durationMin > 0) ||
         (Number.isFinite(distanceMiles) && distanceMiles > 0) ||
         (Number.isFinite(hr) && hr > 0) ||
+        (Number.isFinite(hr1) && hr1 > 0) ||
+        (Number.isFinite(hr2) && hr2 > 0) ||
         (Number.isFinite(calories) && calories > 0)
 
       if (!hasActualEvidence) return
@@ -12087,6 +12235,14 @@ function buildScheduleCardioWorkoutsFromLog(logEntries) {
         distanceMiles: Number.isFinite(distanceMiles) && distanceMiles > 0 ? distanceMiles : null,
         distance_miles: Number.isFinite(distanceMiles) && distanceMiles > 0 ? distanceMiles : null,
         hr: Number.isFinite(hr) && hr > 0 ? hr : null,
+        hr1: Number.isFinite(hr1) && hr1 > 0 ? hr1 : null,
+        hr2: Number.isFinite(hr2) && hr2 > 0 ? hr2 : null,
+        decouplingPct: Number.isFinite(distanceMiles) && distanceMiles >= 4
+          ? computeDecouplingPct(
+            Number.isFinite(hr1) && hr1 > 0 ? hr1 : null,
+            Number.isFinite(hr2) && hr2 > 0 ? hr2 : null
+          )
+          : null,
         calories: Number.isFinite(calories) && calories > 0 ? calories : null,
         notes: cardio?.notes || ""
       })
@@ -22868,6 +23024,14 @@ const vo2ProxyData = useMemo(() => {
         Number(w?.minutes) ||
         Number(w?.duration) ||
         0
+      const avgHr =
+        Number(w?.avg_hr) ||
+        Number(w?.hr) ||
+        Number(w?.heartRate) ||
+        Number(w?.avgHeartRate) ||
+        0
+      const hr1 = Number(w?.hr1) || 0
+      const hr2 = Number(w?.hr2) || 0
 
       if (!date || distanceMiles <= 0 || durationMin <= 0) return null
 
@@ -22879,6 +23043,16 @@ const vo2ProxyData = useMemo(() => {
         -4.6 +
         (0.182258 * metersPerMin) +
         (0.000104 * metersPerMin * metersPerMin)
+      const inZone2 = avgHr >= LIFT_CONFIG.ef_zone2_hr_min && avgHr <= LIFT_CONFIG.ef_zone2_hr_max
+      const ef = (inZone2 && distanceMiles >= 2)
+        ? Number(((1609.34 / paceMinPerMile) / avgHr).toFixed(3))
+        : null
+      const decouplingPct = distanceMiles >= 4
+        ? computeDecouplingPct(
+          Number.isFinite(hr1) && hr1 > 0 ? hr1 : null,
+          Number.isFinite(hr2) && hr2 > 0 ? hr2 : null
+        )
+        : null
 
       return {
         date,
@@ -22886,7 +23060,12 @@ const vo2ProxyData = useMemo(() => {
         vo2: Number(vo2.toFixed(1)),
         paceMinPerMile: Number(paceMinPerMile.toFixed(2)),
         distanceMiles: Number(distanceMiles.toFixed(2)),
-        durationMin: Number(durationMin.toFixed(1))
+        durationMin: Number(durationMin.toFixed(1)),
+        avgHr: avgHr || null,
+        ef,
+        hr1: hr1 || null,
+        hr2: hr2 || null,
+        decouplingPct
       }
     })
     .filter(Boolean)
@@ -28757,6 +28936,7 @@ return (
     progressionState={progressionState}
     schedLog={schedLog}
     workouts={operationalWorkouts}
+    vo2ProxyData={vo2ProxyData}
   />
 )}
 
