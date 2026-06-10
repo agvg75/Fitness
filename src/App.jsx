@@ -13251,6 +13251,7 @@ function buildEnduranceForecast({
     readiness6m: projectReadiness(6),
     readiness12m: projectReadiness(12),
     weeklyRunMiles28: inputs.weeklyRunMiles28,
+    longestRunMiles: inputs.longestRun28,
     avgPace28: inputs.avgPace28,
     runs28Count: inputs.runs28Count,
     cardioMinutesWeekly,
@@ -13313,6 +13314,22 @@ function adjustEquivalentRacePace({
   return Number(predictedPace.toFixed(2))
 }
 
+function enduranceShape({ raceDistMi, weeklyRunMiles28, longestRunMiles, cfg = LIFT_CONFIG }) {
+  const reqLong = (cfg.required_long_run_factor ?? 0.75) * raceDistMi
+  const reqWeekly = (cfg.required_weekly_factor ?? 2.0) * raceDistMi
+  const longScore = reqLong > 0 ? Math.min(1, (longestRunMiles || 0) / reqLong) : 1
+  const weeklyScore = reqWeekly > 0 ? Math.min(1, (weeklyRunMiles28 || 0) / reqWeekly) : 1
+  return { shape: 0.5 * longScore + 0.5 * weeklyScore, longScore, weeklyScore }
+}
+
+function enduranceDiscountedTime(baseMinutes, raceDistMi, shape, cfg = LIFT_CONFIG) {
+  if (!Number.isFinite(baseMinutes)) return baseMinutes
+  const maxPen = raceDistMi > 10
+    ? (cfg.endurance_penalty_max_hm ?? 0.12)
+    : (cfg.endurance_penalty_max_10k ?? 0.06)
+  return baseMinutes * (1 + maxPen * (1 - shape))
+}
+
 function buildRacePrediction(enduranceForecast) {
   if (!enduranceForecast) return null
 
@@ -13324,6 +13341,7 @@ function buildRacePrediction(enduranceForecast) {
     readiness12m,
     avgPace28,
     weeklyRunMiles28,
+    longestRunMiles,
     runPenalty
   } = enduranceForecast
 
@@ -13355,14 +13373,26 @@ function buildRacePrediction(enduranceForecast) {
       runPenalty
     })
     if (!pace) return "NA"
-    return formatRaceTime(predictRaceTimeFromPace(13.1094, pace))
+    return formatRaceTime(enduranceDiscountedTime(
+      predictRaceTimeFromPace(13.1094, pace),
+      13.1094,
+      enduranceShape({ raceDistMi: 13.1094, weeklyRunMiles28, longestRunMiles }).shape
+    ))
   }
 
   return {
     predictedPaceNow,
     fiveK: formatRaceTime(predictRaceTimeFromPace(3.1069, predictedPaceNow)),
-    tenK: formatRaceTime(predictRaceTimeFromPace(6.2137, predictedPaceNow)),
-    halfMarathon: formatRaceTime(predictRaceTimeFromPace(13.1094, predictedPaceNow)),
+    tenK: formatRaceTime(enduranceDiscountedTime(
+      predictRaceTimeFromPace(6.2137, predictedPaceNow),
+      6.2137,
+      enduranceShape({ raceDistMi: 6.2137, weeklyRunMiles28, longestRunMiles }).shape
+    )),
+    halfMarathon: formatRaceTime(enduranceDiscountedTime(
+      predictRaceTimeFromPace(13.1094, predictedPaceNow),
+      13.1094,
+      enduranceShape({ raceDistMi: 13.1094, weeklyRunMiles28, longestRunMiles }).shape
+    )),
     half1m: predictForReadiness(readiness1m),
     half3m: predictForReadiness(readiness3m),
     half6m: predictForReadiness(readiness6m),
