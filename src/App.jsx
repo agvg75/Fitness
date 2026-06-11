@@ -3792,6 +3792,83 @@ function computeReadinessDetail(ocItems, sleepRecords, healthFitDaily, tsbFallba
   return { score, injuryPenalty, sleepPenalty, tsbPenalty, avgSleepHours, latestTsb, active, rollingLoad14, compoundRisk }
 }
 
+const VENUE_END_TIMES = { ymca: "07:00", knr: "10:45" }
+
+const LIFT_TIME_DEFAULTS = {
+  warmup_min: 5,
+  cooldown_min: 5,
+  tendon_min: 8,
+  cardio_fallback_min: 30,
+  per_set_heavy_min: 2.5,
+  per_set_light_min: 2.0,
+  setup_min: 0.5,
+}
+
+function estimateExerciseMinutes(ex, profile) {
+  const prof = profile?.[ex?.id]
+  if (prof?.est_min != null && (prof.n_obs || 0) >= 2) return prof.est_min
+  const setCount = (ex?._def?.length) || 3
+  const heading = String(ex?._sectionH || "")
+  const heavy = heading.includes("Fresh") || heading.includes("Primary") || heading.includes("Heavy")
+  const perSet = heavy ? LIFT_TIME_DEFAULTS.per_set_heavy_min : LIFT_TIME_DEFAULTS.per_set_light_min
+  return Math.round((setCount * perSet + LIFT_TIME_DEFAULTS.setup_min) * 10) / 10
+}
+
+function parseCardioMinutes(cardioStr) {
+  const input = String(cardioStr || "")
+  const m = input.match(/(\d+)\s*[–-]\s*(\d+)\s*min/) || input.match(/(\d+)\s*min/)
+  if (!m) return LIFT_TIME_DEFAULTS.cardio_fallback_min
+  return m[2] ? Math.round((Number(m[1]) + Number(m[2])) / 2) : Number(m[1])
+}
+
+function buildTimeBudgetPlan({ exercises, cardioStr, hasTendon, hasWarmup, budgetMin, profile, sacrificeCardio }) {
+  const fixed = []
+  if (hasWarmup) fixed.push({ label: "Warm-up", min: LIFT_TIME_DEFAULTS.warmup_min })
+  if (hasTendon) fixed.push({ label: "Tendon work", min: LIFT_TIME_DEFAULTS.tendon_min })
+  const cardioMin = parseCardioMinutes(cardioStr)
+  if (cardioStr && !sacrificeCardio) fixed.push({ label: "Cardio", min: cardioMin })
+  fixed.push({ label: "Cooldown", min: LIFT_TIME_DEFAULTS.cooldown_min })
+  const fixedTotal = fixed.reduce((sum, item) => sum + item.min, 0)
+
+  const tierOf = ex => {
+    const heading = String(ex?._sectionH || "")
+    if (heading.includes("Fresh") || heading.includes("Primary")) return 1
+    if (heading.includes("Break") || heading.includes("Auxiliary")) return 2
+    return 3
+  }
+
+  const ranked = (Array.isArray(exercises) ? exercises : [])
+    .map((ex, idx) => ({
+      ex,
+      idx,
+      tier: tierOf(ex),
+      min: estimateExerciseMinutes(ex, profile),
+    }))
+    .sort((a, b) => a.tier - b.tier || a.idx - b.idx)
+
+  let remaining = budgetMin - fixedTotal
+  const included = []
+  const conditional = []
+  ranked.forEach(item => {
+    if (remaining - item.min >= 0) {
+      included.push(item)
+      remaining -= item.min
+    } else {
+      conditional.push(item)
+    }
+  })
+  const fullEstimate = fixedTotal + ranked.reduce((sum, item) => sum + item.min, 0)
+  return {
+    fixed,
+    fixedTotal,
+    included,
+    conditional,
+    fullEstimate,
+    fits: fullEstimate <= budgetMin,
+    slackMin: Math.round(remaining * 10) / 10,
+  }
+}
+
 function computeReadiness(items) {
   return computeReadinessDetail(items, [], []).score
 }
@@ -6618,9 +6695,24 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       }
     } catch (e) { console.warn("[LIFT] exercise order sync failed", e) }
   }
+  const [exerciseTimeProfile, setExerciseTimeProfile] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("lift_exercise_time_profile") || "{}") } catch { return {} }
+  })
+  const saveExerciseTimeProfile = async (nextProfile) => {
+    setExerciseTimeProfile(nextProfile)
+    try { localStorage.setItem("lift_exercise_time_profile", JSON.stringify(nextProfile)) } catch {}
+    try {
+      if (supabase && session?.user?.id) {
+        await supabase.from("user_kv").upsert(
+          { user_id: session.user.id, key: "lift_exercise_time_profile", value: nextProfile, updated_at: new Date().toISOString() },
+          { onConflict: "user_id,key" }
+        )
+      }
+    } catch (e) { console.warn("[LIFT] time profile sync failed", e) }
+  }
   const [openSections, setOpenSections] = useState(() => {
     const mobile = typeof window !== "undefined" ? window.innerWidth < 768 : true
-    return { stretch: false, warmup: false, cooldown: false, tendon: false, main: !mobile, core: false, cardio: false, diagnostics: false }
+    return { stretch: false, warmup: false, cooldown: false, tendon: false, timeBudget: false, main: !mobile, core: false, cardio: false, diagnostics: false }
   })
   const [variants, setVariants] = useState({})
   const [fields, setFields] = useState({})
@@ -6659,9 +6751,27 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const [inlineExResults, setInlineExResults] = useState([]) // [{name, dbId, source}]
   const [highlightedLogEntryId, setHighlightedLogEntryId] = useState(null)
   const [showSetTimer, setShowSetTimer] = useState(false)
+  const [timerExercise, setTimerExercise] = useState(null)
+  const [pendingTimings, setPendingTimings] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("lift_exercise_timings_pending") || "{}") } catch { return {} }
+  })
+  const savePendingTimings = next => {
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - 7)
+    const cutoffDay = cutoff.toISOString().slice(0, 10)
+    const pruned = Object.fromEntries(
+      Object.entries(next || {}).filter(([day]) => String(day) >= cutoffDay)
+    )
+    setPendingTimings(pruned)
+    try { localStorage.setItem("lift_exercise_timings_pending", JSON.stringify(pruned)) } catch {}
+  }
   const [quickLog, setQuickLog] = useState(false)
   const [expandedCards, setExpandedCards] = useState({})
   const [checkedExIds, setCheckedExIds] = useState(new Set())
+  const [timeBudgetMinutes, setTimeBudgetMinutes] = useState(75)
+  const [timeBudgetSacrificeCardio, setTimeBudgetSacrificeCardio] = useState(false)
+  const [timeBudgetNotice, setTimeBudgetNotice] = useState("")
+  const [timeBudgetChecklistOverrides, setTimeBudgetChecklistOverrides] = useState({})
   const [substituteDrawerEx, setSubstituteDrawerEx] = useState(null)
   const [guideOpenIds, setGuideOpenIds] = React.useState(new Set())
   const toggleGuide = id => setGuideOpenIds(prev => {
@@ -6676,6 +6786,33 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   })
   const [scheduleInfoOpen, setScheduleInfoOpen] = useState({ tendon: false })
   const logEntryRefs = useRef({})
+  const updateExerciseTimeProfile = timing => {
+    if (!timing?.exercise_id) return
+    const obsMin = (timing.effective_sec || 0) / 60
+    if (obsMin < 0.5 || obsMin > 30) return
+    const prev = exerciseTimeProfile[timing.exercise_id]
+    const est_min = prev?.est_min == null
+      ? obsMin
+      : Math.round((0.7 * prev.est_min + 0.3 * obsMin) * 10) / 10
+    const next = {
+      ...exerciseTimeProfile,
+      [timing.exercise_id]: {
+        est_min,
+        work_sec: timing.work_sec_used ?? prev?.work_sec ?? 45,
+        rest_sec: timing.rest_sec_used ?? prev?.rest_sec ?? 60,
+        n_obs: (prev?.n_obs || 0) + 1,
+        updated_at: new Date().toISOString(),
+      }
+    }
+    saveExerciseTimeProfile(next)
+  }
+  const recordExerciseTiming = timing => {
+    if (!timing?.exercise_id || !timing?.session_date) return
+    const next = { ...pendingTimings }
+    next[timing.session_date] = { ...(next[timing.session_date] || {}), [timing.exercise_id]: timing }
+    savePendingTimings(next)
+    updateExerciseTimeProfile(timing)
+  }
   const historicalExerciseNames = useMemo(
     () =>
       [...new Set(
@@ -8013,6 +8150,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       }
       const prog = getProgDay(day)
       const ts = new Date(`${sessionDate}T${VENUE_TIMES[venue] || "12:00"}:00`).toISOString()
+      const sessionTimingMap = pendingTimings?.[sessionDate] || {}
 
     const exercises = (prog.exercises || []).map(ex => {
       const vk = getVariant(ex.id)
@@ -8026,16 +8164,21 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
           reps: resolveEditableField(f, "reps", rx.reps),
           load: resolveEditableField(f, "load", rx.load)
         },
+        timing: sessionTimingMap[ex.id] || null,
         notes: f.notes || "", changed: isChanged(day, ex.id),
       }
     })
 
-    const customExs = getCustomExercises(day).map(e => ({
-      exercise_id: resolveStableCustomExerciseId(e.id, e.n, customExerciseRegistry), exercise_name: e.n, variant: "custom", variant_name: e.n,
-      prescribed: { sets: e.sets, reps: e.reps, load: e.load },
-      actual: { sets: e.sets, reps: e.reps, load: e.load },
-      notes: e.notes || "", changed: false,
-    }))
+    const customExs = getCustomExercises(day).map(e => {
+      const stableId = resolveStableCustomExerciseId(e.id, e.n, customExerciseRegistry)
+      return {
+        exercise_id: stableId, exercise_name: e.n, variant: "custom", variant_name: e.n,
+        prescribed: { sets: e.sets, reps: e.reps, load: e.load },
+        actual: { sets: e.sets, reps: e.reps, load: e.load },
+        timing: sessionTimingMap[stableId] || null,
+        notes: e.notes || "", changed: false,
+      }
+    })
 
     const filteredExercises = checkedIds != null ? exercises.filter(ex => checkedIds.has(ex.exercise_id)) : exercises
     const filteredCustomExs = checkedIds != null ? customExs.filter(ex => checkedIds.has(ex.exercise_id)) : customExs
@@ -8184,6 +8327,11 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     setSavedEntries(prev => ({ ...prev, [day]: { ...(prev[day] || {}), [venue]: entry } }))
     if (Array.isArray(logResult?.value)) setSchedLog(logResult.value)
     const sessionsResult = await saveScheduleKey("wt-sessions", buildSessionsStore())
+    if (pendingTimings?.[sessionDate]) {
+      const nextPendingTimings = { ...pendingTimings }
+      delete nextPendingTimings[sessionDate]
+      savePendingTimings(nextPendingTimings)
+    }
     if (logResult?.synced && sessionsResult?.synced) {
       showToast("Session saved and synced.")
     } else if (logResult?.reason === "queued-no-auth" || sessionsResult?.reason === "queued-no-auth") {
@@ -8630,6 +8778,19 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     const displayReps = resolveEditableField(f, "reps", v?.reps)
     const displayLoad = resolveEditableField(f, "load", v?.load)
     const displaySummary = `${displaySets || "—"}×${displayReps || "—"} @ ${displayLoad || "—"}`
+    const launchExerciseTimer = e => {
+      e.stopPropagation()
+      const prof = exerciseTimeProfile?.[ex.id]
+      setTimerExercise({
+        day,
+        exId: ex.id,
+        exName: ex.n,
+        sets: (ex._def?.length) || parseInt(v?.sets, 10) || 3,
+        workSec: prof?.work_sec ?? 45,
+        restSec: prof?.rest_sec ?? 60,
+      })
+      setShowSetTimer(true)
+    }
 
     const toggleExpanded = () => setExpandedCards(prev => ({ ...prev, [cardKey]: collapsed }))
 
@@ -8731,6 +8892,13 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
             >
               {ex.n || ex.name}
             </span>
+            <button
+              onClick={launchExerciseTimer}
+              title="Timer for this exercise"
+              style={{ background: "none", border: "1px solid #2a2d45", borderRadius: 4, color: "#94a3b8", fontSize: 10, cursor: "pointer", padding: "2px 7px", flexShrink: 0 }}
+            >
+              TIMER
+            </button>
             <span style={{ fontSize: 11, color: "#555", flexShrink: 0 }}>
               {(v?.sets || ex.def?.[0]?.[0] || "3")}×{(v?.reps || ex.def?.[0]?.[1] || "—")} @ {(v?.load || ex.def?.[0]?.[2] || "—")}
             </span>
@@ -8763,6 +8931,13 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
                 style={{ accentColor: "#4a9ee8", width: 14, height: 14, cursor: "pointer" }}
               />
               <span style={{ fontSize: 13, fontWeight: 600, color: "#d8d8d8" }}>{ex.n}</span>
+              <button
+                onClick={launchExerciseTimer}
+                title="Timer for this exercise"
+                style={{ background: "none", border: "1px solid #2a2d45", borderRadius: 4, color: "#94a3b8", fontSize: 10, cursor: "pointer", padding: "2px 7px", marginLeft: 6, flexShrink: 0 }}
+              >
+                TIMER
+              </button>
               {chg && <span style={{ fontSize: 9, fontWeight: 700, color: "#d97706", background: "rgba(217,119,6,0.15)", borderRadius: 3, padding: "1px 5px" }}>modified</span>}
               {isCustom && <span style={{ fontSize: 9, color: "#7F77DD", background: "rgba(127,119,221,0.15)", borderRadius: 3, padding: "1px 5px" }}>custom</span>}
               {!includedInLog && <span style={{ fontSize: 9, fontWeight: 700, color: "#9ca3af", background: "rgba(148,163,184,0.16)", borderRadius: 3, padding: "1px 5px" }}>excluded from log</span>}
@@ -9410,9 +9585,12 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
                 ...getCustomExercises(day).map(e => ({ id: e.id, venue: null }))
               ]
               const isYmca = venue === "ymca"
+              const budgetOverride = timeBudgetChecklistOverrides[day] || null
               setPendingChecked(Object.fromEntries(allExs.map(ex => [
                 ex.id,
-                isChecked(day, "exercise", ex.id) && (ex.venue == null || (isYmca ? ex.venue === "YMCA" : ex.venue === "KNR"))
+                Object.prototype.hasOwnProperty.call(budgetOverride || {}, ex.id)
+                  ? !!budgetOverride[ex.id]
+                  : (isChecked(day, "exercise", ex.id) && (ex.venue == null || (isYmca ? ex.venue === "YMCA" : ex.venue === "KNR")))
               ])))
               setPendingVenue(venue)
             }}
@@ -9432,6 +9610,53 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     () => buildScheduleDayDateMismatchReport(schedLog),
     [schedLog]
   )
+  const timeBudgetVenueKey = String(meta.venue || "").toUpperCase() === "KNR" ? "knr" : "ymca"
+  const timeBudgetPlan = useMemo(() => {
+    const cardioConfig = CARDIO[activeDay] || {}
+    let cardioStr = ""
+    if (!cardioConfig.noCardio) {
+      if (Array.isArray(cardioConfig.sessions) && cardioConfig.sessions.length > 0) {
+        const total = cardioConfig.sessions.reduce((sum, session) => {
+          const min = Number(session?.dMin)
+          const max = Number(session?.dMax)
+          if (Number.isFinite(min) && Number.isFinite(max)) return sum + Math.round((min + max) / 2)
+          if (Number.isFinite(min)) return sum + min
+          if (Number.isFinite(max)) return sum + max
+          return sum
+        }, 0)
+        cardioStr = total > 0 ? `${total} min` : cardioConfig.sessions.map(session => {
+          if (session?.dMin != null && session?.dMax != null) return `${session.dMin}-${session.dMax} min`
+          if (session?.dMin != null) return `${session.dMin} min`
+          return ""
+        }).filter(Boolean).join(" + ")
+      } else if (cardioConfig?.dMin != null && cardioConfig?.dMax != null) {
+        cardioStr = `${cardioConfig.dMin}-${cardioConfig.dMax} min`
+      } else if (cardioConfig?.dMin != null) {
+        cardioStr = `${cardioConfig.dMin} min`
+      } else if (cardioConfig?.type) {
+        cardioStr = `${cardioConfig.type} · ${LIFT_TIME_DEFAULTS.cardio_fallback_min} min`
+      }
+    }
+    return buildTimeBudgetPlan({
+      exercises: prog.exercises || [],
+      cardioStr,
+      hasTendon: getTendonEntries(activeDay).length > 0,
+      hasWarmup: (prog.warmup || []).length > 0,
+      budgetMin: Math.max(0, Math.min(240, Number(timeBudgetMinutes) || 0)),
+      profile: exerciseTimeProfile,
+      sacrificeCardio: timeBudgetSacrificeCardio,
+    })
+  }, [activeDay, exerciseTimeProfile, prog.exercises, prog.warmup, tendonEntries, timeBudgetMinutes, timeBudgetSacrificeCardio])
+  const applyTimeBudgetChecklist = () => {
+    const nextSelection = Object.fromEntries([
+      ...timeBudgetPlan.included.map(item => [item.ex.id, true]),
+      ...timeBudgetPlan.conditional.map(item => [item.ex.id, false]),
+    ])
+    setTimeBudgetChecklistOverrides(prev => ({ ...prev, [activeDay]: nextSelection }))
+    if (pendingVenue) {
+      setPendingChecked(prev => ({ ...prev, ...nextSelection }))
+    }
+  }
 
   return (
     <div style={{ color: "#d8d8d8", position: "relative" }}>
@@ -9503,7 +9728,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
           })}
         </div>
 	<div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-	          <button onClick={() => setShowSetTimer(true)} style={buttonStyle(true)}>
+	          <button onClick={() => { setTimerExercise(null); setShowSetTimer(true) }} style={buttonStyle(true)}>
 	            Set Timer
 	          </button>
           <button
@@ -9626,6 +9851,118 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
           <div style={{ border: "0.5px solid #4a3308", borderRadius: 8, marginBottom: 10, overflow: "hidden", boxShadow: "0 0 0 1px rgba(245,158,11,0.08)" }}>
             {secHdr("tendon", "Tendon Work", "#f59e0b", getTendonEntries(activeDay).length ? `${getTendonEntries(activeDay).filter((_, idx) => isChecked(activeDay, "tendon", idx)).length}/${getTendonEntries(activeDay).length} selected` : "")}
             {openSections.tendon && tendonBlock(activeDay)}
+          </div>
+
+          <div style={{ border: "0.5px solid #12364f", borderRadius: 8, marginBottom: 10, overflow: "hidden", boxShadow: "0 0 0 1px rgba(14,165,233,0.08)" }}>
+            {secHdr("timeBudget", "Time Budget", "#0ea5e9", `${Math.round(timeBudgetPlan.fullEstimate)} min est · ${Math.max(0, Math.min(240, Number(timeBudgetMinutes) || 0))} min available`)}
+            {openSections.timeBudget && (
+              <div style={{ padding: "12px 14px", display: "grid", gap: 10 }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <input
+                    type="number"
+                    min={15}
+                    max={240}
+                    value={timeBudgetMinutes}
+                    onChange={e => {
+                      const next = Math.max(15, Math.min(240, Number(e.target.value) || 15))
+                      setTimeBudgetMinutes(next)
+                      setTimeBudgetNotice("")
+                    }}
+                    style={{ width: 92, padding: "6px 8px", borderRadius: 5, fontSize: 12, background: "#111", border: "0.5px solid #252525", color: "#e8e8e8", fontFamily: "inherit", outline: "none" }}
+                  />
+                  <span style={{ fontSize: 11, color: "#666" }}>minutes available</span>
+                  {[60, 75, 90].map(value => (
+                    <button
+                      key={value}
+                      onClick={() => { setTimeBudgetMinutes(value); setTimeBudgetNotice("") }}
+                      style={{ padding: "4px 10px", borderRadius: 20, fontSize: 11, fontWeight: 700, background: "transparent", color: "#7dd3fc", border: "1px solid #164e63", cursor: "pointer" }}
+                    >
+                      {value}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => {
+                      const venueEnd = new Date(`${sessionDate}T${VENUE_END_TIMES[timeBudgetVenueKey] || "07:00"}:00`)
+                      const minutes = Math.max(0, Math.round((venueEnd.getTime() - Date.now()) / 60000))
+                      setTimeBudgetMinutes(Math.min(240, Math.max(0, minutes)))
+                      setTimeBudgetNotice(minutes < 15 ? "Less than 15 minutes remain before venue close." : "")
+                    }}
+                    style={{ padding: "4px 10px", borderRadius: 20, fontSize: 11, fontWeight: 700, background: "transparent", color: "#7dd3fc", border: "1px solid #164e63", cursor: "pointer" }}
+                  >
+                    Until close
+                  </button>
+                </div>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "#cbd5e1" }}>
+                  <input
+                    type="checkbox"
+                    checked={timeBudgetSacrificeCardio}
+                    onChange={e => setTimeBudgetSacrificeCardio(e.target.checked)}
+                    style={{ accentColor: "#0ea5e9", width: 14, height: 14, cursor: "pointer" }}
+                  />
+                  Sacrifice cardio
+                </label>
+                {timeBudgetNotice && <div style={{ fontSize: 11, color: "#f59e0b" }}>{timeBudgetNotice}</div>}
+                <div style={{ padding: "10px 12px", background: "#0a0a12", border: "1px solid #1a1b2e", borderRadius: 6, display: "grid", gap: 6 }}>
+                  <div style={{ fontSize: 12, color: "#ced2f0" }}>
+                    Full estimate {Math.round(timeBudgetPlan.fullEstimate * 10) / 10} min vs budget {Math.max(0, Math.min(240, Number(timeBudgetMinutes) || 0))} min
+                  </div>
+                  <div style={{ fontSize: 11, color: timeBudgetPlan.fits ? "#22c55e" : "#f59e0b" }}>
+                    {timeBudgetPlan.fits ? `Fits with ${timeBudgetPlan.slackMin} min to spare.` : `${Math.abs(timeBudgetPlan.slackMin)} min over budget before conditional triage.`}
+                  </div>
+                  <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Mandatory blocks</div>
+                  {timeBudgetPlan.fixed.map(item => (
+                    <div key={item.label} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12, color: "#cbd5e1" }}>
+                      <span>{item.label}</span>
+                      <span>{item.min} min</span>
+                    </div>
+                  ))}
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12, color: "#7dd3fc", paddingTop: 4, borderTop: "1px solid #1f2937" }}>
+                    <span>Fixed total</span>
+                    <span>{timeBudgetPlan.fixedTotal} min</span>
+                  </div>
+                </div>
+                <div style={{ display: "grid", gap: 6 }}>
+                  <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Core list that fits</div>
+                  {timeBudgetPlan.included.map(item => {
+                    const prof = exerciseTimeProfile?.[item.ex.id]
+                    const learned = prof?.est_min != null && (prof.n_obs || 0) >= 2
+                    return (
+                      <div key={item.ex.id} style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "8px 10px", background: "#0a0a0a", border: "1px solid #1a1a1a", borderRadius: 6 }}>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: 12, color: "#e5e7eb" }}>{item.ex.n}</div>
+                          <div style={{ fontSize: 10, color: learned ? "#22c55e" : "#64748b" }}>{learned ? "learned" : "default"}</div>
+                        </div>
+                        <div style={{ fontSize: 12, color: "#cbd5e1", flexShrink: 0 }}>{item.min} min</div>
+                      </div>
+                    )
+                  })}
+                  {!timeBudgetPlan.included.length && <div style={{ fontSize: 11, color: "#666" }}>No strength exercises fit after fixed blocks.</div>}
+                </div>
+                <div style={{ display: "grid", gap: 6 }}>
+                  <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>If time remains</div>
+                  {timeBudgetPlan.conditional.map(item => {
+                    const prof = exerciseTimeProfile?.[item.ex.id]
+                    const learned = prof?.est_min != null && (prof.n_obs || 0) >= 2
+                    return (
+                      <div key={item.ex.id} style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "8px 10px", background: "#0a0a0a", border: "1px solid #1a1a1a", borderRadius: 6 }}>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: 12, color: "#e5e7eb" }}>{item.ex.n}</div>
+                          <div style={{ fontSize: 10, color: learned ? "#22c55e" : "#64748b" }}>{learned ? "learned" : "default"}</div>
+                        </div>
+                        <div style={{ fontSize: 12, color: "#cbd5e1", flexShrink: 0 }}>{item.min} min</div>
+                      </div>
+                    )
+                  })}
+                  {!timeBudgetPlan.conditional.length && <div style={{ fontSize: 11, color: "#666" }}>Everything fits in the current budget.</div>}
+                </div>
+                <button
+                  onClick={applyTimeBudgetChecklist}
+                  style={{ justifySelf: "start", padding: "8px 12px", borderRadius: 20, fontSize: 11, fontWeight: 700, background: "rgba(14,165,233,0.12)", color: "#7dd3fc", border: "1px solid #164e63", cursor: "pointer" }}
+                >
+                  Apply to log checklist
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Main program */}
@@ -9844,7 +10181,12 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
 	        </>
 	      )}
 
-	      {showSetTimer && <GymSetTimerModal onClose={() => setShowSetTimer(false)} />}
+	      {showSetTimer && <GymSetTimerModal
+	        exerciseContext={timerExercise}
+	        sessionDate={sessionDate}
+	        onTimingComplete={recordExerciseTiming}
+	        onClose={() => { setShowSetTimer(false); setTimerExercise(null) }}
+	      />}
 
 	      {toast && (
 	        <div style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", background: "#1a1a1a", border: "1px solid #333", color: "#e8e8e8", padding: "8px 20px", borderRadius: 8, fontSize: 13, zIndex: 999, pointerEvents: "none" }}>
@@ -9855,7 +10197,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   )
 }
 
-function GymSetTimerModal({ onClose }) {
+function GymSetTimerModal({ onClose, exerciseContext = null, sessionDate = null, onTimingComplete = () => {} }) {
   const timerMachineStorageKey = "lift_timer_machines"
   const normalizeMachineName = value => String(value || "").trim().replace(/\s+/g, " ")
   const sortMachineNames = names => [...names].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))
@@ -9870,7 +10212,7 @@ function GymSetTimerModal({ onClose }) {
     return sortMachineNames([...byKey.values()])
   }
 
-  const [machineName, setMachineName] = useState("")
+  const [machineName, setMachineName] = useState(() => exerciseContext?.exName || "")
   const [savedMachineNames, setSavedMachineNames] = useState(() => {
     if (typeof window === "undefined") return []
     try {
@@ -9879,9 +10221,9 @@ function GymSetTimerModal({ onClose }) {
       return []
     }
   })
-  const [sets, setSets] = useState(3)
-  const [workSec, setWorkSec] = useState(45)
-  const [restSec, setRestSec] = useState(60)
+  const [sets, setSets] = useState(() => exerciseContext?.sets ?? 3)
+  const [workSec, setWorkSec] = useState(() => exerciseContext?.workSec ?? 45)
+  const [restSec, setRestSec] = useState(() => exerciseContext?.restSec ?? 60)
   const [showOpposite, setShowOpposite] = useState(false)
   const [running, setRunning] = useState(false)
   const [started, setStarted] = useState(false)
@@ -9893,11 +10235,39 @@ function GymSetTimerModal({ onClose }) {
     height: typeof window === "undefined" ? 844 : window.innerHeight
   }))
   const panelRef = useRef(null)
+  const startedAtRef = useRef(null)
+  const pauseAccumRef = useRef(0)
+  const pauseStartedAtRef = useRef(null)
+  const emittedRef = useRef(false)
+  const phaseLogRef = useRef([])
+  const lastPhaseIndexRef = useRef(null)
+  const lastPhaseAtMsRef = useRef(0)
 
   const clampInt = (value, min, max) => {
     const n = Number.parseInt(value, 10)
     if (!Number.isFinite(n)) return min
     return Math.max(min, Math.min(max, n))
+  }
+
+  const appendPhaseLog = phase => {
+    if (!phase) return
+    const now = Date.now()
+    const nextMs = now <= lastPhaseAtMsRef.current ? lastPhaseAtMsRef.current + 1 : now
+    lastPhaseAtMsRef.current = nextMs
+    phaseLogRef.current = [
+      ...phaseLogRef.current,
+      { kind: phase.kind, setNo: phase.setNo ?? null, at: new Date(nextMs).toISOString() }
+    ].slice(-60)
+  }
+
+  const resetTimingRefs = () => {
+    startedAtRef.current = null
+    pauseAccumRef.current = 0
+    pauseStartedAtRef.current = null
+    emittedRef.current = false
+    phaseLogRef.current = []
+    lastPhaseIndexRef.current = null
+    lastPhaseAtMsRef.current = 0
   }
 
   const phases = useMemo(() => {
@@ -9953,7 +10323,15 @@ function GymSetTimerModal({ onClose }) {
     setElapsedMs(totalSec * 1000)
     setRunning(false)
     setAnchorMs(null)
+    pauseStartedAtRef.current = null
   }, [isComplete, running, totalSec])
+
+  useEffect(() => {
+    if (!started || !phases.length) return
+    if (lastPhaseIndexRef.current === phaseState.index) return
+    appendPhaseLog(phases[phaseState.index])
+    lastPhaseIndexRef.current = phaseState.index
+  }, [phaseState.index, phases, started])
 
   useEffect(() => {
     const updateViewport = () => setViewport({ width: window.innerWidth, height: window.innerHeight })
@@ -9992,6 +10370,12 @@ function GymSetTimerModal({ onClose }) {
         } catch {}
       }
     }
+    resetTimingRefs()
+    startedAtRef.current = new Date().toISOString()
+    if (phases[0]) {
+      appendPhaseLog(phases[0])
+      lastPhaseIndexRef.current = 0
+    }
     setStarted(true)
     setRunning(true)
     setElapsedMs(0)
@@ -10002,6 +10386,7 @@ function GymSetTimerModal({ onClose }) {
 
   const pauseTimer = () => {
     if (!running) return
+    pauseStartedAtRef.current = Date.now()
     const nextElapsed = Math.min(totalSec * 1000, elapsedMs + (Date.now() - (anchorMs || Date.now())))
     setElapsedMs(nextElapsed)
     setRunning(false)
@@ -10010,6 +10395,10 @@ function GymSetTimerModal({ onClose }) {
 
   const resumeTimer = () => {
     if (isComplete) return
+    if (pauseStartedAtRef.current) {
+      pauseAccumRef.current += Math.max(0, Date.now() - pauseStartedAtRef.current)
+      pauseStartedAtRef.current = null
+    }
     setRunning(true)
     setAnchorMs(Date.now())
     setNowMs(Date.now())
@@ -10017,22 +10406,56 @@ function GymSetTimerModal({ onClose }) {
   }
 
   const skipPhase = () => {
-    const elapsedBeforeCurrent = phases
-      .slice(0, phaseState.index + 1)
-      .reduce((sum, phase) => sum + phase.duration, 0)
-    setElapsedMs(Math.min(totalSec * 1000, elapsedBeforeCurrent * 1000))
+    let cumEnd = 0
+    for (let i = 0; i <= phaseState.index; i += 1) cumEnd += phases[i].duration
+    setElapsedMs(Math.min(cumEnd, totalSec) * 1000)
     setAnchorMs(running ? Date.now() : null)
     setNowMs(Date.now())
   }
 
   const resetTimer = () => {
+    resetTimingRefs()
     setRunning(false)
     setStarted(false)
     setElapsedMs(0)
     setAnchorMs(null)
   }
 
+  const emitTiming = completed => {
+    if (!exerciseContext || !startedAtRef.current || emittedRef.current) return
+    emittedRef.current = true
+    const finished = new Date()
+    const pausedOpenMs = pauseStartedAtRef.current ? Math.max(0, finished.getTime() - pauseStartedAtRef.current) : 0
+    const pause_sec = Math.round((pauseAccumRef.current + pausedOpenMs) / 1000)
+    const wall_sec = Math.max(1, Math.round((finished.getTime() - new Date(startedAtRef.current).getTime()) / 1000))
+    const active_sec = Math.max(1, wall_sec - pause_sec)
+    const effective_sec = active_sec + Math.min(pause_sec, 120)
+    onTimingComplete({
+      exercise_id: exerciseContext.exId,
+      exercise_name: exerciseContext.exName,
+      day: exerciseContext.day,
+      session_date: sessionDate,
+      started_at: startedAtRef.current,
+      finished_at: finished.toISOString(),
+      wall_sec,
+      active_sec,
+      pause_sec,
+      effective_sec,
+      sets_planned: clampInt(sets, 1, 20),
+      completed,
+      work_sec_used: clampInt(workSec, 5, 1800),
+      rest_sec_used: clampInt(restSec, 0, 1800),
+      phases: phaseLogRef.current.map(entry => ({ ...entry })),
+      source: "exercise_timer",
+    })
+  }
+
+  useEffect(() => {
+    if (isComplete) emitTiming(true)
+  }, [isComplete])
+
   const closeTimer = () => {
+    emitTiming(isComplete)
     if (document.fullscreenElement && document.exitFullscreen) {
       document.exitFullscreen().catch(() => {})
     }
@@ -10199,7 +10622,7 @@ function GymSetTimerModal({ onClose }) {
         ) : (
           <button onClick={resumeTimer} style={{ ...buttonStyle(true), padding: controlPadding, fontSize: controlFontSize }}>Resume</button>
         )}
-        <button disabled={!started || isComplete} onClick={skipPhase} style={{ ...buttonStyle(false), padding: controlPadding, fontSize: controlFontSize, color: "#f8fafc", borderColor: "rgba(255,255,255,0.35)", opacity: !started || isComplete ? 0.45 : 1 }}>Skip</button>
+        <button disabled={!started || isComplete} onClick={skipPhase} style={{ ...buttonStyle(false), padding: controlPadding, fontSize: controlFontSize, color: "#f8fafc", borderColor: "rgba(255,255,255,0.35)", opacity: !started || isComplete ? 0.45 : 1 }}>Skip phase</button>
         <button onClick={resetTimer} style={{ ...buttonStyle(false), padding: controlPadding, fontSize: controlFontSize, color: "#f8fafc", borderColor: "rgba(255,255,255,0.35)" }}>Reset</button>
         <button onClick={() => setShowOpposite(v => !v)} style={{ ...buttonStyle(false), padding: controlPadding, fontSize: controlFontSize, color: "#f8fafc", borderColor: "rgba(255,255,255,0.35)" }}>Flip</button>
       </div>
