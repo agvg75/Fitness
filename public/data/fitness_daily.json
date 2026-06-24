@@ -1323,7 +1323,33 @@
       "Resting Energy": "1700 Cal",
       "Exercise Minutes": "7"
     },
-    "synced_at": "2026-06-24T11:07:47.192+00:00"
+    "synced_at": "2026-06-24T12:07:55.742+00:00"
+  },
+  {
+    "daily_id": "healthfit_daily_9ec703fb-9e9e-4a57-a365-6222b1a822f5_2026-06-19",
+    "user_id": "9ec703fb-9e9e-4a57-a365-6222b1a822f5",
+    "metric_date": "2026-06-19",
+    "active_energy_cal": 1235,
+    "resting_energy_cal": 1386,
+    "resting_hr_bpm": 67,
+    "hrv": 28,
+    "steps": 18343,
+    "vo2_max": 41.2,
+    "exercise_minutes": 174,
+    "stand_hours": 15,
+    "source": "HealthFit Health Metrics_v5",
+    "raw": {
+      "HRV": "28",
+      "Date": "6/19/2026",
+      "Steps": "18343",
+      "Resting": "67 bpm",
+      "VO₂ max": "41.2",
+      "Stand Hours": "15",
+      "Active Energy": "1235 Cal",
+      "Resting Energy": "1386 Cal",
+      "Exercise Minutes": "174"
+    },
+    "synced_at": "2026-06-24T12:07:56.103+00:00"
   },
   {
     "daily_id": "healthfit_daily_9ec703fb-9e9e-4a57-a365-6222b1a822f5_2026-06-07",
@@ -1404,56 +1430,30 @@
     "synced_at": "2026-06-09T23:08:06.524+00:00"
   },
   {
-    "daily_id": "healthfit_daily_9ec703fb-9e9e-4a57-a365-6222b1a822f5_2026-06-15",
+    "daily_id": "healthfit_daily_9ec703fb-9e9e-4a57-a365-6222b1a822f5_2026-06-13",
     "user_id": "9ec703fb-9e9e-4a57-a365-6222b1a822f5",
-    "metric_date": "2026-06-15",
-    "active_energy_cal": 773,
-    "resting_energy_cal": 1735,
-    "resting_hr_bpm": 60,
+    "metric_date": "2026-06-13",
+    "active_energy_cal": 367,
+    "resting_energy_cal": 1717,
+    "resting_hr_bpm": 59,
     "hrv": 29,
-    "steps": 7706,
+    "steps": 6325,
     "vo2_max": null,
-    "exercise_minutes": 123,
-    "stand_hours": 14,
+    "exercise_minutes": 15,
+    "stand_hours": 13,
     "source": "HealthFit Health Metrics_v5",
     "raw": {
       "HRV": "29",
-      "Date": "6/15/2026",
-      "Steps": "7706",
-      "Resting": "60 bpm",
+      "Date": "6/13/2026",
+      "Steps": "6325",
+      "Resting": "59 bpm",
       "VO₂ max": "",
-      "Stand Hours": "14",
-      "Active Energy": "773 Cal",
-      "Resting Energy": "1735 Cal",
-      "Exercise Minutes": "123"
+      "Stand Hours": "13",
+      "Active Energy": "367 Cal",
+      "Resting Energy": "1717 Cal",
+      "Exercise Minutes": "15"
     },
-    "synced_at": "2026-06-24T11:07:47.958+00:00"
-  },
-  {
-    "daily_id": "healthfit_daily_9ec703fb-9e9e-4a57-a365-6222b1a822f5_2026-06-19",
-    "user_id": "9ec703fb-9e9e-4a57-a365-6222b1a822f5",
-    "metric_date": "2026-06-19",
-    "active_energy_cal": 1235,
-    "resting_energy_cal": 1386,
-    "resting_hr_bpm": 67,
-    "hrv": 28,
-    "steps": 18343,
-    "vo2_max": 41.2,
-    "exercise_minutes": 174,
-    "stand_hours": 15,
-    "source": "HealthFit Health Metrics_v5",
-    "raw": {
-      "HRV": "28",
-      "Date": "6/19/2026",
-      "Steps": "18343",
-      "Resting": "67 bpm",
-      "VO₂ max": "41.2",
-      "Stand Hours": "15",
-      "Active Energy": "1235 Cal",
-      "Resting Energy": "1386 Cal",
-      "Exercise Minutes": "174"
-    },
-    "synced_at": "2026-06-24T11:07:47.423+00:00"
+    "synced_at": "2026-06-24T12:07:57.073+00:00"
   },
   {
     "daily_id": "healthfit_daily_9ec703fb-9e9e-4a57-a365-6222b1a822f5_2026-06-17",
@@ -1479,59 +1479,33 @@
       "Resting Energy": "1650 Cal",
       "Exercise Minutes": "70"
     },
-    "synced_at": "2026-06-24T11:07:47.688+00:00"
+    "synced_at": "2026-06-24T12:07:56.468+00:00"
   },
   {
-    "daily_id": "healthfit_daily_9ec703fb-9e9e-4a57-a365-6222b1a822f5_2026-06-13",
+    "daily_id": "healthfit_daily_9ec703fb-9e9e-4a57-a365-6222b1a822f5_2026-06-15",
     "user_id": "9ec703fb-9e9e-4a57-a365-6222b1a822f5",
-    "metric_date": "2026-06-13",
-    "active_energy_cal": 367,
-    "resting_energy_cal": 1717,
-    "resting_hr_bpm": 59,
+    "metric_date": "2026-06-15",
+    "active_energy_cal": 773,
+    "resting_energy_cal": 1735,
+    "resting_hr_bpm": 60,
     "hrv": 29,
-    "steps": 6325,
+    "steps": 7706,
     "vo2_max": null,
-    "exercise_minutes": 15,
-    "stand_hours": 13,
+    "exercise_minutes": 123,
+    "stand_hours": 14,
     "source": "HealthFit Health Metrics_v5",
     "raw": {
       "HRV": "29",
-      "Date": "6/13/2026",
-      "Steps": "6325",
-      "Resting": "59 bpm",
+      "Date": "6/15/2026",
+      "Steps": "7706",
+      "Resting": "60 bpm",
       "VO₂ max": "",
-      "Stand Hours": "13",
-      "Active Energy": "367 Cal",
-      "Resting Energy": "1717 Cal",
-      "Exercise Minutes": "15"
+      "Stand Hours": "14",
+      "Active Energy": "773 Cal",
+      "Resting Energy": "1735 Cal",
+      "Exercise Minutes": "123"
     },
-    "synced_at": "2026-06-24T11:07:48.178+00:00"
-  },
-  {
-    "daily_id": "healthfit_daily_9ec703fb-9e9e-4a57-a365-6222b1a822f5_2026-06-18",
-    "user_id": "9ec703fb-9e9e-4a57-a365-6222b1a822f5",
-    "metric_date": "2026-06-18",
-    "active_energy_cal": 964,
-    "resting_energy_cal": 1573,
-    "resting_hr_bpm": 66,
-    "hrv": 33,
-    "steps": 12465,
-    "vo2_max": null,
-    "exercise_minutes": 124,
-    "stand_hours": 16,
-    "source": "HealthFit Health Metrics_v5",
-    "raw": {
-      "HRV": "33",
-      "Date": "6/18/2026",
-      "Steps": "12465",
-      "Resting": "66 bpm",
-      "VO₂ max": "",
-      "Stand Hours": "16",
-      "Active Energy": "964 Cal",
-      "Resting Energy": "1573 Cal",
-      "Exercise Minutes": "124"
-    },
-    "synced_at": "2026-06-24T11:07:47.569+00:00"
+    "synced_at": "2026-06-24T12:07:56.875+00:00"
   },
   {
     "daily_id": "healthfit_daily_9ec703fb-9e9e-4a57-a365-6222b1a822f5_2026-06-16",
@@ -1557,7 +1531,33 @@
       "Resting Energy": "1759 Cal",
       "Exercise Minutes": "125"
     },
-    "synced_at": "2026-06-24T11:07:47.855+00:00"
+    "synced_at": "2026-06-24T12:07:56.592+00:00"
+  },
+  {
+    "daily_id": "healthfit_daily_9ec703fb-9e9e-4a57-a365-6222b1a822f5_2026-06-14",
+    "user_id": "9ec703fb-9e9e-4a57-a365-6222b1a822f5",
+    "metric_date": "2026-06-14",
+    "active_energy_cal": 1167,
+    "resting_energy_cal": 1780,
+    "resting_hr_bpm": 53,
+    "hrv": 23,
+    "steps": 24990,
+    "vo2_max": 41.6,
+    "exercise_minutes": 115,
+    "stand_hours": 14,
+    "source": "HealthFit Health Metrics_v5",
+    "raw": {
+      "HRV": "23",
+      "Date": "6/14/2026",
+      "Steps": "24990",
+      "Resting": "53 bpm",
+      "VO₂ max": "41.6",
+      "Stand Hours": "14",
+      "Active Energy": "1167 Cal",
+      "Resting Energy": "1780 Cal",
+      "Exercise Minutes": "115"
+    },
+    "synced_at": "2026-06-24T12:07:56.979+00:00"
   },
   {
     "daily_id": "healthfit_daily_9ec703fb-9e9e-4a57-a365-6222b1a822f5_2026-06-09",
@@ -1586,30 +1586,30 @@
     "synced_at": "2026-06-22T23:08:01.624+00:00"
   },
   {
-    "daily_id": "healthfit_daily_9ec703fb-9e9e-4a57-a365-6222b1a822f5_2026-06-14",
+    "daily_id": "healthfit_daily_9ec703fb-9e9e-4a57-a365-6222b1a822f5_2026-06-12",
     "user_id": "9ec703fb-9e9e-4a57-a365-6222b1a822f5",
-    "metric_date": "2026-06-14",
-    "active_energy_cal": 1167,
-    "resting_energy_cal": 1780,
-    "resting_hr_bpm": 53,
-    "hrv": 23,
-    "steps": 24990,
-    "vo2_max": 41.6,
-    "exercise_minutes": 115,
-    "stand_hours": 14,
+    "metric_date": "2026-06-12",
+    "active_energy_cal": 920,
+    "resting_energy_cal": 1803,
+    "resting_hr_bpm": 63,
+    "hrv": 25,
+    "steps": 16449,
+    "vo2_max": 41.3,
+    "exercise_minutes": 87,
+    "stand_hours": 15,
     "source": "HealthFit Health Metrics_v5",
     "raw": {
-      "HRV": "23",
-      "Date": "6/14/2026",
-      "Steps": "24990",
-      "Resting": "53 bpm",
-      "VO₂ max": "41.6",
-      "Stand Hours": "14",
-      "Active Energy": "1167 Cal",
-      "Resting Energy": "1780 Cal",
-      "Exercise Minutes": "115"
+      "HRV": "25",
+      "Date": "6/12/2026",
+      "Steps": "16449",
+      "Resting": "63 bpm",
+      "VO₂ max": "41.3",
+      "Stand Hours": "15",
+      "Active Energy": "920 Cal",
+      "Resting Energy": "1803 Cal",
+      "Exercise Minutes": "87"
     },
-    "synced_at": "2026-06-24T11:07:48.073+00:00"
+    "synced_at": "2026-06-24T12:07:57.267+00:00"
   },
   {
     "daily_id": "healthfit_daily_9ec703fb-9e9e-4a57-a365-6222b1a822f5_2026-06-10",
@@ -1638,30 +1638,30 @@
     "synced_at": "2026-06-23T23:07:55.268+00:00"
   },
   {
-    "daily_id": "healthfit_daily_9ec703fb-9e9e-4a57-a365-6222b1a822f5_2026-06-12",
+    "daily_id": "healthfit_daily_9ec703fb-9e9e-4a57-a365-6222b1a822f5_2026-06-11",
     "user_id": "9ec703fb-9e9e-4a57-a365-6222b1a822f5",
-    "metric_date": "2026-06-12",
-    "active_energy_cal": 920,
-    "resting_energy_cal": 1803,
+    "metric_date": "2026-06-11",
+    "active_energy_cal": 1014,
+    "resting_energy_cal": 1797,
     "resting_hr_bpm": 63,
-    "hrv": 25,
-    "steps": 16449,
-    "vo2_max": 41.3,
-    "exercise_minutes": 87,
-    "stand_hours": 15,
+    "hrv": 26,
+    "steps": 10025,
+    "vo2_max": null,
+    "exercise_minutes": 149,
+    "stand_hours": 18,
     "source": "HealthFit Health Metrics_v5",
     "raw": {
-      "HRV": "25",
-      "Date": "6/12/2026",
-      "Steps": "16449",
+      "HRV": "26",
+      "Date": "6/11/2026",
+      "Steps": "10025",
       "Resting": "63 bpm",
-      "VO₂ max": "41.3",
-      "Stand Hours": "15",
-      "Active Energy": "920 Cal",
-      "Resting Energy": "1803 Cal",
-      "Exercise Minutes": "87"
+      "VO₂ max": "",
+      "Stand Hours": "18",
+      "Active Energy": "1014 Cal",
+      "Resting Energy": "1797 Cal",
+      "Exercise Minutes": "149"
     },
-    "synced_at": "2026-06-24T11:07:48.278+00:00"
+    "synced_at": "2026-06-24T12:07:57.483+00:00"
   },
   {
     "daily_id": "healthfit_daily_9ec703fb-9e9e-4a57-a365-6222b1a822f5_2026-06-06",
@@ -1690,30 +1690,30 @@
     "synced_at": "2026-06-19T23:07:56.511+00:00"
   },
   {
-    "daily_id": "healthfit_daily_9ec703fb-9e9e-4a57-a365-6222b1a822f5_2026-06-11",
+    "daily_id": "healthfit_daily_9ec703fb-9e9e-4a57-a365-6222b1a822f5_2026-06-18",
     "user_id": "9ec703fb-9e9e-4a57-a365-6222b1a822f5",
-    "metric_date": "2026-06-11",
-    "active_energy_cal": 1014,
-    "resting_energy_cal": 1797,
-    "resting_hr_bpm": 63,
-    "hrv": 26,
-    "steps": 10025,
+    "metric_date": "2026-06-18",
+    "active_energy_cal": 964,
+    "resting_energy_cal": 1573,
+    "resting_hr_bpm": 66,
+    "hrv": 33,
+    "steps": 12465,
     "vo2_max": null,
-    "exercise_minutes": 149,
-    "stand_hours": 18,
+    "exercise_minutes": 124,
+    "stand_hours": 16,
     "source": "HealthFit Health Metrics_v5",
     "raw": {
-      "HRV": "26",
-      "Date": "6/11/2026",
-      "Steps": "10025",
-      "Resting": "63 bpm",
+      "HRV": "33",
+      "Date": "6/18/2026",
+      "Steps": "12465",
+      "Resting": "66 bpm",
       "VO₂ max": "",
-      "Stand Hours": "18",
-      "Active Energy": "1014 Cal",
-      "Resting Energy": "1797 Cal",
-      "Exercise Minutes": "149"
+      "Stand Hours": "16",
+      "Active Energy": "964 Cal",
+      "Resting Energy": "1573 Cal",
+      "Exercise Minutes": "124"
     },
-    "synced_at": "2026-06-24T11:07:48.51+00:00"
+    "synced_at": "2026-06-24T12:07:56.212+00:00"
   },
   {
     "daily_id": "healthfit_daily_9ec703fb-9e9e-4a57-a365-6222b1a822f5_2026-06-20",
@@ -1739,6 +1739,6 @@
       "Resting Energy": "1742 Cal",
       "Exercise Minutes": "27"
     },
-    "synced_at": "2026-06-24T11:07:47.326+00:00"
+    "synced_at": "2026-06-24T12:07:55.971+00:00"
   }
 ]
