@@ -153747,11 +153747,11 @@
         "elevation_m": null,
         "workout_type": "Strength Training",
         "source_device": "Andres’s Apple Watch",
-        "synced_at": "2026-06-29T13:07:46.748Z"
+        "synced_at": "2026-06-29T14:07:45.173Z"
       },
       "overlap_summary": null,
       "created_at": "2026-06-16T13:07:34.04859+00:00",
-      "updated_at": "2026-06-29T13:07:46.822327+00:00",
+      "updated_at": "2026-06-29T14:07:45.36566+00:00",
       "avg_hr": 87,
       "trimp": 53
     },
@@ -153783,11 +153783,11 @@
         "elevation_m": 251.271,
         "workout_type": "Outdoor Running",
         "source_device": "Andres’s Apple Watch",
-        "synced_at": "2026-06-29T13:07:45.638Z"
+        "synced_at": "2026-06-29T14:07:43.904Z"
       },
       "overlap_summary": null,
       "created_at": "2026-06-17T13:07:33.658728+00:00",
-      "updated_at": "2026-06-29T13:07:45.726291+00:00",
+      "updated_at": "2026-06-29T14:07:44.024854+00:00",
       "avg_hr": 123,
       "trimp": 35
     },
@@ -153819,11 +153819,11 @@
         "elevation_m": null,
         "workout_type": "Strength Training",
         "source_device": "Andres’s Apple Watch",
-        "synced_at": "2026-06-29T13:07:44.687Z"
+        "synced_at": "2026-06-29T14:07:39.141Z"
       },
       "overlap_summary": null,
       "created_at": "2026-06-18T13:07:34.574627+00:00",
-      "updated_at": "2026-06-29T13:07:44.848667+00:00",
+      "updated_at": "2026-06-29T14:07:39.229291+00:00",
       "avg_hr": 106,
       "trimp": 69
     },
@@ -153855,11 +153855,11 @@
         "elevation_m": null,
         "workout_type": "Strength Training",
         "source_device": "Andres’s Apple Watch",
-        "synced_at": "2026-06-29T13:07:43.048Z"
+        "synced_at": "2026-06-29T14:07:37.541Z"
       },
       "overlap_summary": null,
       "created_at": "2026-06-19T13:07:33.578837+00:00",
-      "updated_at": "2026-06-29T13:07:43.178921+00:00",
+      "updated_at": "2026-06-29T14:07:37.637628+00:00",
       "avg_hr": 96,
       "trimp": 60
     },
@@ -153891,11 +153891,11 @@
         "elevation_m": 239.453,
         "workout_type": "Outdoor Running",
         "source_device": "Andres’s Apple Watch",
-        "synced_at": "2026-06-29T13:07:34.899Z"
+        "synced_at": "2026-06-29T14:07:36.169Z"
       },
       "overlap_summary": null,
       "created_at": "2026-06-19T23:07:33.768447+00:00",
-      "updated_at": "2026-06-29T13:07:35.123228+00:00",
+      "updated_at": "2026-06-29T14:07:36.383226+00:00",
       "avg_hr": 136,
       "trimp": 46
     },
@@ -153927,13 +153927,49 @@
         "elevation_m": null,
         "workout_type": "Strength Training",
         "source_device": "Andres’s Apple Watch",
-        "synced_at": "2026-06-29T13:07:32.898Z"
+        "synced_at": "2026-06-29T14:07:34.920Z"
       },
       "overlap_summary": null,
       "created_at": "2026-06-25T12:07:33.977143+00:00",
-      "updated_at": "2026-06-29T13:07:33.927377+00:00",
+      "updated_at": "2026-06-29T14:07:35.044003+00:00",
       "avg_hr": 84,
       "trimp": 52
+    },
+    {
+      "id": "63b9fd5c-34c1-42aa-9d15-4c79a3d3ea07",
+      "session_id": "healthfit_20260629_060321_strength",
+      "user_id": "9ec703fb-9e9e-4a57-a365-6222b1a822f5",
+      "start_date": "2026-06-29T06:03:21.000Z",
+      "end_date": "2026-06-29T07:23:27.000Z",
+      "duration_min": 80,
+      "canonical_type": "strength",
+      "match_confidence": "1",
+      "relationship": "single",
+      "sources": [
+        {
+          "type": "healthfit",
+          "activity": "Strength Training",
+          "device": "Andres’s Apple Watch",
+          "file": "2026-06-29-060321-Strength Training-Andres’s Apple Watch.csv"
+        }
+      ],
+      "preferred_metrics": {
+        "avg_hr": 102,
+        "max_hr": 126,
+        "distance_mi": null,
+        "distance_km": null,
+        "calories": null,
+        "vo2_max": null,
+        "elevation_m": null,
+        "workout_type": "Strength Training",
+        "source_device": "Andres’s Apple Watch",
+        "synced_at": "2026-06-29T14:07:32.598Z"
+      },
+      "overlap_summary": null,
+      "created_at": "2026-06-29T14:07:33.648144+00:00",
+      "updated_at": "2026-06-29T14:07:33.648144+00:00",
+      "avg_hr": 102,
+      "trimp": 54
     }
   ]
 }
