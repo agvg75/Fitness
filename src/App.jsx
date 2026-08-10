@@ -52,6 +52,15 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
 const ANTHROPIC_API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY
 const SUPABASE_AUTH_STORAGE_KEY = "sb-rjirurdpluknrwnxlcox-auth-token"
 const SIGN_OUT_TIMEOUT_MS = 8000
+const SUPABASE_READ_TIMEOUT_MS = 5000
+const SUPABASE_WRITE_TIMEOUT_MS = 8000
+const withTimeout = (promise, ms, tag = "supabase") =>
+  Promise.race([
+    Promise.resolve(promise),
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`[LIFT] ${tag} timed out after ${ms}ms`)), ms)
+    ),
+  ])
 const MODALITY_COEFF = { running: 0.65, cycling: 0.45, swimming: 0.55, strength: 0.35 }
 // Static app-wide config. Keep this at module scope so helper functions and
 // component useMemo callbacks all share the same binding.
@@ -414,16 +423,22 @@ const store = {
   async get(key) {
     try {
       if (supabase && STORE_USER_ID && SYNC_KEYS.has(key)) {
-        const { data, error } = await supabase
-          .from("user_kv")
-          .select("value")
-          .eq("user_id", STORE_USER_ID)
-          .eq("key", key)
-          .maybeSingle()
+        try {
+          const { data, error } = await withTimeout(
+            supabase
+              .from("user_kv")
+              .select("value")
+              .eq("user_id", STORE_USER_ID)
+              .eq("key", key)
+              .maybeSingle(),
+            SUPABASE_READ_TIMEOUT_MS,
+            `store.get:${key}`
+          )
 
-        if (!error && data && data.value != null) {
-          return data.value
-        }
+          if (!error && data && data.value != null) {
+            return data.value
+          }
+        } catch {}
       }
 
       const v = localStorage.getItem(key)
@@ -447,9 +462,13 @@ const store = {
           updated_at: new Date().toISOString()
         }
 
-        const { error } = await supabase
-          .from("user_kv")
-          .upsert(payload, { onConflict: "user_id,key" })
+        const { error } = await withTimeout(
+          supabase
+            .from("user_kv")
+            .upsert(payload, { onConflict: "user_id,key" }),
+          SUPABASE_WRITE_TIMEOUT_MS,
+          `store.set:${key}`
+        )
 
         if (error) return false
       }
@@ -6894,7 +6913,11 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
 
   const ensureFreshScheduleSyncSession = useCallback(async () => {
     if (!supabase) return { ok: false, reason: "missing-supabase" }
-    const { data, error } = await supabase.auth.getSession()
+    const { data, error } = await withTimeout(
+      supabase.auth.getSession(),
+      SUPABASE_WRITE_TIMEOUT_MS,
+      "auth-get-session"
+    )
     if (error) throw error
     const activeSession = data?.session
     if (!activeSession?.user?.id) return { ok: false, reason: "missing-session" }
@@ -6903,7 +6926,11 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     if (!expiresAt || expiresAt - now > 120) {
       return { ok: true, session: activeSession }
     }
-    const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession()
+    const { data: refreshed, error: refreshError } = await withTimeout(
+      supabase.auth.refreshSession(),
+      SUPABASE_WRITE_TIMEOUT_MS,
+      "auth-refresh-session"
+    )
     if (refreshError) throw refreshError
     if (!refreshed?.session?.user?.id) return { ok: false, reason: "missing-session" }
     return { ok: true, session: refreshed.session }
@@ -6945,12 +6972,16 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
 
   const readScheduleKeyFromSupabase = async key => {
     if (!supabase || !session?.user?.id) return null
-    const { data, error } = await supabase
-      .from("user_kv")
-      .select("value")
-      .eq("user_id", session.user.id)
-      .eq("key", key)
-      .maybeSingle()
+    const { data, error } = await withTimeout(
+      supabase
+        .from("user_kv")
+        .select("value")
+        .eq("user_id", session.user.id)
+        .eq("key", key)
+        .maybeSingle(),
+      SUPABASE_READ_TIMEOUT_MS,
+      `schedule-read:${key}`
+    )
     if (error) throw error
     return data?.value ?? null
   }
@@ -6959,19 +6990,38 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     if (!supabase || !session?.user?.id) {
       return { ok: false, reason: "no-auth" }
     }
-    const authResult = await ensureFreshScheduleSyncSession()
+    let authResult
+    try {
+      authResult = await withTimeout(
+        ensureFreshScheduleSyncSession(),
+        SUPABASE_WRITE_TIMEOUT_MS,
+        "auth-refresh"
+      )
+    } catch {
+      return { ok: false, reason: "auth-timeout" }
+    }
     if (!authResult?.ok || !authResult?.session?.user?.id) {
       return { ok: false, reason: authResult?.reason || "no-auth" }
     }
     const userId = authResult.session.user.id
-    const { data, error, status, count } = await supabase
-      .from("user_kv")
-      .upsert(
-        { user_id: userId, key, value, updated_at: new Date().toISOString() },
-        { onConflict: "user_id,key" }
+    let upsertResult
+    try {
+      upsertResult = await withTimeout(
+        supabase
+          .from("user_kv")
+          .upsert(
+            { user_id: userId, key, value, updated_at: new Date().toISOString() },
+            { onConflict: "user_id,key" }
+          )
+          .select("value")
+          .maybeSingle(),
+        SUPABASE_WRITE_TIMEOUT_MS,
+        "kv-upsert"
       )
-      .select("value")
-      .maybeSingle()
+    } catch {
+      return { ok: false, reason: "upsert-timeout" }
+    }
+    const { data, error, status, count } = upsertResult
     if (error) {
       return { ok: false, reason: error.message || "supabase-upsert-failed", error, status, count }
     }
@@ -7209,16 +7259,29 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     })
   }, [programPromptState])
 
-  const loadScheduleLogForMutation = async fallbackLog => {
+  const getLocalScheduleLogForMutation = fallbackLog => {
     const pendingLog = getPendingKvWrite("wt-log")?.value
     if (Array.isArray(pendingLog)) return pendingLog
+    let localLog = null
+    try {
+      const raw = localStorage.getItem("wt-log")
+      const parsed = raw ? JSON.parse(raw) : null
+      if (Array.isArray(parsed)) localLog = parsed
+    } catch {}
+    return Array.isArray(localLog)
+      ? mergeScheduleLogEntries(Array.isArray(fallbackLog) ? fallbackLog : [], localLog)
+      : (Array.isArray(fallbackLog) ? fallbackLog : [])
+  }
+
+  const loadScheduleLogForMutation = async fallbackLog => {
+    const baseLog = getLocalScheduleLogForMutation(fallbackLog)
     try {
       const remoteLog = await readScheduleKeyFromSupabase("wt-log")
-      if (Array.isArray(remoteLog)) return mergeScheduleLogEntries(fallbackLog, remoteLog)
+      if (Array.isArray(remoteLog)) return mergeScheduleLogEntries(baseLog, remoteLog)
     } catch (error) {
       if (process.env.NODE_ENV === "development") console.error("Failed to refresh wt-log before mutation:", error)
     }
-    return Array.isArray(fallbackLog) ? fallbackLog : []
+    return baseLog
   }
 
   // ── Load from storage ──────────────────────────────────────────────────
@@ -8118,7 +8181,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       const draft = JSON.parse(raw)
       if (!draft || !draft.sessions) return
       const age = Date.now() - (draft.savedAt || 0)
-      if (age < 8 * 60 * 60 * 1000) {
+      if (age < 7 * 24 * 60 * 60 * 1000) {
         hydrateSessionStore(draft.sessions)
         if (draft.activeDay) setActiveDay(draft.activeDay)
         if (draft.sessionDate) setSessionDate(draft.sessionDate)
@@ -8190,7 +8253,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     const checkedWarmup = getProgDay(day).warmup?.map((item, i) => ({ ...item, done: isChecked(day, "warmup", i) }))
 
     const completedCardio = getCardioEntries(day).filter((_, i) => isChecked(day, "cardio", i))
-    const currentLog = await loadScheduleLogForMutation(schedLog)
+    const currentLog = getLocalScheduleLogForMutation(schedLog)
     const form_decay_alerts = [];
     // Find the most recent prior session for escalation lookback
     const priorSession = [...(currentLog || [])]
@@ -8316,12 +8379,14 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       }
       return acc
     }, {})
+    const newLog = [entry, ...currentLog.filter(e => e.id !== entry.id)]
+    writeLocalScheduleKey("wt-log", newLog)
+    queuePendingKvWrite("wt-log", newLog)
+    setSchedLog(newLog)
+
     if (Object.keys(loggedCustomRegistryUpdates).length > 0) {
       persistCustomExerciseRegistry({ ...customExerciseRegistry, ...loggedCustomRegistryUpdates })
     }
-
-    const newLog = [entry, ...currentLog.filter(e => e.id !== entry.id)]
-    setSchedLog(newLog)
 
     const logResult = await saveScheduleKey("wt-log", newLog)
     setSavedEntries(prev => ({ ...prev, [day]: { ...(prev[day] || {}), [venue]: entry } }))
