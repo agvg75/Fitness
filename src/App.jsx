@@ -59,6 +59,7 @@ import {
   sanitizeOmissionDispositions,
 } from './lib/prescriptionEvidence.js'
 import { selectMissedWorkPreview } from './lib/missedWorkPreview.js'
+import { openPrimarySectionForSelectedDay } from './lib/schedulePresentation.js'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -6750,8 +6751,12 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   }
   const [openSections, setOpenSections] = useState(() => {
     const mobile = typeof window !== "undefined" ? window.innerWidth < 768 : true
-    return { stretch: false, warmup: false, cooldown: false, tendon: false, timeBudget: false, main: !mobile, core: false, cardio: false, diagnostics: false }
+    const initial = { stretch: false, warmup: false, cooldown: false, tendon: false, timeBudget: false, main: !mobile, core: false, cardio: false, diagnostics: false }
+    return openPrimarySectionForSelectedDay(initial, PLAN[todayDayKey()])
   })
+  useEffect(() => {
+    setOpenSections(current => openPrimarySectionForSelectedDay(current, PLAN[activeDay]))
+  }, [activeDay])
   const [variants, setVariants] = useState({})
   const [fields, setFields] = useState({})
   const [cardioEntries, setCardioEntries] = useState({}) // { day: [{modality, duration, notes}] }
