@@ -13,34 +13,34 @@ export const PROGRAM_META = {
 export const CARDIO = {
   Mon: {
     sessions: [
-      { mod: "bike", type: "Long bike", dMin: 45, dMax: 60, intensity: "Easy aerobic", dist: "10-14 miles", rationale: "Bike long day. One cardio session only, kept aerobic.", cnote: "" },
+      { mod: "bike", type: "Long bike", dMin: 45, dMax: 50, intensity: "Zone 2–3", dist: "Stationary or spin", rationale: "Do after strength. This is the weekly long bike anchor session.", cnote: "" },
     ],
-    goal: "Long bike, easy aerobic", wt: { bike: 55 },
+    goal: "Long bike · weekly anchor · after strength", wt: { bike: 48 },
   },
   Tue: {
     sessions: [
-      { mod: "swim", type: "Medium swim", dMin: 25, dMax: 35, intensity: "Easy aerobic / technique", dist: "600-900 yards", rationale: "Leg day — no run. Swim is non-impact and does not load MTP.", cnote: "" },
+      { mod: "swim", type: "Optional easy swim", dMin: 25, dMax: 35, intensity: "Easy aerobic · low priority", dist: "~600 yards", rationale: "Do after strength. No run today because this is a leg day. Pull buoy if toe is irritated.", cnote: "2×/week swim target." },
     ],
-    goal: "Swim only — leg day, no run", wt: { swim: 30 },
+    goal: "Optional easy swim · leg day · no run", wt: { swim: 30 },
   },
   Wed: {
     sessions: [
-      { mod: "run", type: "Wednesday run", dMin: 30, dMax: 40, intensity: "Zone 2 — conversational", dist: "3 miles", rationale: "Primary midweek run. 3 days after Sunday long run. MTP protocol applies — score before and after.", cnote: "Noon run. No diclofenac unless symptoms present. Log MTP score." },
+      { mod: "run", type: "Optional lunch run", dMin: 30, dMax: 40, intensity: "Zone 2 · conversational pace", dist: "1.5–2 miles", rationale: "Spring/Fall only, weather permitting. Run at lunch, not morning. The ~31-hour gap after Tuesday legs is short of the 48-hour rule, so easy pace is non-negotiable.", cnote: "Third weekly run — drop first if Tuesday legs felt heavy, MTP is above 0 this week, or sleep was below 5.5 hours last night." },
     ],
-    goal: "Wednesday run, Zone 2", wt: { run: 35 },
+    goal: "Optional Wednesday lunch run · Zone 2", wt: { run: 35 },
   },
   Thu: {
     sessions: [
-      { mod: "swim", type: "Short swim", dMin: 15, dMax: 25, intensity: "Easy recovery / technique", dist: "400-600 yards", rationale: "Back and arms day — no run. Short swim supports aerobic frequency without MTP load.", cnote: "" },
+      { mod: "run", type: "Medium run", dMin: 25, dMax: 35, intensity: "Zone 2", dist: "2–3 miles", rationale: "Do after strength. The 49-hour gap from Tuesday legs is preserved.", cnote: "" },
+      { mod: "bike", type: "Optional short bike", dMin: 15, dMax: 20, intensity: "Easy aerobic", dist: "4–6 miles", rationale: "Optional only if time remains after strength and the run.", cnote: "" },
     ],
-    goal: "Short swim — back and arms day, no run", wt: { swim: 20 },
+    goal: "Medium run after strength · optional short bike", wt: { run: 30, bike: 18 },
   },
   Fri: {
     sessions: [
-      { mod: "run", type: "Friday run", dMin: 20, dMax: 30, intensity: "Zone 2 — conversational", dist: "2 miles", rationale: "Second midweek run. Shorter than Wednesday. Keeps Friday light before Saturday hip/leg work.", cnote: "Log MTP score. Stop if any awareness above score 0." },
-      { mod: "swim", type: "Short swim", dMin: 15, dMax: 25, intensity: "Easy aerobic", dist: "400-600 yards", rationale: "Paired easy day. Swim after run — non-impact, supports aerobic base.", cnote: "" },
+      { mod: "swim", type: "Short swim", dMin: 20, dMax: 25, intensity: "Zone 2", dist: "400–600 yards", rationale: "Do after strength. No backstroke. Pull buoy if toe is irritated. This is not a run day, preserving the 49-hour gap to Sunday long run.", cnote: "If MTP signals anything after this session, hold Sunday run distance." },
     ],
-    goal: "Friday run + short swim", wt: { run: 25, swim: 15 },
+    goal: "Short swim after strength · no run", wt: { swim: 23 },
   },
   Sat: {
     sessions: [

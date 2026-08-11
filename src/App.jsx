@@ -918,11 +918,11 @@ function fitBanisterTaus({ dailyTrimp, perfRows, windowDays = 180, minPoints = 2
 const SDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 const SMETA = {
-  Mon: { label:"Monday",    theme:"Chest & Triceps + Long Bike",  venue:"YMCA", color:"#d97706" },
-  Tue: { label:"Tuesday",   theme:"Legs + Swim",                  venue:"YMCA", color:"#d97706" },
-  Wed: { label:"Wednesday", theme:"Rest / Recovery",              venue:"—",    color:"#444"    },
-  Thu: { label:"Thursday",  theme:"Back & Arms + Run",            venue:"YMCA", color:"#d97706" },
-  Fri: { label:"Friday",    theme:"Legs Volume + Hip + Swim",     venue:"YMCA", color:"#d97706" },
+  Mon: { label:"Monday",    theme:"Chest & Triceps Hypertrophy + Long Bike", venue:"YMCA", color:"#d97706" },
+  Tue: { label:"Tuesday",   theme:"Run-Support Legs + Swim",                 venue:"YMCA", color:"#d97706" },
+  Wed: { label:"Wednesday", theme:"Rest / Recovery + Arm Pump",              venue:"—",    color:"#444"    },
+  Thu: { label:"Thursday",  theme:"Back & Biceps Hypertrophy + Run",         venue:"YMCA", color:"#d97706" },
+  Fri: { label:"Friday",    theme:"Run-Support Legs Volume + Swim",          venue:"YMCA", color:"#d97706" },
   Sat: { label:"Saturday",  theme:"Long Swim",                    venue:"YMCA", color:"#d97706" },
   Sun: { label:"Sunday",    theme:"Long Run",                     venue:"—",    color:"#444"    },
 };
@@ -931,7 +931,7 @@ const mk = (r, w) => ({ r: String(r), w: String(w) })
 
 const PLAN = {
 
-  // ─── MONDAY: Chest & Triceps + Long Bike ─────────────────────────────────
+  // ─── MONDAY: Chest & Triceps Hypertrophy + Long Bike ────────────────────
   Mon: {
     cardio: "Long bike · 45–50 min · Zone 2–3 · Stationary or spin · Do AFTER strength · This is the weekly long bike anchor session",
     warmup: [
@@ -939,89 +939,76 @@ const PLAN = {
       "Band pull-aparts · 2×15 · light band · scapular retraction · posterior cuff activation",
       "Standing thoracic rotation · 8e slow · hands behind head · open chest toward ceiling",
       "Light push-up · 2×8 · bodyweight · controlled 3 sec down · pec and shoulder activation",
-      "Wrist circles · 10 each direction · elbow joint prep before heavy pressing and curls",
+      "Wrist circles · 10 each direction · elbow joint prep before heavy pressing",
     ],
-    topNote: "YMCA only — KNR suspended until September. Full 5:00–7:00 window. Sequence: Chest → Pull/Chin-ups → Shoulders → Arms → Core → Tendon. Tendon section is 10 min at end — do not skip even if time is tight.",
+    topNote: "YMCA only — KNR suspended until September. Chest and Triceps hypertrophy day (redistribution 2026-08). Sequence: Chin-ups (2 short skill sets, fresh) → Chest → Triceps → Shoulders → Tendon. Biceps and back volume moved to Thursday; core moved to leg days. Long bike after strength. Tendon section is 5 min at end — do not skip.",
     tendon: [
       { id: "eccentric_lateral_raise_mon", name: "Eccentric Lateral Raise", sub: "Light DB · 4 sec lowering", note: "Supraspinatus protocol · 2 sets only · lower is slower · therapeutic not hypertrophy", def: [mk(8,5), mk(8,5)] },
-      { id: "eccentric_bicep_curl_mon", name: "Eccentric Biceps Curl", sub: "DB or cable · 4 sec lowering", note: "Elbow flexor tendon protocol · lighter than working weight · slow eccentric only", def: [mk(8,20), mk(8,20)] },
     ],
     sections: [
-      { h: "A — CHEST + CHIN-UPS (compound first)", ex: [
+      { h: "A — CHIN-UP SKILL BLOCK (first, fresh)", ex: [
+        { id:"chinups", name:"Chin-ups", sub:"Bodyweight · full ROM · 2 short sets · skill frequency", def:[mk(7,"BW"),mk(7,"BW")], note:"Dead hang start · 5–7 reps per set · stop 2 reps shy of failure · purpose is skill frequency, Thursday carries the volume · target 3×8–10 by September DEXA · weighted once 3×10 consistent" },
+      ]},
+      { h: "B — CHEST", ex: [
         { id:"chest_press_machine", name:"Chest Press", sub:"Technogym / machine", def:[mk(6,110),mk(6,110),mk(6,110)], note:"2-0-2 tempo · full ROM · 4–8 rep range · primary chest metric: target 135–145 lb by September" },
         { id:"incline_chest_press", name:"Incline Chest Press", sub:"Smith machine · low angle", def:[mk(6,90),mk(6,90),mk(6,90)], note:"Low incline · shoulder-safe · upper chest fullness · target 110–120 lb by September" },
-        { id:"chinups", name:"Chin-ups", sub:"Bodyweight · full ROM · immediately after incline press", def:[mk(7,"BW"),mk(7,"BW"),mk(7,"BW")], note:"Dead hang start · 3×7 PR confirmed 2026-05-27 · do here while lats and biceps are fresh · transition: replace 1 set/week with pronated pull-up grip · target 3×6 pull-ups by July" },
-        { id:"machine_flys", name:"Machine Flys", sub:"Cable or pec deck", def:[mk(8,30),mk(8,30),mk(8,30)], note:"Full stretch · controlled return · chest isolation finisher · goes after chin-ups" },
+        { id:"machine_flys", name:"Machine Flys", sub:"Cable or pec deck", def:[mk(8,30),mk(8,30),mk(8,30)], note:"Full stretch · controlled return · chest isolation finisher" },
       ]},
-      { h: "B — PULL", ex: [
-        { id:"pull_down_cable", name:"Pull Down", sub:"Cable straight-arm or heavy lat pulldown", def:[mk(8,160),mk(8,160),mk(8,160)], note:"Lat primary · Monday back volume · arms straight for straight-arm variant" },
-      ]},
-      { h: "C — BICEPS (heaviest first · Biceps Curl before Hammer Curls)", ex: [
-        { id:"bicep_curl_heavy", name:"Biceps Curl", sub:"DB or BB · supinated", def:[mk(6,55),mk(6,55),mk(6,55)], note:"Full supination at top · goes first — heaviest single-joint biceps movement · Monday lighter than Thursday · if lateral wrist complains switch to rotating cable bar" },
-        { id:"hammer_curl", name:"Hammer Curls", sub:"DB alternating · brachialis emphasis", def:[mk(6,55),mk(6,55),mk(6,55)], note:"Neutral grip · controlled · brachialis and brachioradialis · after biceps curl" },
-        { id:"bicep_curl_reverse", name:"Biceps Curl — Reverse", sub:"DB or cable · pronated grip", def:[mk(6,35),mk(6,35),mk(6,35)], note:"Brachioradialis and forearm extensor emphasis · lightest biceps work · goes last · reduce or skip if wrist discomfort" },
+      { h: "C — TRICEPS", ex: [
+        { id:"triceps_pulldown", name:"Triceps Pulldown", sub:"Cable rope or bar", def:[mk(8,50),mk(8,50),mk(8,50)], note:"Elbows fixed · full extension · target 65–70 lb by September · primary arm size driver" },
+        { id:"triceps_overhead", name:"Triceps Overhead", sub:"Cable or DB · long head stretch", def:[mk(8,30),mk(8,30)], note:"Full overhead extension · 4 sec eccentric · long head stretch is the stimulus · target 45–50 lb" },
+        { id:"cable_incline_pushdown", name:"Cable Incline Pushdown", sub:"Standing at angle · high-to-low cable", def:[mk(6,40),mk(6,40),mk(6,40)], note:"Sternal head · 3rd triceps angle" },
       ]},
       { h: "D — SHOULDER (HYPERTROPHY)", ex: [
         { id:"lateral_raise", name:"Lateral Raise", sub:"Cable or DB", def:[mk(12,15),mk(12,15),mk(12,15)], note:"Controlled arc · no shrug · shoulder width · target 22–25 lb by September" },
         { id:"rear_delt_fly", name:"Rear Delt Fly", sub:"Reverse pec deck or incline DB", def:[mk(12,25),mk(12,25),mk(12,25)], note:"Squeeze at top · posterior cuff health" },
         { id:"face_pull_er", name:"Face Pull / ER", sub:"Cable rope · neutral grip", def:[mk(15,45),mk(15,45)], note:"External rotation emphasis · shoulder health · maintain indefinitely" },
       ]},
-      { h: "E — TRICEPS", ex: [
-        { id:"triceps_pulldown", name:"Triceps Pulldown", sub:"Cable rope or bar", def:[mk(8,50),mk(8,50),mk(8,50)], note:"Elbows fixed · full extension · target 65–70 lb by September · primary arm size driver" },
-        { id:"triceps_overhead", name:"Triceps Overhead", sub:"Cable or DB · long head stretch", def:[mk(8,30),mk(8,30)], note:"Full overhead extension · 4 sec eccentric · long head stretch is the stimulus · target 45–50 lb" },
-        { id:"cable_incline_pushdown", name:"Cable Incline Pushdown", sub:"Standing at angle · high-to-low cable", def:[mk(6,40),mk(6,40),mk(6,40)], note:"Sternal head · 3rd triceps angle" },
-      ]},
-      { h: "F — CORE + STABILITY", ex: [
-        { id:"pushup_plank_shoulder_touch", name:"Pushup Plank w/ Shoulder Touch", sub:"Bodyweight · anti-rotation", def:[mk("10e","BW"),mk("10e","BW")], note:"Hips level · touch opposite shoulder" },
-        { id:"pallof_press", name:"Pallof Press", sub:"Cable · split stance", def:[mk("10e",40),mk("10e",48)], note:"Anti-rotation isometric · exhale on press · 2× per week with Friday" },
-      ]},
     ],
   },
 
-  // ─── TUESDAY: Legs (Heavy) + Swim ────────────────────────────────────────
+  // ─── TUESDAY: Run-Support Legs (Heavy) + Swim ────────────────────────────
   Tue: {
     cardio: "Optional easy swim · ~600 yards · low priority · 2×/week target · Pull buoy if toe irritated · Do AFTER strength · No run today (leg day)",
     warmup: [
       "Stationary bike 5–10 min · light → moderate · get blood flowing",
       "Standing calf raises 2×8 off plate/step · full stretch at bottom",
       "Bodyweight squat 2×8 · band around knees if form OK",
+      "Lateral band walk · green band · 2 laps (~60 ft) · glute med activation (moved from main program)",
+      "Hip drive marches · band · 2×10e · pelvic neutral (moved from main program)",
       "TOE/ANKLE BLOCK — do not skip · MTP protection",
       "Ankle (L) inversion + dorsiflexion 2×10 · band assisted",
       "Towel scrunches (L) 5 sets · intrinsic foot strength",
     ],
-    topNote: "YMCA Day — Legs heavy (4–8 rep range). 49hr gap from Tuesday legs to Thursday run preserved. Tendon Work before main program. Toe/ankle block in warm-up is non-optional.",
-    tendonWork: [
-      "MTP Weight-Bearing Balance · L1: 2×20s each side · Flat floor, eyes open, foot completely flat · Feel ball of foot pressing floor · No toe curling · L3 target: 3×45s + slight heel rise · Advance only after 3 sessions zero MTP irritation next day · Search: single leg balance great toe MTP physical therapy",
-      "Eccentric Calf Raise · L1: 2×8 each leg · Off step or plate · Both feet up, one foot down · 3-sec lowering · Bodyweight only · Full heel drop at bottom · L3 target: 3×12 + 10–15 lb DB · Advance: 3 sessions zero Achilles next-day soreness · Search: Alfredson protocol eccentric calf raise Achilles",
-      "Tibialis Raise (Shin Raise) · L1: 2×15 · Heels on floor back against wall · Raise toes as high as possible · 1-sec hold at top · Stop if sharp shin pain · L3 target: 3×25 + light ankle weight · Advance: 3 sessions zero shin soreness · Search: tibialis anterior raise wall running injury prevention",
-      "Terminal Knee Extension (TKE) · L1: 2×10 each side · Light loop band anchored at knee height behind you · Band in crease of knee · Drive to full extension · 1-sec hold · Small ROM — not a squat · L3 target: 3×15 medium band 3-sec hold · Advance: 3 sessions zero knee irritation · Search: TKE band patellar tendon physical therapy",
-      "Single-Leg Balance · L1: 2×20s each side · Eyes open · Flat floor · Knee slightly bent · Arch neutral, toes flat · L3 target: 3×30s eyes closed · Search: single leg balance proprioception ankle rehabilitation",
+    topNote: "YMCA Day — Run-support legs, heavy (4–8 rep range), reduced volume (redistribution 2026-08). 49hr gap from Tuesday legs to Thursday run preserved. Tendon Work before main program. Toe/ankle block in warm-up is non-optional. Hamstring eccentric curl now lives here (moved from Friday). Hip Abduction is intentionally split from Friday Hip Adduction; manual weekly alternation can be added later.",
+    tendon: [
+      { id:"mtp_balance", name:"MTP Weight-Bearing Balance", sub:"Flat floor · eyes open · foot completely flat", note:"Feel ball of foot pressing floor · No toe curling · L3 target: 3×45s + slight heel rise · Advance only after 3 sessions zero MTP irritation next day · Search: single leg balance great toe MTP physical therapy", def:[mk("20s each side","BW"),mk("20s each side","BW")] },
+      { id:"eccentric_calf_raise", name:"Eccentric Calf Raise", sub:"Off step or plate · bodyweight only · 3-sec lowering", note:"Both feet up, one foot down · Full heel drop at bottom · L3 target: 3×12 + 10–15 lb DB · Advance: 3 sessions zero Achilles next-day soreness · Search: Alfredson protocol eccentric calf raise Achilles", def:[mk("8 each leg","BW"),mk("8 each leg","BW")] },
+      { id:"tibialis_raise_dorsiflexion", name:"Tibialis Raise (Shin Raise)", sub:"Heels on floor · back against wall · bodyweight", note:"Raise toes as high as possible · 1-sec hold at top · Stop if sharp shin pain · L3 target: 3×25 + light ankle weight · Advance: 3 sessions zero shin soreness · Search: tibialis anterior raise wall running injury prevention", def:[mk(15,"BW"),mk(15,"BW")] },
+      { id:"tke_patellar", name:"Terminal Knee Extension (TKE)", sub:"Light loop band · anchored at knee height behind you", note:"Band in crease of knee · Drive to full extension · 1-sec hold · Small ROM — not a squat · L3 target: 3×15 medium band 3-sec hold · Advance: 3 sessions zero knee irritation · Search: TKE band patellar tendon physical therapy", def:[mk("10 each side","light band"),mk("10 each side","light band")] },
+      { id:"single_leg_balance", name:"Single-Leg Balance", sub:"Eyes open · flat floor · bodyweight", note:"Knee slightly bent · Arch neutral, toes flat · L3 target: 3×30s eyes closed · Search: single leg balance proprioception ankle rehabilitation", def:[mk("20s each side","BW"),mk("20s each side","BW")] },
     ],
     sections: [
       { h: "Glutes / Hips", ex: [
         { id:"t1", name:"Hip Thrust",              sub:"Smith machine",                def:[mk(8,160),mk(8,160),mk(8,160)],              note:"Full hip ext · pause at top · ribs down · 160 lb confirmed working load 2026-05-27" },
+        { id:"t_abd", name:"Hip Abduction", sub:"Abductor machine · Tuesday isolation slot", def:[mk(8,120),mk(8,120),mk(8,120)], note:"Intentionally split from Friday Hip Adduction · manual weekly alternation can be added later · full ROM · controlled return" },
       ]},
       { h: "Posterior Chain", ex: [
         { id:"t2a", name:"Leg Press — Bilateral",  sub:"Machine · strength protocol",  def:[mk(6,220),mk(6,220),mk(6,220)],              note:"220 lb bilateral confirmed 2026-05-27 · full ROM · controlled descent" },
         { id:"t2b", name:"Leg Press — Left Only",  sub:"Machine · MTP asymmetry protocol", def:[mk(6,80),mk(6,80)],                     note:"80 lb left leg only · 2 extra sets · closes 27% left leg deficit from DEXA · keep separate from bilateral sets" },
-        { id:"t3", name:"KB RDL",                  sub:"Kettlebell · hip hinge",       def:[mk(8,70),mk(8,70),mk(8,70)],                note:"70 lb confirmed 2026-05-27 · hinge not squat · flat back · progress toward 110–120 lb by September for HM posterior chain" },
-      ]},
-      { h: "Hip Stability", ex: [
-        { id:"t4", name:"Lateral Band Walk",       sub:"Green band · 2 laps (~60 ft)", def:[mk("2 laps","green"),mk("2 laps","green")],   note:"Maintain tension throughout · glute med activation" },
-        { id:"t5", name:"Hip Drive Marches",       sub:"Elastic band",                 def:[mk("10e","band"),mk("10e","band"),mk("10e","band")], note:"Pelvic neutral · don't let hip drop" },
+        { id:"t_hec", name:"Hamstring Eccentric Curl", sub:"Leg curl · 4-sec eccentric · extra set left leg", def:[mk(6,45),mk(6,45),mk(6,45)], note:"Moved from Friday (redistribution 2026-08) · 45 lb confirmed 2026-05-27 · 4-second lowering · slow control · add extra set for left leg only (MTP asymmetry protocol)" },
       ]},
       { h: "Quads", ex: [
-        { id:"t6a", name:"Leg Extension — Bilateral", sub:"Machine",                   def:[mk(6,80),mk(6,80),mk(6,80)],                note:"Full extension · controlled · 80 lb bilateral confirmed" },
-        { id:"t6b", name:"Leg Extension — Left Only", sub:"Machine · MTP asymmetry protocol", def:[mk(6,40),mk(6,40)],                  note:"40 lb left leg only · 2 extra sets · MTP protocol asymmetry correction" },
+        { id:"t6b", name:"Leg Extension — Left Only", sub:"Machine · MTP asymmetry protocol", def:[mk(6,40),mk(6,40)], note:"40 lb left leg only · 2 extra sets · MTP protocol asymmetry correction · bilateral volume quad work lives on Friday" },
       ]},
-      { h: "Core", ex: [
-        { id:"t7", name:"Plank",                   sub:"3×60 sec",                     def:[mk("60s","BW"),mk("60s","BW"),mk("60s","BW")], note:"Neutral spine · breathe" },
-        { id:"t8", name:"90/90 Deadbugs",          sub:"3×30 reps",                    def:[mk(30,"BW"),mk(30,"BW"),mk(30,"BW")],         note:"Back flat · slow · controlled · 30 reps confirmed 2026-05-27" },
+      { h: "Core (superset, 8 min block)", ex: [
+        { id:"t7", name:"Plank", sub:"3×60 sec · superset with deadbugs", def:[mk("60s","BW"),mk("60s","BW"),mk("60s","BW")], note:"Neutral spine · breathe · superset with 90/90 deadbugs to save time" },
+        { id:"t8", name:"90/90 Deadbugs", sub:"3×30 reps · superset with plank", def:[mk(30,"BW"),mk(30,"BW"),mk(30,"BW")], note:"Back flat · slow · controlled · 30 reps confirmed 2026-05-27" },
       ]},
     ],
   },
 
-  // ─── WEDNESDAY: Rest / Recovery + Optional Lunch Run ─────────────────────
+  // ─── WEDNESDAY: Rest / Recovery + Restricted Arm Pump ────────────────────
   Wed: {
     cardio: "Optional lunch run · 1.5–2 miles · Zone 2 · Conversational pace · Spring/Fall only (weather permitting) · Run at lunch not morning · Third weekly run — DROP FIRST if Tuesday legs felt heavy, MTP above 0 this week, or sleep below 5.5 hrs last night · Gap from Tuesday legs (5am) to Wed lunch run (~12pm) is ~31 hours — short of 48hr rule so easy pace is non-negotiable",
     warmup: [],
@@ -1032,17 +1019,20 @@ const PLAN = {
       "High lunge with lateral lean · 30 sec each side · hip flexor release",
       "Wide stance rotation · 4 each side",
     ],
-    topNote: "Rest day — no gym, no strength, no high intensity cardio. Tendon protocol only: 20 min, at home or work, no equipment needed except one resistance band. Optional: easy 7-mile bike commute on trail counts as active recovery. · If doing the lunch run: 3-min abbreviated pre-run (ankle rotations, leg swings both sides, A-skips — skip knee hugs and side lunges, already covered by tendon protocol). Full 5-min post-run static routine after.",
+    topNote: "Rest day — no gym, no strength grinding, no high intensity cardio. Tendon protocol (20 min) plus a RESTRICTED arm pump block (redistribution 2026-08): 3 items, bands or light DBs, RPE 7 cap, nowhere near failure, zero leg involvement. Drop rule: if last night's sleep was poor or TSB is trending down, drop the arm pump first — tendon work stays. Optional easy 7-mile bike commute counts as active recovery. If doing the lunch run: 3-min abbreviated pre-run, full 5-min post-run static routine after.",
     tendon: [
       { id:"tibialis_raise_wed", name:"Tibialis Raise", sub:"Wall shin raise · bodyweight", note:"Stand 18 in from wall · lift toes to shin · 3 sec hold · running prehab · no equipment", def:[mk(15,"BW"),mk(15,"BW"),mk(15,"BW")] },
       { id:"eccentric_calf_raise_wed", name:"Eccentric Calf Raise", sub:"Step or curb · bodyweight", note:"Rise on two feet · lower on one · 3 sec eccentric · Achilles and calf protocol", def:[mk(10,"BW"),mk(10,"BW"),mk(10,"BW")] },
       { id:"hip_flexor_iso_wed", name:"Hip Flexor Isometric Hold", sub:"Floor or chair · seated knee raise hold", note:"90° hip flexion · hold 30–45 sec · running prehab · no equipment", def:[mk("30s","BW"),mk("30s","BW")] },
       { id:"face_pull_band_wed", name:"Face Pull / Band Pull-Apart", sub:"Resistance band", note:"Rotator cuff health · ER emphasis · loop band at face height or pull-apart", def:[mk(15,"band"),mk(15,"band"),mk(15,"band")] },
       { id:"tke_band_wed", name:"Terminal Knee Extension", sub:"Resistance band · loop at knee height", note:"Patellar tendon isometric loading · small ROM · 2 sec hold at extension", def:[mk(15,"band"),mk(15,"band")] },
+      { id:"eccentric_bicep_curl_wed", name:"Eccentric Biceps Curl", sub:"DB or band · 4 sec lowering", note:"Moved from Monday tendon block (redistribution 2026-08) · elbow flexor tendon protocol · lighter than working weight · slow eccentric only", def:[mk(8,20),mk(8,20)] },
+      { id:"arm_pump_curl_wed", name:"Arm Pump — Light Curl", sub:"Band or light DB · RPE 7 cap", note:"Restricted pump work · 12–15 easy reps · third weekly biceps touch · never grind · drop first on poor sleep or falling TSB", def:[mk(14,"light"),mk(14,"light")] },
+      { id:"arm_pump_pushdown_wed", name:"Arm Pump — Band Pushdown or Bench Dip", sub:"Band or bodyweight · RPE 7 cap", note:"Restricted pump work · 12–15 easy reps · third weekly triceps touch · never grind · drop first on poor sleep or falling TSB", def:[mk(14,"light"),mk(14,"light")] },
     ],
   },
 
-  // ─── THURSDAY: Back & Arms + Run ─────────────────────────────────────────
+  // ─── THURSDAY: Back & Biceps Hypertrophy + Run ───────────────────────────
   Thu: {
     cardio: "Medium run · 25–35 min · 2–3 miles · Zone 2 · Do AFTER strength · Optional short bike 15–20 min / 4–6 miles if time remains · 49hr gap from Tuesday legs to Thursday run ✓",
     warmup: [
@@ -1060,23 +1050,22 @@ const PLAN = {
       "High lunge with lateral lean · L foot forward, R hand up and over · 30 sec each side",
       "Wide stance rotation · hips back, alternate reaching one hand to floor, other to sky · 4e",
     ],
-    topNote: "YMCA Day — Back and Arms. Mix of heavy (4–8) and volume (8–15) sets. No swim today: arm day swim constraint. Run is buffered 49hr from Tuesday legs. Tendon Work before main program. · Before the run: do 3-min active pre-run routine (ankle rotations, leg swings, forward lunges) as transition from strength to run. After the run: full 5-min post-run static routine.",
-    tendonWork: [
-      "Eccentric Lateral Raise · L1: 2×8 each arm · 5 lb DB · Raise with BOTH arms together to shoulder height, lower with ONE arm only (4-sec lower) · Reset and repeat · The slow lowering is the entire stimulus — do not rush it · L3 target: 3×12 each arm at 8–10 lb · Advance: 3 sessions zero outer shoulder next-day soreness · Search: eccentric lateral raise supraspinatus rotator cuff rehab",
-      "Eccentric Biceps Curl · L1: 2×5 each arm · 15 lb DB (lighter than working weight) · Curl up with BOTH arms, lower with ONE arm (4-sec lower) · Elbow stays at side · This is significantly harder than it looks at slow tempo · L3 target: 3×8 each arm at 25 lb 5-sec lower · Advance: 3 sessions zero elbow/biceps next-day soreness · Search: eccentric biceps curl tendon loading physical therapy",
-      "Face Pull (Loaded Tendon Stimulus) · 2×15 · Cable or band · Slow pull and controlled 3-sec return · This is the loaded version not just warm-up activation · Maintain indefinitely — no progression target",
-      "Pre-Run Ankle Primer · 2×10 each side · Simple calf raise, bodyweight, flat floor · Activation only before the run · Do not use eccentric protocol here — save that for Tuesday · Skip if calf is acutely tight",
+    topNote: "YMCA Day — Back and Biceps hypertrophy (redistribution 2026-08). 9 core exercises; Inverted Row or Straight-Arm Pulldown may be added as a single optional slot ONLY if all 9 are done and time remains — by default they are out. No swim today: arm day swim constraint. Run buffered 49hr from Tuesday legs. Tendon Work before main program. Before the run: 3-min active pre-run routine. After: full 5-min post-run static routine.",
+    tendon: [
+      { id:"eccentric_lateral_raise", name:"Eccentric Lateral Raise", sub:"5 lb DB · raise with both arms · lower with one arm", note:"4-sec lower · Reset and repeat · The slow lowering is the entire stimulus — do not rush it · L3 target: 3×12 each arm at 8–10 lb · Advance: 3 sessions zero outer shoulder next-day soreness · Search: eccentric lateral raise supraspinatus rotator cuff rehab", def:[mk("8 each arm",5),mk("8 each arm",5)] },
+      { id:"eccentric_biceps_curl", name:"Eccentric Biceps Curl", sub:"15 lb DB · lighter than working weight", note:"Curl up with both arms, lower with one arm · 4-sec lower · Elbow stays at side · This is significantly harder than it looks at slow tempo · L3 target: 3×8 each arm at 25 lb 5-sec lower · Advance: 3 sessions zero elbow/biceps next-day soreness · Search: eccentric biceps curl tendon loading physical therapy", def:[mk("5 each arm",15),mk("5 each arm",15)] },
+      { id:"face_pull_tendon", name:"Face Pull (Loaded Tendon Stimulus)", sub:"Cable or band", note:"Slow pull and controlled 3-sec return · This is the loaded version not just warm-up activation · Maintain indefinitely — no progression target", def:[mk(15,"band/cable"),mk(15,"band/cable")] },
+      { id:"pre_run_ankle_primer", name:"Pre-Run Ankle Primer", sub:"Simple calf raise · flat floor · bodyweight", note:"Activation only before the run · Do not use eccentric protocol here — save that for Tuesday · Skip if calf is acutely tight", def:[mk("10 each side","BW"),mk("10 each side","BW")] },
     ],
     sections: [
       { h: "Compound Pull — Fresh", ex: [
-        { id:"th10", name:"Chin-ups",                        sub:"Bodyweight · full ROM · do first while fresh", def:[mk(7,"BW"),mk(7,"BW"),mk(7,"BW")], note:"Dead hang start · 3×7 PR confirmed 2026-05-27 · transition: replace 1 set/week with pronated pull-up grip · target 3×6 pull-ups by July · add weight via belt once 3×10 BW consistent" },
+        { id:"th10", name:"Chin-ups", sub:"Bodyweight · full ROM · do first while fresh", def:[mk(8,"BW"),mk(8,"BW"),mk(8,"BW")], note:"Dead hang start · volume day for chin-ups (Monday holds the 2-set skill block) · 3×7 PR confirmed 2026-05-27 · transition: replace 1 set/week with pronated pull-up grip · add weight via belt once 3×10 BW consistent" },
         { id:"th11", name:"Hanging Leg Raises",              sub:"Pull-up bar · stay on bar immediately after chin-ups", def:[mk(10,"BW"),mk(10,"BW"),mk(10,"BW")], note:"Posterior pelvic tilt at top · no swing · 2-sec hold · direct rectus abdominis work for pelvic tilt control miles 10–13 · progress: 10 → 15 reps → add 2.5 lb ankle weight" },
       ]},
       { h: "Biceps — Fresh (before grip-limited back work)", ex: [
-        { id:"th5", name:"Biceps Curl",                      sub:"DB or barbell · palms up",               def:[mk(6,80),mk(6,80),mk(6,80)],              note:"No sway · full elbow extension · heavy day · 80 lb confirmed 2026-05-27 · if lateral wrist complains, switch to rotating cable bar" },
+        { id:"th5", name:"Biceps Curl", sub:"DB or barbell · palms up", def:[mk(6,80),mk(6,80),mk(6,80)], note:"No sway · full elbow extension · heavy anchor · 80 lb confirmed 2026-05-27 · if lateral wrist complains, switch to rotating cable bar" },
         { id:"th8", name:"Hammer Curl",                      sub:"DB alternating",                         def:[mk(6,60),mk(6,60),mk(6,60)],              note:"Neutral grip · full ROM · 60 lb confirmed 2026-05-27" },
-        { id:"th6", name:"Cable D2 Flexion",                 sub:"Cable · unsheathing sword",              def:[mk(6,10),mk(6,10),mk(6,10)],              note:"Full diagonal ROM · controlled · 10 lb first session" },
-        { id:"th_rbc", name:"Reverse Bicep Curl",            sub:"Cable · palms down",                     def:[mk(6,40),mk(6,40),mk(6,40)],              note:"Forearm and brachioradialis · 40 lb" },
+        { id:"th_alt", name:"Curl — Alternating Slot", sub:"Week A: reverse cable curl · Week B: cable rope curl", def:[mk(6,45),mk(6,45),mk(6,45)], note:"Alternate weekly (redistribution 2026-08): pronated reverse curl 40–45 lb, or cable rope curl 60–80 lb · Cable D2 Flexion may substitute occasionally as the Week B option · one slot, not three exercises" },
       ]},
       { h: "Back Primary", ex: [
         { id:"th1", name:"Cable Row (mid) — Single Arm",     sub:"Cable · mid-height · SA · use straps",   def:[mk(8,200),mk(8,200),mk(8,200)],           note:"Single-arm · scapula retraction · don't round · grip limit not back limit · use wrist straps" },
@@ -1085,17 +1074,13 @@ const PLAN = {
       { h: "Overhead Push — Pull Break", ex: [
         { id:"th_sp", name:"Shoulder Press",                 sub:"PureStrength plate-loaded · 45 lb plate each side", def:[mk(8,90),mk(8,90),mk(8,90)], note:"90 lb total confirmed first session 2026-05-27 · push break lets lats recover · progress +5 lb/side every 2–3 weeks · target 130–140 lb by September" },
       ]},
-      { h: "Back Auxiliary", ex: [
-        { id:"th4", name:"Inverted Row",                     sub:"TRX or bar · 3–4 sets",                  def:[mk(8,"BW"),mk(8,"BW"),mk(8,"BW")],        note:"Full ROM · chest to bar" },
-        { id:"th3", name:"Straight Arm Pulldowns",           sub:"Cable · Wolverines · 40 lb",             def:[mk(8,40),mk(8,40),mk(8,40)],              note:"Arms straight · lat isolation" },
-      ]},
       { h: "Core", ex: [
         { id:"th9", name:"Suitcase Carry",                   sub:"DB · 2 laps each arm (~30 ft/lap)",      def:[mk("2 laps",70),mk("2 laps",70)],         note:"Upright · no lateral lean · core braced · 70 lb confirmed 2026-05-27" },
       ]},
     ],
   },
 
-  // ─── FRIDAY: Legs Volume + Hip + Chest (Volume) + Swim ───────────────────
+  // ─── FRIDAY: Run-Support Legs Volume + Swim ──────────────────────────────
   Fri: {
     cardio: "Short swim · 20–25 min · 400–600 yards · Zone 2 · No backstroke · Pull buoy if toe irritated · Do AFTER strength · NOT a run day — preserves 49hr gap to Sunday long run ✓ Friday 5am legs → Sunday 6am run = 49hr. If MTP signals anything after this session, hold Sunday run distance.",
     warmup: [
@@ -1104,11 +1089,11 @@ const PLAN = {
       "Hip CARs 8e slow",
       "Arm circles 2×30 sec each direction",
     ],
-    topNote: "YMCA Day — Legs volume (8–15 reps, lighter than Tuesday) + hip/core + second chest frequency. Swim only — no run today. Tendon Work after main program (primer for Sunday).",
-    tendonWork: [
-      "Tibialis Raise · 2×15 · Wall shin raises · Anterior chain primer for Sunday run · Always stay at Level 1 on Friday regardless of Tuesday progression level · This is activation not loading · Search: tibialis anterior raise wall",
-      "Eccentric Calf Raise (Lighter Friday Version) · 2×6 each leg · Bodyweight only · 3-sec lower · ALWAYS keep Friday version at Level 1 regardless of Tuesday level · Purpose is priming Sunday's long run, not adding Achilles stimulus",
-      "Hip Flexor Isometric Hold · L1: 2×20s each side · Stand upright, lift one knee to 90°, hold completely still · No load · Feel deep sustained effort at front of hip (not a cramp) · If cramping reduce to 12 sec · L3 target: 3×30s + light ankle weight · Advance: 3 sessions zero hip flexor next-day soreness · Search: hip flexor isometric hold running prehab",
+    topNote: "YMCA Day — Run-support legs volume (8–15 reps, lighter than Tuesday), reduced count (redistribution 2026-08). Swim only — no run today. Hamstring eccentric curl moved to Tuesday. Hip Adduction is intentionally split from Tuesday Hip Abduction; manual weekly alternation can be added later. Cable Crossover is the second chest frequency and is the FIRST thing cut when time runs out. Tendon Work after main program (primer for Sunday).",
+    tendon: [
+      { id:"tibialis_raise_primer", name:"Tibialis Raise", sub:"Wall shin raises · bodyweight", note:"Anterior chain primer for Sunday run · Always stay at Level 1 on Friday regardless of Tuesday progression level · This is activation not loading · Search: tibialis anterior raise wall", def:[mk(15,"BW"),mk(15,"BW")] },
+      { id:"eccentric_calf_lighter", name:"Eccentric Calf Raise (Lighter Friday Version)", sub:"Bodyweight only · 3-sec lower", note:"ALWAYS keep Friday version at Level 1 regardless of Tuesday level · Purpose is priming Sunday's long run, not adding Achilles stimulus", def:[mk("6 each leg","BW"),mk("6 each leg","BW")] },
+      { id:"hip_flexor_isometric", name:"Hip Flexor Isometric Hold", sub:"Stand upright · knee to 90° · no load", note:"Hold completely still · Feel deep sustained effort at front of hip (not a cramp) · If cramping reduce to 12 sec · L3 target: 3×30s + light ankle weight · Advance: 3 sessions zero hip flexor next-day soreness · Search: hip flexor isometric hold running prehab", def:[mk("20s each side","BW"),mk("20s each side","BW")] },
     ],
     sections: [
       { h: "Hip Compound — Heaviest First", ex: [
@@ -1117,20 +1102,18 @@ const PLAN = {
       { h: "Posterior Chain", ex: [
         { id:"f5", name:"Romanian Deadlift",       sub:"DB or barbell",                def:[mk(8,70),mk(8,70),mk(8,70)],                 note:"70 lb confirmed 2026-05-27 · hinge · flat back · 3-1-2 tempo · progress +5 lb weekly · target 110–120 lb by September for HM posterior chain endurance" },
         { id:"f5b", name:"Back Extension",         sub:"45° hyperextension bench",     def:[mk(12,"BW"),mk(12,"BW")],                    note:"3-sec hold at top · neutral spine · lumbar endurance for HM miles 10–13 · start BW 2×12 · progress to 3×15 BW then add 10 lb plate" },
-        { id:"f6", name:"Hamstring Eccentric Curl",sub:"Leg curl · 4-sec eccentric · extra set left leg", def:[mk(8,45),mk(8,45),mk(8,45)], note:"45 lb confirmed 2026-05-27 · 4-second lowering · slow control · add extra set for left leg only (MTP asymmetry protocol)" },
+      ]},
+      { h: "Quads — Volume", ex: [
+        { id:"f_le", name:"Leg Extension — Bilateral", sub:"Machine · volume slot", def:[mk(14,40),mk(14,40),mk(14,40)], note:"Volume quad slot moved from Tuesday (redistribution 2026-08) · 12–16 reps · full extension · controlled" },
       ]},
       { h: "Hip Isolation", ex: [
-        { id:"f1", name:"Hip Abduction",           sub:"Abductor machine",             def:[mk(8,120),mk(8,120),mk(8,120)],              note:"Full ROM · controlled return · 120 lb confirmed" },
-        { id:"f2", name:"Hip Adduction",           sub:"Adductor machine",             def:[mk(8,90),mk(8,90),mk(8,90)],                 note:"Pelvic control throughout · 90 lb confirmed 2026-05-27" },
-        { id:"f3", name:"KB Swing",                sub:"Kettlebell · hip hinge drive", def:[mk(10,25),mk(10,25),mk(10,25)],              note:"Power from glutes · not arms · progress to 35 lb when 3×10 easy" },
+        { id:"f2", name:"Hip Adduction", sub:"Adductor machine · Friday isolation slot", def:[mk(8,90),mk(8,90),mk(8,90)], note:"Intentionally split from Tuesday Hip Abduction · manual weekly alternation can be added later · pelvic control throughout · 90 lb confirmed 2026-05-27" },
       ]},
-      { h: "Core + Shoulder Health", ex: [
-        { id:"f7", name:"Pallof Press",            sub:"Cable · split stance",          def:[mk("8e",30),mk("8e",30),mk("8e",30)],        note:"Anti-rotation · brace · press slowly · 2× per week with Monday" },
-        { id:"f9", name:"Russian Twists",          sub:"15 lb ball · 3×30 reps",       def:[mk(30,15),mk(30,15),mk(30,15)],              note:"Feet elevated optional · controlled · 15 lb ball confirmed 2026-05-27" },
-        { id:"f8", name:"Shoulder Clock w/ Band",  sub:"Resistance band",              def:[mk("5e","band"),mk("5e","band"),mk("5e","band")], note:"Full range · light load only · rotator cuff health" },
+      { h: "Core", ex: [
+        { id:"f7", name:"Pallof Press", sub:"Cable · split stance", def:[mk("8e",30),mk("8e",30),mk("8e",30)], note:"Anti-rotation · brace · press slowly · single core slot · swap for Russian Twists occasionally if preferred, not both" },
       ]},
       { h: "Chest Finisher — 2nd Frequency", ex: [
-        { id:"f0", name:"Cable Crossover",         sub:"Low-to-high or mid",           def:[mk(8,40),mk(8,40),mk(8,40)],                 note:"40 lb confirmed 2026-05-27 · full stretch at start · squeeze at top · second chest frequency · do last — isolation finisher only" },
+        { id:"f0", name:"Cable Crossover", sub:"Low-to-high or mid", def:[mk(8,40),mk(8,40),mk(8,40)], note:"40 lb confirmed 2026-05-27 · full stretch at start · squeeze at top · second chest frequency · do last — first thing cut when time runs out" },
       ]},
     ],
   },
