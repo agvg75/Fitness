@@ -46,6 +46,7 @@ import { generateTrainerReport } from "./exportReport"
 import MetricValue from './components/MetricValue'
 import CoachEntry from './components/CoachEntry'
 import { useMetricSnapshot } from './lib/useMetricSnapshot'
+import { createReleaseUpdateMonitor, reloadWithDurableState, RUNNING_RELEASE_ID } from './lib/releaseUpdate.js'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -6670,7 +6671,7 @@ function SubstituteDrawer({ flag, onSelectSubstitute, onClose }) {
   )
 }
 
-function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, setSchedLog, readinessScore, latestHealthFit = null, ocItems = [], computedTSB = null, tsbV2Panel = null, progressionReadiness = "progress", progressionReasons = [], tendonStatus = { painScore: 0, stiffness: false, override: null }, scheduleFeedback = [], sleepRecords = [], setSleepRecords = () => {}, scheduleTarget = null, clearScheduleTarget = () => {}, ocConstraintState = null, canonicalSessions = [], formDecayPenalty = null, formDecayAccumulation = {}, tissueLoadIndex = {} }) {
+function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, setSchedLog, readinessScore, latestHealthFit = null, ocItems = [], computedTSB = null, tsbV2Panel = null, progressionReadiness = "progress", progressionReasons = [], tendonStatus = { painScore: 0, stiffness: false, override: null }, scheduleFeedback = [], sleepRecords = [], setSleepRecords = () => {}, scheduleTarget = null, clearScheduleTarget = () => {}, ocConstraintState = null, canonicalSessions = [], formDecayPenalty = null, formDecayAccumulation = {}, tissueLoadIndex = {}, reportUpdateReloadSafety = () => {} }) {
   const safeScheduleFeedback = Array.isArray(scheduleFeedback) ? scheduleFeedback : []
   const isMobileLayout = useIsMobile()
   const [activeDay, setActiveDay] = useState(todayDayKey())
@@ -8172,13 +8173,36 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     } catch {}
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
+  const persistCurrentSessionDraft = useCallback(() => {
     try {
       localStorage.setItem(SESSION_DRAFT_KEY, JSON.stringify({
         sessions: buildSessionsStore(), savedAt: Date.now(), activeDay, sessionDate
       }))
-    } catch {}
-  }, [fields, variants, activeDay, sessionDate])
+      return true
+    } catch {
+      return false
+    }
+  }, [fields, variants, activeDay, sessionDate]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    persistCurrentSessionDraft()
+  }, [persistCurrentSessionDraft])
+
+  const hasUnsavedSessionFields = useMemo(() => {
+    const hasFieldValues = Object.values(fields || {}).some(field =>
+      field && Object.values(field).some(value => value !== "" && value != null)
+    )
+    return hasFieldValues || Object.keys(variants || {}).length > 0 || pendingVenue != null
+  }, [fields, variants, pendingVenue])
+
+  useEffect(() => {
+    reportUpdateReloadSafety({
+      isCommitting,
+      hasUnsavedDraftFields: hasUnsavedSessionFields,
+      hasPendingLocalWrites: pendingKvWriteCount > 0,
+      persistBeforeReload: persistCurrentSessionDraft,
+    })
+  }, [hasUnsavedSessionFields, isCommitting, pendingKvWriteCount, persistCurrentSessionDraft, reportUpdateReloadSafety])
 
   // ── Log session ────────────────────────────────────────────────────────
   const logSession = async (venue, checkedIds = null) => {
@@ -20068,6 +20092,49 @@ function normalizeDistanceToMiles(workout) {
 export default function App() {
   if (typeof window !== "undefined") window.__liftConfig = LIFT_CONFIG
   const isMobileLayout = useIsMobile()
+  const [updateAvailable, setUpdateAvailable] = useState(false)
+  const [updateReloadError, setUpdateReloadError] = useState("")
+  const [updateReloadSafety, setUpdateReloadSafety] = useState({
+    isCommitting: false,
+    hasUnsavedDraftFields: false,
+    hasPendingLocalWrites: false,
+  })
+  const updateReloadSafetyRef = useRef({ persistBeforeReload: () => true })
+
+  useEffect(() => {
+    const monitor = createReleaseUpdateMonitor({
+      onUpdateAvailable: () => setUpdateAvailable(true),
+    })
+    return () => monitor.stop()
+  }, [])
+
+  const reportUpdateReloadSafety = useCallback(nextSafety => {
+    updateReloadSafetyRef.current = nextSafety
+    setUpdateReloadSafety(previous => {
+      const next = {
+        isCommitting: Boolean(nextSafety?.isCommitting),
+        hasUnsavedDraftFields: Boolean(nextSafety?.hasUnsavedDraftFields),
+        hasPendingLocalWrites: Boolean(nextSafety?.hasPendingLocalWrites),
+      }
+      return previous.isCommitting === next.isCommitting &&
+        previous.hasUnsavedDraftFields === next.hasUnsavedDraftFields &&
+        previous.hasPendingLocalWrites === next.hasPendingLocalWrites
+        ? previous
+        : next
+    })
+  }, [])
+
+  const reloadUpdate = useCallback(async () => {
+    setUpdateReloadError("")
+    const result = await reloadWithDurableState({
+      isCommitting: updateReloadSafetyRef.current?.isCommitting,
+      persistBeforeReload: updateReloadSafetyRef.current?.persistBeforeReload || (() => true),
+      reload: () => window.location.reload(),
+    })
+    if (result.reason === "local-persist-failed") {
+      setUpdateReloadError("Could not save the current draft on this device. Update not reloaded.")
+    }
+  }, [])
   // ────────────────────────────────────────────────────────────────────────
 
   // User-added races: persisted in localStorage under "lift_user_races".
@@ -26712,12 +26779,56 @@ return (
       overflowX: "hidden"
     }}
     >
+      {updateAvailable && (
+        <div
+          role="status"
+          style={{
+            position: "sticky",
+            top: 8,
+            zIndex: 10000,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 10,
+            flexWrap: "wrap",
+            marginBottom: 12,
+            padding: "9px 12px",
+            borderRadius: 8,
+            border: "1px solid rgba(56,189,248,0.55)",
+            background: "rgba(8,47,73,0.96)",
+            boxShadow: "0 4px 16px rgba(0,0,0,0.35)",
+          }}
+        >
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#e0f2fe" }}>LIFT update available</div>
+            {updateReloadError && <div style={{ marginTop: 3, fontSize: 11, color: "#fca5a5" }}>{updateReloadError}</div>}
+          </div>
+          <button
+            type="button"
+            onClick={reloadUpdate}
+            disabled={updateReloadSafety.isCommitting}
+            style={{
+              padding: "7px 11px",
+              border: "1px solid #7dd3fc",
+              borderRadius: 6,
+              background: updateReloadSafety.isCommitting ? "#334155" : "#0ea5e9",
+              color: "#fff",
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: updateReloadSafety.isCommitting ? "wait" : "pointer",
+              opacity: updateReloadSafety.isCommitting ? 0.7 : 1,
+            }}
+          >
+            {updateReloadSafety.isCommitting ? "Saving…" : "Reload update"}
+          </button>
+        </div>
+      )}
       <div style={{ display: "flex", justifyContent: "space-between", gap: "16px", flexWrap: "wrap", marginBottom: "16px" }}>
         <div>
   <div style={{ fontSize: "64px", fontWeight: "800", lineHeight: 1, marginTop: 0, marginBottom: "6px" }}>
     L.I.F.T.
   </div>
-  <div style={{ fontSize: 11, opacity: 0.4 }}>Build: {typeof __BUILD_DATE__ !== "undefined" ? __BUILD_DATE__ : "dev"}</div>
+  <div style={{ fontSize: 11, opacity: 0.4 }}>Release: {RUNNING_RELEASE_ID}</div>
   <div style={{ fontSize: "11px", opacity: 0.85, marginBottom: "4px" }}>
     Longitudinal Integrated Fitness Tracker
   </div>
@@ -29730,6 +29841,7 @@ return (
     formDecayPenalty={formDecayReadinessPenalty}
     formDecayAccumulation={formDecayAccumulation}
     tissueLoadIndex={tissueLoadIndex}
+    reportUpdateReloadSafety={reportUpdateReloadSafety}
   />
 )}
 
