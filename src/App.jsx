@@ -47,6 +47,13 @@ import MetricValue from './components/MetricValue'
 import CoachEntry from './components/CoachEntry'
 import { useMetricSnapshot } from './lib/useMetricSnapshot'
 import { createReleaseUpdateMonitor, reloadWithDurableState, RUNNING_RELEASE_ID } from './lib/releaseUpdate.js'
+import {
+  buildPrescribedPlanExercises,
+  filterActivePlanFieldOverrides,
+  filterRenderableCustomExercises,
+  isPlanDayRenderable,
+  reorderActivePlanExercises,
+} from './lib/scheduleAuthority.js'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -1330,35 +1337,6 @@ function getDefaultSectionHeadingForMovement(day, movementPattern, fallbackSecti
   if (match?.h) return match.h
   if (fallbackSections.length > 0) return fallbackSections[fallbackSections.length - 1]?.h || null
   return day || null
-}
-
-function buildCustomExerciseDef(sets, reps, load) {
-  const setCount = Math.max(1, parseInt(sets, 10) || 1)
-  return Array.from({ length: setCount }, () => ({ r: reps ?? "", w: load ?? "" }))
-}
-
-function buildProgramCustomExercise(registryEntry, sectionHeading = null) {
-  const sets = String(registryEntry?.default_sets ?? 3)
-  const reps = String(registryEntry?.default_reps ?? "8-12")
-  const load = registryEntry?.default_load == null ? "" : String(registryEntry.default_load)
-  const name = registryEntry?.exercise_name || "Custom Exercise"
-  return {
-    id: registryEntry?.stable_id,
-    n: name,
-    fi: null,
-    _def: buildCustomExerciseDef(sets, reps, load),
-    _sectionH: sectionHeading,
-    isProgramCustom: true,
-    variants: {
-      machine: {
-        n: name,
-        sets,
-        reps,
-        load,
-        note: registryEntry?.notes || "",
-      },
-    },
-  }
 }
 
 function ensureCustomRegistryMigrationFromLogEntries(entries) {
@@ -6926,8 +6904,9 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     const newVariants = {}
     SDAYS.forEach(d => {
       if (!ss[d]) return
-      Object.keys(ss[d]).forEach(exId => {
-        const v = ss[d][exId]
+      const activeOverrides = filterActivePlanFieldOverrides(PLAN[d], ss[d])
+      Object.keys(activeOverrides).forEach(exId => {
+        const v = activeOverrides[exId]
         if (!v || typeof v !== "object" || Array.isArray(v)) return
         // Accept an entry if ANY editable field was saved, not only when `sets`
         // is present. A weight-only edit (load set, sets/reps untouched) is the
@@ -7573,7 +7552,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     }
   }
 
-  // ── Data source: PLAN (primary) with PROG as fallback ─────────────
+  // ── Data source: PLAN is authoritative; PROG is fallback only ─────
   const getProgDay = (day) => {
     const schDay = PLAN[day]
     if (schDay) {
@@ -7583,63 +7562,10 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       const cooldown = (schDay.cooldown || []).map(s =>
         typeof s === "string" ? { n: s, d: "" } : { n: s.n || "", d: s.d || "" }
       )
-      let exercises = (schDay.sections || []).flatMap(sec =>
-        (sec.ex || []).map(ex => {
-          const def = ex.def || []
-          return {
-            id: ex.id,
-            n: ex.name,
-            fi: null,
-            _def: def,
-            _sectionH: sec.h,
-            variants: {
-              machine: {
-                n: ex.sub || ex.name,
-                sets: String(def.length || 3),
-                reps: def[0]?.r ?? "—",
-                load: def[0]?.w ?? "—",
-                note: ex.note || "",
-              },
-            },
-          }
-        })
+      const exercises = reorderActivePlanExercises(
+        buildPrescribedPlanExercises(schDay),
+        exerciseOrder?.[day]
       )
-      const programCustomEntries = Object.values(customExerciseRegistry || {})
-        .filter(entry => Array.isArray(entry?.program_days) && entry.program_days.includes(day))
-      programCustomEntries.forEach(entry => {
-        const dayOverride = scheduleOverrides?.[day]?.[entry.stable_id] || {}
-        const sectionHeading = dayOverride.section_heading || getDefaultSectionHeadingForMovement(day, entry.movement_pattern, schDay.sections || [])
-        const customExercise = buildProgramCustomExercise(entry, sectionHeading)
-        if (!customExercise?.id) return
-        const insertAfterId = String(dayOverride.after_exercise_id || "")
-        if (insertAfterId) {
-          const anchorIdx = exercises.findIndex(exercise => String(exercise.id) === insertAfterId)
-          if (anchorIdx >= 0) {
-            exercises.splice(anchorIdx + 1, 0, customExercise)
-            return
-          }
-        }
-        if (sectionHeading) {
-          let lastSectionIdx = -1
-          exercises.forEach((exercise, idx) => {
-            if (exercise._sectionH === sectionHeading) lastSectionIdx = idx
-          })
-          if (lastSectionIdx >= 0) {
-            exercises.splice(lastSectionIdx + 1, 0, customExercise)
-            return
-          }
-        }
-        exercises.push(customExercise)
-      })
-      // Apply saved custom order for this day if present.
-      const savedOrder = exerciseOrder?.[day]
-      if (Array.isArray(savedOrder) && savedOrder.length) {
-        const byId = new Map(exercises.map(ex => [ex.id, ex]))
-        const ordered = []
-        savedOrder.forEach(id => { if (byId.has(id)) { ordered.push(byId.get(id)); byId.delete(id) } })
-        byId.forEach(ex => ordered.push(ex))  // any new exercises not in saved order go to the end
-        exercises = ordered
-      }
       return { stretch: [], warmup, cooldown, exercises, core: [], _topNote: schDay.topNote }
     }
     // Fallback to PROG for any day not in PLAN
@@ -7831,6 +7757,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
 
   // ── Custom exercises ───────────────────────────────────────────────────
   const getCustomExercises = (day) => customExercises[day] || []
+  const getRenderableCustomExercises = (day) => filterRenderableCustomExercises(getCustomExercises(day), PLAN)
 
   const openProgramPrompt = (exercise, day, registryEntry = null) => {
     const entry = registryEntry || customExerciseRegistry?.[exercise?.id] || null
@@ -8239,7 +8166,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       }
     })
 
-    const customExs = getCustomExercises(day).map(e => {
+    const customExs = getRenderableCustomExercises(day).map(e => {
       const stableId = resolveStableCustomExerciseId(e.id, e.n, customExerciseRegistry)
       return {
         exercise_id: stableId, exercise_name: e.n, variant: "custom", variant_name: e.n,
@@ -9560,7 +9487,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
             const prog = getProgDay(day)
             const allExs = [
               ...(prog.exercises || []).map(ex => ({ id: ex.id, name: ex.n, venue: ex.venue || null })),
-              ...getCustomExercises(day).map(e => ({ id: e.id, name: e.n, venue: null }))
+              ...getRenderableCustomExercises(day).map(e => ({ id: e.id, name: e.n, venue: null }))
             ]
             const selectedExerciseCount = Object.keys(pendingChecked).filter(id => pendingChecked[id]).length
             const skippedExerciseCount = Math.max(0, allExs.length - selectedExerciseCount)
@@ -9654,7 +9581,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
               const prog = getProgDay(day)
               const allExs = [
                 ...(prog.exercises || []).map(ex => ({ id: ex.id, venue: ex.venue || null })),
-                ...getCustomExercises(day).map(e => ({ id: e.id, venue: null }))
+                ...getRenderableCustomExercises(day).map(e => ({ id: e.id, venue: null }))
               ]
               const isYmca = venue === "ymca"
               const budgetOverride = timeBudgetChecklistOverrides[day] || null
@@ -9677,7 +9604,8 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
 
   const prog = getProgDay(activeDay)
   const meta = SCH_META[activeDay] || SMETA[activeDay] || {}
-  const hasMainProgram = (prog.exercises?.length || 0) > 0 || getCustomExercises(activeDay).length > 0 || inlineExForm === activeDay
+  const hasMainProgram = (prog.exercises?.length || 0) > 0 || getRenderableCustomExercises(activeDay).length > 0 || inlineExForm === activeDay
+  const renderableScheduleDays = SDAYS.filter(day => isPlanDayRenderable(PLAN[day], CARDIO[day]))
   const scheduleMismatchReport = useMemo(
     () => buildScheduleDayDateMismatchReport(schedLog),
     [schedLog]
@@ -9785,16 +9713,16 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       {/* Day navigation */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
         <div style={{ display: "flex", gap: 3, background: "#0a0a0a", borderRadius: 8, padding: 4, border: "1px solid #1a1a1a", flexWrap: "wrap" }}>
-          {SDAYS.map(d => {
+          {renderableScheduleDays.map(d => {
             const m = SCH_META[d] || SMETA[d] || {}
             const active = d === activeDay && schedView === "schedule"
             const isSplit = SPLIT_DAYS.includes(d)
             return (
               <button key={d} onClick={() => { switchScheduleDay(d); setSchedView("schedule"); setSavedEntries(prev => ({ ...prev })) }}
-                style={{ padding: "6px 12px", border: "none", cursor: "pointer", background: active ? (m.color || "#185FA5") + "22" : "transparent", fontSize: 12, fontWeight: active ? 700 : 500, letterSpacing: "0.06em", textTransform: "uppercase", color: active ? (m.color || "#185FA5") : "#3a3a3a", borderRadius: 6, position: "relative" }}>
+                style={{ padding: "6px 12px", border: "none", cursor: "pointer", background: active ? (m.color || "#185FA5") + "33" : "transparent", fontSize: 12, fontWeight: active ? 700 : 500, letterSpacing: "0.06em", textTransform: "uppercase", color: active ? (m.color === "#444" ? "#cbd5e1" : (m.color || "#185FA5")) : "#94a3b8", borderRadius: 6, position: "relative" }}>
                 {d}
                 {isSplit && <div style={{ fontSize: 7, color: "#7F77DD", marginTop: 1 }}>split</div>}
-                {!isSplit && <div style={{ fontSize: 8, opacity: 0.7, marginTop: 1, color: m.venue === "KNR" ? "#3b82f6" : m.venue === "—" ? "#333" : "#d97706" }}>{m.venue}</div>}
+                {!isSplit && <div style={{ fontSize: 8, opacity: 0.8, marginTop: 1, color: m.venue === "KNR" ? "#60a5fa" : m.venue === "—" ? "#64748b" : "#f59e0b" }}>{m.venue}</div>}
               </button>
             )
           })}
@@ -10086,7 +10014,12 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
                       })
                     })()
                     : <div style={{ textAlign: "center", padding: 16, color: "#444", fontSize: 13 }}>Active recovery — no resistance training today.</div>}
-                  {getCustomExercises(activeDay).map(ex => (
+                  {getRenderableCustomExercises(activeDay).length > 0 && (
+                    <div style={{ fontSize: 9, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.12em", margin: "14px 0 5px", fontFamily: "'Barlow Condensed',sans-serif" }}>
+                      Custom / one-off
+                    </div>
+                  )}
+                  {getRenderableCustomExercises(activeDay).map(ex => (
                     <React.Fragment key={ex.id}>
                       {exCard(ex, activeDay, true)}
                       {renderProgramPrompt(ex, activeDay)}
