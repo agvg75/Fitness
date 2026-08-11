@@ -58,6 +58,7 @@ import {
   buildPrescriptionContext,
   sanitizeOmissionDispositions,
 } from './lib/prescriptionEvidence.js'
+import { selectMissedWorkPreview } from './lib/missedWorkPreview.js'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -6653,6 +6654,58 @@ function SubstituteDrawer({ flag, onSelectSubstitute, onClose }) {
   )
 }
 
+function MissedWorkSuggestionsPreview({ preview }) {
+  const [debugOpen, setDebugOpen] = useState(false)
+  if (!preview?.has_preview) return null
+  const debugRows = [...(preview.actionable || []), ...(preview.excluded || [])]
+
+  return (
+    <div style={{ marginBottom: 10, padding: "10px 12px", background: "rgba(14,165,233,0.055)", border: "1px solid rgba(14,165,233,0.22)", borderRadius: 8 }}>
+      <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: "0.14em", color: "#7dd3fc", marginBottom: preview.actionable.length ? 8 : 3 }}>
+        MISSED WORK SUGGESTIONS
+      </div>
+      {preview.actionable.map(row => (
+        <div key={row.candidate_id} style={{ padding: "8px 0", borderTop: "1px solid rgba(125,211,252,0.1)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#e5e7eb" }}>{row.exercise_name}</div>
+            <div style={{ fontSize: 10, color: row.confidence === "possible" ? "#fbbf24" : "#7dd3fc" }}>{row.uncertainty_label}</div>
+          </div>
+          <div style={{ fontSize: 10, color: "#64748b", marginTop: 2 }}>Missed {row.source_day} · {row.source_session_date} · {row.omission_label}</div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#bae6fd", marginTop: 5 }}>
+            {row.action === "use_existing_slot" ? `Use ${row.receiving_day} ${row.existing_slot_name}` : `${row.action_label} · estimated +${row.candidate_estimated_minutes} min`}
+          </div>
+          <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 2 }}>{row.preview_rationale}</div>
+        </div>
+      ))}
+      {preview.excluded.length > 0 && (
+        <button onClick={() => setDebugOpen(open => !open)} style={{ marginTop: 5, padding: 0, background: "none", border: "none", color: "#64748b", fontSize: 10, cursor: "pointer", textDecoration: "underline" }}>
+          {debugOpen ? "Hide missed-work diagnostics" : "Why aren't other missed exercises suggested?"}
+        </button>
+      )}
+      {preview.excluded.length === 0 && preview.actionable.length > 0 && (
+        <button onClick={() => setDebugOpen(open => !open)} style={{ marginTop: 5, padding: 0, background: "none", border: "none", color: "#475569", fontSize: 10, cursor: "pointer" }}>
+          {debugOpen ? "Hide diagnostics" : "Diagnostics"}
+        </button>
+      )}
+      {debugOpen && (
+        <div style={{ marginTop: 8, padding: "8px", background: "#090b10", borderRadius: 6, display: "grid", gap: 8 }}>
+          {debugRows.map((row, index) => (
+            <details key={`${row.candidate_id || row.source_session_id}-${row.source_exercise_id}-${index}`}>
+              <summary style={{ fontSize: 10, color: row.action === "not_recommended" ? "#f59e0b" : "#64748b", cursor: "pointer" }}>
+                {row.exercise_name} · {row.action_label}
+              </summary>
+              <pre style={{ margin: "6px 0 0", whiteSpace: "pre-wrap", overflowWrap: "anywhere", fontSize: 9, lineHeight: 1.45, color: "#64748b" }}>
+                {JSON.stringify(row.debug, null, 2)}
+              </pre>
+            </details>
+          ))}
+          <div style={{ fontSize: 9, color: "#475569" }}>Validation preview only · provisional day budgets · no schedule or volume changes</div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, setSchedLog, readinessScore, latestHealthFit = null, ocItems = [], computedTSB = null, tsbV2Panel = null, progressionReadiness = "progress", progressionReasons = [], tendonStatus = { painScore: 0, stiffness: false, override: null }, scheduleFeedback = [], sleepRecords = [], setSleepRecords = () => {}, scheduleTarget = null, clearScheduleTarget = () => {}, ocConstraintState = null, canonicalSessions = [], formDecayPenalty = null, formDecayAccumulation = {}, tissueLoadIndex = {}, reportUpdateReloadSafety = () => {} }) {
   const safeScheduleFeedback = Array.isArray(scheduleFeedback) ? scheduleFeedback : []
   const isMobileLayout = useIsMobile()
@@ -8773,6 +8826,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
     const includedInLog = isChecked(day, "exercise", ex.id)
     const quickChecked = checkedExIds.has(ex.id)
     const quickExpanded = !!expandedCards[ex.id]
+    const missedPriority = !isCustom ? missedWorkPreview?.priority_markers?.[ex.id] : null
     const collapsed = quickLog ? !quickExpanded : (expandedCards[cardKey] == null ? isMobileLayout : !expandedCards[cardKey])
     const vColors = { machine: "#3b82f6", db: "#22c55e", friendly: "#f97316" }
     const vBgs = { machine: "rgba(59,130,246,0.12)", db: "rgba(34,197,94,0.12)", friendly: "rgba(249,115,22,0.12)" }
@@ -8924,6 +8978,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
             >
               {ex.n || ex.name}
             </span>
+            {missedPriority && <span title={`Display-only priority from ${missedPriority.source_date}; prescribed volume is unchanged`} style={{ fontSize: 9, fontWeight: 700, color: "#7dd3fc", background: "rgba(14,165,233,0.13)", borderRadius: 3, padding: "1px 5px", flexShrink: 0 }}>Missed-work priority · {missedPriority.label}</span>}
             <button
               onClick={launchExerciseTimer}
               title="Timer for this exercise"
@@ -8972,6 +9027,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
               </button>
               {chg && <span style={{ fontSize: 9, fontWeight: 700, color: "#d97706", background: "rgba(217,119,6,0.15)", borderRadius: 3, padding: "1px 5px" }}>modified</span>}
               {isCustom && <span style={{ fontSize: 9, color: "#7F77DD", background: "rgba(127,119,221,0.15)", borderRadius: 3, padding: "1px 5px" }}>custom</span>}
+              {missedPriority && <span title={`Display-only priority from ${missedPriority.source_date}; sets, reps, load, and order are unchanged`} style={{ fontSize: 9, fontWeight: 700, color: "#7dd3fc", background: "rgba(14,165,233,0.13)", borderRadius: 3, padding: "1px 5px" }}>Missed-work priority · {missedPriority.label}</span>}
               {!includedInLog && <span style={{ fontSize: 9, fontWeight: 700, color: "#9ca3af", background: "rgba(148,163,184,0.16)", borderRadius: 3, padding: "1px 5px" }}>excluded from log</span>}
               {historySparkline && (
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
@@ -9688,6 +9744,14 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   }
 
   const prog = getProgDay(activeDay)
+  const missedWorkPreview = useMemo(() => selectMissedWorkPreview({
+    sessions: schedLog,
+    selectedDate: sessionDate,
+    selectedDay: activeDay,
+    currentPlan: PLAN,
+    currentCardio: CARDIO,
+    ocState: ocItems,
+  }), [schedLog, sessionDate, activeDay, ocItems])
   const meta = SCH_META[activeDay] || SMETA[activeDay] || {}
   const hasMainProgram = (prog.exercises?.length || 0) > 0 || getRenderableCustomExercises(activeDay).length > 0 || inlineExForm === activeDay
   const renderableScheduleDays = SDAYS.filter(day => isPlanDayRenderable(PLAN[day], CARDIO[day]))
@@ -9925,6 +9989,8 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
               {prog._topNote}
             </div>
           )}
+
+          <MissedWorkSuggestionsPreview preview={missedWorkPreview} />
 
           {/* Stretch */}
           {prog.stretch?.length > 0 && checklistSection(activeDay, "stretch", prog.stretch, "#7F77DD", "Stretch", "~5 min")}
