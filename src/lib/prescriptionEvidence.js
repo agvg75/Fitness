@@ -66,7 +66,7 @@ export function sanitizeOmissionDispositions(prescriptionContext, includedExerci
       return [[exerciseId, {
         reason,
         substitute_exercise_id: reason === "substituted" ? disposition?.substitute_exercise_id || null : null,
-        oc_item_id: reason === "oc_blocked" ? disposition?.oc_item_id || null : null,
+        oc_item_id: reason === "oc_blocked" || reason === "substituted" ? disposition?.oc_item_id || null : null,
       }]]
     })
   )

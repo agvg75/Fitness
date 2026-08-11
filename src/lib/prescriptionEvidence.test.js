@@ -114,6 +114,19 @@ test("structured substitution and OC block remain distinct", () => {
   assert.equal(evidence[1].evidence_class, "explicit_oc_block")
 })
 
+test("OC-generated substitution preserves structured OC provenance", () => {
+  const prescription_context = buildPrescriptionContext({ planDay: planDay(["t1"]), day: "Tue", sessionDate: "2026-08-11", releaseId: "r1" })
+  const [evidence] = characterizeFinalizedSession({
+    prescription_context,
+    exercises: [{ exercise_id: "custom_bridge", variant: "custom" }],
+    omission_dispositions: {
+      t1: { reason: "substituted", substitute_exercise_id: "custom_bridge", oc_item_id: "oc-hip" },
+    },
+  })
+  assert.equal(evidence.evidence_class, "explicit_substitution")
+  assert.equal(evidence.oc_item_id, "oc-hip")
+})
+
 test("only absent authoritative IDs can retain omission dispositions", () => {
   const context = buildPrescriptionContext({ planDay: planDay(["t1", "t8"]), day: "Tue", sessionDate: "2026-08-11", releaseId: "r1" })
   assert.deepEqual(sanitizeOmissionDispositions(context, ["t1"], {
