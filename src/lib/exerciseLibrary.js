@@ -1873,6 +1873,7 @@ export function flagExercisesForOcItems(dayExercises, activeOcItems, executionDa
         exerciseName: entry.name,
         libraryExerciseId: entry.id,
         ocItemLabel: ocItem.label,
+        ocItemId: ocItem.id || null,
         ocLocation: ocItem.location,
         ocKey: ocItem.key,
         ocScore: ocItem.currentScore,

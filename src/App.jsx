@@ -54,6 +54,10 @@ import {
   isPlanDayRenderable,
   reorderActivePlanExercises,
 } from './lib/scheduleAuthority.js'
+import {
+  buildPrescriptionContext,
+  sanitizeOmissionDispositions,
+} from './lib/prescriptionEvidence.js'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -6711,6 +6715,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const [sessionDate, setSessionDate] = useState(todayISO())
   const [pendingVenue, setPendingVenue] = useState(null)   // venue awaiting exercise selection
   const [pendingChecked, setPendingChecked] = useState({}) // { [exercise_id]: bool }
+  const [pendingOmissionDispositions, setPendingOmissionDispositions] = useState({})
   const [isCommitting, setIsCommitting] = useState(false)
   const [logCommitError, setLogCommitError] = useState("")
   const pendingKvFlushRef = useRef(null)
@@ -7906,7 +7911,9 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       sets: String(entry?.default_sets ?? "3"),
       reps: String(entry?.default_reps ?? "8-12"),
       load: String(entry?.default_load ?? ""),
-      notes: `Substituted for ${sourceExerciseName} — OC flag: ${flag?.ocLocation || "unknown region"}`
+      notes: `Substituted for ${sourceExerciseName} — OC flag: ${flag?.ocLocation || "unknown region"}`,
+      substituted_for_exercise_id: flag?.exerciseId || null,
+      oc_item_id: flag?.ocItemId || null,
     }
     const updated = { ...customExercises, [day]: [...getCustomExercises(day), newEx] }
     setCustomExercises(updated)
@@ -8174,11 +8181,34 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
         actual: { sets: e.sets, reps: e.reps, load: e.load },
         timing: sessionTimingMap[stableId] || null,
         notes: e.notes || "", changed: false,
+        substituted_for_exercise_id: e.substituted_for_exercise_id || null,
+        oc_item_id: e.oc_item_id || null,
       }
     })
 
     const filteredExercises = checkedIds != null ? exercises.filter(ex => checkedIds.has(ex.exercise_id)) : exercises
     const filteredCustomExs = checkedIds != null ? customExs.filter(ex => checkedIds.has(ex.exercise_id)) : customExs
+    const prescriptionContext = buildPrescriptionContext({
+      planDay: PLAN[day],
+      day,
+      sessionDate,
+      releaseId: RUNNING_RELEASE_ID,
+    })
+    const includedExerciseIds = [...filteredExercises, ...filteredCustomExs].map(ex => ex.exercise_id)
+    const structuredSubstitutions = Object.fromEntries(
+      filteredCustomExs
+        .filter(ex => ex.substituted_for_exercise_id)
+        .map(ex => [ex.substituted_for_exercise_id, {
+          reason: "substituted",
+          substitute_exercise_id: ex.exercise_id,
+          oc_item_id: ex.oc_item_id || null,
+        }])
+    )
+    const omissionDispositions = sanitizeOmissionDispositions(
+      prescriptionContext,
+      includedExerciseIds,
+      { ...structuredSubstitutions, ...pendingOmissionDispositions }
+    )
     const completedTendonWork = getTendonEntries(day)
       .filter((_, idx) => isChecked(day, "tendon", idx))
       .map(item => ({ ...item }))
@@ -8274,6 +8304,8 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       stretch_completed: checkedStretch,
       warmup_completed: checkedWarmup,
       source: "LIFT Schedule Tab", apple_watch_sync_pending: true,
+      prescription_context: prescriptionContext,
+      omission_dispositions: omissionDispositions,
       metadata: {
         form_decay_alerts,
       },
@@ -8376,6 +8408,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       try { localStorage.removeItem(SESSION_DRAFT_KEY) } catch {}
       setPendingVenue(null)
       setPendingChecked({})
+      setPendingOmissionDispositions({})
       setQuickLog(false)
       return true
     } catch (error) {
@@ -9491,6 +9524,9 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
             ]
             const selectedExerciseCount = Object.keys(pendingChecked).filter(id => pendingChecked[id]).length
             const skippedExerciseCount = Math.max(0, allExs.length - selectedExerciseCount)
+            const prescribedExercises = prog.exercises || []
+            const omittedPrescribedExercises = prescribedExercises.filter(ex => pendingChecked[ex.id] === false)
+            const includedSubstituteOptions = allExs.filter(ex => pendingChecked[ex.id] !== false)
             const selectedWarmupCount = (prog.warmup || []).filter((_, idx) => isChecked(day, "warmup", idx)).length
             const selectedTendonCount = getTendonEntries(day).filter((_, idx) => isChecked(day, "tendon", idx)).length
             const selectedCardioCount = getCardioEntries(day).filter((_, idx) => isChecked(day, "cardio", idx)).length
@@ -9516,6 +9552,54 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
                     Strength {selectedExerciseCount} included{skippedExerciseCount ? ` · ${skippedExerciseCount} skipped` : ""} · Warm-up {selectedWarmupCount} · Tendon {selectedTendonCount} · Cardio {selectedCardioCount}
                   </div>
                 </div>
+                {omittedPrescribedExercises.length > 0 && (
+                  <div style={{ marginBottom: 12, padding: "10px", background: "#11110d", border: "1px solid #34301d", borderRadius: 7 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "#d6c98a", marginBottom: 3 }}>
+                      {omittedPrescribedExercises.length} prescribed {omittedPrescribedExercises.length === 1 ? "exercise was" : "exercises were"} not included
+                    </div>
+                    <div style={{ fontSize: 10, color: "#777", marginBottom: 8 }}>Optional: record why. Unknown is fine.</div>
+                    {omittedPrescribedExercises.map(ex => {
+                      const disposition = pendingOmissionDispositions[ex.id] || { reason: "unknown" }
+                      return (
+                        <div key={ex.id} style={{ display: "grid", gridTemplateColumns: "minmax(110px, 1fr) minmax(135px, 1fr)", gap: 7, alignItems: "center", marginTop: 6 }}>
+                          <div style={{ fontSize: 11, color: "#bbb" }}>{ex.n}</div>
+                          <div>
+                            <select
+                              aria-label={`Reason ${ex.n} was not included`}
+                              value={disposition.reason || "unknown"}
+                              onChange={event => setPendingOmissionDispositions(prev => ({
+                                ...prev,
+                                [ex.id]: { reason: event.target.value, substitute_exercise_id: null, oc_item_id: null },
+                              }))}
+                              style={{ width: "100%", background: "#161616", color: "#bbb", border: "1px solid #333", borderRadius: 5, padding: "5px 6px", fontSize: 11 }}
+                            >
+                              <option value="unknown">Unknown</option>
+                              <option value="time">Ran out of time</option>
+                              <option value="intentional">Intentional skip</option>
+                              <option value="substituted">Substituted</option>
+                              <option value="oc_blocked">OC / injury blocked</option>
+                              <option value="contraindicated">Contraindicated</option>
+                            </select>
+                            {disposition.reason === "substituted" && includedSubstituteOptions.length > 0 && (
+                              <select
+                                aria-label={`Substitute for ${ex.n}`}
+                                value={disposition.substitute_exercise_id || ""}
+                                onChange={event => setPendingOmissionDispositions(prev => ({
+                                  ...prev,
+                                  [ex.id]: { ...disposition, substitute_exercise_id: event.target.value || null },
+                                }))}
+                                style={{ width: "100%", marginTop: 4, background: "#161616", color: "#bbb", border: "1px solid #333", borderRadius: 5, padding: "5px 6px", fontSize: 11 }}
+                              >
+                                <option value="">Substitute not linked</option>
+                                {includedSubstituteOptions.map(option => <option key={option.id} value={option.id}>{option.n}</option>)}
+                              </select>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
                 {grouped.map(group => (
                   <div key={group.groupLabel || "all"}>
                     {group.groupLabel && (
@@ -9591,6 +9675,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
                   ? !!budgetOverride[ex.id]
                   : (isChecked(day, "exercise", ex.id) && (ex.venue == null || (isYmca ? ex.venue === "YMCA" : ex.venue === "KNR")))
               ])))
+              setPendingOmissionDispositions({})
               setPendingVenue(venue)
             }}
               style={{ width: "100%", padding: 13, background: venue === "knr" ? "#0F6E56" : "#185FA5", color: "#fff", border: "none", borderRadius: 7, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", marginBottom: 8 }}>
