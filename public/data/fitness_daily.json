@@ -3718,6 +3718,32 @@
     "synced_at": "2026-09-18T23:07:40.058+00:00"
   },
   {
+    "daily_id": "healthfit_daily_9ec703fb-9e9e-4a57-a365-6222b1a822f5_2026-09-06",
+    "user_id": "9ec703fb-9e9e-4a57-a365-6222b1a822f5",
+    "metric_date": "2026-09-06",
+    "active_energy_cal": 268,
+    "resting_energy_cal": 1633,
+    "resting_hr_bpm": 68,
+    "hrv": 25,
+    "steps": 4712,
+    "vo2_max": null,
+    "exercise_minutes": 9,
+    "stand_hours": 12,
+    "source": "HealthFit Health Metrics_v5",
+    "raw": {
+      "HRV": "25",
+      "Date": "9/6/2026",
+      "Steps": "4712",
+      "Resting": "68 bpm",
+      "VO₂ max": "",
+      "Stand Hours": "12",
+      "Active Energy": "268 Cal",
+      "Resting Energy": "1633 Cal",
+      "Exercise Minutes": "9"
+    },
+    "synced_at": "2026-09-19T23:07:41.722+00:00"
+  },
+  {
     "daily_id": "healthfit_daily_9ec703fb-9e9e-4a57-a365-6222b1a822f5_2026-09-12",
     "user_id": "9ec703fb-9e9e-4a57-a365-6222b1a822f5",
     "metric_date": "2026-09-12",
@@ -3741,7 +3767,7 @@
       "Resting Energy": "1442 Cal",
       "Exercise Minutes": "10"
     },
-    "synced_at": "2026-09-24T14:07:57.878+00:00"
+    "synced_at": "2026-09-24T15:07:49.567+00:00"
   },
   {
     "daily_id": "healthfit_daily_9ec703fb-9e9e-4a57-a365-6222b1a822f5_2026-09-11",
@@ -3767,33 +3793,7 @@
       "Resting Energy": "1513 Cal",
       "Exercise Minutes": "15"
     },
-    "synced_at": "2026-09-24T14:07:58.074+00:00"
-  },
-  {
-    "daily_id": "healthfit_daily_9ec703fb-9e9e-4a57-a365-6222b1a822f5_2026-09-06",
-    "user_id": "9ec703fb-9e9e-4a57-a365-6222b1a822f5",
-    "metric_date": "2026-09-06",
-    "active_energy_cal": 268,
-    "resting_energy_cal": 1633,
-    "resting_hr_bpm": 68,
-    "hrv": 25,
-    "steps": 4712,
-    "vo2_max": null,
-    "exercise_minutes": 9,
-    "stand_hours": 12,
-    "source": "HealthFit Health Metrics_v5",
-    "raw": {
-      "HRV": "25",
-      "Date": "9/6/2026",
-      "Steps": "4712",
-      "Resting": "68 bpm",
-      "VO₂ max": "",
-      "Stand Hours": "12",
-      "Active Energy": "268 Cal",
-      "Resting Energy": "1633 Cal",
-      "Exercise Minutes": "9"
-    },
-    "synced_at": "2026-09-19T23:07:41.722+00:00"
+    "synced_at": "2026-09-24T15:07:49.843+00:00"
   },
   {
     "daily_id": "healthfit_daily_9ec703fb-9e9e-4a57-a365-6222b1a822f5_2026-09-09",
