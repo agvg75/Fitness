@@ -50,7 +50,8 @@ export function matchEvidence(a,b) {
   if (!a || !b || a === b) return { classification:"not_match",reason:"self_or_missing" }
   if (typeFamily(a.canonical_type) !== typeFamily(b.canonical_type)) return { classification:"not_match",reason:"modality_mismatch" }
   const idsA=new Set(sourceKinds(a)),idsB=new Set(sourceKinds(b))
-  const differentSources=[...idsA].some(x=>![...idsB].includes(x)) || [...idsB].some(x=>!idsA.has(x))
+  // Distinct provenance is necessary but not sufficient evidence for a duplicate.
+  const differentSources=[...idsA].some(x=>!idsB.has(x)) || [...idsB].some(x=>!idsA.has(x))
   const startA=Date.parse(a.start_date||""),startB=Date.parse(b.start_date||"")
   const endA=Date.parse(a.end_date||""),endB=Date.parse(b.end_date||"")
   const da=distanceInMiles(a.preferred_metrics?.distance),db=distanceInMiles(b.preferred_metrics?.distance)
@@ -60,6 +61,7 @@ export function matchEvidence(a,b) {
   const precisionA=timingPrecision(a),precisionB=timingPrecision(b)
   if (precisionA==="date_only" || precisionB==="date_only") {
     if (sessionLocalDate(a)!==sessionLocalDate(b)) return {classification:"not_match",reason:"different_calendar_day"}
+    if (!differentSources) return {classification:"insufficient_evidence",reason:"date_only_same_source"}
     if (distanceSimilar && durationSimilar) return { classification:"possible_duplicate", reason:"date_only_distance_and_duration",differentSources }
     if (distanceSimilar) return { classification:"review", reason:"date_only_distance_only",differentSources }
     return {classification:"insufficient_evidence",reason:"date_only_not_corroborrated"}
@@ -79,15 +81,29 @@ export function findSourceAwareCandidates(sessions) {
   rows.forEach((session,i)=>{
     const day=sessionLocalDate(session)
     if(!/^\d{4}-\d{2}-\d{2}$/.test(day)) return
-    for(const target of [day]) {
+    // Cross-midnight workouts may begin on adjacent local calendar days.
+    // Candidate matches still require corroborating evidence in matchEvidence.
+    const days=[day]
+    if(timingPrecision(session)==="timed") {
+      const time=Date.parse(`${day}T12:00:00Z`)
+      if(Number.isFinite(time)) {
+        days.push(new Date(time-86400000).toISOString().slice(0,10))
+        days.push(new Date(time+86400000).toISOString().slice(0,10))
+      }
+    }
+    for(const target of days) {
       if(!byDay.has(target)) byDay.set(target,[])
       byDay.get(target).push({session,i})
     }
   })
   const output=[]
+  const visited=new Set()
   byDay.forEach(group=>{
     for(let i=0;i<group.length;i++) for(let j=i+1;j<group.length;j++) {
       const a=group[i],b=group[j]
+      const pairKey=`${Math.min(a.i,b.i)}:${Math.max(a.i,b.i)}`
+      if(visited.has(pairKey)) continue
+      visited.add(pairKey)
       const evidence=matchEvidence(a.session,b.session)
       if (["possible_duplicate","strong_duplicate_evidence","review"].includes(evidence.classification)) {
         output.push({ first:a.session.session_id,second:b.session.session_id,...evidence })
