@@ -151,6 +151,7 @@ async function loadAllUserRows(supabase, table, userId, orderColumn) {
       .select("*")
       .eq("user_id", userId)
       .order(orderColumn, { ascending: true })
+      .order("id", { ascending: true })
       .range(from, from + PAGE_SIZE - 1)
     throwIfError(error, `loadAllUserRows:${table}`)
     const batch = Array.isArray(data) ? data : []
