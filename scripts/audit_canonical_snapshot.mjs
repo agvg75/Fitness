@@ -3,6 +3,7 @@
 import fs from "node:fs"
 import { dedupeCanonicalSessions } from "../src/lib/canonicalSessions.js"
 import { findSourceAwareCandidates, timingPrecision, auditCanonicalRetention } from "../src/lib/sourceAwareIdentity.js"
+import { previewConservativeRetention } from "../src/lib/conservativeCanonicalRetention.js"
 
 const path = new URL("../public/data/workout_sessions_canonical.json", import.meta.url)
 if (!fs.existsSync(path)) {
@@ -60,3 +61,5 @@ console.log("[canonical audit baseline]", JSON.stringify(output))
 console.log("[canonical retention evidence]", JSON.stringify(auditCanonicalRetention(original,deduped)))
 // Report only. A change in these counts requires review, not automatic deletion.
 // No database writes, no runtime state changes, no deployment block on a changed count.
+
+console.log("[canonical conservative preview]", JSON.stringify(previewConservativeRetention(original).summary))
