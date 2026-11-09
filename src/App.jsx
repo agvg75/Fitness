@@ -127,7 +127,7 @@ const LIFT_CONFIG = {
   goal_event_name: "Olympic triathlon", // tentative, date unconfirmed
   goal_event_date: null,
   hm_race_date: null,
-  hm_taper_start: null
+  hm_taper_start: null,
   hm_peak_mi_week: 9,
   hm_taper_factor: 0.90,
   hm_weekly_build: 1.10,
