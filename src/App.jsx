@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { PROG, CARDIO } from "./scheduleData.js"
 import { summarizeTimeBudget } from "./lib/timeBudgetSummary.js"
 import { calculateBanisterFromDailyTrimp } from "./lib/banisterTimeline.js"
+import { attachAcwrToTimeline } from "./lib/acwrTimeline.js"
 import {
   applyCanonicalSessionMergePolicy, 
   dedupeCanonicalSessions,
@@ -24950,15 +24951,11 @@ const tsbV2Panel = useMemo(() => {
     const load = Number(session.trimp || session.duration_min || 0)
     acwrByDate[d] = (acwrByDate[d] || 0) + load
   })
-  let rows = allRows.slice(-lookbackDays).map(r => ({ ...r, label: String(r.date).slice(5) }))
-  rows = rows.map((pt, i) => {
-    const slice28 = rows.slice(Math.max(0, i - 27), i + 1)
-    const slice7  = rows.slice(Math.max(0, i - 6),  i + 1)
-    const chronic = slice28.reduce((s, p) => s + (acwrByDate[p.date] || 0), 0) / 28
-    const acute   = slice7.reduce((s,  p) => s + (acwrByDate[p.date] || 0), 0) / 7
-    const acwr    = chronic > 0 ? Number((acute / chronic).toFixed(2)) : null
-    return { ...pt, acwr }
-  })
+  // Compute against the full timeline before slicing to the displayed
+  // range. This prevents the first 27 visible days from losing their history.
+  let rows = attachAcwrToTimeline(allRows, acwrByDate)
+    .slice(-lookbackDays)
+    .map(r => ({ ...r, label: String(r.date).slice(5) }))
   const sVals = rows.map(r => r.strengthLoad).filter(v => Number.isFinite(v))
   const sMin = sVals.length ? Math.min(...sVals) : 0
   const sMax = sVals.length ? Math.max(...sVals) : 1
