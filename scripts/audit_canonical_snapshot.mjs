@@ -2,6 +2,7 @@
 // This is not the signed-in user's live Supabase history.
 import fs from "node:fs"
 import { dedupeCanonicalSessions } from "../src/lib/canonicalSessions.js"
+import { findSourceAwareCandidates, timingPrecision } from "../src/lib/sourceAwareIdentity.js"
 
 const path = new URL("../public/data/workout_sessions_canonical.json", import.meta.url)
 if (!fs.existsSync(path)) {
@@ -33,6 +34,28 @@ const output = {
   latest: original.reduce((v,s) => !v || String(s.start_date) > v ? String(s.start_date) : v, null)?.slice(0,10),
   source: "bundled GitHub snapshot, not current Supabase"
 }
+const candidates = findSourceAwareCandidates(original)
+const classifications = candidates.reduce((out,item)=>{
+  out[item.classification]=(out[item.classification] || 0)+1
+  return out
+},{})
+const times = original.reduce((out,item)=>{
+  const p=timingPrecision(item)
+  out[p]=(out[p]||0)+1
+  return out
+},{})
+const candidateLinks = new Map()
+candidates.forEach(pair=>{
+  candidateLinks.set(pair.first,(candidateLinks.get(pair.first)||0)+1)
+  candidateLinks.set(pair.second,(candidateLinks.get(pair.second)||0)+1)
+})
+console.log("[canonical source evidence]",JSON.stringify({
+  sourceRecords:original.length,
+  precision:times,
+  candidatePairCounts:classifications,
+  recordsWithMultiplePossibleMatches:[...candidateLinks.values()].filter(n=>n>1).length,
+  warning:"Candidates are evidence for review, not automatic merges"
+}))
 console.log("[canonical audit baseline]", JSON.stringify(output))
 // Report only. A change in these counts requires review, not automatic deletion.
 // No database writes, no runtime state changes, no deployment block on a changed count.
