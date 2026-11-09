@@ -1,3 +1,5 @@
+import { findTemporalDuplicateCandidates } from "./temporalDuplicateEvidence.js"
+
 function safeStringify(value) {
   try {
     return JSON.stringify(value)
@@ -292,8 +294,6 @@ function mergeCanonicalSessionPair(a, b) {
 
 // The old date/distance bucketing was not an identity key. Only a stable
 // source-session ID can be used for an exact-record identity check here.
-import { findTemporalDuplicateCandidates } from "./temporalDuplicateEvidence.js"
-
 function getDuplicateSessionKey(session) {
   return session?.session_id || makeSessionId("session", session)
 }
