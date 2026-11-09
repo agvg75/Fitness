@@ -49,3 +49,9 @@ test("different modalities and calendar days never pair",()=>{
   assert.equal(matchEvidence(a,b).classification,"not_match")
   assert.equal(matchEvidence(a,c).classification,"not_match")
 })
+
+test("partially overlapping sessions without cross-source corroboration remain unpaired",()=>{
+  const a=timed("one","apple","2026-01-02T14:00:00Z","2026-01-02T14:40:00Z")
+  const b=timed("two","apple","2026-01-02T14:15:00Z","2026-01-02T14:55:00Z",3.1)
+  assert.equal(matchEvidence(a,b).classification,"not_match")
+})
