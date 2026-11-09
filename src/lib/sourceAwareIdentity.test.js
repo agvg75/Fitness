@@ -55,3 +55,23 @@ test("partially overlapping sessions without cross-source corroboration remain u
   const b=timed("two","apple","2026-01-02T14:15:00Z","2026-01-02T14:55:00Z",3.1)
   assert.equal(matchEvidence(a,b).classification,"not_match")
 })
+
+test("same-source date-only records do not become duplicate candidates from matching metrics",()=>{
+  const a=dateOnly("fv-a","2026-03-05",3.1,40)
+  const b=dateOnly("fv-b","2026-03-05",3.1,40)
+  assert.equal(matchEvidence(a,b).classification,"insufficient_evidence")
+  assert.deepEqual(findSourceAwareCandidates([a,b]),[])
+})
+test("cross-midnight overlapping workouts are audited exactly once",()=>{
+  const a=timed("apple-night","apple","2026-01-02T23:50:00Z","2026-01-03T00:30:00Z")
+  const b=timed("techno-night","technogym","2026-01-03T00:00:00Z","2026-01-03T00:40:00Z",4988.9664,"m")
+  assert.equal(matchEvidence(a,b).classification,"strong_duplicate_evidence")
+  const candidates=findSourceAwareCandidates([a,b])
+  assert.equal(candidates.length,1)
+  assert.equal(candidates[0].classification,"strong_duplicate_evidence")
+})
+test("distinct adjacent-day workouts are not paired just because distances match",()=>{
+  const a=timed("a","apple","2026-01-02T22:00:00Z","2026-01-02T22:40:00Z")
+  const b=timed("b","technogym","2026-01-03T02:00:00Z","2026-01-03T02:40:00Z",4988.9664,"m")
+  assert.deepEqual(findSourceAwareCandidates([a,b]),[])
+})
