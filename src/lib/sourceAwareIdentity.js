@@ -112,3 +112,56 @@ export function findSourceAwareCandidates(sessions) {
   })
   return output
 }
+
+/**
+ * Read-only comparison of a historical deduplication result against independent
+ * workout evidence. Does not mutate, merge, or delete any session.
+ *
+ * Counts are session-ID based. Records without IDs and records whose IDs are
+ * duplicated in the input are reported separately, since their fate cannot be
+ * established reliably from membership in the retained set alone.
+ */
+export function auditCanonicalRetention(originalSessions, retainedSessions) {
+  const original=Array.isArray(originalSessions)?originalSessions:[]
+  const retained=Array.isArray(retainedSessions)?retainedSessions:[]
+  const countIds=rows=>rows.reduce((counts,session)=>{
+    const id=session?.session_id
+    if(typeof id==="string" && id) counts.set(id,(counts.get(id)||0)+1)
+    return counts
+  },new Map())
+  const inputCounts=countIds(original)
+  const retainedCounts=countIds(retained)
+  const candidates=findSourceAwareCandidates(original)
+  const strongConnections=new Set()
+  for(const pair of candidates) {
+    if(pair.classification!=="strong_duplicate_evidence") continue
+    // A candidate only supports removal if its counterpart actually survived.
+    if(retainedCounts.has(pair.first)) strongConnections.add(pair.second)
+    if(retainedCounts.has(pair.second)) strongConnections.add(pair.first)
+  }
+  let retainedIdentifiable=0,removedWithStrongCounterpart=0
+  let removedWithoutStrongCounterpart=0,ambiguousIdentity=0
+  for(const session of original) {
+    const id=session?.session_id
+    if(typeof id!=="string" || !id || inputCounts.get(id)!==1 || retainedCounts.get(id)>1) {
+      ambiguousIdentity++
+    } else if(retainedCounts.has(id)) {
+      retainedIdentifiable++
+    } else if(strongConnections.has(id)) {
+      removedWithStrongCounterpart++
+    } else {
+      removedWithoutStrongCounterpart++
+    }
+  }
+  return {
+    originalCount:original.length,
+    retainedCount:retained.length,
+    retainedIdentifiable,
+    removedWithStrongCounterpart,
+    removedWithoutStrongCounterpart,
+    ambiguousIdentity,
+    candidatePairs:candidates.length,
+    strongPairs:candidates.filter(pair=>pair.classification==="strong_duplicate_evidence").length,
+    warning:"Independent evidence review only; not permission for automatic deletion"
+  }
+}
