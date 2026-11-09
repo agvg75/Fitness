@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { PROG, CARDIO } from "./scheduleData.js"
 import { summarizeTimeBudget } from "./lib/timeBudgetSummary.js"
+import { calculateBanisterFromDailyTrimp } from "./lib/banisterTimeline.js"
 import {
   applyCanonicalSessionMergePolicy, 
   dedupeCanonicalSessions,
@@ -23652,29 +23653,11 @@ const computedTSBFromSessions = useMemo(() => {
     if (!date || !Number.isFinite(trimp) || trimp <= 0) return
     dailyTrimp[date] = (dailyTrimp[date] || 0) + trimp
   })
-  const days = Object.keys(dailyTrimp).sort()
-  if (!days.length) return null
-  let ctl = 0, atl = 0, prevCtl = 0, prevAtl = 0
-  let prev = days[0]
-  days.forEach(d => {
-    const gap = Math.max(0, Math.round((new Date(d) - new Date(prev)) / 86400000))
-    // Fill zero-TRIMP days between sessions
-    for (let i = 0; i < gap - 1; i++) {
-      prevCtl = ctl; prevAtl = atl
-      ctl = ctl + (0 - ctl) / tau1
-      atl = atl + (0 - atl) / tau2
-    }
-    prevCtl = ctl; prevAtl = atl
-    const t = dailyTrimp[d] || 0
-    ctl = ctl + (t - ctl) / tau1
-    atl = atl + (t - atl) / tau2
-    prev = d
+  // Include zero-load days through today. Otherwise TSB stays frozen at
+  // the last workout and does not reflect rest/recovery.
+  return calculateBanisterFromDailyTrimp(dailyTrimp, {
+    tau1, tau2, asOfDate: todayISO()
   })
-  // TSB(t) = CTL(t-1) - ATL(t-1) per Banister definition
-  const tsb = +(prevCtl - prevAtl).toFixed(1)
-  const out = { ctl: +ctl.toFixed(1), atl: +atl.toFixed(1), tsb, dailyTrimp }
-  out.global = out
-  return out
 }, [banisterSupplementalSessions, unifiedCanonicalSessions])
 
 const acwrSeries = useMemo(() => {
