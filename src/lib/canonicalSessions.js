@@ -290,171 +290,117 @@ function mergeCanonicalSessionPair(a, b) {
   })
 }
 
-function getDuplicateSessionKey(session) {
-  const dateKey = getSessionDateKey(session)
-  const type = getSessionTypeFamily(session)
-  const startMs = getSessionStartMs(session)
-  const endMs = getSessionEndMs(session)
-  if (!dateKey || !type || !Number.isFinite(startMs)) {
-    return session?.session_id || makeSessionId("session", session)
-  }
+// The old date/distance bucketing was not an identity key. Only a stable
+// source-session ID can be used for an exact-record identity check here.
+import { findTemporalDuplicateCandidates } from "./temporalDuplicateEvidence.js"
 
-  const roundedStart = Math.round(startMs / (90 * 60 * 1000))
-  const roundedEnd = Number.isFinite(endMs) ? Math.round(endMs / (90 * 60 * 1000)) : "na"
-  const roundedDistance = Math.round(getSessionDistanceMiles(session) * 10) / 10
-  return `${dateKey}|${type}|${roundedStart}|${roundedEnd}|${roundedDistance || "na"}`
+function getDuplicateSessionKey(session) {
+  return session?.session_id || makeSessionId("session", session)
 }
 
 export function getCanonicalSessionDuplicateKey(session) {
   return getDuplicateSessionKey(session)
 }
 
-export function dedupeCanonicalSessions(sessions) {
-  const sorted = (Array.isArray(sessions) ? sessions : [])
-    .slice()
-    .sort((a, b) => String(a?.start_date || "").localeCompare(String(b?.start_date || "")))
+const canonicalSourceKeys = session => new Set(
+  Object.entries(session?.sources || {})
+    .filter(([, value]) => value && typeof value === "object")
+    .map(([key]) => key.toLowerCase())
+)
 
-  const clusters = []
-
-  const isSamePhysicalSession = (a, b) => {
-    if (!a || !b) return false
-    const dateA = getSessionDateKey(a)
-    const dateB = getSessionDateKey(b)
-    const typeA = getSessionTypeFamily(a)
-    const typeB = getSessionTypeFamily(b)
-    if (!dateA || dateA !== dateB || !typeA || typeA !== typeB) return false
-
-    const startA = getSessionStartMs(a)
-    const startB = getSessionStartMs(b)
-    const endA = getSessionEndMs(a)
-    const endB = getSessionEndMs(b)
-    const durA = getSessionDurationValue(a)
-    const durB = getSessionDurationValue(b)
-    const distA = getSessionDistanceMiles(a)
-    const distB = getSessionDistanceMiles(b)
-
-    const startClose = Number.isFinite(startA) && Number.isFinite(startB) && Math.abs(startA - startB) <= 90 * 60 * 1000
-    const endClose = Number.isFinite(endA) && Number.isFinite(endB) && Math.abs(endA - endB) <= 90 * 60 * 1000
-    const sameDistance = distA > 0 && distB > 0 && Math.abs(distA - distB) / Math.max(distA, distB) <= 0.01
-    const durationSimilar = durA > 0 && durB > 0 && Math.abs(durA - durB) / Math.max(durA, durB) <= 0.2
-    const hasAppleA = Boolean(a?.sources?.apple)
-    const hasAppleB = Boolean(b?.sources?.apple)
-    const hasTechA = Boolean(a?.sources?.technogym)
-    const hasTechB = Boolean(b?.sources?.technogym)
-    const sourceMix = (hasAppleA && hasTechB) || (hasTechA && hasAppleB)
-    const placeholderA = isPlaceholderSession(a)
-    const placeholderB = isPlaceholderSession(b)
-
-    if (placeholderA && placeholderB && (startClose || endClose || durationSimilar)) return true
-    if ((placeholderA || placeholderB) && durationSimilar) return true
-    if (sourceMix && (startClose || endClose || sameDistance)) return true
-    if (sameDistance && (startClose || sourceMix || placeholderA || placeholderB)) return true
-    if (startClose && (sourceMix || sameDistance)) return true
-    return false
-  }
-
-  sorted.forEach(session => {
-    let cluster = null
-    for (const candidate of clusters) {
-      if (candidate.some(existing => isSamePhysicalSession(existing, session))) {
-        cluster = candidate
-        break
+/**
+ * Returns reconciled workouts plus unmatched/ambiguous candidates for review.
+ * The matching rule is >=80% of the shorter timed workout, with the same
+ * activity category. No date or distance proxy is used.
+ *
+ * To avoid overwriting same-source payloads or making arbitrary choices in
+ * many-to-one components, only unique, disjoint-source pairs are auto-merged.
+ * This is pure with respect to the caller's records.
+ */
+export function reconcileCanonicalSessions(sessions) {
+  const input = Array.isArray(sessions) ? sessions : []
+  const unique = []
+  const identicalById = new Map()
+  let exactCopiesCollapsed = 0
+  for (const session of input) {
+    const id = typeof session?.session_id === "string" && session.session_id ? session.session_id : null
+    const signature = safeStringify(session)
+    if (id && signature !== null) {
+      const previous = identicalById.get(id)
+      if (previous?.has(signature)) {
+        exactCopiesCollapsed++
+        continue
       }
+      if (!previous) identicalById.set(id, new Set([signature]))
+      else previous.add(signature)
     }
-
-    if (cluster) cluster.push(session)
-    else clusters.push([session])
-  })
-
-  const deduped = clusters
-    .map(cluster => cluster.reduce((acc, session) => (acc ? mergeCanonicalSessionPair(acc, session) : session), null))
-    .map(applyCanonicalSessionMergePolicy)
-    .sort((a, b) => String(a?.start_date || "").localeCompare(String(b?.start_date || "")))
-
-  const TG_START = "2025-11-01"
-  const TG_END = "2026-02-28"
-  const scoreSessionMetadata = session => {
-    if (!session || typeof session !== "object") return 0
-    return Object.entries(session).reduce((score, [, value]) => {
-      if (value == null) return score
-      if (typeof value === "string") return value.trim() ? score + 1 : score
-      if (Array.isArray(value)) return value.length ? score + 1 : score
-      if (typeof value === "object") return Object.keys(value).length ? score + 1 : score
-      return score + 1
-    }, 0)
+    unique.push(session)
   }
-
-  const groupedByDate = deduped.reduce((map, session) => {
-    const dateKey = getSessionDateKey(session)
-    if (!dateKey || dateKey < TG_START || dateKey > TG_END) return map
-    if (!map.has(dateKey)) map.set(dateKey, [])
-    map.get(dateKey).push(session)
-    return map
-  }, new Map())
-
-  const fuzzyLosers = new Set()
-
-  groupedByDate.forEach(group => {
-    const modalityGroups = group.reduce((map, session) => {
-      const modality = getSessionTypeFamily(session)
-      if (!modality) return map
-      if (!map.has(modality)) map.set(modality, [])
-      map.get(modality).push(session)
-      return map
-    }, new Map())
-
-    modalityGroups.forEach(modalitySessions => {
-      const visited = new Set()
-      modalitySessions.forEach((session, index) => {
-        if (visited.has(index)) return
-        const baseDistance = getSessionDistanceMiles(session)
-        const cluster = [{ session, index }]
-        visited.add(index)
-
-        for (let i = index + 1; i < modalitySessions.length; i += 1) {
-          if (visited.has(i)) continue
-          const candidate = modalitySessions[i]
-          const candidateDistance = getSessionDistanceMiles(candidate)
-          if (baseDistance > 0 && candidateDistance > 0 && Math.abs(baseDistance - candidateDistance) <= 0.1) {
-            cluster.push({ session: candidate, index: i })
-            visited.add(i)
-          }
-        }
-
-        if (cluster.length < 2) return
-
-        const winner = cluster
-          .slice()
-          .sort((a, b) => scoreSessionMetadata(b.session) - scoreSessionMetadata(a.session))[0]
-
-        cluster.forEach(({ session: candidate }) => {
-          if (candidate === winner.session) return
-          candidate.dedupedBy = winner.session.id || getDuplicateSessionKey(winner.session)
-          fuzzyLosers.add(candidate)
-        })
+  const candidates = findTemporalDuplicateCandidates(unique)
+  const adjacent = new Map()
+  for (const edge of candidates) {
+    for (const index of [edge.firstIndex, edge.secondIndex]) {
+      if (!adjacent.has(index)) adjacent.set(index, [])
+      adjacent.get(index).push(edge)
+    }
+  }
+  const matched = new Set()
+  const mergedPairs = []
+  const review = []
+  for (const edge of candidates) {
+    const a = edge.firstIndex, b = edge.secondIndex
+    const sa = canonicalSourceKeys(unique[a]), sb = canonicalSourceKeys(unique[b])
+    const haveIndependentSources = sa.size > 0 && sb.size > 0 &&
+      ![...sa].some(key => sb.has(key))
+    const uniquePair = adjacent.get(a)?.length === 1 && adjacent.get(b)?.length === 1
+    if (uniquePair && haveIndependentSources && !matched.has(a) && !matched.has(b)) {
+      matched.add(a)
+      matched.add(b)
+      mergedPairs.push({ firstIndex: a, secondIndex: b, ...edge })
+    } else {
+      review.push({
+        ...edge,
+        reason: !uniquePair ? "multiple_overlapping_candidates" :
+          !haveIndependentSources ? "shared_or_unknown_source" : "unresolved"
       })
-    })
-  })
+    }
+  }
+  const output = []
+  for (let i = 0; i < unique.length; i++) {
+    if (matched.has(i)) continue
+    output.push(unique[i])
+  }
+  for (const pair of mergedPairs) {
+    output.push(mergeCanonicalSessionPair(unique[pair.firstIndex], unique[pair.secondIndex]))
+  }
+  output.sort((a, b) => String(a?.start_date || "").localeCompare(String(b?.start_date || "")))
+  return {
+    sessions: output,
+    review,
+    mergedPairs,
+    summary: {
+      inputCount: input.length,
+      uniqueCount: unique.length,
+      exactCopiesCollapsed,
+      candidatePairs: candidates.length,
+      automaticMerges: mergedPairs.length,
+      reviewPairs: review.length,
+      retainedCount: output.length
+    }
+  }
+}
 
-  return deduped
-    .filter(session => !fuzzyLosers.has(session))
-    .sort((a, b) => String(a?.start_date || "").localeCompare(String(b?.start_date || "")))
+export function dedupeCanonicalSessions(sessions) {
+  return reconcileCanonicalSessions(sessions).sessions
 }
 
 export function mergeCanonicalSessionsPreferPrimary(primarySessions, secondarySessions) {
-  const primary = dedupeCanonicalSessions(primarySessions)
-  const secondary = dedupeCanonicalSessions(secondarySessions)
-  const primaryKeys = new Set(primary.map(getDuplicateSessionKey))
-  const appended = []
-
-  secondary.forEach(session => {
-    const key = getDuplicateSessionKey(session)
-    if (primaryKeys.has(key)) return
-    primaryKeys.add(key)
-    appended.push(session)
-  })
-
-  return dedupeCanonicalSessions([...primary, ...appended])
+  // Avoid the former 90-minute/date/distance key; the same reconciliation
+  // rules apply to records from both collections.
+  return dedupeCanonicalSessions([
+    ...(Array.isArray(primarySessions) ? primarySessions : []),
+    ...(Array.isArray(secondarySessions) ? secondarySessions : [])
+  ])
 }
 
 function estimateScheduleStrengthTrimp(entry) {
