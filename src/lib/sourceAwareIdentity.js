@@ -70,7 +70,7 @@ export function matchEvidence(a,b) {
   if (!overlap) return {classification:"not_match",reason:"no_temporal_overlap"}
   const fraction=overlap/Math.min(endA-startA,endB-startB)
   if (fraction>=.8 && (distanceSimilar || durationSimilar) && differentSources) return {classification:"strong_duplicate_evidence",reason:"timed_overlap_cross_source",overlapFraction:fraction}
-  if (fraction>=.5) return {classification:"review",reason:"partial_timed_overlap",overlapFraction:fraction}
+  if (fraction>=.5 && differentSources && (distanceSimilar || durationSimilar)) return {classification:"review",reason:"partial_timed_overlap",overlapFraction:fraction}
   return {classification:"not_match",reason:"low_temporal_overlap"}
 }
 export function findSourceAwareCandidates(sessions) {
