@@ -65,10 +65,12 @@ test("same-source date-only records do not become duplicate candidates from matc
 test("cross-midnight overlapping workouts are audited exactly once",()=>{
   const a=timed("apple-night","apple","2026-01-02T23:50:00Z","2026-01-03T00:30:00Z")
   const b=timed("techno-night","technogym","2026-01-03T00:00:00Z","2026-01-03T00:40:00Z",4988.9664,"m")
-  assert.equal(matchEvidence(a,b).classification,"strong_duplicate_evidence")
+  // Their 30-minute overlap is only 75% of the shorter 40-minute workout.
+  // That merits review, rather than the >=80% strong-evidence classification.
+  assert.equal(matchEvidence(a,b).classification,"review")
   const candidates=findSourceAwareCandidates([a,b])
   assert.equal(candidates.length,1)
-  assert.equal(candidates[0].classification,"strong_duplicate_evidence")
+  assert.equal(candidates[0].classification,"review")
 })
 test("distinct adjacent-day workouts are not paired just because distances match",()=>{
   const a=timed("a","apple","2026-01-02T22:00:00Z","2026-01-02T22:40:00Z")
