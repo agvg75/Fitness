@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react"
 import { findTemporalDuplicateCandidates } from "../lib/temporalDuplicateEvidence.js"
 import { reviewPairIdentity, savePairReview, loadPairReviews } from "../lib/duplicateReviewPersistence.js"
+import { planReviewedWorkoutResolution } from "../lib/reviewResolutionPlan.js"
 
 const STORE_KEY="lift_duplicate_review_snapshot_v1"
 const DECISIONS=new Set(["same","distinct","uncertain"])
@@ -64,6 +65,7 @@ export default function DuplicateReviewPanel({supabase, userId}){
   },[supabase,userId])
   const pairs=useMemo(()=>snapshot.length?findTemporalDuplicateCandidates(snapshot):[],[snapshot])
   const categories=useMemo(()=>[...new Set(pairs.map(p=>p.category))].sort(),[pairs])
+  const resolution=useMemo(()=>planReviewedWorkoutResolution(snapshot,decisions),[snapshot,decisions])
   const chosen=useMemo(()=>pairs.map(p=>({...p,key:reviewPairIdentity(snapshot[p.firstIndex],snapshot[p.secondIndex])}))
     .filter(p=>(category==="all"||p.category===category)&&
       (filter==="all"||(filter==="unreviewed"?!DECISIONS.has(decisions[p.key]?.decision):decisions[p.key]?.decision===filter))),[pairs,snapshot,category,filter,decisions])
@@ -113,6 +115,12 @@ export default function DuplicateReviewPanel({supabase, userId}){
       <p style={{fontSize:13}}><strong>{pairs.length}</strong> overlapping candidate pairs,
         <strong> {reviewed}</strong> reviewed, <strong>{pairs.length-reviewed}</strong> awaiting review.
         Snapshot: {snapshot.length} records.</p>
+      <p style={{fontSize:12,color:"#c6c8e1"}}>
+        Reviewed resolution preview: {resolution.eligibleAfterReview.length} confirmed pairs eligible after review,
+        {" "}{resolution.blockedSame.length} confirmed pairs blocked by other overlaps,
+        {" "}{resolution.pendingReview} unreviewed pairs, and {resolution.uncertain} uncertain pairs.
+        No historical training loads are changed.
+      </p>
       <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}}>
         <label style={{fontSize:12}}>Category <select aria-label="Category" value={category} onChange={e=>{setCategory(e.target.value);setLimit(25)}} style={styles.button}>
           <option value="all">All</option>{categories.map(c=><option value={c} key={c}>{c}</option>)}
