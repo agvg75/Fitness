@@ -30638,7 +30638,7 @@ return (
         mealRecords={typeof mealRecords !== "undefined" ? mealRecords : []}
         liftConfig={LIFT_CONFIG}
       />
-      <DuplicateReviewPanel />
+      <DuplicateReviewPanel supabase={supabase} userId={STORE_USER_ID} />
     </div>
 
     <div style={{ flex: "0 0 40%", minWidth: 0, borderLeft: "1px solid #1a1b2e", paddingLeft: 20 }}>
