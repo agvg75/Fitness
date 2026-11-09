@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react"
 import { findTemporalDuplicateCandidates } from "../lib/temporalDuplicateEvidence.js"
+import { loadCanonicalSessions } from "../lib/persistence.js"
+import { assessLiveCanonicalHistory } from "../lib/liveCanonicalAudit.js"
 import { reviewPairIdentity, savePairReview, loadPairReviews } from "../lib/duplicateReviewPersistence.js"
 import { planReviewedWorkoutResolution } from "../lib/reviewResolutionPlan.js"
 
@@ -20,6 +22,10 @@ export function reviewKey(edge,records) {
 
 export default function DuplicateReviewPanel({supabase, userId}){
   const [snapshot,setSnapshot]=useState([])
+  const [liveSessions,setLiveSessions]=useState([])
+  const [liveStatus,setLiveStatus]=useState("Sign in to load live workout history")
+  const [refresh,setRefresh]=useState(0)
+  const [dataset,setDataset]=useState("live")
   const [loadState,setLoadState]=useState("loading")
   const [decisions,setDecisions]=useState({})
   const [legacyDecisions,setLegacyDecisions]=useState({})
@@ -63,13 +69,27 @@ export default function DuplicateReviewPanel({supabase, userId}){
     })
     return ()=>{alive=false}
   },[supabase,userId])
-  const pairs=useMemo(()=>snapshot.length?findTemporalDuplicateCandidates(snapshot):[],[snapshot])
+  useEffect(()=>{
+    let active=true
+    setLiveSessions([])
+    if(!supabase||!userId){setLiveStatus("Sign in to inspect Supabase workout history");return ()=>{active=false}}
+    setLiveStatus("Loading complete Supabase canonical history…")
+    loadCanonicalSessions(supabase,userId).then(rows=>{
+      if(!active)return
+      setLiveSessions(rows)
+      setLiveStatus("Loaded "+rows.length+" rows from signed-in Supabase")
+    }).catch(error=>{if(active)setLiveStatus("Supabase load failed: "+String(error.message||error))})
+    return ()=>{active=false}
+  },[supabase,userId,refresh])
+  const reviewRows=dataset==="live"?liveSessions:snapshot
+  const pairs=useMemo(()=>reviewRows.length?findTemporalDuplicateCandidates(reviewRows):[],[reviewRows])
+  const liveAudit=useMemo(()=>assessLiveCanonicalHistory(liveSessions,decisions),[liveSessions,decisions])
   const categories=useMemo(()=>[...new Set(pairs.map(p=>p.category))].sort(),[pairs])
-  const resolution=useMemo(()=>planReviewedWorkoutResolution(snapshot,decisions),[snapshot,decisions])
-  const chosen=useMemo(()=>pairs.map(p=>({...p,key:reviewPairIdentity(snapshot[p.firstIndex],snapshot[p.secondIndex])}))
+  const resolution=useMemo(()=>planReviewedWorkoutResolution(reviewRows,decisions),[reviewRows,decisions])
+  const chosen=useMemo(()=>pairs.map(p=>({...p,key:reviewPairIdentity(reviewRows[p.firstIndex],reviewRows[p.secondIndex])}))
     .filter(p=>(category==="all"||p.category===category)&&
-      (filter==="all"||(filter==="unreviewed"?!DECISIONS.has(decisions[p.key]?.decision):decisions[p.key]?.decision===filter))),[pairs,snapshot,category,filter,decisions])
-  const reviewed=useMemo(()=>pairs.filter(p=>DECISIONS.has(decisions[reviewPairIdentity(snapshot[p.firstIndex],snapshot[p.secondIndex])]?.decision)).length,[pairs,decisions,snapshot])
+      (filter==="all"||(filter==="unreviewed"?!DECISIONS.has(decisions[p.key]?.decision):decisions[p.key]?.decision===filter))),[pairs,reviewRows,category,filter,decisions])
+  const reviewed=useMemo(()=>pairs.filter(p=>DECISIONS.has(decisions[reviewPairIdentity(reviewRows[p.firstIndex],reviewRows[p.secondIndex])]?.decision)).length,[pairs,decisions,reviewRows])
   const decide=async(key,decision)=>{
     if(!key || !supabase || !userId || !remoteReady || savingPair) return
     setSavingPair(key)
@@ -90,12 +110,12 @@ export default function DuplicateReviewPanel({supabase, userId}){
   }
   const exportDecisions=()=>{
     const rows=pairs.map(p=>({
-      pair_key:reviewPairIdentity(snapshot[p.firstIndex],snapshot[p.secondIndex]),first_session_id:snapshot[p.firstIndex]?.session_id,
-      second_session_id:snapshot[p.secondIndex]?.session_id,category:p.category,
+      pair_key:reviewPairIdentity(reviewRows[p.firstIndex],reviewRows[p.secondIndex]),first_session_id:reviewRows[p.firstIndex]?.session_id,
+      second_session_id:reviewRows[p.secondIndex]?.session_id,category:p.category,
       overlap_minutes:p.overlapMinutes,overlap_fraction:p.overlapFraction,
-      decision:decisions[reviewPairIdentity(snapshot[p.firstIndex],snapshot[p.secondIndex])]?.decision||"unreviewed"
+      decision:decisions[reviewPairIdentity(reviewRows[p.firstIndex],reviewRows[p.secondIndex])]?.decision||"unreviewed"
     }))
-    const payload={format:"LIFT duplicate review v1",source:"bundled canonical snapshot",criteria:"same category and >=80% of shorter time interval",
+    const payload={format:"LIFT duplicate review v2",source:dataset==="live"?"signed-in Supabase canonical history":"bundled canonical snapshot",criteria:"same category and >=80% of shorter time interval",
       exported_at:new Date().toISOString(),records:rows}
     const blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json"})
     const href=URL.createObjectURL(blob)
@@ -105,16 +125,32 @@ export default function DuplicateReviewPanel({supabase, userId}){
   return <section style={styles.shell}>
     <h3 style={{margin:"0 0 8px",fontSize:16}}>Historical duplicate review</h3>
     <p style={{fontSize:12,lineHeight:1.5,color:"#b2b4c7"}}>
-      This review uses the bundled historical snapshot, not your live Supabase account.
+      Choose signed-in Supabase history or the bundled historical snapshot for comparison.
       Reviewed decisions are stored in your account in Supabase and can be exported. They do not merge, delete,
       exclude, or recalculate workouts. Earlier browser-only decisions are available separately for backup.
     </p>
     <p role="status" style={{fontSize:12,color:saveStatus.startsWith("Save failed")||saveStatus.startsWith("Cannot")?"#fca5a5":"#b2b4c7"}}>{saveStatus}</p>
     {Object.keys(legacyDecisions).length>0&&<button style={styles.button} onClick={exportLegacy}>Export {Object.keys(legacyDecisions).length} earlier browser-only decisions</button>}
-    {loadState!=="ready"?<p>Snapshot: {loadState}</p>:<>
+    <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:10}}>
+      <label style={{fontSize:12}}>History source <select aria-label="History source" value={dataset} onChange={e=>{setDataset(e.target.value);setLimit(25)}} style={styles.button}>
+        <option value="live">Live Supabase account</option><option value="snapshot">Bundled historical snapshot</option>
+      </select></label>
+      <button style={styles.button} disabled={!userId||!supabase} onClick={()=>setRefresh(x=>x+1)}>Refresh live history</button>
+    </div>
+    <p style={{fontSize:12,color:"#b2b4c7"}}>{liveStatus}</p>
+    {liveStatus.startsWith("Loaded")&&<p style={{fontSize:12,color:"#b2b4c7"}}>
+      Live audit: {liveAudit.records} records, {liveAudit.overlappingPairs} overlapping pairs,
+      {liveAudit.ambiguousIdentityPairs} pairs with ambiguous identities,
+      {liveAudit.invalidTimes} records without valid timed intervals,
+      {liveAudit.matchedSavedDecisions} matching saved decisions,
+      {liveAudit.staleSavedDecisions} saved decisions not present in live history.
+      No workout records or training loads are changed.
+    </p>}
+    {(dataset==="snapshot" && loadState!=="ready") || (dataset==="live" && !liveStatus.startsWith("Loaded"))
+      ?<p>Selected source: {dataset==="live"?liveStatus:"Snapshot: "+loadState}</p>:<>
       <p style={{fontSize:13}}><strong>{pairs.length}</strong> overlapping candidate pairs,
         <strong> {reviewed}</strong> reviewed, <strong>{pairs.length-reviewed}</strong> awaiting review.
-        Snapshot: {snapshot.length} records.</p>
+        Selected history: {reviewRows.length} records.</p>
       <p style={{fontSize:12,color:"#c6c8e1"}}>
         Reviewed resolution preview: {resolution.eligibleAfterReview.length} confirmed pairs eligible after review,
         {" "}{resolution.blockedSame.length} confirmed pairs blocked by other overlaps,
@@ -133,7 +169,7 @@ export default function DuplicateReviewPanel({supabase, userId}){
       </div>
       <p style={{fontSize:11,color:"#a4a7c1"}}>Showing {Math.min(limit,chosen.length)} of {chosen.length} matching pairs. Where one session overlaps multiple records, inspect all related pairs before deciding.</p>
       {chosen.slice(0,limit).map(p=>{
-        const a=snapshot[p.firstIndex],b=snapshot[p.secondIndex]
+        const a=reviewRows[p.firstIndex],b=reviewRows[p.secondIndex]
         const source=s=>Object.keys(s?.sources||{}).filter(k=>s.sources[k]).join(" + ")||"unknown"
         return <div key={p.key} style={styles.row}>
           <div style={{fontSize:13,fontWeight:600}}>{p.category} ({(p.overlapFraction*100).toFixed(1)}% overlap, {p.overlapMinutes.toFixed(1)} minutes)</div>
