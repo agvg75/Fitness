@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { dedupeCanonicalSessions, makeCanonicalSessionFromScheduleLog } from "./canonicalSessions.js"
-import { loadSleepRecords, loadHealthfitDaily, loadBiometricRecords } from "./persistence.js"
+import { loadSleepRecords, loadHealthfitDaily, loadBiometricRecords, upsertCanonicalSessions } from "./persistence.js"
 
 const session = ({ id, start, end, distance = 3, source = "apple", type = "Running" }) => ({
   session_id: id,
@@ -83,3 +83,33 @@ for (const [label, fn, dateField] of [
     assert.equal(sb.getCalls(), 3)
   })
 }
+
+test("canonical-session upsert persists TRIMP and its provenance", async () => {
+  let written = null
+  const sb = {
+    from(name) {
+      assert.equal(name, "canonical_sessions")
+      return {
+        select() { return this },
+        eq() { return this },
+        async in() { return { data: [], error: null } },
+        upsert(rows) {
+          written = rows
+          return this
+        },
+        then(resolve) { return resolve({ data: written, error: null }) },
+      }
+    }
+  }
+  await upsertCanonicalSessions(sb, "test-user", [{
+    session_id: "schedule_example", canonical_type: "Traditional Strength Training",
+    start_date: "2026-11-08T12:00:00Z", duration_min: null,
+    duration_provenance: "missing", trimp: 21,
+    trimp_provenance: "strength_sets_proxy",
+    sources: { schedule: { session_id: "example" } }
+  }])
+  assert.equal(written.length, 1)
+  assert.equal(written[0].trimp, 21)
+  assert.equal(written[0].raw.duration_provenance, "missing")
+  assert.equal(written[0].raw.trimp_provenance, "strength_sets_proxy")
+})
