@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "prebuild": "node scripts/convert_xlsx_to_json.mjs",
+    "prebuild": "node --test src/lib/dataIntegrity.test.js && node scripts/convert_xlsx_to_json.mjs",
+    "test:data-integrity": "node --test src/lib/dataIntegrity.test.js",
     "build": "vite build",
     "preview": "vite preview"
   },
