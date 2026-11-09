@@ -171,29 +171,8 @@ async function loadAllUserRows(supabase, table, userId, orderColumn) {
 
 export async function loadCanonicalSessions(supabase, userId) {
   requireSupabase(supabase, userId, "loadCanonicalSessions")
-
-  let allSessions = []
-  let from = 0
-  const PAGE_SIZE = 1000
-
-  while (true) {
-    const { data, error } = await supabase
-      .from("canonical_sessions")
-      .select("*")
-      .eq("user_id", userId)
-      .order("start_date", { ascending: true })
-      .range(from, from + PAGE_SIZE - 1)
-
-    throwIfError(error, "loadCanonicalSessions")
-
-    if (!data || data.length === 0) break
-    allSessions = allSessions.concat(data)
-    if (data.length < PAGE_SIZE) break
-    from += PAGE_SIZE
-  }
-
-  const data = allSessions
-  return data.map(rowToCanonicalSession)
+  const rows = await loadAllUserRows(supabase, "canonical_sessions", userId, "start_date")
+  return rows.map(rowToCanonicalSession)
 }
 
 /**

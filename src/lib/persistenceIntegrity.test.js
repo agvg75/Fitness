@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-import { loadSleepRecords, loadHealthfitDaily, loadBiometricRecords, upsertCanonicalSessions } from "./persistence.js"
+import { loadCanonicalSessions, loadSleepRecords, loadHealthfitDaily, loadBiometricRecords, upsertCanonicalSessions } from "./persistence.js"
 
 function mockSupabase(records, tableName) {
   let calls = 0
@@ -23,6 +23,7 @@ function mockSupabase(records, tableName) {
 }
 
 for (const [label, fn, dateField] of [
+  ["canonical", loadCanonicalSessions, "start_date"],
   ["sleep", loadSleepRecords, "sleep_date"],
   ["healthfit", loadHealthfitDaily, "record_date"],
   ["biometric", loadBiometricRecords, "measured_date"]
@@ -32,6 +33,7 @@ for (const [label, fn, dateField] of [
       id: String(i + 1), [dateField]: "2026-01-01", raw: {}
     }))
     const sb = mockSupabase(records,
+      label === "canonical" ? "canonical_sessions" :
       label === "sleep" ? "sleep_records" :
       label === "healthfit" ? "healthfit_daily" : "biometric_records")
     const result = await fn(sb, "test-user")
