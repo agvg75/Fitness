@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-import {distanceInMiles,timingPrecision,sessionLocalDate,matchEvidence,findSourceAwareCandidates} from "./sourceAwareIdentity.js"
+import {distanceInMiles,timingPrecision,sessionLocalDate,matchEvidence,findSourceAwareCandidates,auditCanonicalRetention} from "./sourceAwareIdentity.js"
 
 const timed=(id,source,start,end,value=3.1,unit="mi",kind="Running")=>({
   session_id:id,canonical_type:kind,start_date:start,end_date:end,
@@ -76,4 +76,28 @@ test("distinct adjacent-day workouts are not paired just because distances match
   const a=timed("a","apple","2026-01-02T22:00:00Z","2026-01-02T22:40:00Z")
   const b=timed("b","technogym","2026-01-03T02:00:00Z","2026-01-03T02:40:00Z",4988.9664,"m")
   assert.deepEqual(findSourceAwareCandidates([a,b]),[])
+})
+
+test("retention audit identifies removed records lacking strong independent evidence",()=>{
+  const a=timed("apple","apple","2026-01-01T14:00:00Z","2026-01-01T14:40:00Z")
+  const b=timed("technogym","technogym","2026-01-01T14:02:00Z","2026-01-01T14:42:00Z",4988.9664,"m")
+  const c=timed("other-run","apple","2026-01-01T18:00:00Z","2026-01-01T18:40:00Z")
+  const report=auditCanonicalRetention([a,b,c],[a])
+  assert.equal(report.originalCount,3)
+  assert.equal(report.retainedCount,1)
+  assert.equal(report.removedWithStrongCounterpart,1)
+  assert.equal(report.removedWithoutStrongCounterpart,1)
+  assert.equal(report.ambiguousIdentity,0)
+})
+test("retention audit reports missing or repeated IDs as ambiguous rather than claiming removal",()=>{
+  const x=timed("repeated","apple","2026-01-01T14:00:00Z","2026-01-01T14:40:00Z")
+  const report=auditCanonicalRetention([x,{...x},{...x,session_id:null}],[])
+  assert.equal(report.ambiguousIdentity,3)
+  assert.equal(report.removedWithoutStrongCounterpart,0)
+})
+test("retention audit does not mutate its input",()=>{
+  const a=timed("apple","apple","2026-01-01T14:00:00Z","2026-01-01T14:40:00Z")
+  const before=JSON.stringify(a)
+  auditCanonicalRetention([a],[])
+  assert.equal(JSON.stringify(a),before)
 })
