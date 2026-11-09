@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "prebuild": "node scripts/audit_canonical_snapshot.mjs && node --test src/lib/reviewResolutionPlan.test.js src/lib/duplicateReviewPersistence.test.js src/lib/temporalDuplicateEvidence.test.js src/lib/conservativeCanonicalRetention.test.js src/lib/sourceAwareIdentity.test.js src/lib/persistenceIntegrity.test.js src/lib/timeBudgetSummary.test.js src/lib/banisterTimeline.test.js src/lib/acwrTimeline.test.js && node scripts/convert_xlsx_to_json.mjs",
+    "prebuild": "node scripts/audit_canonical_snapshot.mjs && node --test src/lib/liveCanonicalAudit.test.js src/lib/reviewResolutionPlan.test.js src/lib/duplicateReviewPersistence.test.js src/lib/temporalDuplicateEvidence.test.js src/lib/conservativeCanonicalRetention.test.js src/lib/sourceAwareIdentity.test.js src/lib/persistenceIntegrity.test.js src/lib/timeBudgetSummary.test.js src/lib/banisterTimeline.test.js src/lib/acwrTimeline.test.js && node scripts/convert_xlsx_to_json.mjs",
     "test:persistence": "node --test src/lib/persistenceIntegrity.test.js",
     "test:timebudget": "node --test src/lib/timeBudgetSummary.test.js",
     "test:banister": "node --test src/lib/banisterTimeline.test.js",
@@ -15,7 +15,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "test:duplicate-review": "node --test src/lib/duplicateReviewPersistence.test.js",
-    "test:review-resolution": "node --test src/lib/reviewResolutionPlan.test.js"
+    "test:review-resolution": "node --test src/lib/reviewResolutionPlan.test.js",
+    "test:live-canonical": "node --test src/lib/liveCanonicalAudit.test.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.98.0",
