@@ -115,6 +115,12 @@ function canonicalSessionToRow(session, userId) {
     start_date: timestampOrNull(session?.start_date || session?.dateTime || session?.date),
     end_date: timestampOrNull(session?.end_date),
     duration_min: session?.duration_min ?? session?.dur ?? null,
+    trimp: session?.trimp ?? null,
+    raw: {
+      ...(session?.raw || {}),
+      ...(session?.duration_provenance != null ? { duration_provenance: session.duration_provenance } : {}),
+      ...(session?.trimp_provenance != null ? { trimp_provenance: session.trimp_provenance } : {}),
+    },
     match_confidence: session?.match_confidence || null,
     relationship: session?.relationship || null,
     overlap_summary: session?.overlap_summary || null,
@@ -132,6 +138,8 @@ function rowToCanonicalSession(row) {
     start_date: row?.raw?.start_date ?? row?.start_date,
     end_date: row?.raw?.end_date ?? row?.end_date,
     duration_min: row?.raw?.duration_min ?? row?.duration_min,
+    duration_provenance: row?.raw?.duration_provenance ?? null,
+    trimp_provenance: row?.raw?.trimp_provenance ?? null,
     trimp: row?.raw?.trimp ?? row?.trimp,
     match_confidence: row?.raw?.match_confidence ?? row?.match_confidence,
     relationship: row?.raw?.relationship ?? row?.relationship,
@@ -139,6 +147,26 @@ function rowToCanonicalSession(row) {
     sources: row?.raw?.sources ?? row?.sources ?? {},
     preferred_metrics: row?.raw?.preferred_metrics ?? row?.preferred_metrics ?? {},
   }
+}
+
+// Read the complete history using bounded PostgREST pages.
+async function loadAllUserRows(supabase, table, userId, orderColumn) {
+  const PAGE_SIZE = 500
+  const rows = []
+  for (let from = 0; from < 200000; from += PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from(table)
+      .select("*")
+      .eq("user_id", userId)
+      .order(orderColumn, { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, from + PAGE_SIZE - 1)
+    throwIfError(error, `loadAllUserRows:${table}`)
+    const batch = Array.isArray(data) ? data : []
+    rows.push(...batch)
+    if (batch.length < PAGE_SIZE) return rows
+  }
+  throw new Error(`loadAllUserRows:${table} exceeded the safety page limit`)
 }
 
 export async function loadCanonicalSessions(supabase, userId) {
@@ -301,6 +329,8 @@ function mergeCanonicalSessionRow(existing, incoming) {
     ...incoming,
     canonical_type: finalType,
     duration_min: finalDur,
+    trimp: pick(existing.trimp, incoming.trimp),
+    raw: { ...(existing.raw || {}), ...(incoming.raw || {}) },
     sources: mergedSources,
     preferred_metrics: mergedPreferredMetrics,
     created_at: existing.created_at || incoming.created_at,
@@ -404,13 +434,8 @@ function rowToSleepRecord(row) {
 
 export async function loadSleepRecords(supabase, userId) {
   requireSupabase(supabase, userId, "loadSleepRecords")
-  const { data, error } = await supabase
-    .from("sleep_records")
-    .select("*")
-    .eq("user_id", userId)
-    .order("sleep_date", { ascending: true })
-  throwIfError(error, "loadSleepRecords")
-  return (data || []).map(rowToSleepRecord)
+  const data = await loadAllUserRows(supabase, "sleep_records", userId, "sleep_date")
+  return data.map(rowToSleepRecord)
 }
 
 export async function upsertSleepRecords(supabase, userId, records) {
@@ -508,13 +533,8 @@ function rowToHealthfitRecord(row) {
 
 export async function loadHealthfitDaily(supabase, userId) {
   requireSupabase(supabase, userId, "loadHealthfitDaily")
-  const { data, error } = await supabase
-    .from("healthfit_daily")
-    .select("*")
-    .eq("user_id", userId)
-    .order("record_date", { ascending: true })
-  throwIfError(error, "loadHealthfitDaily")
-  return (data || []).map(rowToHealthfitRecord)
+  const data = await loadAllUserRows(supabase, "healthfit_daily", userId, "record_date")
+  return data.map(rowToHealthfitRecord)
 }
 
 export async function upsertHealthfitDaily(supabase, userId, records) {
@@ -611,13 +631,8 @@ function rowToBiometricRecord(row) {
 
 export async function loadBiometricRecords(supabase, userId) {
   requireSupabase(supabase, userId, "loadBiometricRecords")
-  const { data, error } = await supabase
-    .from("biometric_records")
-    .select("*")
-    .eq("user_id", userId)
-    .order("measured_date", { ascending: true })
-  throwIfError(error, "loadBiometricRecords")
-  return (data || []).map(rowToBiometricRecord)
+  const data = await loadAllUserRows(supabase, "biometric_records", userId, "measured_date")
+  return data.map(rowToBiometricRecord)
 }
 
 export async function upsertBiometricRecords(supabase, userId, records) {
