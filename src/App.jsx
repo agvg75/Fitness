@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { PROG, CARDIO } from "./scheduleData.js"
+import { summarizeTimeBudget } from "./lib/timeBudgetSummary.js"
 import {
   applyCanonicalSessionMergePolicy, 
   dedupeCanonicalSessions,
@@ -3857,16 +3858,13 @@ function buildTimeBudgetPlan({ exercises, cardioStr, hasTendon, hasWarmup, warmu
       conditional.push(item)
     }
   })
-  const fullEstimate = fixedTotal + ranked.reduce((sum, item) => sum + item.min, 0)
   return {
     fixed,
     fixedTotal,
     included,
     conditional,
-    fullEstimate,
-    fits: fullEstimate <= budgetMin,
+    ...summarizeTimeBudget({ fixedTotal, ranked, included, budgetMin }),
     essentialOmitted: conditional.some(item => item.tier === 1),
-    slackMin: Math.round(remaining * 10) / 10,
   }
 }
 
@@ -6830,6 +6828,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const [timeBudgetSacrificeCardio, setTimeBudgetSacrificeCardio] = useState(false)
   const [timeBudgetNotice, setTimeBudgetNotice] = useState("")
   const [timeBudgetChecklistOverrides, setTimeBudgetChecklistOverrides] = useState({})
+  const [appliedTimeBudgetByDay, setAppliedTimeBudgetByDay] = useState({})
   const [substituteDrawerEx, setSubstituteDrawerEx] = useState(null)
   const [guideOpenIds, setGuideOpenIds] = React.useState(new Set())
   const toggleGuide = id => setGuideOpenIds(prev => {
@@ -8378,8 +8377,8 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       source: "LIFT Schedule Tab", apple_watch_sync_pending: true,
       prescription_context: prescriptionContext,
       omission_dispositions: omissionDispositions,
-       timebox_minutes: timeBudgetMinutes,
-       timebox_sacrifice_cardio: timeBudgetSacrificeCardio,
+       timebox_minutes: appliedTimeBudgetByDay[day]?.minutes ?? null,
+       timebox_sacrifice_cardio: appliedTimeBudgetByDay[day]?.sacrificeCardio ?? null,
       metadata: {
         form_decay_alerts,
       },
@@ -9825,6 +9824,10 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       ...timeBudgetPlan.conditional.map(item => [item.ex.id, false]),
     ])
     setTimeBudgetChecklistOverrides(prev => ({ ...prev, [activeDay]: nextSelection }))
+    setAppliedTimeBudgetByDay(prev => ({
+      ...prev,
+      [activeDay]: { minutes: Math.max(0, Math.min(240, Number(timeBudgetMinutes) || 0)), sacrificeCardio: timeBudgetSacrificeCardio }
+    }))
     if (pendingVenue) {
       setPendingChecked(prev => ({ ...prev, ...nextSelection }))
     }
@@ -10081,7 +10084,9 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
                     Full estimate {Math.round(timeBudgetPlan.fullEstimate * 10) / 10} min vs budget {Math.max(0, Math.min(240, Number(timeBudgetMinutes) || 0))} min
                   </div>
                   <div style={{ fontSize: 11, color: timeBudgetPlan.fits ? "#22c55e" : "#f59e0b" }}>
-                    {timeBudgetPlan.fits ? `Fits with ${timeBudgetPlan.slackMin} min to spare.` : `${Math.abs(timeBudgetPlan.slackMin)} min over budget before conditional triage.`}
+                    {timeBudgetPlan.fits
+                      ? `Full plan fits, ${timeBudgetPlan.slackMin} min spare.`
+                      : `Full plan exceeds budget by ${timeBudgetPlan.fullOverageMin} min. Selected: ${timeBudgetPlan.selectedEstimate} min (${timeBudgetPlan.selectedOverageMin > 0 ? `${timeBudgetPlan.selectedOverageMin} min over` : `${timeBudgetPlan.slackMin} min spare`}).`}
                   </div>
                   {timeBudgetPlan.essentialOmitted && <div role="alert" style={{ color: "#ef4444", fontSize: 12 }}>Some priority 1 exercises cannot fit. Do not shorten rest to squeeze them in.</div>}
                   <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Mandatory blocks</div>
