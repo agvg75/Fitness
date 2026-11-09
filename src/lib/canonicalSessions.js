@@ -299,8 +299,11 @@ function getDuplicateSessionKey(session) {
     return session?.session_id || makeSessionId("session", session)
   }
 
-  const roundedStart = Math.round(startMs / (90 * 60 * 1000))
-  const roundedEnd = Number.isFinite(endMs) ? Math.round(endMs / (90 * 60 * 1000)) : "na"
+  // A 90-minute bucket can collide for distinct sessions on the same day.
+  // Five-minute buckets are conservative. Exact record IDs remain available
+  // when the session has no usable start timestamp.
+  const roundedStart = Math.round(startMs / (5 * 60 * 1000))
+  const roundedEnd = Number.isFinite(endMs) ? Math.round(endMs / (5 * 60 * 1000)) : "na"
   const roundedDistance = Math.round(getSessionDistanceMiles(session) * 10) / 10
   return `${dateKey}|${type}|${roundedStart}|${roundedEnd}|${roundedDistance || "na"}`
 }
@@ -318,6 +321,8 @@ export function dedupeCanonicalSessions(sessions) {
 
   const isSamePhysicalSession = (a, b) => {
     if (!a || !b) return false
+    if (a.session_id && b.session_id && a.session_id === b.session_id) return true
+
     const dateA = getSessionDateKey(a)
     const dateB = getSessionDateKey(b)
     const typeA = getSessionTypeFamily(a)
@@ -326,31 +331,37 @@ export function dedupeCanonicalSessions(sessions) {
 
     const startA = getSessionStartMs(a)
     const startB = getSessionStartMs(b)
+    if (!Number.isFinite(startA) || !Number.isFinite(startB)) return false
+
+    const startDifference = Math.abs(startA - startB)
     const endA = getSessionEndMs(a)
     const endB = getSessionEndMs(b)
-    const durA = getSessionDurationValue(a)
-    const durB = getSessionDurationValue(b)
     const distA = getSessionDistanceMiles(a)
     const distB = getSessionDistanceMiles(b)
+    const sameDistance = distA > 0 && distB > 0 &&
+      Math.abs(distA - distB) / Math.max(distA, distB) <= 0.01
 
-    const startClose = Number.isFinite(startA) && Number.isFinite(startB) && Math.abs(startA - startB) <= 90 * 60 * 1000
-    const endClose = Number.isFinite(endA) && Number.isFinite(endB) && Math.abs(endA - endB) <= 90 * 60 * 1000
-    const sameDistance = distA > 0 && distB > 0 && Math.abs(distA - distB) / Math.max(distA, distB) <= 0.01
-    const durationSimilar = durA > 0 && durB > 0 && Math.abs(durA - durB) / Math.max(durA, durB) <= 0.2
-    const hasAppleA = Boolean(a?.sources?.apple)
-    const hasAppleB = Boolean(b?.sources?.apple)
-    const hasTechA = Boolean(a?.sources?.technogym)
-    const hasTechB = Boolean(b?.sources?.technogym)
-    const sourceMix = (hasAppleA && hasTechB) || (hasTechA && hasAppleB)
-    const placeholderA = isPlaceholderSession(a)
-    const placeholderB = isPlaceholderSession(b)
-
-    if (placeholderA && placeholderB && (startClose || endClose || durationSimilar)) return true
-    if ((placeholderA || placeholderB) && durationSimilar) return true
-    if (sourceMix && (startClose || endClose || sameDistance)) return true
-    if (sameDistance && (startClose || sourceMix || placeholderA || placeholderB)) return true
-    if (startClose && (sourceMix || sameDistance)) return true
-    return false
+    // Different device records may describe a single physical workout. Do
+    // not infer identity from similar distances or durations alone.
+    const crossDevice = (Boolean(a?.sources?.apple) && Boolean(b?.sources?.technogym)) ||
+      (Boolean(a?.sources?.technogym) && Boolean(b?.sources?.apple))
+    const placeholder = isPlaceholderSession(a) || isPlaceholderSession(b)
+    if (placeholder) {
+      return startDifference <= 5 * 60 * 1000 && sameDistance
+    }
+    if (crossDevice && startDifference <= 15 * 60 * 1000) {
+      if (Number.isFinite(endA) && Number.isFinite(endB)) {
+        const overlap = Math.max(0, Math.min(endA, endB) - Math.max(startA, startB))
+        const shorter = Math.min(endA - startA, endB - startB)
+        return shorter > 0 && overlap / shorter >= 0.5
+      }
+      return sameDistance
+    }
+    // Identical source exports may be repeated; only join with near-exact
+    // timestamps and a corroborating distance.
+    return sameDistance && startDifference <= 2 * 60 * 1000 &&
+      Number.isFinite(endA) && Number.isFinite(endB) &&
+      Math.abs(endA - endB) <= 2 * 60 * 1000
   }
 
   sorted.forEach(session => {
@@ -371,74 +382,11 @@ export function dedupeCanonicalSessions(sessions) {
     .map(applyCanonicalSessionMergePolicy)
     .sort((a, b) => String(a?.start_date || "").localeCompare(String(b?.start_date || "")))
 
-  const TG_START = "2025-11-01"
-  const TG_END = "2026-02-28"
-  const scoreSessionMetadata = session => {
-    if (!session || typeof session !== "object") return 0
-    return Object.entries(session).reduce((score, [, value]) => {
-      if (value == null) return score
-      if (typeof value === "string") return value.trim() ? score + 1 : score
-      if (Array.isArray(value)) return value.length ? score + 1 : score
-      if (typeof value === "object") return Object.keys(value).length ? score + 1 : score
-      return score + 1
-    }, 0)
-  }
-
-  const groupedByDate = deduped.reduce((map, session) => {
-    const dateKey = getSessionDateKey(session)
-    if (!dateKey || dateKey < TG_START || dateKey > TG_END) return map
-    if (!map.has(dateKey)) map.set(dateKey, [])
-    map.get(dateKey).push(session)
-    return map
-  }, new Map())
-
-  const fuzzyLosers = new Set()
-
-  groupedByDate.forEach(group => {
-    const modalityGroups = group.reduce((map, session) => {
-      const modality = getSessionTypeFamily(session)
-      if (!modality) return map
-      if (!map.has(modality)) map.set(modality, [])
-      map.get(modality).push(session)
-      return map
-    }, new Map())
-
-    modalityGroups.forEach(modalitySessions => {
-      const visited = new Set()
-      modalitySessions.forEach((session, index) => {
-        if (visited.has(index)) return
-        const baseDistance = getSessionDistanceMiles(session)
-        const cluster = [{ session, index }]
-        visited.add(index)
-
-        for (let i = index + 1; i < modalitySessions.length; i += 1) {
-          if (visited.has(i)) continue
-          const candidate = modalitySessions[i]
-          const candidateDistance = getSessionDistanceMiles(candidate)
-          if (baseDistance > 0 && candidateDistance > 0 && Math.abs(baseDistance - candidateDistance) <= 0.1) {
-            cluster.push({ session: candidate, index: i })
-            visited.add(i)
-          }
-        }
-
-        if (cluster.length < 2) return
-
-        const winner = cluster
-          .slice()
-          .sort((a, b) => scoreSessionMetadata(b.session) - scoreSessionMetadata(a.session))[0]
-
-        cluster.forEach(({ session: candidate }) => {
-          if (candidate === winner.session) return
-          candidate.dedupedBy = winner.session.id || getDuplicateSessionKey(winner.session)
-          fuzzyLosers.add(candidate)
-        })
-      })
-    })
-  })
-
+  // Historical same-date/same-distance fuzzy filtering was destructive:
+  // it could discard a second legitimate workout with similar distance.
+  // Preserve ambiguous records; only the corroborated matches above merge.
   return deduped
-    .filter(session => !fuzzyLosers.has(session))
-    .sort((a, b) => String(a?.start_date || "").localeCompare(String(b?.start_date || "")))
+
 }
 
 export function mergeCanonicalSessionsPreferPrimary(primarySessions, secondarySessions) {
@@ -706,9 +654,12 @@ export function makeCanonicalSessionFromScheduleLog(entry) {
   const startDate =
     entry?.logged_at ||
     (entry?.date ? `${String(entry.date).slice(0, 10)}T12:00:00` : null)
-  const durationMin = 60
+  // Schedule logs often lack actual elapsed time. Never invent 60 minutes.
+  const reportedDuration = Number(entry?.duration_min ?? entry?.duration_minutes)
+  const durationMin = Number.isFinite(reportedDuration) && reportedDuration > 0
+    ? reportedDuration : null
   const startMs = toMsForScheduleSeeds(startDate)
-  const endDate = Number.isFinite(startMs)
+  const endDate = Number.isFinite(startMs) && durationMin != null
     ? new Date(startMs + durationMin * 60000).toISOString()
     : null
   const canonicalType = inferCanonicalTypeFromScheduleLog(entry)
@@ -721,8 +672,10 @@ export function makeCanonicalSessionFromScheduleLog(entry) {
     start_date: startDate,
     end_date: endDate,
     duration_min: durationMin,
+    duration_provenance: durationMin == null ? "missing" : "schedule_logged",
     overlap_summary: null,
     trimp: estimateScheduleStrengthTrimp(entry),
+    trimp_provenance: "strength_sets_proxy",
     sources: {
       apple: null,
       technogym: null,
