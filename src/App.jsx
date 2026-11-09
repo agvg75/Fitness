@@ -48,6 +48,7 @@ import { createClient } from "@supabase/supabase-js"
 import { generateTrainerReport } from "./exportReport"
 import MetricValue from './components/MetricValue'
 import CoachEntry from './components/CoachEntry'
+import DuplicateReviewPanel from "./components/DuplicateReviewPanel.jsx"
 import { useMetricSnapshot } from './lib/useMetricSnapshot'
 import { createReleaseUpdateMonitor, reloadWithDurableState, RUNNING_RELEASE_ID } from './lib/releaseUpdate.js'
 import {
@@ -30637,6 +30638,7 @@ return (
         mealRecords={typeof mealRecords !== "undefined" ? mealRecords : []}
         liftConfig={LIFT_CONFIG}
       />
+      <DuplicateReviewPanel />
     </div>
 
     <div style={{ flex: "0 0 40%", minWidth: 0, borderLeft: "1px solid #1a1b2e", paddingLeft: 20 }}>
