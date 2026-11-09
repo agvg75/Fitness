@@ -122,9 +122,12 @@ const LIFT_CONFIG = {
   mtp_ceiling_miles: 6.6,  // advanced from 4.0 — three consecutive score-0 sessions confirmed May 31 2026
   mtp_next_milestone_miles: 7.26,  // superseded by derived getMtpNextMilestone
 
-  // Half marathon build
-  hm_race_date:    "2026-10-18",  // Naperville Half Marathon (St. Jude 10K is a tune-up, not the goal race)
-  hm_taper_start:  "2026-09-27",  // 3-week taper before Naperville Oct 18
+  // The 2026 HM is complete; do not compute a taper against a past race.
+  season_mode: "offseason",
+  goal_event_name: "Olympic triathlon", // tentative, date unconfirmed
+  goal_event_date: null,
+  hm_race_date: null,
+  hm_taper_start: null,
   hm_peak_mi_week: 9,
   hm_taper_factor: 0.90,
   hm_weekly_build: 1.10,
@@ -3791,6 +3794,15 @@ const LIFT_TIME_DEFAULTS = {
   setup_min: 0.5,
 }
 
+// Explicit exercise priority overrides section-heading heuristics.
+const LIFT_EXERCISE_PRIORITY = {
+  chinups: 1, chest_press_machine: 1, triceps_pulldown: 1,
+  incline_chest_press: 2, lateral_raise: 2, rear_delt_fly: 2,
+  machine_flys: 3, cable_incline_pushdown: 3, triceps_overhead: 3, face_pull_er: 3,
+  t1: 1, t2a: 1, t2b: 1, t6b: 1, t_hec: 2, t_abd: 3, t7: 3, t8: 3,
+  th10: 1, th1: 1, th2: 1, th5: 2, th_sp: 2, th8: 3, th_alt: 3, th11: 3, th9: 3,
+  f4: 1, f5: 1, f5b: 2, f_le: 2, f2: 3, f7: 3, f0: 3
+}
 function estimateExerciseMinutes(ex, profile) {
   const prof = profile?.[ex?.id]
   if (prof?.est_min != null && (prof.n_obs || 0) >= 2) return prof.est_min
@@ -3808,16 +3820,17 @@ function parseCardioMinutes(cardioStr) {
   return m[2] ? Math.round((Number(m[1]) + Number(m[2])) / 2) : Number(m[1])
 }
 
-function buildTimeBudgetPlan({ exercises, cardioStr, hasTendon, hasWarmup, budgetMin, profile, sacrificeCardio }) {
+function buildTimeBudgetPlan({ exercises, cardioStr, hasTendon, hasWarmup, warmupCount, tendonSetCount, budgetMin, profile, sacrificeCardio }) {
   const fixed = []
-  if (hasWarmup) fixed.push({ label: "Warm-up", min: LIFT_TIME_DEFAULTS.warmup_min })
-  if (hasTendon) fixed.push({ label: "Tendon work", min: LIFT_TIME_DEFAULTS.tendon_min })
+  if (hasWarmup) fixed.push({ label: "Warm-up", min: warmupCount != null ? warmupCount * 1.5 : LIFT_TIME_DEFAULTS.warmup_min })
+  if (hasTendon) fixed.push({ label: "Tendon work", min: tendonSetCount != null ? tendonSetCount : LIFT_TIME_DEFAULTS.tendon_min })
   const cardioMin = parseCardioMinutes(cardioStr)
   if (cardioStr && !sacrificeCardio) fixed.push({ label: "Cardio", min: cardioMin })
   fixed.push({ label: "Cooldown", min: LIFT_TIME_DEFAULTS.cooldown_min })
   const fixedTotal = fixed.reduce((sum, item) => sum + item.min, 0)
 
   const tierOf = ex => {
+    if (Object.prototype.hasOwnProperty.call(LIFT_EXERCISE_PRIORITY, ex?.id)) return LIFT_EXERCISE_PRIORITY[ex.id]
     const heading = String(ex?._sectionH || "")
     if (heading.includes("Fresh") || heading.includes("Primary")) return 1
     if (heading.includes("Break") || heading.includes("Auxiliary")) return 2
@@ -3852,6 +3865,7 @@ function buildTimeBudgetPlan({ exercises, cardioStr, hasTendon, hasWarmup, budge
     conditional,
     fullEstimate,
     fits: fullEstimate <= budgetMin,
+    essentialOmitted: conditional.some(item => item.tier === 1),
     slackMin: Math.round(remaining * 10) / 10,
   }
 }
@@ -8364,6 +8378,8 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       source: "LIFT Schedule Tab", apple_watch_sync_pending: true,
       prescription_context: prescriptionContext,
       omission_dispositions: omissionDispositions,
+       timebox_minutes: timeBudgetMinutes,
+       timebox_sacrifice_cardio: timeBudgetSacrificeCardio,
       metadata: {
         form_decay_alerts,
       },
@@ -9796,6 +9812,8 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       cardioStr,
       hasTendon: getTendonEntries(activeDay).length > 0,
       hasWarmup: (prog.warmup || []).length > 0,
+      warmupCount: (prog.warmup || []).length,
+      tendonSetCount: (PLAN[activeDay]?.tendon || []).reduce((n, ex) => n + (ex?.def?.length || 0), 0) || (PLAN[activeDay]?.tendonWork || []).length * 2 || null,
       budgetMin: Math.max(0, Math.min(240, Number(timeBudgetMinutes) || 0)),
       profile: exerciseTimeProfile,
       sacrificeCardio: timeBudgetSacrificeCardio,
@@ -10027,7 +10045,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
                     style={{ width: 92, padding: "6px 8px", borderRadius: 5, fontSize: 12, background: "#111", border: "0.5px solid #252525", color: "#e8e8e8", fontFamily: "inherit", outline: "none" }}
                   />
                   <span style={{ fontSize: 11, color: "#666" }}>minutes available</span>
-                  {[60, 75, 90].map(value => (
+                  {[40, 55, 70, 90].map(value => (
                     <button
                       key={value}
                       onClick={() => { setTimeBudgetMinutes(value); setTimeBudgetNotice("") }}
@@ -10065,6 +10083,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
                   <div style={{ fontSize: 11, color: timeBudgetPlan.fits ? "#22c55e" : "#f59e0b" }}>
                     {timeBudgetPlan.fits ? `Fits with ${timeBudgetPlan.slackMin} min to spare.` : `${Math.abs(timeBudgetPlan.slackMin)} min over budget before conditional triage.`}
                   </div>
+                  {timeBudgetPlan.essentialOmitted && <div role="alert" style={{ color: "#ef4444", fontSize: 12 }}>Some priority 1 exercises cannot fit. Do not shorten rest to squeeze them in.</div>}
                   <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Mandatory blocks</div>
                   {timeBudgetPlan.fixed.map(item => (
                     <div key={item.label} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12, color: "#cbd5e1" }}>
@@ -21507,6 +21526,7 @@ const HM_PLAN_LONG_RUN = useMemo(() => {
   const lastActual = pastMondays.length ? frozen[pastMondays[pastMondays.length - 1]] : 0
   const mtpCeiling = getMtpCeiling()
   const startLongRunMi = Math.max(3.1, Math.min(lastActual || 3.1, mtpCeiling))
+  if (LIFT_CONFIG.season_mode === "offseason" || !LIFT_CONFIG.hm_race_date || !LIFT_CONFIG.hm_taper_start) return frozen
   const generated = generateHmPlan({
     startMonday: isoMondayOf(todayIso),
     startLongRunMi,
@@ -30333,13 +30353,13 @@ return (
 
           // Build planned curve from HM_PLAN_LONG_RUN (ChatGPT plan, week-start keyed)
           // Maps each week's Monday ISO date → planned long run miles
-          const RACE_DATE = new Date(LIFT_CONFIG.hm_race_date)
+          const RACE_DATE = LIFT_CONFIG.season_mode !== "offseason" && LIFT_CONFIG.hm_race_date ? new Date(LIFT_CONFIG.hm_race_date) : null
 
           // Convert HM_PLAN_LONG_RUN week keys to chart labels
           const planByLabel = {}
           Object.entries(HM_PLAN_LONG_RUN).forEach(([weekKey, mi]) => {
             const d = new Date(weekKey + "T12:00:00")
-            if (d <= RACE_DATE) {
+            if (RACE_DATE && d <= RACE_DATE) {
               const label = formatBucketLabel(d, "monthly")
               planByLabel[label] = Number(mi.toFixed(2))
             }
@@ -30351,15 +30371,14 @@ return (
           }))
 
           // Find the September race week label
-          const sepLabel = Object.keys(planByLabel).find(l => l.endsWith("/09")) ||
-            formatBucketLabel(new Date("2026-09-19"), "monthly")
+          const sepLabel = RACE_DATE ? formatBucketLabel(RACE_DATE, "monthly") : null
 
           return (
             <div style={{ ...cardStyle(), gridColumn: "1 / -1" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8, marginBottom: "10px" }}>
                 <div style={{ fontWeight: "bold", fontSize: "13px" }}>Running Volume (mi/week)</div>
                 <div style={{ fontSize: "11px", color: "#667", textAlign: "right" }}>
-                  Adaptive HM plan · peak 9 mi long run · taper Sep 27 · Naperville HM 10/18/26
+                  {RACE_DATE ? "Active half-marathon build" : "Off-season, no active race taper"}
                 </div>
               </div>
               <ResponsiveContainer width="100%" height={260}>
@@ -30372,15 +30391,15 @@ return (
                     n === "actual" ? "Actual" : n === "forecast" ? "Projected" : "HM Plan"
                   ]} />
                   <Legend verticalAlign="top" height={28} wrapperStyle={{ fontSize: "11px" }} />
-                  <ReferenceLine y={9} stroke="#ffd166" strokeDasharray="4 3"
-                    label={{ value: "Plan peak", fill: "#ffd166", fontSize: 10, position: "insideTopRight" }} />
+                  {RACE_DATE && <ReferenceLine y={LIFT_CONFIG.hm_peak_mi_week} stroke="#ffd166" strokeDasharray="4 3"
+                    label={{ value: "Plan peak", fill: "#ffd166", fontSize: 10, position: "insideTopRight" }} />}
                   {sepLabel && (
                     <ReferenceLine x={sepLabel} stroke="#4ade80" strokeDasharray="4 3"
                       label={{ value: "Race", fill: "#4ade80", fontSize: 10, position: "insideTopLeft" }} />
                   )}
                   <Bar  dataKey="actual"   name="Actual"    fill={color} opacity={0.7} />
                   <Line dataKey="forecast" name="Projected" stroke={color} strokeWidth={2} strokeDasharray="5 3" dot={{ r: 4 }} connectNulls={false} />
-                  <Line dataKey="plan"     name="HM Plan"   stroke="#ffd166" strokeWidth={1.5} strokeDasharray="3 2" dot={false} connectNulls />
+                  {RACE_DATE && <Line dataKey="plan" name="HM Plan" stroke="#ffd166" strokeWidth={1.5} strokeDasharray="3 2" dot={false} connectNulls />}
                 </ComposedChart>
               </ResponsiveContainer>
               <div style={{ fontSize: "11px", opacity: 0.6, marginTop: "6px" }}>{eta}</div>
