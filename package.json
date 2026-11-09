@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "prebuild": "node --test src/lib/persistenceIntegrity.test.js && node scripts/convert_xlsx_to_json.mjs",
+    "prebuild": "node --test src/lib/persistenceIntegrity.test.js src/lib/timeBudgetSummary.test.js && node scripts/convert_xlsx_to_json.mjs",
     "test:persistence": "node --test src/lib/persistenceIntegrity.test.js",
+    "test:timebudget": "node --test src/lib/timeBudgetSummary.test.js",
     "build": "vite build",
     "preview": "vite preview"
   },
