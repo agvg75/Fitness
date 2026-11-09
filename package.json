@@ -5,11 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "prebuild": "node --test src/lib/persistenceIntegrity.test.js src/lib/timeBudgetSummary.test.js src/lib/banisterTimeline.test.js src/lib/acwrTimeline.test.js && node scripts/convert_xlsx_to_json.mjs",
+    "prebuild": "node scripts/audit_canonical_snapshot.mjs && node --test src/lib/persistenceIntegrity.test.js src/lib/timeBudgetSummary.test.js src/lib/banisterTimeline.test.js src/lib/acwrTimeline.test.js && node scripts/convert_xlsx_to_json.mjs",
     "test:persistence": "node --test src/lib/persistenceIntegrity.test.js",
     "test:timebudget": "node --test src/lib/timeBudgetSummary.test.js",
     "test:banister": "node --test src/lib/banisterTimeline.test.js",
     "test:acwr": "node --test src/lib/acwrTimeline.test.js",
+    "audit:canonical": "node scripts/audit_canonical_snapshot.mjs",
     "build": "vite build",
     "preview": "vite preview"
   },
