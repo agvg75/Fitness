@@ -1,7 +1,7 @@
 // Non-destructive audit of the bundled canonical-session snapshot.
 // This is not the signed-in user's live Supabase history.
 import fs from "node:fs"
-import { dedupeCanonicalSessions } from "../src/lib/canonicalSessions.js"
+import { dedupeCanonicalSessions, reconcileCanonicalSessions } from "../src/lib/canonicalSessions.js"
 import { findSourceAwareCandidates, timingPrecision, auditCanonicalRetention } from "../src/lib/sourceAwareIdentity.js"
 import { previewConservativeRetention } from "../src/lib/conservativeCanonicalRetention.js"
 import { auditTemporalRetention } from "../src/lib/temporalDuplicateEvidence.js"
@@ -66,3 +66,5 @@ console.log("[canonical retention evidence]", JSON.stringify(auditCanonicalReten
 console.log("[canonical conservative preview]", JSON.stringify(previewConservativeRetention(original).summary))
 
 console.log("[canonical minute-based 80 percent audit]", JSON.stringify(auditTemporalRetention(original,deduped)))
+
+console.log("[canonical replacement reconciliation]", JSON.stringify(reconcileCanonicalSessions(original).summary))
