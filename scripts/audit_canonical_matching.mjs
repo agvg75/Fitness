@@ -37,5 +37,26 @@ const nearDistance = (a,b) => {
 const hours=(a,b)=>Math.abs(Date.parse(a.start_date)-Date.parse(b.start_date))/3600000
 const differentSourceSameDistance = revived.filter(a => raw.some(b => b!==a && baselineIds.has(b.session_id) && date(a)===date(b) && a.canonical_type===b.canonical_type && source(a)!==source(b) && nearDistance(a,b) && hours(a,b)>2)).length
 const counts={sourceRecords:raw.length,baseline:baseline.length,candidate:proposed.length,baselineDropped:summarize(baselineDropped),candidateDropped:summarize(candidateDropped),revived:summarize(revived),newDrops:summarize(newDrops),revivedWithSameDistanceCrossSourceMoreThan2h:differentSourceSameDistance}
+const fuzzyLosers = oldData.filter(s => s.dedupedBy && !baselineIds.has(s.session_id))
+const fuzzyOnlyPreserved = fuzzyLosers.filter(s => proposedIds.has(s.session_id))
+const sourcePair = (s, winner) => `${source(s)} -> ${source(winner)}`
+const matchedByWinner = fuzzyLosers.map(s => ({ s, winner: rawById.get(String(s.dedupedBy)) })).filter(({winner})=>winner)
+const strongDifferentSource = matchedByWinner.filter(({s,winner})=>source(s)!==source(winner) && nearDistance(s,winner))
+const sameSourceGap = matchedByWinner.filter(({s,winner})=>source(s)===source(winner) && hours(s,winner)>2)
+const dateOnly = s => s.start_date===s.end_date || /T0[456]:00:00/.test(s.start_date||"")
+const ambiguousMidnight = matchedByWinner.filter(({s,winner})=>dateOnly(s)||dateOnly(winner))
+console.log("[canonical-fuzzy-audit]", JSON.stringify({
+  allFuzzyDropped:fuzzyLosers.length,
+  fuzzyRestoredByCandidate:fuzzyOnlyPreserved.length,
+  fuzzyDropSourcePairs:by(matchedByWinner,({s,winner})=>sourcePair(s,winner)),
+  strongCrossSource:strongDifferentSource.length,
+  sameSourceMoreThan2h:sameSourceGap.length,
+  dateOnlyInvolved:ambiguousMidnight.length,
+  sameSourceGapExamples:sameSourceGap.slice(0,12).map(({s,winner})=>({
+    ids:[s.session_id,winner.session_id], times:[s.start_date,winner.start_date],
+    distance:[s.preferred_metrics?.distance?.value,winner.preferred_metrics?.distance?.value],
+    unit:[s.preferred_metrics?.distance?.unit,winner.preferred_metrics?.distance?.unit]
+  }))
+}))
 console.log("[canonical-matching-audit]", JSON.stringify(counts))
 if(baseline.length<100 || proposed.length<100) throw Error("Unexpected loss of canonical history")
