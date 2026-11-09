@@ -58,5 +58,29 @@ console.log("[canonical-fuzzy-audit]", JSON.stringify({
     unit:[s.preferred_metrics?.distance?.unit,winner.preferred_metrics?.distance?.unit]
   }))
 }))
+const plausibleTwin = s => {
+  const peers = baseline.filter(other => other.canonical_type === s.canonical_type && date(other) === date(s))
+  return peers.map(other => ({
+    other,
+    gap: hours(s,other),
+    distMatch: nearDistance(s,other),
+    sameSource: source(s) === source(other)
+  })).sort((a,b) => (a.distMatch===b.distMatch ? 0 : a.distMatch ? -1 : 1) || a.gap-b.gap)[0]
+}
+const restoredEvidence = revived.map(s => ({s,match:plausibleTwin(s)})).filter(x=>x.match)
+const reportBucket = ({match}) => {
+  const g=match.gap
+  const band= !Number.isFinite(g) ? "no_timestamp" : g<=.25 ? "<=15min" : g<=2 ? "15min-2h" : g<=8 ? "2-8h" : ">8h"
+  return (match.distMatch ? "same_dist_" : "other_dist_") + (match.sameSource ? "same_src_" : "diff_src_") + band
+}
+console.log("[canonical-restored-evidence]", JSON.stringify({
+  count:restoredEvidence.length,
+  buckets:by(restoredEvidence, reportBucket),
+  missingPeer:revived.length-restoredEvidence.length,
+  examplesStrongPotentiallySeparate:restoredEvidence.filter(x=>x.match.sameSource && x.match.gap>2 && x.match.distMatch).slice(0,8).map(({s,match})=>({
+    ids:[s.session_id,match.other.session_id],starts:[s.start_date,match.other.start_date],
+    sources:[source(s),source(match.other)],distances:[s.preferred_metrics?.distance,match.other.preferred_metrics?.distance]
+  }))
+}))
 console.log("[canonical-matching-audit]", JSON.stringify(counts))
 if(baseline.length<100 || proposed.length<100) throw Error("Unexpected loss of canonical history")
