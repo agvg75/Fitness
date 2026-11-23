@@ -64,6 +64,7 @@ import {
 } from './lib/prescriptionEvidence.js'
 import { selectMissedWorkPreview } from './lib/missedWorkPreview.js'
 import { openPrimarySectionForSelectedDay } from './lib/schedulePresentation.js'
+import TrainingFocusBriefing from './components/TrainingFocusBriefing.jsx'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -18329,6 +18330,10 @@ const SCH_META = {
               Sat: { label:"Saturday",  theme:"Long Swim",                    venue:"YMCA", color:"#d97706" },
                 Sun: { label:"Sunday",    theme:"Long Run",                     venue:"—",    color:"#444"    },
                 };
+// Stable references for the opening "Where you are" card.
+const inferFocusMovementPattern = exercise => inferMovementPattern(null, exercise)
+const FOCUS_PLAN_DAYS_PER_WEEK = Object.values(SCH_META).filter(day => !/rest/i.test(day.theme)).length
+
 const schDefaultForDay = day => {
   const data = {};
   (PLAN[day]?.sections || []).forEach(sec =>
@@ -27187,6 +27192,13 @@ return (
 
 {tab === "Overview" && (
   <div>
+    <TrainingFocusBriefing
+      canonicalSessions={canonicalSessions}
+      schedLog={schedLog}
+      patternOf={inferFocusMovementPattern}
+      planDaysPerWeek={FOCUS_PLAN_DAYS_PER_WEEK}
+      onOpenSchedule={() => setTab("Schedule")}
+    />
     {(() => {
       const rd = computeReadinessDetail(
         ocItems,
