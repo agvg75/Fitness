@@ -66,6 +66,7 @@ import { selectMissedWorkPreview } from './lib/missedWorkPreview.js'
 import { openPrimarySectionForSelectedDay } from './lib/schedulePresentation.js'
 import TrainingFocusBriefing from './components/TrainingFocusBriefing.jsx'
 import { proposeAdaptiveStrengthSession } from './lib/adaptiveStrengthSession.js'
+import { lastRecordedStrengthDate, activeComeback, proposeComeback } from './lib/comebackSchedule.js'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -6789,6 +6790,16 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const [justUndone, setJustUndone] = useState(null)    // "ymca" | "knr" | null
   const [sessionDate, setSessionDate] = useState(todayISO())
   const [adaptiveApplyMessage, setAdaptiveApplyMessage] = useState("")
+  const [comebackState, setComebackState] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("lift-comeback-phase-v1") || "null") } catch { return null }
+  })
+  const persistComebackState = value => {
+    setComebackState(value)
+    try {
+      if (value) localStorage.setItem("lift-comeback-phase-v1", JSON.stringify(value))
+      else localStorage.removeItem("lift-comeback-phase-v1")
+    } catch {}
+  }
   const [pendingVenue, setPendingVenue] = useState(null)   // venue awaiting exercise selection
   const [pendingChecked, setPendingChecked] = useState({}) // { [exercise_id]: bool }
   const [pendingOmissionDispositions, setPendingOmissionDispositions] = useState({})
@@ -9770,6 +9781,31 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   }
 
   const prog = getProgDay(activeDay)
+  const strengthGap = useMemo(() => lastRecordedStrengthDate(canonicalSessions, schedLog, sessionDate),
+    [canonicalSessions, schedLog, sessionDate])
+  const comebackActive = activeComeback(comebackState, session?.user?.id, sessionDate)
+  const comebackPreview = useMemo(() => comebackActive ? proposeComeback({
+    exercises: (getProgDay(activeDay).exercises || []).map(ex => ({...ex, activeVariant: variants[ex.id] || "machine"})),
+    fields, day: activeDay, daysOff: comebackState.daysOff, week: comebackState.week,
+    readiness: progressionReadiness,
+    injuryBlock: Number(tendonStatus?.painScore ?? 0) >= 3 ||
+      ocConstraintState?.gate?.upperProgressionReadiness === "deload" ||
+      ocConstraintState?.gate?.lowerProgressionReadiness === "deload",
+  }) : null, [comebackActive, comebackState, activeDay, fields, variants, progressionReadiness, tendonStatus, ocConstraintState])
+  const approveComeback = () => {
+    if (!comebackActive || !comebackPreview?.eligible) return
+    setFields(previous => {
+      const next = {...previous}
+      for (const item of comebackPreview.proposals) {
+        const key = activeDay + "_" + item.id
+        if (["sets","reps","load"].some(k => Object.prototype.hasOwnProperty.call(previous[key] || {},k)
+          && String(previous[key][k] ?? "") !== item.before[k])) continue
+        next[key] = {...(previous[key] || {}), ...item.after}
+      }
+      return next
+    })
+    setAdaptiveApplyMessage("Accepted comeback adjustments are in editable fields; no workout was logged.")
+  }
   const adaptiveStrengthPreview = useMemo(() => proposeAdaptiveStrengthSession({
     exercises: (getProgDay(activeDay).exercises || []).map(ex => ({
       ...ex, activeVariant: variants[ex.id] || "machine"
@@ -10046,6 +10082,87 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
             </div>
           )}
 
+          {prog.exercises?.length > 0 && (
+            <section aria-label="Comeback workout proposal" style={{ marginBottom: 12, padding: 13,
+              border: "1px solid #51406e", borderRadius: 8, background: "#131426" }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#ddd6fe", marginBottom: 6 }}>
+                Comeback workout, optional
+              </div>
+              <div style={{ fontSize: 11, color: "#b4b8d0", marginBottom: 9 }}>
+                A gap in records is not proof of inactivity. Confirm your break before applying a ramp.
+                Phases advance manually and are saved only on this device.
+              </div>
+              {comebackActive ? (
+                <>
+                  <div style={{ fontSize: 11, color: "#e2e8f0", marginBottom: 7 }}>
+                    Confirmed break: {comebackState.daysOff} days, starting {comebackState.startDate}.
+                  </div>
+                  <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 11, color: "#e2e8f0" }}>
+                    Comeback week
+                    <select aria-label="Comeback week" value={comebackState.week} onChange={event => {
+                      persistComebackState({...comebackState, week: Number(event.target.value)})
+                      setAdaptiveApplyMessage("")
+                    }} style={{ background: "#111827", color: "#e2e8f0", padding: 5 }}>
+                      {comebackPreview?.plan?.steps.map(step => (
+                        <option key={step.week} value={step.week}>
+                          Week {step.week} of {comebackPreview.plan.weeks}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div style={{ fontSize: 11, color: "#facc15", marginTop: 7 }}>{comebackPreview?.warning}</div>
+                  {comebackPreview?.step && <div style={{fontSize:11,color:"#a5b4fc",marginTop:6}}>
+                    Illustrative: {Math.round(comebackPreview.step.volumeFactor*100)}% of usual sets,
+                    {Math.round(comebackPreview.step.loadFactor*100)}% of usual numeric load.
+                  </div>}
+                  {comebackPreview?.proposals.map(item => (
+                    <div key={item.id} style={{ fontSize: 11, color: "#cbd5e1", padding: "6px 0",
+                      borderBottom: "1px solid #283048" }}>
+                      {item.name}: {item.before.sets} × {item.before.reps} at {item.before.load}
+                      {" → "}{item.after.sets} × {item.after.reps} at {item.after.load}
+                    </div>
+                  ))}
+                  {comebackPreview?.eligible && comebackPreview.proposals.length > 0 && (
+                    <button type="button" onClick={approveComeback}
+                      style={{ marginTop: 9, padding: 8, borderRadius: 5, background: "#4c1d95",
+                        color: "white", border: "1px solid #a78bfa", cursor: "pointer" }}>
+                      Apply this comeback week to editable workout
+                    </button>
+                  )}
+                  <button type="button" onClick={() => { persistComebackState(null); setAdaptiveApplyMessage("") }}
+                    style={{ marginLeft: 8, marginTop: 9, padding: 8, background: "transparent",
+                      border: "1px solid #64748b", color: "#cbd5e1", borderRadius: 5, cursor: "pointer" }}>
+                    End comeback phase
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize: 11, color: "#b4b8d0", marginBottom: 8 }}>
+                    {strengthGap.days == null ? "No earlier strength session is available; cannot infer a break." :
+                      strengthGap.days < 14 ? "No 14-day strength gap in the available records." :
+                        "Last recorded strength session: " + strengthGap.lastDate + " (" + strengthGap.days + " days before selected workout)."}
+                  </div>
+                  {strengthGap.days >= 14 && session?.user?.id && (
+                    <button type="button" onClick={() => {
+                      persistComebackState({userId: session.user.id, startDate: sessionDate,
+                        daysOff: strengthGap.days, lastDate: strengthGap.lastDate, week: 1})
+                      setAdaptiveApplyMessage("")
+                    }} style={{padding:8,background:"#4c1d95",border:"1px solid #a78bfa",
+                      borderRadius:5,color:"white",cursor:"pointer"}}>
+                      I confirm this was a real strength-training break
+                    </button>
+                  )}
+                </>
+              )}
+              {adaptiveApplyMessage && <div role="status" style={{fontSize:11,color:"#86efac",marginTop:7}}>
+                {adaptiveApplyMessage}
+              </div>}
+              <div style={{fontSize:10,color:"#94a3b8",marginTop:8}}>
+                The template and logged sessions are unchanged until you approve and later log a workout.
+                Any manually edited exercise remains protected. Injury and deload restrictions take precedence.
+              </div>
+            </section>
+          )}
           {prog.exercises?.length > 0 && (
             <section aria-label="Adaptive strength session" style={{ marginBottom: 12, padding: "12px 14px", background: "#101322", border: "1px solid #34445f", borderLeft: "3px solid #22c55e", borderRadius: 8 }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: "#dbeafe", marginBottom: 4 }}>Adaptive workout preview (optional)</div>
