@@ -38,9 +38,13 @@ export function proposeAdaptiveStrengthSession({ exercises = [], scheduleLog = [
     const template = ex.variants[variantKey] || ex.variants.machine || Object.values(ex.variants)[0]
     if (!template) continue
     const key = day + "_" + id
-    // Never overwrite a previous manual or accepted prescription.
-    if (["sets","reps","load"].some(k => Object.prototype.hasOwnProperty.call(fields[key] || {}, k))) continue
     const before = { sets: String(template.sets ?? ""), reps: String(template.reps ?? ""), load: String(template.load ?? "") }
+    // Saved drafts sometimes contain template-equivalent values. Only protect an
+    // explicit departure from the template, not its unmodified cached defaults.
+    if (["sets","reps","load"].some(k =>
+      Object.prototype.hasOwnProperty.call(fields[key] || {}, k) &&
+      String(fields[key][k] ?? "") !== before[k]
+    )) continue
     const after = { ...before }
     const reasons = [], history = [], seen = new Set()
     for (const log of logs) {

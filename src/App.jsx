@@ -9783,7 +9783,11 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
       const next = { ...previous }
       for (const item of adaptiveStrengthPreview.proposals) {
         const key = activeDay + "_" + item.id
-        if (["sets","reps","load"].some(k => Object.prototype.hasOwnProperty.call(previous[key] || {}, k))) continue
+        // Protect actual user edits, but permit cached fields equal to defaults.
+        if (["sets","reps","load"].some(k =>
+          Object.prototype.hasOwnProperty.call(previous[key] || {}, k) &&
+          String(previous[key][k] ?? "") !== item.before[k]
+        )) continue
         next[key] = { ...(previous[key] || {}), ...item.after }
       }
       return next

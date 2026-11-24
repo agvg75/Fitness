@@ -36,3 +36,9 @@ test("pure, no input mutation",()=>{
  const a={exercises:exercise,scheduleLog:[log("2026-11-20"),log("2026-11-17")],selectedDate:"2026-11-23",day:"Mon"}
  const s=JSON.stringify(a);run(a);assert.equal(JSON.stringify(a),s)
 })
+
+test("cached template values are not mistaken for user edits", () => {
+  const x=testCase({fields:{Mon_chest:{sets:3,reps:8,load:110}}})
+  assert.equal(x.proposals.length,1)
+  assert.equal(x.proposals[0].after.load,"100")
+})
