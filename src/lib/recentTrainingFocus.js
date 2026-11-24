@@ -1,3 +1,4 @@
+import { buildReentryPlan, countRecordedComebacks } from "./comebackPlan.js"
 // Recent-training awareness: looks at what was actually done over the last
 // month (and the three months before it) and proposes where to focus now,
 // instead of assuming the full weekly program is being followed.
@@ -210,6 +211,8 @@ export function summarizeRecentTraining(events, { today = new Date(), planDaysPe
       dataIsStale: true,
       longestRecentGapDays: null,
       recommendedDaysThisWeek: null,
+      reentryPlan: null,
+      comebacks: 0,
       domains: [],
       patterns: [],
       focus: [{
@@ -252,6 +255,11 @@ export function summarizeRecentTraining(events, { today = new Date(), planDaysPe
     .sort((a, b) => a.setsRecent - b.setsRecent)
 
   const focus = []
+  // This is a comparison of recorded activity, not verified inactivity.
+  // A return can only be counted if records exist on both sides of a gap.
+  const comebacks = countRecordedComebacks([...anyDates])
+  const reentryGap = status === "layoff" ? overall.daysSince : status === "returning" ? longestGap : null
+  const reentryPlan = buildReentryPlan(reentryGap)
   if (status === "layoff" || status === "returning") {
     const gap = status === "layoff" ? overall.daysSince : longestGap
     focus.push({
@@ -318,6 +326,8 @@ export function summarizeRecentTraining(events, { today = new Date(), planDaysPe
     dataIsStale: overall.daysSince > config.staleDataDays,
     longestRecentGapDays: longestGap,
     recommendedDaysThisWeek: recommended,
+    reentryPlan,
+    comebacks,
     domains,
     patterns,
     focus: focus.slice(0, config.maxFocusItems),

@@ -88,6 +88,41 @@ export default function TrainingFocusBriefing({
         </div>
       ))}
 
+      {summary.reentryPlan && (
+        <div style={{ marginTop: 10, padding: "11px 12px", background: "#11132a", border: "1px solid #2a2b45", borderRadius: 8 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#e5e7eb", marginBottom: 5 }}>
+            Illustrative comeback: {summary.reentryPlan.weeks} week{summary.reentryPlan.weeks === 1 ? "" : "s"}
+          </div>
+          <div style={{ fontSize: 11, color: "#aab", lineHeight: 1.5, marginBottom: 7 }}>{summary.reentryPlan.firstSession}</div>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, color: "#aab" }}>
+            <thead><tr style={{ textAlign: "left", color: "#8b90b0" }}>
+              <th>Week</th><th>Illustrative load</th><th>Illustrative sets</th><th>Effort</th>
+            </tr></thead>
+            <tbody>
+              {summary.reentryPlan.steps.map(step => (
+                <tr key={step.week} style={{ borderTop: "1px solid #2a2b45" }}>
+                  <td>{step.week}</td><td>{Math.round(step.loadFactor * 100)}%</td>
+                  <td>{Math.round(step.volumeFactor * 100)}%</td><td>{step.effort}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div style={{ color: "#facc15", fontSize: 11, marginTop: 7 }}>
+            {summary.dataIsStale
+              ? "Training records are stale; this is a hypothetical example, not a restart recommendation."
+              : summary.reentryPlan.advisory}
+          </div>
+        </div>
+      )}
+      {summary.comebacks > 0 && (
+        <div style={{ fontSize: 11, color: "#8b90b0", marginTop: 8 }}>
+          Recorded returns after at least seven completely unlogged days: {summary.comebacks} in this 16-week window.
+          This counts gaps in data, which may not represent actual breaks.
+        </div>
+      )}
+      <div style={{ fontSize: 11, color: "#8b90b0", marginTop: 8 }}>
+        Busy-week fallback to consider (not guaranteed maintenance): one abbreviated strength session and two aerobic sessions if recovery permits.
+      </div>
       {summary.dataIsStale && summary.dataThrough && (
         <div style={{ fontSize: 12, color: "#facc15", marginTop: 8, lineHeight: 1.45 }}>
           Newest record is from {summary.dataThrough} ({summary.dataAgeDays} days ago). If you trained since then, import or log it before trusting this.

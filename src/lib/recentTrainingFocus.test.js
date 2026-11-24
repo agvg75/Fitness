@@ -194,3 +194,21 @@ test("insufficient prior baseline is disclosed", () => {
   const s = summarizeRecentTraining(every("run", [1, 3]), { today: TODAY })
   assert.match(s.headline, /Insufficient historical records/)
 })
+
+test("a returning gap exposes an illustrative, not automatic, comeback plan", () => {
+  const events = [...every("strength", [1]), ...every("strength", range(17, 110, 2))]
+  const s = summarizeRecentTraining(events, { today: TODAY })
+  assert.equal(s.status, "returning")
+  assert.equal(s.reentryPlan.weeks, 1)
+  assert.ok(s.comebacks >= 1)
+})
+test("a long record gap is labeled stale even if an illustrative ramp is available", () => {
+  const s = summarizeRecentTraining(every("strength", range(56, 110, 7)), { today: TODAY })
+  assert.equal(s.dataIsStale, true)
+  assert.equal(s.reentryPlan.weeks, 4)
+})
+test("no events give no calculated comeback", () => {
+  const s = summarizeRecentTraining([], { today: TODAY })
+  assert.equal(s.reentryPlan, null)
+  assert.equal(s.comebacks, 0)
+})
