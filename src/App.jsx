@@ -65,6 +65,7 @@ import {
 import { selectMissedWorkPreview } from './lib/missedWorkPreview.js'
 import { openPrimarySectionForSelectedDay } from './lib/schedulePresentation.js'
 import TrainingFocusBriefing from './components/TrainingFocusBriefing.jsx'
+import { proposeAdaptiveStrengthSession } from './lib/adaptiveStrengthSession.js'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -6787,6 +6788,7 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   const [savedEntries, setSavedEntries] = useState({})   // { day: { ymca: entry|null, knr: entry|null } }
   const [justUndone, setJustUndone] = useState(null)    // "ymca" | "knr" | null
   const [sessionDate, setSessionDate] = useState(todayISO())
+  const [adaptiveApplyMessage, setAdaptiveApplyMessage] = useState("")
   const [pendingVenue, setPendingVenue] = useState(null)   // venue awaiting exercise selection
   const [pendingChecked, setPendingChecked] = useState({}) // { [exercise_id]: bool }
   const [pendingOmissionDispositions, setPendingOmissionDispositions] = useState({})
@@ -9768,6 +9770,26 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
   }
 
   const prog = getProgDay(activeDay)
+  const adaptiveStrengthPreview = useMemo(() => proposeAdaptiveStrengthSession({
+    exercises: (getProgDay(activeDay).exercises || []).map(ex => ({
+      ...ex, activeVariant: variants[ex.id] || "machine"
+    })),
+    scheduleLog: schedLog, selectedDate: sessionDate,
+    readiness: progressionReadiness, fields, day: activeDay,
+  }), [activeDay, sessionDate, schedLog, progressionReadiness, fields, variants])
+  const applyAdaptiveStrengthPreview = () => {
+    if (!adaptiveStrengthPreview.eligible || !adaptiveStrengthPreview.proposals.length) return
+    setFields(previous => {
+      const next = { ...previous }
+      for (const item of adaptiveStrengthPreview.proposals) {
+        const key = activeDay + "_" + item.id
+        if (["sets","reps","load"].some(k => Object.prototype.hasOwnProperty.call(previous[key] || {}, k))) continue
+        next[key] = { ...(previous[key] || {}), ...item.after }
+      }
+      return next
+    })
+    setAdaptiveApplyMessage("Accepted adjustments are now in your editable session draft, not logged as completed. Review each field before training.")
+  }
   const missedWorkPreview = useMemo(() => selectMissedWorkPreview({
     sessions: schedLog,
     selectedDate: sessionDate,
@@ -10020,6 +10042,48 @@ function TabSchedule({ storedWorkouts, setStoredWorkouts, session, schedLog, set
             </div>
           )}
 
+          {prog.exercises?.length > 0 && (
+            <section aria-label="Adaptive strength session" style={{ marginBottom: 12, padding: "12px 14px", background: "#101322", border: "1px solid #34445f", borderLeft: "3px solid #22c55e", borderRadius: 8 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#dbeafe", marginBottom: 4 }}>Adaptive workout preview (optional)</div>
+              <div style={{ fontSize: 11, lineHeight: 1.5, color: "#aab5ca", marginBottom: 8 }}>
+                The existing workout remains unchanged unless you approve. Suggestions compare exact logged exercise IDs and equipment variants from the last 84 days. No load increases or automatic substitutions.
+              </div>
+              {adaptiveStrengthPreview.warnings.map((message, index) => (
+                <div role="status" key={index} style={{ fontSize: 11, color: "#fbbf24", marginBottom: 6 }}>{message}</div>
+              ))}
+              {adaptiveStrengthPreview.evidence?.lastScheduleLogDay && (
+                <div style={{ fontSize: 10, color: "#8da2bb", marginBottom: 8 }}>
+                  Latest LIFT schedule-log date: {adaptiveStrengthPreview.evidence.lastScheduleLogDay}
+                </div>
+              )}
+              {adaptiveStrengthPreview.proposals.length ? (
+                <>
+                  {adaptiveStrengthPreview.proposals.map(item => (
+                    <div key={item.id} style={{ background: "#0b1020", border: "1px solid #24334a", borderRadius: 6, padding: "8px 10px", marginBottom: 6 }}>
+                      <div style={{ fontWeight: 600, fontSize: 12, color: "#e2e8f0" }}>{item.name}</div>
+                      <div style={{ fontSize: 11, color: "#cad5e4", marginTop: 2 }}>
+                        Program: {item.before.sets} × {item.before.reps} at {item.before.load || "unspecified"}.
+                        Proposed: {item.after.sets} × {item.after.reps} at {item.after.load || "unspecified"}.
+                      </div>
+                      {item.reasons.map((reason, idx) => (
+                        <div key={idx} style={{ color: "#94a3b8", fontSize: 10, marginTop: 3 }}>{reason}</div>
+                      ))}
+                    </div>
+                  ))}
+                  <button type="button" onClick={applyAdaptiveStrengthPreview} style={{
+                    background: "#14532d", color: "#ecfdf5", border: "1px solid #16a34a", borderRadius: 6,
+                    cursor: "pointer", padding: "8px 11px", fontSize: 12, fontWeight: 600
+                  }}>Apply proposed changes to editable fields</button>
+                </>
+              ) : (
+                <div style={{ fontSize: 11, color: "#aab5ca" }}>No evidence-supported adjustment is proposed. Continue with the programmed session or edit it manually.</div>
+              )}
+              {adaptiveApplyMessage && <div role="status" style={{ fontSize: 11, color: "#86efac", marginTop: 7 }}>{adaptiveApplyMessage}</div>}
+              <div style={{ fontSize: 10, color: "#72859d", marginTop: 8 }}>
+                This is a conservative heuristic, not a validated dosing algorithm. Verify symptoms, equipment, and load units before acceptance.
+              </div>
+            </section>
+          )}
           <MissedWorkSuggestionsPreview preview={missedWorkPreview} />
 
           {/* Stretch */}
