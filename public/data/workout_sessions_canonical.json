@@ -157779,11 +157779,11 @@
         "elevation_m": 24.996,
         "workout_type": "Outdoor Running",
         "source_device": "Andres’s Apple Watch",
-        "synced_at": "2026-11-26T21:07:41.259Z"
+        "synced_at": "2026-11-26T22:07:41.730Z"
       },
       "overlap_summary": null,
       "created_at": "2026-11-15T13:07:33.436734+00:00",
-      "updated_at": "2026-11-26T21:07:41.383323+00:00",
+      "updated_at": "2026-11-26T22:07:41.886291+00:00",
       "avg_hr": 138,
       "trimp": 44
     },
@@ -157815,11 +157815,11 @@
         "elevation_m": 246.562,
         "workout_type": "Outdoor Cycling",
         "source_device": "Andres’s Apple Watch",
-        "synced_at": "2026-11-26T21:07:39.078Z"
+        "synced_at": "2026-11-26T22:07:39.806Z"
       },
       "overlap_summary": null,
       "created_at": "2026-11-22T01:07:33.236727+00:00",
-      "updated_at": "2026-11-26T21:07:39.17566+00:00",
+      "updated_at": "2026-11-26T22:07:39.939804+00:00",
       "avg_hr": 92,
       "trimp": 16
     },
@@ -157851,11 +157851,11 @@
         "elevation_m": 256.603,
         "workout_type": "Outdoor Cycling",
         "source_device": "Andres’s Apple Watch",
-        "synced_at": "2026-11-26T21:07:40.039Z"
+        "synced_at": "2026-11-26T22:07:40.725Z"
       },
       "overlap_summary": null,
       "created_at": "2026-11-22T01:07:34.429323+00:00",
-      "updated_at": "2026-11-26T21:07:40.239238+00:00",
+      "updated_at": "2026-11-26T22:07:40.802947+00:00",
       "avg_hr": 100,
       "trimp": 19
     },
@@ -157887,11 +157887,11 @@
         "elevation_m": 259.039,
         "workout_type": "Outdoor Walking",
         "source_device": "Andres’s Apple Watch",
-        "synced_at": "2026-11-26T21:07:38.109Z"
+        "synced_at": "2026-11-26T22:07:38.825Z"
       },
       "overlap_summary": null,
       "created_at": "2026-11-24T13:07:33.607362+00:00",
-      "updated_at": "2026-11-26T21:07:38.20553+00:00",
+      "updated_at": "2026-11-26T22:07:38.950139+00:00",
       "avg_hr": 84,
       "trimp": 11
     },
@@ -157923,11 +157923,11 @@
         "elevation_m": null,
         "workout_type": "Strength Training",
         "source_device": "Andres’s Apple Watch",
-        "synced_at": "2026-11-26T21:07:37.201Z"
+        "synced_at": "2026-11-26T22:07:37.770Z"
       },
       "overlap_summary": null,
       "created_at": "2026-11-24T14:07:34.18669+00:00",
-      "updated_at": "2026-11-26T21:07:37.290741+00:00",
+      "updated_at": "2026-11-26T22:07:37.857665+00:00",
       "avg_hr": 85,
       "trimp": 32
     },
@@ -157959,11 +157959,11 @@
         "elevation_m": 244.946,
         "workout_type": "Outdoor Running",
         "source_device": "Andres’s Apple Watch",
-        "synced_at": "2026-11-26T21:07:36.264Z"
+        "synced_at": "2026-11-26T22:07:36.731Z"
       },
       "overlap_summary": null,
       "created_at": "2026-11-24T23:07:34.639907+00:00",
-      "updated_at": "2026-11-26T21:07:36.360973+00:00",
+      "updated_at": "2026-11-26T22:07:36.954952+00:00",
       "avg_hr": 165,
       "trimp": 49
     },
@@ -157995,11 +157995,11 @@
         "elevation_m": 259.135,
         "workout_type": "Outdoor Walking",
         "source_device": "Andres’s Apple Watch",
-        "synced_at": "2026-11-26T21:07:35.139Z"
+        "synced_at": "2026-11-26T22:07:35.509Z"
       },
       "overlap_summary": null,
       "created_at": "2026-11-25T14:07:34.220656+00:00",
-      "updated_at": "2026-11-26T21:07:35.314336+00:00",
+      "updated_at": "2026-11-26T22:07:35.689884+00:00",
       "avg_hr": 86,
       "trimp": 4
     },
@@ -158031,11 +158031,11 @@
         "elevation_m": null,
         "workout_type": "Strength Training",
         "source_device": "Andres’s Apple Watch",
-        "synced_at": "2026-11-26T21:07:33.064Z"
+        "synced_at": "2026-11-26T22:07:33.530Z"
       },
       "overlap_summary": null,
       "created_at": "2026-11-25T15:07:33.49593+00:00",
-      "updated_at": "2026-11-26T21:07:33.910287+00:00",
+      "updated_at": "2026-11-26T22:07:34.439995+00:00",
       "avg_hr": 84,
       "trimp": 36
     }
